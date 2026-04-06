@@ -25,6 +25,29 @@ def _r_squared(y_true: np.ndarray, y_hat: np.ndarray) -> float:
     return 0.0 if total_sum == 0.0 else float(1.0 - residual_sum / total_sum)
 
 
+def _vector_norm(values: np.ndarray) -> float:
+    """Compute Euclidean norm without NumPy linalg."""
+    return float(np.sqrt(np.sum(np.square(values))))
+
+
+def _weighted_line_fit(x: np.ndarray, y: np.ndarray, weights: np.ndarray) -> tuple[float, float]:
+    """Fit a weighted straight line using closed-form weighted least squares."""
+    weight_sum = float(np.sum(weights))
+    if weight_sum <= 0.0:
+        raise ValueError("Weighted regression requires positive total weight")
+    mean_x = float(np.sum(weights * x) / weight_sum)
+    mean_y = float(np.sum(weights * y) / weight_sum)
+    centered_x = x - mean_x
+    centered_y = y - mean_y
+    denominator = float(np.sum(weights * centered_x * centered_x))
+    if abs(denominator) <= 1e-12:
+        return 0.0, mean_y
+    numerator = float(np.sum(weights * centered_x * centered_y))
+    slope = numerator / denominator
+    intercept = mean_y - slope * mean_x
+    return float(slope), float(intercept)
+
+
 def robust_huber_fit(
     x: np.ndarray,
     y: np.ndarray,
@@ -34,36 +57,44 @@ def robust_huber_fit(
 ) -> tuple[float, float, np.ndarray, float]:
     """Fit IRLS with Huber loss using MAD-scaled residuals per robust regression practice."""
     x_values, y_values = _flatten_xy(x, y)
-    design = np.column_stack([x_values, np.ones_like(x_values)])
-    beta, *_ = np.linalg.lstsq(design, y_values, rcond=None)
+    slope, intercept = _weighted_line_fit(x_values, y_values, np.ones_like(x_values))
+    beta = np.array([slope, intercept], dtype=float)
     for _ in range(max_iter):
-        residuals = y_values - design @ beta
+        residuals = y_values - (beta[0] * x_values + beta[1])
         mad = 1.4826 * np.median(np.abs(residuals))
         scale = mad if np.isfinite(mad) and mad > 1e-12 else max(1e-12, float(np.std(residuals)))
         z_scores = residuals / scale
         weights = np.ones_like(z_scores)
         mask = np.abs(z_scores) > delta
         weights[mask] = delta / np.abs(z_scores[mask])
-        beta_new, *_ = np.linalg.lstsq(design * weights[:, None], y_values * weights, rcond=None)
-        if np.linalg.norm(beta_new - beta) <= tol * (np.linalg.norm(beta) + 1e-12):
+        slope_new, intercept_new = _weighted_line_fit(x_values, y_values, weights)
+        beta_new = np.array([slope_new, intercept_new], dtype=float)
+        if _vector_norm(beta_new - beta) <= tol * (_vector_norm(beta) + 1e-12):
             beta = beta_new
             break
         beta = beta_new
-    y_hat = design @ beta
+    y_hat = beta[0] * x_values + beta[1]
     return float(beta[0]), float(beta[1]), y_hat, _r_squared(y_values, y_hat)
 
 
 def total_least_squares_fit(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
-    """Fit an orthogonal regression line using centered SVD for total least squares."""
+    """Fit an orthogonal regression line using covariance closed forms for total least squares."""
     x_values, y_values = _flatten_xy(x, y)
     if x_values.size < 2:
         raise ValueError(f"TLS requires at least 2 points, got {x_values.size}")
     mean_x = float(np.mean(x_values))
     mean_y = float(np.mean(y_values))
-    centered = np.column_stack([x_values - mean_x, y_values - mean_y])
-    _, _, vt_matrix = np.linalg.svd(centered, full_matrices=False)
-    normal_x, normal_y = vt_matrix[-1, 0], vt_matrix[-1, 1]
-    slope = float(np.sign(normal_x) * 1e12) if abs(normal_y) < 1e-12 else float(-normal_x / normal_y)
+    dx = x_values - mean_x
+    dy = y_values - mean_y
+    sxx = float(np.sum(dx * dx))
+    syy = float(np.sum(dy * dy))
+    sxy = float(np.sum(dx * dy))
+    if abs(sxy) <= 1e-12:
+        slope = 0.0 if sxx >= syy else float(np.sign(np.mean(dy) or 1.0) * 1e12)
+    else:
+        term = syy - sxx
+        radical = float(np.sqrt(term * term + 4.0 * sxy * sxy))
+        slope = float((term + np.copysign(radical, sxy)) / (2.0 * sxy))
     return slope, float(mean_y - slope * mean_x)
 
 

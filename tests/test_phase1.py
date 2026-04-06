@@ -8,7 +8,7 @@ import math
 
 import numpy as np
 
-from server.core.spatial import haversine_km, idw_interpolate
+from server.core.spatial import bilinear_interpolate, haversine_km, idw_interpolate
 from server.state.session import session
 from server.tools.config import load_run_config, save_run_config, update_run_config
 from server.tools.statistics import (
@@ -94,6 +94,14 @@ def test_idw() -> None:
     values = np.array([[1.0], [2.0], [3.0], [4.0]])
     result = idw_interpolate(points, values, (0.0, 0.0))
     assert math.isclose(float(result[0]), 2.5, rel_tol=1e-9)
+
+
+def test_bilinear_interpolate() -> None:
+    """Verify bilinear interpolation returns the midpoint average on a 2x2 grid cell."""
+    points = [(0.0, 0.0), (0.0, 2.0), (2.0, 0.0), (2.0, 2.0)]
+    values = np.array([10.0, 14.0, 18.0, 22.0])
+    result = bilinear_interpolate(points, values, (1.0, 1.0))
+    assert math.isclose(float(result), 16.0, rel_tol=1e-9)
 
 
 def test_config_update_save_load(monkeypatch, tmp_path) -> None:

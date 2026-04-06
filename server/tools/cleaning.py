@@ -25,6 +25,33 @@ RULES = {
 }
 
 
+def _float_param(params: dict[str, object], key: str, default: float) -> float:
+    """Read a numeric cleaning-rule parameter as float from a parsed JSON object."""
+    value = params.get(key, default)
+    if not isinstance(value, (int, float, str)):
+        raise ValueError(f"Parameter '{key}' must be numeric, got {type(value).__name__}")
+    return float(value)
+
+
+def _int_param(params: dict[str, object], key: str, default: int) -> int:
+    """Read an integer cleaning-rule parameter from a parsed JSON object."""
+    value = params.get(key, default)
+    if not isinstance(value, (int, float, str)):
+        raise ValueError(f"Parameter '{key}' must be integer-like, got {type(value).__name__}")
+    return int(value)
+
+
+def _sector_bounds(params: dict[str, object]) -> tuple[float, float]:
+    """Read tower-shadow sector bounds from the parsed cleaning-rule parameters."""
+    value = params.get("exclude_sectors", [170, 190])
+    if not isinstance(value, list) or len(value) < 2:
+        raise ValueError("exclude_sectors must be a list with start and end degrees")
+    start_value, end_value = value[0], value[1]
+    if not isinstance(start_value, (int, float, str)) or not isinstance(end_value, (int, float, str)):
+        raise ValueError("exclude_sectors values must be numeric")
+    return float(start_value), float(end_value)
+
+
 def _require_timeseries() -> pd.DataFrame:
     """Return the active timeseries dataframe required for Phase 2 cleaning operations."""
     if session.timeseries_df is None or session.raw_timeseries_df is None:
@@ -60,8 +87,8 @@ def _mapping_for_sensor(sensor: str) -> dict[str, str | None]:
 
 def _apply_range_check(df: pd.DataFrame, sensor: str, mask: np.ndarray, params: dict[str, object]) -> int:
     """Apply min-max threshold cleaning to a single sensor column."""
-    min_value = float(params.get("min", 0.0))
-    max_value = float(params.get("max", 50.0))
+    min_value = _float_param(params, "min", 0.0)
+    max_value = _float_param(params, "max", 50.0)
     affected = mask & ((df[sensor] < min_value) | (df[sensor] > max_value)) & df[sensor].notna().to_numpy()
     df.loc[affected, sensor] = np.nan
     return int(affected.sum())
@@ -74,7 +101,7 @@ def _apply_icing_filter(df: pd.DataFrame, sensor: str, mask: np.ndarray, params:
     temp_col = sensor_map.get("temp_col")
     if sd_col not in df.columns or temp_col not in df.columns:
         raise ValueError("icing_filter requires matching sd and temperature columns in the timeseries")
-    threshold = float(params.get("temp_threshold_c", 2.0))
+    threshold = _float_param(params, "temp_threshold_c", 2.0)
     affected = mask & (df[sd_col].fillna(np.nan) == 0).to_numpy() & (df[temp_col] < threshold).fillna(False).to_numpy()
     df.loc[affected, sensor] = np.nan
     return int(affected.sum())
@@ -82,7 +109,7 @@ def _apply_icing_filter(df: pd.DataFrame, sensor: str, mask: np.ndarray, params:
 
 def _apply_stuck_sensor(df: pd.DataFrame, sensor: str, mask: np.ndarray, params: dict[str, object]) -> int:
     """Remove runs of repeated identical values using a minimum consecutive-count threshold."""
-    threshold = int(params.get("consecutive_count", 6))
+    threshold = _int_param(params, "consecutive_count", 6)
     series = df[sensor]
     groups = series.ne(series.shift()) | series.isna()
     run_ids = groups.cumsum()
@@ -98,8 +125,7 @@ def _apply_tower_shadow(df: pd.DataFrame, sensor: str, mask: np.ndarray, params:
     direction_col = sensor_map.get("dir_col")
     if direction_col not in df.columns:
         raise ValueError("tower_shadow requires a paired direction column in session.sensor_mapping")
-    sector_values = params.get("exclude_sectors", [170, 190])
-    start_deg, end_deg = float(sector_values[0]), float(sector_values[1])
+    start_deg, end_deg = _sector_bounds(params)
     directions = df[direction_col].to_numpy(dtype=float)
     sector_mask = (
         (directions >= start_deg) & (directions <= end_deg)
@@ -113,11 +139,12 @@ def _apply_tower_shadow(df: pd.DataFrame, sensor: str, mask: np.ndarray, params:
 
 def _apply_spike_filter(df: pd.DataFrame, sensor: str, mask: np.ndarray, params: dict[str, object]) -> int:
     """Remove spikes outside rolling mean plus-minus sigma-threshold times rolling standard deviation."""
-    window = int(params.get("window_size", 6))
-    sigma = float(params.get("sigma_threshold", 4.0))
+    window = _int_param(params, "window_size", 6)
+    sigma = _float_param(params, "sigma_threshold", 4.0)
     mean = df[sensor].rolling(window=window, min_periods=2, center=True).mean()
     std = df[sensor].rolling(window=window, min_periods=2, center=True).std(ddof=0)
-    affected = mask & (np.abs(df[sensor] - mean) > sigma * std).fillna(False).to_numpy()
+    spike_mask = (np.abs(df[sensor] - mean) > sigma * std).fillna(False).to_numpy()
+    affected = mask & spike_mask
     df.loc[affected, sensor] = np.nan
     return int(affected.sum())
 
@@ -149,7 +176,7 @@ def _apply_rule(rule_type: str, sensor: str, params: dict[str, object], start_da
     df = _require_timeseries()
     if rule_type != "timestamp_gap_fill" and sensor not in df.columns:
         raise ValueError(f"Sensor column '{sensor}' not found in loaded timeseries")
-    mask = _date_mask(df.index, start_date, end_date)
+    mask = _date_mask(pd.DatetimeIndex(df.index), start_date, end_date)
     if rule_type == "range_check":
         return _apply_range_check(df, sensor, mask, params)
     if rule_type == "icing_filter":

@@ -17,10 +17,14 @@ mcp = FastMCP(
 
 sys.modules.setdefault("server.main", sys.modules[__name__])
 
+import server.tools.air_density  # noqa: F401,E402
 import server.tools.cleaning  # noqa: F401,E402
 import server.tools.config  # noqa: F401,E402
 import server.tools.data_io  # noqa: F401,E402
+import server.tools.era5  # noqa: F401,E402
 import server.tools.extrapolation  # noqa: F401,E402
+import server.tools.ltc  # noqa: F401,E402
+import server.tools.ltc_ml  # noqa: F401,E402
 import server.tools.shear  # noqa: F401,E402
 import server.tools.statistics  # noqa: F401,E402
 

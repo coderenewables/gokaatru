@@ -177,7 +177,13 @@ def compute_scatter_stats(sensor_a: str, sensor_b: str) -> dict:
     aligned = _align_pair(sensor_a, sensor_b)
     x_values = aligned[sensor_a].to_numpy(dtype=float)
     y_values = aligned[sensor_b].to_numpy(dtype=float)
-    slope, intercept = np.polyfit(x_values, y_values, 1)
+    mean_x = float(np.mean(x_values))
+    mean_y = float(np.mean(y_values))
+    centered_x = x_values - mean_x
+    centered_y = y_values - mean_y
+    denominator = float(np.sum(centered_x**2))
+    slope = 0.0 if denominator <= 1e-12 else float(np.sum(centered_x * centered_y) / denominator)
+    intercept = float(mean_y - slope * mean_x)
     predicted = slope * x_values + intercept
     residuals = y_values - predicted
     return {

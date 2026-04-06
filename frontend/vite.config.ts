@@ -3,6 +3,22 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.split("\\").join("/");
+          if (normalizedId.includes("react-plotly.js") || normalizedId.includes("plotly.js-dist-min") || normalizedId.includes("/plotly.js/")) {
+            return "plotly-vendor";
+          }
+          if (normalizedId.includes("react-leaflet") || normalizedId.includes("/leaflet/")) {
+            return "leaflet-vendor";
+          }
+          return undefined;
+        },
+      },
+    },
+  },
   server: {
     host: "127.0.0.1",
     port: 5173,
@@ -21,5 +37,6 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    setupFiles: ["./src/test/setup.ts"],
   },
 });

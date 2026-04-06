@@ -1,12 +1,24 @@
+import { Suspense, lazy } from "react";
+
 import { Navigate, createBrowserRouter } from "react-router-dom";
 
 import { AppShell } from "./components/layout/AppShell";
-import { DataPage } from "./pages/DataPage";
-import { LtcPage } from "./pages/LtcPage";
-import { OverviewPage } from "./pages/OverviewPage";
-import { ReanalysisPage } from "./pages/ReanalysisPage";
-import { ResultsPage } from "./pages/ResultsPage";
-import { SitePage } from "./pages/SitePage";
+import { LoadingState } from "./components/common/LoadingState";
+
+const OverviewPage = lazy(async () => ({ default: (await import("./pages/OverviewPage")).OverviewPage }));
+const DataPage = lazy(async () => ({ default: (await import("./pages/DataPage")).DataPage }));
+const SitePage = lazy(async () => ({ default: (await import("./pages/SitePage")).SitePage }));
+const ReanalysisPage = lazy(async () => ({ default: (await import("./pages/ReanalysisPage")).ReanalysisPage }));
+const LtcPage = lazy(async () => ({ default: (await import("./pages/LtcPage")).LtcPage }));
+const ResultsPage = lazy(async () => ({ default: (await import("./pages/ResultsPage")).ResultsPage }));
+
+function LazyPage({ component: Component }: { component: React.ComponentType }) {
+  return (
+    <Suspense fallback={<LoadingState label="Loading page" />}>
+      <Component />
+    </Suspense>
+  );
+}
 
 export const appRouter = createBrowserRouter([
   {
@@ -14,12 +26,12 @@ export const appRouter = createBrowserRouter([
     element: <AppShell />,
     children: [
       { index: true, element: <Navigate to="/overview" replace /> },
-      { path: "overview", element: <OverviewPage /> },
-      { path: "data", element: <DataPage /> },
-      { path: "site", element: <SitePage /> },
-      { path: "reanalysis", element: <ReanalysisPage /> },
-      { path: "ltc", element: <LtcPage /> },
-      { path: "results", element: <ResultsPage /> },
+      { path: "overview", element: <LazyPage component={OverviewPage} /> },
+      { path: "data", element: <LazyPage component={DataPage} /> },
+      { path: "site", element: <LazyPage component={SitePage} /> },
+      { path: "reanalysis", element: <LazyPage component={ReanalysisPage} /> },
+      { path: "ltc", element: <LazyPage component={LtcPage} /> },
+      { path: "results", element: <LazyPage component={ResultsPage} /> },
     ],
   },
 ]);

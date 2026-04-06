@@ -86,6 +86,141 @@ export interface ConfigUpdateResponse {
   file_path: string;
 }
 
+export interface CleaningApplyResponse {
+  status: string;
+  rule: string;
+  sensor: string;
+  records_affected: number;
+}
+
+export interface CleaningLogEntry {
+  rule_type: string;
+  sensor: string;
+  records_affected: number;
+  applied_at: string;
+  params: Record<string, JsonValue>;
+  start_date: string;
+  end_date: string;
+}
+
+export interface CleaningLogResponse {
+  entries: CleaningLogEntry[];
+}
+
+export interface TableBuildResponse {
+  method: string;
+  aggregation: string;
+  table: number[][];
+}
+
+export interface ExtrapolationResponse {
+  status: string;
+  column_name: string;
+  method_counts: {
+    direct: number;
+    interpolated: number;
+    extrapolated: number;
+  };
+}
+
+export interface Era5Node {
+  latitude: number;
+  longitude: number;
+  distance_km: number;
+  bearing: string;
+}
+
+export interface Era5NodesResponse {
+  nodes: Era5Node[];
+  grid_resolution_deg: number;
+}
+
+export interface Era5ExtractResponse {
+  status: string;
+  latitude: number;
+  longitude: number;
+  rows: number;
+  start: string;
+  end: string;
+  variables: string[];
+  cached: boolean;
+}
+
+export interface Era5InterpolationResponse {
+  status: string;
+  rows: number;
+  method: string;
+  variables: string[];
+}
+
+export interface LtcRunResponse {
+  status: string;
+  algorithm: string;
+  [key: string]: JsonValue;
+}
+
+export interface ClippingAnalysisPoint {
+  start_year: number;
+  n_years: number;
+  mean_speed: number;
+  iav: number;
+  lta_ratio: number;
+  historic_uncertainty: number;
+  climate_uncertainty: number;
+  combined_uncertainty: number;
+}
+
+export interface ClippingAnalysisResponse {
+  optimal_start_year: number;
+  min_uncertainty: number;
+  iav: number;
+  analysis_data: ClippingAnalysisPoint[];
+}
+
+export interface HomogeneityDataset {
+  name: string;
+  recommended_start_year: number;
+  pettitt_p_value: number;
+  trend_per_year: number;
+}
+
+export interface HomogeneityAnalysisResponse {
+  datasets: HomogeneityDataset[];
+}
+
+export interface HomogeneityApplyResponse {
+  status: string;
+  rows_before: number;
+  rows_after: number;
+  cutoff_year: number;
+}
+
+export interface UncertaintyResponse {
+  total_uncertainty_pct: number;
+  components: {
+    measurement: number;
+    vertical_extrapolation: number;
+    mcp: number;
+    future_variability: number;
+  };
+  p_factors: {
+    p50: number;
+    p75: number;
+    p90: number;
+    p99: number;
+  };
+  inputs: {
+    measurement_height_m: number;
+    hub_height_m: number;
+    shear_method: string;
+    mcp_r_squared: number;
+    concurrent_months: number;
+    iav_pct: number;
+    algorithm: string;
+    is_interpolation: boolean;
+  };
+}
+
 export type AnalysisSummaryResponse = Record<string, SessionSummaryMetric> & {
   completed_steps: SessionStep[];
 };
@@ -125,6 +260,12 @@ export interface GeoJsonFeature {
 export interface SiteMapResponse {
   type: "FeatureCollection";
   features: GeoJsonFeature[];
+}
+
+export interface RunconfigExportResponse {
+  status: string;
+  file_path: string;
+  runconfig: RunConfigResponse;
 }
 
 export interface UploadResponse {

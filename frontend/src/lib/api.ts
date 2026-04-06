@@ -3,17 +3,30 @@ import type {
   AnalysisSummaryResponse,
   ApiHealthResponse,
   ApiStatusResponse,
+  CleaningApplyResponse,
+  CleaningLogResponse,
+  ClippingAnalysisResponse,
   ConfigUpdateResponse,
   CreateSessionResponse,
   EnsembleResultsResponse,
+  Era5ExtractResponse,
+  Era5InterpolationResponse,
+  Era5NodesResponse,
+  ExtrapolationResponse,
+  HomogeneityAnalysisResponse,
+  HomogeneityApplyResponse,
   JsonValue,
+  LtcRunResponse,
   LtcResultsResponse,
   PlotResult,
   RunConfigResponse,
+  RunconfigExportResponse,
   SensorCoverageResponse,
   SensorsResponse,
   SessionSummaryResponse,
   SiteMapResponse,
+  TableBuildResponse,
+  UncertaintyResponse,
   UpdateRunConfigRequest,
 } from "./types";
 
@@ -102,14 +115,18 @@ export const configApi = {
 
 export const analysisApi = {
   applyCleaning: (sessionId: string, body: JsonValue) =>
-    requestJson<ApiStatusResponse>(`/sessions/${sessionId}/cleaning/apply`, { method: "POST", body: JSON.stringify(body) }, sessionId),
+    requestJson<CleaningApplyResponse>(
+      `/sessions/${sessionId}/cleaning/apply`,
+      { method: "POST", body: JSON.stringify(body) },
+      sessionId,
+    ),
   undoCleaning: (sessionId: string, entryIndex: number) =>
     requestJson<ApiStatusResponse>(
       `/sessions/${sessionId}/cleaning/undo`,
       { method: "POST", body: JSON.stringify({ entry_index: entryIndex }) },
       sessionId,
     ),
-  getCleaningLog: (sessionId: string) => requestJson<ApiStatusResponse>(`/sessions/${sessionId}/cleaning/log`, {}, sessionId),
+  getCleaningLog: (sessionId: string) => requestJson<CleaningLogResponse>(`/sessions/${sessionId}/cleaning/log`, {}, sessionId),
   calculateShear: (sessionId: string, heightSensors: string) =>
     requestJson<ApiStatusResponse>(
       `/sessions/${sessionId}/shear/calculate`,
@@ -117,7 +134,7 @@ export const analysisApi = {
       sessionId,
     ),
   buildShearTable: (sessionId: string, aggregation = "mean") =>
-    requestJson<ApiStatusResponse>(
+    requestJson<TableBuildResponse>(
       `/sessions/${sessionId}/shear/table`,
       { method: "POST", body: JSON.stringify({ aggregation }) },
       sessionId,
@@ -129,25 +146,33 @@ export const analysisApi = {
       sessionId,
     ),
   buildRoughnessTable: (sessionId: string, aggregation = "mean") =>
-    requestJson<ApiStatusResponse>(
+    requestJson<TableBuildResponse>(
       `/sessions/${sessionId}/roughness/table`,
       { method: "POST", body: JSON.stringify({ aggregation }) },
       sessionId,
     ),
   extrapolateHub: (sessionId: string, body: JsonValue) =>
-    requestJson<ApiStatusResponse>(
+    requestJson<ExtrapolationResponse>(
       `/sessions/${sessionId}/extrapolation/hub`,
       { method: "POST", body: JSON.stringify(body) },
       sessionId,
     ),
   findEra5Nodes: (sessionId: string, body: JsonValue) =>
-    requestJson<ApiStatusResponse>(`/sessions/${sessionId}/era5/nodes`, { method: "POST", body: JSON.stringify(body) }, sessionId),
+    requestJson<Era5NodesResponse>(
+      `/sessions/${sessionId}/era5/nodes`,
+      { method: "POST", body: JSON.stringify(body) },
+      sessionId,
+    ),
   extractEra5: (sessionId: string, body: JsonValue) =>
-    requestJson<ApiStatusResponse>(`/sessions/${sessionId}/era5/extract`, { method: "POST", body: JSON.stringify(body) }, sessionId),
+    requestJson<Era5ExtractResponse>(
+      `/sessions/${sessionId}/era5/extract`,
+      { method: "POST", body: JSON.stringify(body) },
+      sessionId,
+    ),
   interpolateEra5: (sessionId: string) =>
-    requestJson<ApiStatusResponse>(`/sessions/${sessionId}/era5/interpolate`, { method: "POST" }, sessionId),
+    requestJson<Era5InterpolationResponse>(`/sessions/${sessionId}/era5/interpolate`, { method: "POST" }, sessionId),
   runLtc: (sessionId: string, algorithm: string, body: JsonValue) =>
-    requestJson<ApiStatusResponse>(
+    requestJson<LtcRunResponse>(
       `/sessions/${sessionId}/ltc/${algorithm}`,
       { method: "POST", body: JSON.stringify(body) },
       sessionId,
@@ -159,21 +184,25 @@ export const analysisApi = {
       sessionId,
     ),
   runClipping: (sessionId: string, body: JsonValue) =>
-    requestJson<ApiStatusResponse>(`/sessions/${sessionId}/clipping`, { method: "POST", body: JSON.stringify(body) }, sessionId),
+    requestJson<ClippingAnalysisResponse>(
+      `/sessions/${sessionId}/clipping`,
+      { method: "POST", body: JSON.stringify(body) },
+      sessionId,
+    ),
   analyzeHomogeneity: (sessionId: string, method: string) =>
-    requestJson<ApiStatusResponse>(
+    requestJson<HomogeneityAnalysisResponse>(
       `/sessions/${sessionId}/homogeneity/analyze`,
       { method: "POST", body: JSON.stringify({ method }) },
       sessionId,
     ),
   applyHomogeneity: (sessionId: string, cutoffYear: number) =>
-    requestJson<ApiStatusResponse>(
+    requestJson<HomogeneityApplyResponse>(
       `/sessions/${sessionId}/homogeneity/apply`,
       { method: "POST", body: JSON.stringify({ cutoff_year: cutoffYear }) },
       sessionId,
     ),
   calculateUncertainty: (sessionId: string, body: JsonValue) =>
-    requestJson<ApiStatusResponse>(
+    requestJson<UncertaintyResponse>(
       `/sessions/${sessionId}/uncertainty`,
       { method: "POST", body: JSON.stringify(body) },
       sessionId,
@@ -192,9 +221,5 @@ export const resultsApi = {
     ),
   getSiteMap: (sessionId: string) => requestJson<SiteMapResponse>(`/sessions/${sessionId}/map/site`, {}, sessionId),
   exportRunconfig: (sessionId: string) =>
-    requestJson<{ status: string; file_path: string; runconfig: RunConfigResponse }>(
-      `/sessions/${sessionId}/runconfig/export`,
-      {},
-      sessionId,
-    ),
+    requestJson<RunconfigExportResponse>(`/sessions/${sessionId}/runconfig/export`, {}, sessionId),
 };

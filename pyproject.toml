@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "gokaatru"
+version = "0.1.0"
+description = "Wind Resource Assessment MCP Server"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=2.0.0",
+    "pydantic>=2.0",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+    "plotly>=5.15",
+    "windrose>=1.9",
+    "xarray>=2023.1",
+    "zarr>=2.14",
+    "fsspec>=2023.1",
+    "s3fs>=2023.1",
+]
+
+[project.optional-dependencies]
+ml = ["xgboost>=1.7", "scikit-learn>=1.2"]
+dev = ["pytest>=7.0", "ruff>=0.1"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,10 @@
+data/
+__pycache__/
+*.pyc
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+the idea.txt
+.venv/
+logic/

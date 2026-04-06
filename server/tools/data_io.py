@@ -1,0 +1,238 @@
+"""data_io — Phase 1 MCP tools for timeseries and datamodel loading.
+
+Part of GoKaatru MCP Server.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pandas as pd
+
+from server.core.validators import detect_timestep_minutes
+from server.main import mcp
+from server.schemas.common import SensorInfo
+from server.state.session import session
+
+TIMESTAMP_CANDIDATES = ["Timestamp", "timestamp", "DateTime", "datetime", "Date", "date", "Time", "time"]
+SENSOR_FIELDS = {
+    "speed_col": "wind_speed",
+    "dir_col": "wind_direction",
+    "temp_col": "temperature",
+    "pressure_col": "pressure",
+}
+
+
+def _read_tabular_file(file_path: str) -> pd.DataFrame:
+    """Load CSV, TSV, or Excel input according to the GoKaatru Phase 1 file-ingest spec."""
+    path = Path(file_path)
+    if not path.exists():
+        raise ValueError(f"Input file does not exist: {file_path}")
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        return pd.read_csv(path)
+    if suffix in {".tsv", ".txt"}:
+        return pd.read_csv(path, sep="\t")
+    if suffix in {".xls", ".xlsx"}:
+        return pd.read_excel(path)
+    raise ValueError(f"Unsupported file type '{suffix}'. Expected CSV, TSV, TXT, XLS, or XLSX")
+
+
+def _detect_timestamp_column(df: pd.DataFrame) -> tuple[str, pd.Series]:
+    """Select the timestamp column with the most valid parses per the Phase 1 ingestion rule."""
+    candidates = [column for column in TIMESTAMP_CANDIDATES if column in df.columns] or list(df.columns)
+    best_name = ""
+    best_series = pd.Series(dtype="datetime64[ns]")
+    best_count = -1
+    for column in candidates:
+        parsed = pd.to_datetime(df[column], errors="coerce")
+        valid_count = int(parsed.notna().sum())
+        if valid_count > best_count:
+            best_name = str(column)
+            best_series = parsed
+            best_count = valid_count
+    if best_count <= 0:
+        raise ValueError("Could not detect a timestamp column with any valid datetime values")
+    return best_name, best_series
+
+
+def _format_timestamp(value: pd.Timestamp) -> str:
+    """Format timestamps consistently for Phase 1 tool responses."""
+    return pd.Timestamp(value).isoformat()
+
+
+def _extract_measurement_points(node: object) -> list[dict[str, object]]:
+    """Recursively collect Task 43 measurement_point records from a JSON tree."""
+    if isinstance(node, dict):
+        points = node.get("measurement_point", [])
+        collected = [item for item in points if isinstance(item, dict)]
+        for value in node.values():
+            collected.extend(_extract_measurement_points(value))
+        return collected
+    if isinstance(node, list):
+        collected: list[dict[str, object]] = []
+        for item in node:
+            collected.extend(_extract_measurement_points(item))
+        return collected
+    return []
+
+
+def _build_sensor_mapping(points: list[dict[str, object]]) -> dict[float, dict[str, str | None]]:
+    """Map Task 43 measurement points to height-indexed sensor columns per the Phase 1 schema."""
+    mapping: dict[float, dict[str, str | None]] = {}
+    type_to_field = {
+        "wind_speed": "speed_col",
+        "wind_direction": "dir_col",
+        "temperature": "temp_col",
+        "air_temperature": "temp_col",
+        "pressure": "pressure_col",
+        "air_pressure": "pressure_col",
+    }
+    for point in points:
+        height_value = point.get("height_m")
+        sensor_name = point.get("name")
+        sensor_type = type_to_field.get(str(point.get("measurement_type_id", "")))
+        if not isinstance(height_value, (int, float)) or not isinstance(sensor_name, str) or sensor_type is None:
+            continue
+        mapping.setdefault(
+            float(height_value),
+            {
+                "speed_col": None,
+                "dir_col": None,
+                "sd_col": None,
+                "temp_col": None,
+                "pressure_col": None,
+            },
+        )
+        mapping[float(height_value)][sensor_type] = sensor_name
+        if sensor_type == "speed_col":
+            mapping[float(height_value)]["sd_col"] = f"{sensor_name}_sd"
+    return mapping
+
+
+def _build_sensor_rows(require_mapping: bool) -> list[dict[str, object]]:
+    """Build sensor inventory rows using session mapping rules from the Phase 1 data inventory spec."""
+    if session.timeseries_df is None:
+        raise ValueError("Timeseries data is not loaded")
+    if require_mapping and not session.sensor_mapping:
+        raise ValueError("Sensor mapping is not loaded. Run parse_datamodel first")
+    sensors: list[dict[str, object]] = []
+    total_rows = len(session.timeseries_df)
+    for height, mapping in sorted(session.sensor_mapping.items(), reverse=True):
+        for field_name, sensor_type in SENSOR_FIELDS.items():
+            column_name = mapping.get(field_name)
+            if column_name is None or column_name not in session.timeseries_df.columns:
+                continue
+            series = session.timeseries_df[column_name]
+            coverage = 0.0 if total_rows == 0 else float(series.notna().sum() / total_rows * 100.0)
+            sensor = SensorInfo(
+                name=column_name,
+                height_m=height,
+                sensor_type=sensor_type,
+                data_coverage_pct=coverage,
+                record_count=int(series.notna().sum()),
+            )
+            sensors.append(sensor.model_dump())
+    return sensors
+
+
+def _gap_lengths_in_minutes(series: pd.Series, timestep_minutes: int) -> list[int]:
+    """Measure contiguous missing-data gap lengths in minutes using the inferred Phase 1 timestep."""
+    missing = series.isna()
+    groups = missing.ne(missing.shift(fill_value=False)).cumsum()
+    gap_sizes = missing.groupby(groups).sum()
+    return [int(size * timestep_minutes) for size in gap_sizes[gap_sizes > 0].tolist()]
+
+
+@mcp.tool()
+def parse_timeseries(file_path: str) -> dict:
+    """Parse a wind timeseries file into session state following the GoKaatru Phase 1 ingest spec."""
+    source_df = _read_tabular_file(file_path)
+    timestamp_column, parsed_timestamps = _detect_timestamp_column(source_df)
+    filtered_df = source_df.loc[parsed_timestamps.notna()].copy()
+    filtered_df.index = pd.DatetimeIndex(parsed_timestamps.loc[parsed_timestamps.notna()])
+    filtered_df = filtered_df.drop(columns=[timestamp_column]).sort_index()
+    if filtered_df.empty:
+        raise ValueError("Parsed timeseries is empty after timestamp detection")
+    session.timeseries_df = filtered_df.copy()
+    session.raw_timeseries_df = filtered_df.copy(deep=True)
+    timestep_minutes = detect_timestep_minutes(filtered_df)
+    return {
+        "status": "ok",
+        "rows": int(len(filtered_df)),
+        "columns": filtered_df.columns.tolist(),
+        "start": _format_timestamp(filtered_df.index.min()),
+        "end": _format_timestamp(filtered_df.index.max()),
+        "timestep_minutes": timestep_minutes,
+    }
+
+
+@mcp.tool()
+def parse_datamodel(file_path: str) -> dict:
+    """Parse an IEA Task 43 datamodel JSON file into the Phase 1 height-to-sensor mapping."""
+    path = Path(file_path)
+    if not path.exists():
+        raise ValueError(f"Datamodel file does not exist: {file_path}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    mapping = _build_sensor_mapping(_extract_measurement_points(payload))
+    if session.timeseries_df is not None:
+        mapping = {
+            height: sensor_map
+            for height, sensor_map in mapping.items()
+            if sensor_map.get("speed_col") in session.timeseries_df.columns
+        }
+    session.sensor_mapping = dict(sorted(mapping.items(), reverse=True))
+    return {
+        "status": "ok",
+        "heights": list(session.sensor_mapping.keys()),
+        "mapping": {str(height): sensor_map.copy() for height, sensor_map in session.sensor_mapping.items()},
+    }
+
+
+@mcp.tool()
+def list_sensors() -> dict:
+    """List mapped sensors with coverage statistics using the GoKaatru Phase 1 inventory contract."""
+    return {"sensors": _build_sensor_rows(require_mapping=True)}
+
+
+@mcp.tool()
+def get_period_of_record() -> dict:
+    """Summarize period of record and sensor inventory per the Phase 1 measurement inventory spec."""
+    if session.timeseries_df is None:
+        raise ValueError("Timeseries data is not loaded")
+    return {
+        "start": _format_timestamp(session.timeseries_df.index.min()),
+        "end": _format_timestamp(session.timeseries_df.index.max()),
+        "total_records": int(len(session.timeseries_df)),
+        "timestep_minutes": detect_timestep_minutes(session.timeseries_df),
+        "sensors": _build_sensor_rows(require_mapping=False),
+    }
+
+
+@mcp.tool()
+def get_data_coverage(sensor_name: str) -> dict:
+    """Return sensor coverage and gap statistics using the Phase 1 data availability spec."""
+    if session.timeseries_df is None:
+        raise ValueError("Timeseries data is not loaded")
+    if sensor_name not in session.timeseries_df.columns:
+        raise ValueError(f"Sensor column '{sensor_name}' not found in loaded timeseries")
+    timestep_minutes = detect_timestep_minutes(session.timeseries_df)
+    full_index = pd.date_range(
+        session.timeseries_df.index.min(),
+        session.timeseries_df.index.max(),
+        freq=f"{timestep_minutes}min",
+    )
+    series = session.timeseries_df[sensor_name].reindex(full_index)
+    gap_lengths = _gap_lengths_in_minutes(series, timestep_minutes)
+    total_records = int(len(series))
+    valid_records = int(series.notna().sum())
+    largest_gap = max(gap_lengths, default=0)
+    gaps_over_1_hour = sum(1 for gap in gap_lengths if gap > 60)
+    return {
+        "sensor": sensor_name,
+        "total_records": total_records,
+        "valid_records": valid_records,
+        "coverage_pct": 0.0 if total_records == 0 else float(valid_records / total_records * 100.0),
+        "largest_gap_minutes": largest_gap,
+        "gaps_over_1_hour": gaps_over_1_hour,
+    }

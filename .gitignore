@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .ruff_cache/
 *.egg-info/
+frontend/node_modules/
 dist/
 build/
 .env

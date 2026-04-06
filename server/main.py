@@ -19,14 +19,20 @@ sys.modules.setdefault("server.main", sys.modules[__name__])
 
 import server.tools.air_density  # noqa: F401,E402
 import server.tools.cleaning  # noqa: F401,E402
+import server.tools.clipping  # noqa: F401,E402
 import server.tools.config  # noqa: F401,E402
 import server.tools.data_io  # noqa: F401,E402
+import server.tools.ensemble  # noqa: F401,E402
 import server.tools.era5  # noqa: F401,E402
 import server.tools.extrapolation  # noqa: F401,E402
+import server.tools.homogeneity  # noqa: F401,E402
 import server.tools.ltc  # noqa: F401,E402
 import server.tools.ltc_ml  # noqa: F401,E402
+import server.tools.map  # noqa: F401,E402
 import server.tools.shear  # noqa: F401,E402
 import server.tools.statistics  # noqa: F401,E402
+import server.tools.uncertainty  # noqa: F401,E402
+import server.tools.visualization  # noqa: F401,E402
 
 
 def main() -> None:

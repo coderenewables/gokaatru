@@ -36,18 +36,22 @@ def _set_nested_value(config: dict[str, object], key: str, value: object) -> Non
 def _sync_state_from_runconfig() -> None:
     """Project known runconfig fields back onto session state per the GoKaatru session model."""
     config = session.runconfig
+    session.coordinate = None
+    session.project_name = None
+    session.measurement_type = None
+    session.hub_height_m = None
     location = config.get("location")
     if isinstance(location, dict) and {"latitude", "longitude"}.issubset(location):
         latitude = float(location["latitude"])
         longitude = float(location["longitude"])
         elevation = float(location.get("elevation_m", 0.0))
-        session.coordinate = Coordinate(latitude=latitude, longitude=longitude, elevation_m=elevation)
+        session.set_coordinate(Coordinate(latitude=latitude, longitude=longitude, elevation_m=elevation))
     if "project_name" in config and isinstance(config["project_name"], str):
-        session.project_name = str(config["project_name"])
+        session.set_project_name(str(config["project_name"]))
     if "measurement_type" in config and isinstance(config["measurement_type"], str):
-        session.measurement_type = str(config["measurement_type"])
+        session.set_measurement_type(str(config["measurement_type"]))
     if "hub_height_m" in config and isinstance(config["hub_height_m"], (int, float)):
-        session.hub_height_m = float(config["hub_height_m"])
+        session.set_hub_height_m(float(config["hub_height_m"]))
 
 
 def _runconfig_path() -> Path:
@@ -94,9 +98,10 @@ def load_run_config() -> dict:
 @mcp.tool()
 def get_analysis_summary() -> dict:
     """Report Phase 1 analysis readiness flags based on populated session-state fields."""
+    coordinate = session.get_coordinate()
     return {
-        "project_name": session.project_name,
-        "hub_height_m": session.hub_height_m,
+        "project_name": session.get_project_name(),
+        "hub_height_m": session.get_hub_height_m(),
         "timeseries_loaded": session.timeseries_df is not None,
         "sensor_mapping_loaded": bool(session.sensor_mapping),
         "cleaning_rules_applied": len(session.cleaning_log),
@@ -107,5 +112,5 @@ def get_analysis_summary() -> dict:
         "era5_interpolated_ready": session.era5_interpolated_df is not None,
         "ltc_algorithms_run": sorted(session.ltc_results.keys()),
         "ensemble_ready": session.ensemble_df is not None,
-        "coordinate": None if session.coordinate is None else session.coordinate.model_dump(),
+        "coordinate": None if coordinate is None else coordinate.model_dump(),
     }

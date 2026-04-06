@@ -1409,7 +1409,7 @@ Before declaring the build complete, verify:
 - [ ] `python -m pytest tests/ -v` — all tests pass
 - [ ] `python -m server.main` — server starts without errors
 - [ ] `echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python -m server.main` — lists all tools
-- [ ] Tool count matches spec: ~48 tools total
+- [ ] Tool count matches spec: 59 tools total
 - [ ] Every tool has a docstring
 - [ ] No `Any` types anywhere in `server/`
 - [ ] No `**kwargs` anywhere in `server/`
@@ -1426,6 +1426,6 @@ Before declaring the build complete, verify:
 | 1 | pyproject.toml, .gitignore, server/main.py, server/state/session.py, server/schemas/common.py, server/core/validators.py, server/core/spatial.py, server/core/momm.py, server/tools/data_io.py, server/tools/statistics.py, server/tools/config.py, tests/conftest.py, tests/test_phase1.py | 17 tools |
 | 2 | server/core/regression.py, server/core/formulas.py, server/tools/shear.py, server/tools/extrapolation.py, server/tools/cleaning.py, tests/test_phase2.py | 12 tools |
 | 3 | server/tools/era5.py, server/tools/ltc.py, server/tools/ltc_ml.py, server/tools/air_density.py, tests/test_phase3.py | 11 tools |
-| 4 | server/tools/ensemble.py, server/tools/clipping.py, server/tools/homogeneity.py, server/tools/uncertainty.py, server/tools/visualization.py, server/tools/map.py, tests/test_phase4.py | 18 tools |
+| 4 | server/tools/ensemble.py, server/tools/clipping.py, server/tools/homogeneity.py, server/tools/uncertainty.py, server/tools/visualization.py, server/tools/map.py, tests/test_phase4.py | 19 tools |
 | 5 | tests/test_e2e.py, Dockerfile, docker-compose.yml, librechat_config.yaml, README.md | — |
-| **Total** | **~35 files** | **~48 tools** |
+| **Total** | **36 files** | **59 tools** |

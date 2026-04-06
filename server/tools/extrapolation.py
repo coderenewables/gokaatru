@@ -121,7 +121,7 @@ def extrapolate_to_hub_height(hub_height_m: float, shear_model: str = "power_law
     if hub_height_m in speed_map:
         column_name = _hub_column_name(hub_height_m)
         session.timeseries_df[column_name] = session.timeseries_df[speed_map[hub_height_m]]
-        session.hub_height_m = float(hub_height_m)
+        session.set_hub_height_m(float(hub_height_m))
         return {
             "status": "ok",
             "column_name": column_name,
@@ -160,7 +160,7 @@ def extrapolate_to_hub_height(hub_height_m: float, shear_model: str = "power_law
         counts["extrapolated"] = int(extrap_rows.sum())
     column_name = _hub_column_name(hub_height_m)
     session.timeseries_df[column_name] = result
-    session.hub_height_m = float(hub_height_m)
+    session.set_hub_height_m(float(hub_height_m))
     return {"status": "ok", "column_name": column_name, "method_counts": counts}
 
 

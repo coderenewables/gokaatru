@@ -59,6 +59,8 @@ def test_find_era5_nodes_grid(monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(result["nodes"]) == 4
     assert all(node["distance_km"] > 0 for node in result["nodes"])
     assert math.isclose(result["grid_resolution_deg"], 0.25, rel_tol=1e-9)
+    assert session.runconfig["location"]["latitude"] == 52.4
+    assert session.runconfig["location"]["longitude"] == 4.8
 
 
 def test_era5_storage_options_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None:

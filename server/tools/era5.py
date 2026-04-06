@@ -175,8 +175,9 @@ def _load_cached_era5(cache_path: Path, start_date: str, end_date: str) -> tuple
 
 def _store_coordinate(latitude: float, longitude: float) -> None:
     """Persist the site coordinate in session state for later interpolation tools."""
-    elevation = 0.0 if session.coordinate is None else session.coordinate.elevation_m
-    session.coordinate = Coordinate(latitude=latitude, longitude=longitude, elevation_m=elevation)
+    current = session.get_coordinate()
+    elevation = 0.0 if current is None else current.elevation_m
+    session.set_coordinate(Coordinate(latitude=latitude, longitude=longitude, elevation_m=elevation))
 
 
 @mcp.tool()
@@ -268,7 +269,8 @@ def compute_era5_wind_speed(latitude: float, longitude: float) -> dict:
 @mcp.tool()
 def interpolate_era5_to_site() -> dict:
     """Spatially interpolate ERA5 node data to the site using linear interpolation with IDW fallback."""
-    if session.coordinate is None:
+    coordinate = session.get_coordinate()
+    if coordinate is None:
         raise ValueError("Site coordinate is not set. Run find_era5_nodes first")
     if not session.era5_nodes or len(session.era5_nodes) < 4:
         raise ValueError("ERA5 nodes are not available. Run find_era5_nodes first")
@@ -288,7 +290,7 @@ def interpolate_era5_to_site() -> dict:
     if common_index.empty:
         raise ValueError("ERA5 node dataframes do not share any common timestamps for interpolation")
     variables = ["Spd_100m", "sp", "t2m", "d2m"]
-    site = (session.coordinate.latitude, session.coordinate.longitude)
+    site = (coordinate.latitude, coordinate.longitude)
     result = pd.DataFrame(index=common_index)
     methods_used: set[str] = set()
     for variable in variables:

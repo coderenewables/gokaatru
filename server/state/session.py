@@ -58,16 +58,76 @@ class SessionState:
         self.ensemble_df = None
         self.runconfig = {}
 
+    def set_project_name(self, project_name: str | None) -> None:
+        """Persist project name in runconfig while retaining a mirrored session convenience field."""
+        self.project_name = project_name
+        if project_name is None:
+            self.runconfig.pop("project_name", None)
+            return
+        self.runconfig["project_name"] = project_name
+
+    def set_coordinate(self, coordinate: Coordinate | None) -> None:
+        """Persist site location in runconfig while retaining a mirrored session convenience field."""
+        self.coordinate = coordinate
+        if coordinate is None:
+            self.runconfig.pop("location", None)
+            return
+        self.runconfig["location"] = coordinate.model_dump()
+
+    def set_measurement_type(self, measurement_type: str | None) -> None:
+        """Persist measurement type in runconfig while retaining a mirrored session convenience field."""
+        self.measurement_type = measurement_type
+        if measurement_type is None:
+            self.runconfig.pop("measurement_type", None)
+            return
+        self.runconfig["measurement_type"] = measurement_type
+
+    def set_hub_height_m(self, hub_height_m: float | None) -> None:
+        """Persist hub height in runconfig while retaining a mirrored session convenience field."""
+        self.hub_height_m = hub_height_m
+        if hub_height_m is None:
+            self.runconfig.pop("hub_height_m", None)
+            return
+        self.runconfig["hub_height_m"] = float(hub_height_m)
+
+    def get_coordinate(self) -> Coordinate | None:
+        """Return the site coordinate from runconfig when available, else the mirrored session field."""
+        location = self.runconfig.get("location")
+        if isinstance(location, dict) and {"latitude", "longitude"}.issubset(location):
+            return Coordinate(
+                latitude=float(location["latitude"]),
+                longitude=float(location["longitude"]),
+                elevation_m=float(location.get("elevation_m", 0.0)),
+            )
+        return self.coordinate
+
+    def get_project_name(self) -> str | None:
+        """Return the project name from runconfig when available, else the mirrored session field."""
+        value = self.runconfig.get("project_name")
+        return str(value) if isinstance(value, str) else self.project_name
+
+    def get_measurement_type(self) -> str | None:
+        """Return the measurement type from runconfig when available, else the mirrored session field."""
+        value = self.runconfig.get("measurement_type")
+        return str(value) if isinstance(value, str) else self.measurement_type
+
+    def get_hub_height_m(self) -> float | None:
+        """Return the hub height from runconfig when available, else the mirrored session field."""
+        value = self.runconfig.get("hub_height_m")
+        if isinstance(value, (int, float)):
+            return float(value)
+        return self.hub_height_m
+
     def to_runconfig(self) -> dict[str, object]:
         """Serialize current state into a run configuration dictionary for GoKaatru tools."""
         config: dict[str, object] = dict(self.runconfig)
-        if self.project_name is not None:
+        if "project_name" not in config and self.project_name is not None:
             config["project_name"] = self.project_name
-        if self.coordinate is not None:
+        if "location" not in config and self.coordinate is not None:
             config["location"] = self.coordinate.model_dump()
-        if self.measurement_type is not None:
+        if "measurement_type" not in config and self.measurement_type is not None:
             config["measurement_type"] = self.measurement_type
-        if self.hub_height_m is not None:
+        if "hub_height_m" not in config and self.hub_height_m is not None:
             config["hub_height_m"] = self.hub_height_m
         if self.sensor_mapping:
             config["sensor_mapping"] = {

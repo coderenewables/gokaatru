@@ -63,6 +63,7 @@ def test_extrapolate_to_hub_height(sample_timeseries_df: pd.DataFrame) -> None:
     assert "Spd_120m_hub" in session.timeseries_df.columns
     assert session.timeseries_df["Spd_120m_hub"].dropna().gt(0).all()
     assert session.timeseries_df["Spd_120m_hub"].mean() > session.timeseries_df["Spd_100m"].mean()
+    assert session.runconfig["hub_height_m"] == 120.0
 
 
 def test_cleaning_range_check(sample_timeseries_df: pd.DataFrame) -> None:

@@ -8,7 +8,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from server.api.deps import get_session_manager, get_session_state
+from server.api.deps import completed_steps, get_session_manager, get_session_state
 from server.api.schemas import CreateSessionResponse, SessionSummaryResponse
 from server.state.manager import SessionManager
 from server.state.session import SessionState
@@ -32,6 +32,7 @@ def _session_summary(state: SessionState) -> SessionSummaryResponse:
         era5_nodes_loaded=bool(state.era5_nodes),
         era5_interpolated_loaded=state.era5_interpolated_df is not None,
         ltc_algorithms=sorted(state.ltc_results.keys()),
+        completed_steps=completed_steps(state),
     )
 
 
@@ -45,6 +46,7 @@ def create_session(
         session_id=state.session_id or "",
         workspace_dir=str(state.workspace_dir) if state.workspace_dir is not None else "",
         created_at=state.created_at,
+        completed_steps=[],
     )
 
 

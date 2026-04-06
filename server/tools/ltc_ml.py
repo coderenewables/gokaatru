@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from server.main import mcp
-from server.state.session import session
+from server.state.session import SessionState, session
 from server.tools.ltc import MEASURED_COLUMN, REFERENCE_COLUMN, _concurrent_frame, _regression_metrics
 
 
@@ -60,13 +60,13 @@ class XGBoostTrain(Protocol):
     ) -> BoosterLike: ...
 
 
-def _long_term_frame(long_col: str) -> pd.DataFrame:
+def _long_term_frame(state: SessionState, long_col: str) -> pd.DataFrame:
     """Return the long-term reference dataframe required for ML LTC prediction."""
-    if session.era5_interpolated_df is None:
+    if state.era5_interpolated_df is None:
         raise ValueError("Interpolated ERA5 dataframe is not available")
-    if long_col not in session.era5_interpolated_df.columns:
+    if long_col not in state.era5_interpolated_df.columns:
         raise ValueError(f"Reference column '{long_col}' not found in session.era5_interpolated_df")
-    return session.era5_interpolated_df.copy()
+    return state.era5_interpolated_df.copy()
 
 
 def _build_features(df: pd.DataFrame, long_col: str, long_dir_col: str) -> tuple[pd.DataFrame, list[str]]:
@@ -108,25 +108,30 @@ def _xgboost_import() -> tuple[DMatrixFactory, XGBoostTrain]:
     return DMatrix, train
 
 
-def _save_xgboost_result(result_df: pd.DataFrame, metrics: Mapping[str, object]) -> str:
+def _save_xgboost_result(state: SessionState, result_df: pd.DataFrame, metrics: Mapping[str, object]) -> str:
     """Persist the XGBoost LTC result to CSV and session state."""
-    output_dir = Path(session.get_data_dir()) / "ltc_results"
+    output_dir = Path(state.get_data_dir()) / "ltc_results"
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
     output_path = output_dir / f"ltc_xgboost_{timestamp}.csv"
     result_df.to_csv(output_path, index=False)
-    session.ltc_results["xgboost"] = {"df": result_df.copy(), "metrics": dict(metrics), "file": str(output_path)}
+    state.ltc_results["xgboost"] = {"df": result_df.copy(), "metrics": dict(metrics), "file": str(output_path)}
     return str(output_path)
 
 
-@mcp.tool()
-def run_ltc_xgboost(short_col: str, long_col: str, short_dir_col: str = "", long_dir_col: str = "") -> dict:
+def _run_ltc_xgboost(
+    state: SessionState,
+    short_col: str,
+    long_col: str,
+    short_dir_col: str = "",
+    long_dir_col: str = "",
+) -> dict:
     """Run XGBoost MCP with temporal, directional, and meteorological features and early stopping."""
     DMatrix, xgb_train = _xgboost_import()
-    _, _, concurrent = _concurrent_frame(session, short_col, long_col)
+    _, _, concurrent = _concurrent_frame(state, short_col, long_col)
     if len(concurrent) < 100:
         raise ValueError(f"XGBoost LTC requires at least 100 concurrent samples, got {len(concurrent)}")
-    long_df = _long_term_frame(long_col)
+    long_df = _long_term_frame(state, long_col)
     reference_feature_columns = [
         column for column in [long_dir_col, "t2m", "sp"] if column and column in long_df.columns
     ]
@@ -192,5 +197,11 @@ def run_ltc_xgboost(short_col: str, long_col: str, short_dir_col: str = "", long
             "total_corrected_points": int(len(long_df)),
         }
     )
-    result_file = _save_xgboost_result(result_df, metrics)
+    result_file = _save_xgboost_result(state, result_df, metrics)
     return {"status": "ok", "algorithm": "xgboost", "metrics": metrics, "result_file": result_file}
+
+
+@mcp.tool()
+def run_ltc_xgboost(short_col: str, long_col: str, short_dir_col: str = "", long_dir_col: str = "") -> dict:
+    """Run XGBoost MCP with temporal, directional, and meteorological features and early stopping."""
+    return _run_ltc_xgboost(session, short_col, long_col, short_dir_col, long_dir_col)

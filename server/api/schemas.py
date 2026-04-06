@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 
 
 class CreateSessionResponse(BaseModel):
@@ -16,6 +16,7 @@ class CreateSessionResponse(BaseModel):
     session_id: str
     workspace_dir: str
     created_at: datetime | None
+    completed_steps: list[str] = Field(default_factory=list)
 
 
 class SessionSummaryResponse(BaseModel):
@@ -33,21 +34,36 @@ class SessionSummaryResponse(BaseModel):
     era5_nodes_loaded: bool
     era5_interpolated_loaded: bool
     ltc_algorithms: list[str]
+    completed_steps: list[str]
+
+
+class RunConfigUpdate(BaseModel):
+    """Represent one dotted-key runconfig mutation in a batched config update request."""
+
+    key: str = Field(..., min_length=1)
+    value: JsonValue
 
 
 class UpdateRunConfigRequest(BaseModel):
     """Submit a partial run configuration payload for a session."""
 
-    runconfig: dict[str, str | int | float | bool | None | list[str] | list[float] | dict[str, str]]
+    updates: list[RunConfigUpdate] = Field(default_factory=list)
 
 
 class ApplyCleaningRuleRequest(BaseModel):
     """Describe a cleaning rule request for the workflow API."""
 
-    rule_name: str
-    sensor_name: str = ""
-    threshold: float | None = None
-    replacement: float | None = None
+    rule_type: str
+    sensor: str = ""
+    params: dict[str, JsonValue] = Field(default_factory=dict)
+    start_date: str = ""
+    end_date: str = ""
+
+
+class UndoCleaningRuleRequest(BaseModel):
+    """Select one cleaning log entry to remove and replay around."""
+
+    entry_index: int = Field(..., ge=0)
 
 
 class CalculateShearRequest(BaseModel):
@@ -94,22 +110,58 @@ class RunLtcRequest(BaseModel):
     long_dir_col: str = ""
 
 
+class EnsembleRequest(BaseModel):
+    """Request multi-algorithm ensemble blending using one measured reference column."""
+
+    measured_col: str
+
+
+class ClippingRequest(BaseModel):
+    """Request clipping analysis for one corrected wind-speed column and source."""
+
+    speed_col: str
+    source: str = "ensemble"
+
+
+class HomogeneityAnalyzeRequest(BaseModel):
+    """Request Pettitt homogeneity analysis using annual or monthly aggregation."""
+
+    method: str = "annual"
+
+
+class HomogeneityApplyRequest(BaseModel):
+    """Request trimming ERA5 interpolated data to a selected homogeneous start year."""
+
+    cutoff_year: int
+
+
 class CalculateUncertaintyRequest(BaseModel):
     """Request uncertainty evaluation for one annual energy estimate."""
 
-    aep_mwh: float = Field(..., gt=0)
-    measurement_unc_pct: float = Field(3.0, ge=0)
-    model_unc_pct: float = Field(4.0, ge=0)
-    interannual_unc_pct: float = Field(3.0, ge=0)
-    long_term_unc_pct: float = Field(2.0, ge=0)
+    measurement_uncertainty_pct: float = Field(..., ge=0)
+    measurement_height_m: float = Field(..., gt=0)
+    hub_height_m: float = Field(..., gt=0)
+    shear_method: str
+    mcp_r_squared: float = Field(..., ge=0, le=1)
+    concurrent_hours: float = Field(..., gt=0)
+    algorithm: str = "speedsort"
+    iav_pct: float = Field(6.0, ge=0)
+    shear_std: float = Field(0.0, ge=0)
+    is_interpolation: bool = False
 
 
 class PlotRequest(BaseModel):
     """Request a named plot with simple string-based arguments from the workflow UI."""
 
+    speed_sensor: str = ""
     sensor_name: str = ""
     sensor_names: str = ""
     direction_sensor: str = ""
     sensor_a: str = ""
     sensor_b: str = ""
     table_type: str = "shear"
+    total_pct: float = Field(0.0, ge=0)
+    measurement_pct: float = Field(0.0, ge=0)
+    vertical_pct: float = Field(0.0, ge=0)
+    mcp_pct: float = Field(0.0, ge=0)
+    future_pct: float = Field(0.0, ge=0)

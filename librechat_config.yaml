@@ -1,0 +1,7 @@
+# Docker Compose configuration for LibreChat talking to the GoKaatru SSE server.
+# If LibreChat runs outside Docker, change the URL to http://localhost:8080/sse.
+mcpServers:
+  gokaatru:
+    type: sse
+    url: http://gokaatru:8080/sse
+    timeout: 120000

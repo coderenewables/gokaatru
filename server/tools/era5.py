@@ -74,7 +74,9 @@ def _era5_storage_options() -> dict[str, object]:
     headers: dict[str, str] = {}
     explicit_header = os.environ.get("EARTHDATAHUB_AUTH_HEADER", "").strip()
     explicit_value = os.environ.get("EARTHDATAHUB_AUTH_VALUE", "").strip()
-    bearer_token = os.environ.get("EARTHDATAHUB_BEARER_TOKEN", "").strip()
+    bearer_token = os.environ.get("EARTHDATAHUB_BEARER_TOKEN", "").strip() or os.environ.get(
+        "EARTHDATAHUB_TOKEN", ""
+    ).strip()
     api_key = os.environ.get("EARTHDATAHUB_API_KEY", "").strip()
     api_key_header = os.environ.get("EARTHDATAHUB_API_KEY_HEADER", "x-api-key").strip() or "x-api-key"
     if explicit_header and explicit_value:

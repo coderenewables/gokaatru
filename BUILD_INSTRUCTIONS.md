@@ -1334,25 +1334,25 @@ Create a configuration guide for connecting LibreChat to GoKaatru:
 
 **File: `librechat_config.yaml`** (example config snippet)
 ```yaml
-# Add to LibreChat's librechat.yaml under mcpServers:
+# Add to LibreChat's librechat.yaml under mcpServers.
+# Use `http://gokaatru:8080/sse` when LibreChat runs in the same Docker Compose stack.
+# Use `http://localhost:8080/sse` when LibreChat runs outside Docker on the host machine.
 mcpServers:
   gokaatru:
     type: sse
-    url: http://localhost:8080/sse
+    url: http://gokaatru:8080/sse
     timeout: 120000
 ```
 
 **File: `docker-compose.yml`**
 ```yaml
-version: '3.8'
-
 services:
   gokaatru:
     build: .
     ports:
       - "8080:8080"
     environment:
-      - EARTHDATAHUB_TOKEN=${EARTHDATAHUB_TOKEN}
+      - EARTHDATAHUB_TOKEN=${EARTHDATAHUB_TOKEN:-}
     volumes:
       - ./data:/app/data
 
@@ -1361,7 +1361,7 @@ services:
     ports:
       - "3080:3080"
     volumes:
-      - ./librechat_config.yaml:/app/librechat.yaml
+      - ./librechat_config.yaml:/app/librechat.yaml:ro
     depends_on:
       - gokaatru
 ```
@@ -1382,7 +1382,7 @@ COPY data/ data/
 RUN pip install --no-cache-dir ".[ml]"
 
 EXPOSE 8080
-CMD ["python", "-m", "server.main", "--transport", "sse", "--port", "8080"]
+CMD ["python", "-m", "server.main", "--transport", "sse", "--host", "0.0.0.0", "--port", "8080"]
 ```
 
 ---
@@ -1394,7 +1394,7 @@ CMD ["python", "-m", "server.main", "--transport", "sse", "--port", "8080"]
 Write a README with:
 1. One-paragraph description
 2. Quick start (local): `conda activate gokaatru && pip install -e ".[ml,dev]" && python -m server.main`
-3. Quick start (Docker): `docker compose up`
+3. Quick start (Docker): `docker compose up --build`
 4. LibreChat setup instructions
 5. List of all available tools (grouped by domain)
 6. Link to BUILD_SPECIFICATION.md for details
@@ -1407,8 +1407,8 @@ Before declaring the build complete, verify:
 
 - [ ] `ruff check server/ tests/` — zero warnings
 - [ ] `python -m pytest tests/ -v` — all tests pass
-- [ ] `python -m server.main` — server starts without errors
-- [ ] `echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python -m server.main` — lists all tools
+- [ ] `python -m server.main --help` — CLI help renders without errors
+- [ ] `python -c "import asyncio, json; from server.main import mcp; print(json.dumps([tool.name for tool in asyncio.run(mcp.list_tools())], indent=2))"` — lists all registered tools
 - [ ] Tool count matches spec: 59 tools total
 - [ ] Every tool has a docstring
 - [ ] No `Any` types anywhere in `server/`
@@ -1416,6 +1416,7 @@ Before declaring the build complete, verify:
 - [ ] All Pydantic models use v2 syntax
 - [ ] `data/` directory is gitignored
 - [ ] Docker build succeeds: `docker build -t gokaatru .`
+- [ ] Docker Compose config renders cleanly: `docker compose config`
 
 ---
 

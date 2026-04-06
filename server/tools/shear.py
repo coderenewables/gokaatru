@@ -11,7 +11,7 @@ import pandas as pd
 
 from server.core.momm import compute_weighted_momm_table
 from server.main import mcp
-from server.state.session import session
+from server.state.session import SessionState, session
 
 
 def _parse_height_sensors(height_sensors: str) -> dict[float, str]:
@@ -25,11 +25,11 @@ def _parse_height_sensors(height_sensors: str) -> dict[float, str]:
     return dict(sorted(parsed.items()))
 
 
-def _require_timeseries() -> pd.DataFrame:
+def _require_timeseries(state: SessionState) -> pd.DataFrame:
     """Return the loaded timeseries dataframe required by the Phase 2 shear workflow."""
-    if session.timeseries_df is None:
+    if state.timeseries_df is None:
         raise ValueError("Timeseries data is not loaded")
-    return session.timeseries_df
+    return state.timeseries_df
 
 
 def _require_columns(df: pd.DataFrame, height_map: dict[float, str]) -> None:
@@ -141,17 +141,16 @@ def _aggr_momm_table(df: pd.DataFrame, height_map: dict[float, str]) -> pd.DataF
     return result.fillna(fallback)
 
 
-@mcp.tool()
-def calculate_shear_timeseries(height_sensors: str) -> dict:
+def _calculate_shear_timeseries(state: SessionState, height_sensors: str) -> dict:
     """Calculate timestamp-wise power-law shear coefficients per IEC 61400-12-1 Section B.2."""
-    df = _require_timeseries()
+    df = _require_timeseries(state)
     height_map = _parse_height_sensors(height_sensors)
     _require_columns(df, height_map)
     heights = np.asarray(list(height_map.keys()), dtype=float)
     speed_matrix = df[list(height_map.values())].to_numpy(dtype=float)
     shear_values = _compute_pairwise_shear(speed_matrix, heights)
-    session.shear_timeseries_df = pd.DataFrame({"shear_coefficient": shear_values}, index=df.index)
-    valid = session.shear_timeseries_df["shear_coefficient"].dropna()
+    state.shear_timeseries_df = pd.DataFrame({"shear_coefficient": shear_values}, index=df.index)
+    valid = state.shear_timeseries_df["shear_coefficient"].dropna()
     return {
         "status": "ok",
         "records": int(valid.count()),
@@ -161,17 +160,16 @@ def calculate_shear_timeseries(height_sensors: str) -> dict:
     }
 
 
-@mcp.tool()
-def calculate_roughness_timeseries(height_sensors: str) -> dict:
+def _calculate_roughness_timeseries(state: SessionState, height_sensors: str) -> dict:
     """Calculate timestamp-wise roughness lengths from U versus ln(z) fits per IEC 61400-12-1 Section B.3."""
-    df = _require_timeseries()
+    df = _require_timeseries(state)
     height_map = _parse_height_sensors(height_sensors)
     _require_columns(df, height_map)
     heights = np.asarray(list(height_map.keys()), dtype=float)
     speed_matrix = df[list(height_map.values())].to_numpy(dtype=float)
     roughness = _fit_rowwise_log_profile(speed_matrix, heights)
-    session.roughness_timeseries_df = pd.DataFrame({"roughness_length": roughness}, index=df.index)
-    valid = session.roughness_timeseries_df["roughness_length"].dropna()
+    state.roughness_timeseries_df = pd.DataFrame({"roughness_length": roughness}, index=df.index)
+    valid = state.roughness_timeseries_df["roughness_length"].dropna()
     return {
         "status": "ok",
         "records": int(valid.count()),
@@ -181,44 +179,46 @@ def calculate_roughness_timeseries(height_sensors: str) -> dict:
     }
 
 
-@mcp.tool()
-def build_shear_table(aggregation: str = "mean") -> dict:
+def _build_shear_table(state: SessionState, aggregation: str = "mean") -> dict:
     """Build a 12x24 power-law shear lookup table using mean, median, or Windographer MoMM aggregation."""
     if aggregation not in {"mean", "median", "momm"}:
         raise ValueError(f"aggregation must be one of mean, median, momm, got '{aggregation}'")
-    if session.shear_timeseries_df is None:
+    if state.shear_timeseries_df is None:
         raise ValueError("Shear timeseries is not available. Run calculate_shear_timeseries first")
-    valid = session.shear_timeseries_df.dropna()
+    valid = state.shear_timeseries_df.dropna()
     fallback = float(valid["shear_coefficient"].mean()) if not valid.empty else 0.143
-    session.shear_table = _aggregate_table(valid, "shear_coefficient", aggregation, fallback)
-    return {"method": "power_law", "aggregation": aggregation, "table": session.shear_table.values.tolist()}
+    state.shear_table = _aggregate_table(valid, "shear_coefficient", aggregation, fallback)
+    return {"method": "power_law", "aggregation": aggregation, "table": state.shear_table.values.tolist()}
 
 
-@mcp.tool()
-def build_roughness_table(aggregation: str = "mean") -> dict:
+def _build_roughness_table(state: SessionState, aggregation: str = "mean") -> dict:
     """Build a 12x24 roughness lookup table in log-space per IEC logarithmic profile practice."""
     if aggregation not in {"mean", "median", "momm"}:
         raise ValueError(f"aggregation must be one of mean, median, momm, got '{aggregation}'")
-    if session.roughness_timeseries_df is None:
+    if state.roughness_timeseries_df is None:
         raise ValueError("Roughness timeseries is not available. Run calculate_roughness_timeseries first")
-    valid = session.roughness_timeseries_df.dropna()
-    session.roughness_table = _aggregate_roughness_table(valid, aggregation)
-    return {"method": "log_law", "aggregation": aggregation, "table": session.roughness_table.values.tolist()}
+    valid = state.roughness_timeseries_df.dropna()
+    state.roughness_table = _aggregate_roughness_table(valid, aggregation)
+    return {"method": "log_law", "aggregation": aggregation, "table": state.roughness_table.values.tolist()}
 
 
-@mcp.tool()
-def build_sector_shear_tables(direction_sensor: str, num_sectors: int = 12, aggregation: str = "mean") -> dict:
+def _build_sector_shear_tables(
+    state: SessionState,
+    direction_sensor: str,
+    num_sectors: int = 12,
+    aggregation: str = "mean",
+) -> dict:
     """Build direction-sector-specific 12x24 shear tables using IEC directional binning and chosen aggregation."""
     if aggregation not in {"mean", "median", "momm"}:
         raise ValueError(f"aggregation must be one of mean, median, momm, got '{aggregation}'")
     if num_sectors <= 0:
         raise ValueError(f"num_sectors must be positive, got {num_sectors}")
-    df = _require_timeseries()
+    df = _require_timeseries(state)
     if direction_sensor not in df.columns:
         raise ValueError(f"Direction sensor '{direction_sensor}' not found in loaded timeseries")
-    if session.shear_timeseries_df is None:
+    if state.shear_timeseries_df is None:
         raise ValueError("Shear timeseries is not available. Run calculate_shear_timeseries first")
-    joined = session.shear_timeseries_df.join(df[[direction_sensor]], how="inner").dropna()
+    joined = state.shear_timeseries_df.join(df[[direction_sensor]], how="inner").dropna()
     width = 360.0 / num_sectors
     sectors: dict[str, list[list[float]]] = {}
     indices = (((joined[direction_sensor] + width / 2.0) % 360.0) // width).astype(int)
@@ -232,11 +232,46 @@ def build_sector_shear_tables(direction_sensor: str, num_sectors: int = 12, aggr
     return {"sectors": sectors}
 
 
+def _build_aggr_momm_shear_table(state: SessionState, height_sensors: str) -> dict:
+    """Build an aggregate MoMM shear table by deriving alpha from per-height Windographer MoMM wind tables."""
+    df = _require_timeseries(state)
+    height_map = _parse_height_sensors(height_sensors)
+    _require_columns(df, height_map)
+    state.shear_table = _aggr_momm_table(df, height_map)
+    return {"method": "power_law", "aggregation": "aggr_momm", "table": state.shear_table.values.tolist()}
+
+
+@mcp.tool()
+def calculate_shear_timeseries(height_sensors: str) -> dict:
+    """Calculate timestamp-wise power-law shear coefficients per IEC 61400-12-1 Section B.2."""
+    return _calculate_shear_timeseries(session, height_sensors)
+
+
+@mcp.tool()
+def calculate_roughness_timeseries(height_sensors: str) -> dict:
+    """Calculate timestamp-wise roughness lengths from U versus ln(z) fits per IEC 61400-12-1 Section B.3."""
+    return _calculate_roughness_timeseries(session, height_sensors)
+
+
+@mcp.tool()
+def build_shear_table(aggregation: str = "mean") -> dict:
+    """Build a 12x24 power-law shear lookup table using mean, median, or Windographer MoMM aggregation."""
+    return _build_shear_table(session, aggregation)
+
+
+@mcp.tool()
+def build_roughness_table(aggregation: str = "mean") -> dict:
+    """Build a 12x24 roughness lookup table in log-space per IEC logarithmic profile practice."""
+    return _build_roughness_table(session, aggregation)
+
+
+@mcp.tool()
+def build_sector_shear_tables(direction_sensor: str, num_sectors: int = 12, aggregation: str = "mean") -> dict:
+    """Build direction-sector-specific 12x24 shear tables using IEC directional binning and chosen aggregation."""
+    return _build_sector_shear_tables(session, direction_sensor, num_sectors, aggregation)
+
+
 @mcp.tool()
 def build_aggr_momm_shear_table(height_sensors: str) -> dict:
     """Build an aggregate MoMM shear table by deriving alpha from per-height Windographer MoMM wind tables."""
-    df = _require_timeseries()
-    height_map = _parse_height_sensors(height_sensors)
-    _require_columns(df, height_map)
-    session.shear_table = _aggr_momm_table(df, height_map)
-    return {"method": "power_law", "aggregation": "aggr_momm", "table": session.shear_table.values.tolist()}
+    return _build_aggr_momm_shear_table(session, height_sensors)

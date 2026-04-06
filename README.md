@@ -22,15 +22,29 @@ python -m server.main --transport sse --host 0.0.0.0 --port 8080
 docker compose up --build
 ```
 
-The GoKaatru SSE endpoint will be available at `http://localhost:8080/sse`, and LibreChat will be available at `http://localhost:3080`.
+The Compose stack starts three services:
+
+- GoKaatru at `http://localhost:8080/sse`
+- LibreChat at `http://localhost:3080`
+- MongoDB for LibreChat at `mongodb://localhost:27017/LibreChat`
+
+The checked-in Compose file includes a local MongoDB container plus the minimum LibreChat environment needed for startup. For local overrides, copy [.env.example](.env.example) to `.env` and replace the LibreChat secret placeholders before starting the stack.
 
 ## LibreChat Setup
 
-If you use the included Docker Compose stack, LibreChat reads [librechat_config.yaml](librechat_config.yaml) automatically and connects to the `gokaatru` service over the internal Docker network using `http://gokaatru:8080/sse`.
+If you use the included Docker Compose stack, LibreChat reads [librechat_config.yaml](librechat_config.yaml) automatically. The checked-in config includes the required `version` field plus an MCP domain allowlist for both `http://gokaatru:8080` and `http://localhost:8080`, so it can initialize the GoKaatru SSE server inside Docker and from a host-local LibreChat setup.
+
+The Compose stack also configures `OPENAI_API_KEY=user_provided` by default so LibreChat can start without a baked-in provider secret. You still need to supply a real model provider key in LibreChat before you can use chat completions.
 
 If LibreChat runs outside Docker, add this MCP server entry to its `librechat.yaml`:
 
 ```yaml
+version: "1.3.6"
+
+mcpSettings:
+  allowedDomains:
+    - http://localhost:8080
+
 mcpServers:
   gokaatru:
     type: sse
@@ -49,6 +63,8 @@ python -m server.main --help
 python -c "import asyncio, json; from server.main import mcp; print(json.dumps([tool.name for tool in asyncio.run(mcp.list_tools())], indent=2))"
 docker build -t gokaatru .
 docker compose config
+docker compose up -d
+docker compose ps
 ```
 
 ## Tool Inventory

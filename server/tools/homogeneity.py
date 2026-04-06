@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from server.main import mcp
-from server.state.session import session
+from server.state.session import SessionState, session
 
 
 def _wind_speed_column(frame: pd.DataFrame) -> str:
@@ -71,15 +71,14 @@ def _recommended_start_year(series: pd.Series) -> int:
     return int(years[-1])
 
 
-@mcp.tool()
-def analyze_homogeneity(method: str = "annual") -> dict:
+def _analyze_homogeneity(state: SessionState, method: str = "annual") -> dict:
     """Run Pettitt homogeneity screening on ERA5 node series aggregated annually or monthly."""
     if method not in {"annual", "monthly"}:
         raise ValueError(f"method must be 'annual' or 'monthly', got '{method}'")
-    if not session.era5_data:
+    if not state.era5_data:
         raise ValueError("At least one ERA5 dataset is required for homogeneity analysis")
     datasets: list[dict[str, object]] = []
-    for name, frame_like in sorted(session.era5_data.items()):
+    for name, frame_like in sorted(state.era5_data.items()):
         frame = _to_indexed_frame(frame_like)
         speed_col = _wind_speed_column(frame)
         frequency = "YE" if method == "annual" else "ME"
@@ -98,18 +97,29 @@ def analyze_homogeneity(method: str = "annual") -> dict:
     return {"datasets": datasets}
 
 
-@mcp.tool()
-def apply_homogeneity_cutoff(cutoff_year: int) -> dict:
+def _apply_homogeneity_cutoff(state: SessionState, cutoff_year: int) -> dict:
     """Trim interpolated ERA5 data to a recommended homogeneous period start year."""
-    if session.era5_interpolated_df is None:
+    if state.era5_interpolated_df is None:
         raise ValueError("Interpolated ERA5 dataframe is not available")
-    frame = _to_indexed_frame(session.era5_interpolated_df)
+    frame = _to_indexed_frame(state.era5_interpolated_df)
     rows_before = int(len(frame))
     trimmed = frame[frame.index.year >= cutoff_year].copy()
-    session.era5_interpolated_df = trimmed
+    state.era5_interpolated_df = trimmed
     return {
         "status": "ok",
         "rows_before": rows_before,
         "rows_after": int(len(trimmed)),
         "cutoff_year": int(cutoff_year),
     }
+
+
+@mcp.tool()
+def analyze_homogeneity(method: str = "annual") -> dict:
+    """Run Pettitt homogeneity screening on ERA5 node series aggregated annually or monthly."""
+    return _analyze_homogeneity(session, method)
+
+
+@mcp.tool()
+def apply_homogeneity_cutoff(cutoff_year: int) -> dict:
+    """Trim interpolated ERA5 data to a recommended homogeneous period start year."""
+    return _apply_homogeneity_cutoff(session, cutoff_year)

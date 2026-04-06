@@ -123,7 +123,7 @@ def _save_xgboost_result(result_df: pd.DataFrame, metrics: Mapping[str, object])
 def run_ltc_xgboost(short_col: str, long_col: str, short_dir_col: str = "", long_dir_col: str = "") -> dict:
     """Run XGBoost MCP with temporal, directional, and meteorological features and early stopping."""
     DMatrix, xgb_train = _xgboost_import()
-    _, _, concurrent = _concurrent_frame(short_col, long_col)
+    _, _, concurrent = _concurrent_frame(session, short_col, long_col)
     if len(concurrent) < 100:
         raise ValueError(f"XGBoost LTC requires at least 100 concurrent samples, got {len(concurrent)}")
     long_df = _long_term_frame(long_col)

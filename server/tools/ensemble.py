@@ -11,21 +11,21 @@ import numpy as np
 import pandas as pd
 
 from server.main import mcp
-from server.state.session import session
+from server.state.session import SessionState, session
 
 
-def _measured_series(measured_col: str) -> pd.Series:
+def _measured_series(state: SessionState, measured_col: str) -> pd.Series:
     """Return the measured wind-speed series for ensemble scoring using overlap-period bias and RMSE."""
-    if session.timeseries_df is None:
+    if state.timeseries_df is None:
         raise ValueError("Measured timeseries is not loaded")
-    if measured_col not in session.timeseries_df.columns:
+    if measured_col not in state.timeseries_df.columns:
         raise ValueError(f"Measured column '{measured_col}' not found in session.timeseries_df")
-    return session.timeseries_df[measured_col].copy()
+    return state.timeseries_df[measured_col].copy()
 
 
-def _ltc_result_series(algorithm: str) -> pd.Series:
+def _ltc_result_series(state: SessionState, algorithm: str) -> pd.Series:
     """Return a corrected LTC series indexed by timestamp using the Phase 3 result-file schema."""
-    payload = session.ltc_results.get(algorithm)
+    payload = state.ltc_results.get(algorithm)
     if payload is None or "df" not in payload:
         raise ValueError(f"LTC result for algorithm '{algorithm}' is not available")
     frame = pd.DataFrame(payload["df"]).copy()
@@ -57,22 +57,21 @@ def _overlap_metrics(observed: pd.Series, predicted: pd.Series) -> dict[str, flo
     }
 
 
-def _ensemble_output_path() -> Path:
+def _ensemble_output_path(state: SessionState) -> Path:
     """Return the standard Phase 4 ensemble CSV output path under data/ltc_results."""
-    output_dir = Path(session.get_data_dir()) / "ltc_results"
+    output_dir = Path(state.get_data_dir()) / "ltc_results"
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
     return output_dir / f"ensemble_{timestamp}.csv"
 
 
-@mcp.tool()
-def run_ensemble(measured_col: str) -> dict:
+def _run_ensemble(state: SessionState, measured_col: str) -> dict:
     """Blend LTC algorithms using inverse-RMSE weights and overlap-period bias correction per MCP ensemble practice."""
-    algorithms = sorted(session.ltc_results.keys())
+    algorithms = sorted(state.ltc_results.keys())
     if len(algorithms) < 2:
         raise ValueError(f"Ensemble requires at least 2 LTC results, got {len(algorithms)}")
-    measured = _measured_series(measured_col)
-    component_series = {algorithm: _ltc_result_series(algorithm) for algorithm in algorithms}
+    measured = _measured_series(state, measured_col)
+    component_series = {algorithm: _ltc_result_series(state, algorithm) for algorithm in algorithms}
     overlap_stats = {algorithm: _overlap_metrics(measured, series) for algorithm, series in component_series.items()}
     inverse_rmse = {
         algorithm: 0.0 if stats["rmse"] <= 0.0 else 1.0 / stats["rmse"] for algorithm, stats in overlap_stats.items()
@@ -94,12 +93,18 @@ def run_ensemble(measured_col: str) -> dict:
     overlap = pd.concat([measured.rename("measured"), aligned["Ensemble_Speed"]], axis=1, join="inner").dropna()
     metrics = _overlap_metrics(overlap["measured"], overlap["Ensemble_Speed"])
     output = aligned.reset_index(names="Timestamp")
-    output_path = _ensemble_output_path()
+    output_path = _ensemble_output_path(state)
     output.to_csv(output_path, index=False)
-    session.ensemble_df = output.copy()
+    state.ensemble_df = output.copy()
     return {
         "status": "ok",
         "weights": weights,
         "metrics": {"rmse": metrics["rmse"], "r2": metrics["r2"], "bias": metrics["bias"]},
         "result_file": str(output_path),
     }
+
+
+@mcp.tool()
+def run_ensemble(measured_col: str) -> dict:
+    """Blend LTC algorithms using inverse-RMSE weights and overlap-period bias correction per MCP ensemble practice."""
+    return _run_ensemble(session, measured_col)

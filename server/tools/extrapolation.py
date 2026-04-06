@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from server.main import mcp
-from server.state.session import session
+from server.state.session import SessionState, session
 
 
 def _hub_column_name(hub_height_m: float) -> str:
@@ -16,14 +16,14 @@ def _hub_column_name(hub_height_m: float) -> str:
     return f"Spd_{int(hub_height_m)}m_hub" if float(hub_height_m).is_integer() else f"Spd_{hub_height_m}m_hub"
 
 
-def _speed_height_map() -> dict[float, str]:
+def _speed_height_map(state: SessionState) -> dict[float, str]:
     """Extract measured speed columns from the loaded sensor mapping."""
-    if session.timeseries_df is None:
+    if state.timeseries_df is None:
         raise ValueError("Timeseries data is not loaded")
     mapping = {
         height: sensor_map["speed_col"]
-        for height, sensor_map in session.sensor_mapping.items()
-        if sensor_map.get("speed_col") in session.timeseries_df.columns
+        for height, sensor_map in state.sensor_mapping.items()
+        if sensor_map.get("speed_col") in state.timeseries_df.columns
     }
     if not mapping:
         raise ValueError("No valid speed sensors are available in session.sensor_mapping")
@@ -104,28 +104,27 @@ def _log_linear_interpolation(
     )
 
 
-@mcp.tool()
-def extrapolate_to_hub_height(hub_height_m: float, shear_model: str = "power_law") -> dict:
+def _extrapolate_to_hub_height(state: SessionState, hub_height_m: float, shear_model: str = "power_law") -> dict:
     """Create a hub-height wind-speed series using power-law or log-law shear per IEC 61400-12-1 Annex B."""
     if shear_model not in {"power_law", "log_law"}:
         raise ValueError(f"shear_model must be 'power_law' or 'log_law', got '{shear_model}'")
-    if session.timeseries_df is None:
+    if state.timeseries_df is None:
         raise ValueError("Timeseries data is not loaded")
-    speed_map = _speed_height_map()
+    speed_map = _speed_height_map(state)
     heights = np.asarray(list(sorted(speed_map.keys())), dtype=float)
     columns = [speed_map[height] for height in heights]
-    speed_matrix = session.timeseries_df[columns].to_numpy(dtype=float)
+    speed_matrix = state.timeseries_df[columns].to_numpy(dtype=float)
     valid_mask = np.isfinite(speed_matrix) & (speed_matrix > 0.1)
     result = np.full(speed_matrix.shape[0], np.nan, dtype=float)
     counts = {"direct": 0, "interpolated": 0, "extrapolated": 0}
     if hub_height_m in speed_map:
         column_name = _hub_column_name(hub_height_m)
-        session.timeseries_df[column_name] = session.timeseries_df[speed_map[hub_height_m]]
-        session.set_hub_height_m(float(hub_height_m))
+        state.timeseries_df[column_name] = state.timeseries_df[speed_map[hub_height_m]]
+        state.set_hub_height_m(float(hub_height_m))
         return {
             "status": "ok",
             "column_name": column_name,
-            "method_counts": {"direct": len(session.timeseries_df), "interpolated": 0, "extrapolated": 0},
+            "method_counts": {"direct": len(state.timeseries_df), "interpolated": 0, "extrapolated": 0},
         }
     between = float(heights.min()) < hub_height_m < float(heights.max())
     if between:
@@ -148,34 +147,37 @@ def extrapolate_to_hub_height(hub_height_m: float, shear_model: str = "power_law
         ref_heights = heights[nearest]
         ref_speeds = speed_matrix[extrap_rows, :][np.arange(nearest.size), nearest]
         if shear_model == "power_law":
-            if session.shear_table is None:
+            if state.shear_table is None:
                 raise ValueError("Power-law extrapolation requires session.shear_table")
-            params = _lookup_table_values(session.timeseries_df.index[extrap_rows], session.shear_table)
+            params = _lookup_table_values(state.timeseries_df.index[extrap_rows], state.shear_table)
             result[extrap_rows] = _power_extrapolate_array(ref_speeds, ref_heights, hub_height_m, params)
         else:
-            if session.roughness_table is None:
+            if state.roughness_table is None:
                 raise ValueError("Log-law extrapolation requires session.roughness_table")
-            params = _lookup_table_values(session.timeseries_df.index[extrap_rows], session.roughness_table)
+            params = _lookup_table_values(state.timeseries_df.index[extrap_rows], state.roughness_table)
             result[extrap_rows] = _log_extrapolate_array(ref_speeds, ref_heights, hub_height_m, params)
         counts["extrapolated"] = int(extrap_rows.sum())
     column_name = _hub_column_name(hub_height_m)
-    session.timeseries_df[column_name] = result
-    session.set_hub_height_m(float(hub_height_m))
+    state.timeseries_df[column_name] = result
+    state.set_hub_height_m(float(hub_height_m))
     return {"status": "ok", "column_name": column_name, "method_counts": counts}
 
 
-@mcp.tool()
-def extrapolate_reanalysis_to_hub(hub_height_m: float, reference_height_m: float = 100.0) -> dict:
+def _extrapolate_reanalysis_to_hub(
+    state: SessionState,
+    hub_height_m: float,
+    reference_height_m: float = 100.0,
+) -> dict:
     """Extrapolate ERA5 site wind speed to hub height using the session month-hour shear lookup table."""
-    if session.era5_interpolated_df is None:
+    if state.era5_interpolated_df is None:
         raise ValueError("ERA5 interpolated data is not available. Run ERA5 interpolation tools first")
-    if session.shear_table is None:
+    if state.shear_table is None:
         raise ValueError("Reanalysis hub-height extrapolation requires session.shear_table")
     reference_col = f"Spd_{int(reference_height_m)}m"
-    if reference_col not in session.era5_interpolated_df.columns:
+    if reference_col not in state.era5_interpolated_df.columns:
         raise ValueError(f"Reference ERA5 column '{reference_col}' not found in interpolated data")
-    shear_values = _lookup_table_values(session.era5_interpolated_df.index, session.shear_table)
-    reference_speed = session.era5_interpolated_df[reference_col].to_numpy(dtype=float)
+    shear_values = _lookup_table_values(state.era5_interpolated_df.index, state.shear_table)
+    reference_speed = state.era5_interpolated_df[reference_col].to_numpy(dtype=float)
     hub_speed = _power_extrapolate_array(
         reference_speed,
         np.full_like(reference_speed, reference_height_m),
@@ -183,5 +185,17 @@ def extrapolate_reanalysis_to_hub(hub_height_m: float, reference_height_m: float
         shear_values,
     )
     column_name = _hub_column_name(hub_height_m)
-    session.era5_interpolated_df[column_name] = hub_speed
+    state.era5_interpolated_df[column_name] = hub_speed
     return {"status": "ok", "column_name": column_name}
+
+
+@mcp.tool()
+def extrapolate_to_hub_height(hub_height_m: float, shear_model: str = "power_law") -> dict:
+    """Create a hub-height wind-speed series using power-law or log-law shear per IEC 61400-12-1 Annex B."""
+    return _extrapolate_to_hub_height(session, hub_height_m, shear_model)
+
+
+@mcp.tool()
+def extrapolate_reanalysis_to_hub(hub_height_m: float, reference_height_m: float = 100.0) -> dict:
+    """Extrapolate ERA5 site wind speed to hub height using the session month-hour shear lookup table."""
+    return _extrapolate_reanalysis_to_hub(session, hub_height_m, reference_height_m)

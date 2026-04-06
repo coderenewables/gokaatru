@@ -12,7 +12,7 @@ import pandas as pd
 from server.core.validators import detect_timestep_minutes
 from server.main import mcp
 from server.schemas.common import SensorInfo
-from server.state.session import session
+from server.state.session import SessionState, session
 
 TIMESTAMP_CANDIDATES = ["Timestamp", "timestamp", "DateTime", "datetime", "Date", "date", "Time", "time"]
 SENSOR_FIELDS = {
@@ -110,20 +110,20 @@ def _build_sensor_mapping(points: list[dict[str, object]]) -> dict[float, dict[s
     return mapping
 
 
-def _build_sensor_rows(require_mapping: bool) -> list[dict[str, object]]:
+def _build_sensor_rows(state: SessionState, require_mapping: bool) -> list[dict[str, object]]:
     """Build sensor inventory rows using session mapping rules from the Phase 1 data inventory spec."""
-    if session.timeseries_df is None:
+    if state.timeseries_df is None:
         raise ValueError("Timeseries data is not loaded")
-    if require_mapping and not session.sensor_mapping:
+    if require_mapping and not state.sensor_mapping:
         raise ValueError("Sensor mapping is not loaded. Run parse_datamodel first")
     sensors: list[dict[str, object]] = []
-    total_rows = len(session.timeseries_df)
-    for height, mapping in sorted(session.sensor_mapping.items(), reverse=True):
+    total_rows = len(state.timeseries_df)
+    for height, mapping in sorted(state.sensor_mapping.items(), reverse=True):
         for field_name, sensor_type in SENSOR_FIELDS.items():
             column_name = mapping.get(field_name)
-            if column_name is None or column_name not in session.timeseries_df.columns:
+            if column_name is None or column_name not in state.timeseries_df.columns:
                 continue
-            series = session.timeseries_df[column_name]
+            series = state.timeseries_df[column_name]
             coverage = 0.0 if total_rows == 0 else float(series.notna().sum() / total_rows * 100.0)
             sensor = SensorInfo(
                 name=column_name,
@@ -144,8 +144,7 @@ def _gap_lengths_in_minutes(series: pd.Series, timestep_minutes: int) -> list[in
     return [int(size * timestep_minutes) for size in gap_sizes[gap_sizes > 0].tolist()]
 
 
-@mcp.tool()
-def parse_timeseries(file_path: str) -> dict:
+def _parse_timeseries(state: SessionState, file_path: str) -> dict:
     """Parse a wind timeseries file into session state following the GoKaatru Phase 1 ingest spec."""
     source_df = _read_tabular_file(file_path)
     timestamp_column, parsed_timestamps = _detect_timestamp_column(source_df)
@@ -154,8 +153,8 @@ def parse_timeseries(file_path: str) -> dict:
     filtered_df = filtered_df.drop(columns=[timestamp_column]).sort_index()
     if filtered_df.empty:
         raise ValueError("Parsed timeseries is empty after timestamp detection")
-    session.timeseries_df = filtered_df.copy()
-    session.raw_timeseries_df = filtered_df.copy(deep=True)
+    state.timeseries_df = filtered_df.copy()
+    state.raw_timeseries_df = filtered_df.copy(deep=True)
     timestep_minutes = detect_timestep_minutes(filtered_df)
     return {
         "status": "ok",
@@ -167,62 +166,58 @@ def parse_timeseries(file_path: str) -> dict:
     }
 
 
-@mcp.tool()
-def parse_datamodel(file_path: str) -> dict:
+def _parse_datamodel(state: SessionState, file_path: str) -> dict:
     """Parse an IEA Task 43 datamodel JSON file into the Phase 1 height-to-sensor mapping."""
     path = Path(file_path)
     if not path.exists():
         raise ValueError(f"Datamodel file does not exist: {file_path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
     mapping = _build_sensor_mapping(_extract_measurement_points(payload))
-    if session.timeseries_df is not None:
+    if state.timeseries_df is not None:
         mapping = {
             height: sensor_map
             for height, sensor_map in mapping.items()
-            if sensor_map.get("speed_col") in session.timeseries_df.columns
+            if sensor_map.get("speed_col") in state.timeseries_df.columns
         }
-    session.sensor_mapping = dict(sorted(mapping.items(), reverse=True))
+    state.sensor_mapping = dict(sorted(mapping.items(), reverse=True))
     return {
         "status": "ok",
-        "heights": list(session.sensor_mapping.keys()),
-        "mapping": {str(height): sensor_map.copy() for height, sensor_map in session.sensor_mapping.items()},
+        "heights": list(state.sensor_mapping.keys()),
+        "mapping": {str(height): sensor_map.copy() for height, sensor_map in state.sensor_mapping.items()},
     }
 
 
-@mcp.tool()
-def list_sensors() -> dict:
+def _list_sensors(state: SessionState) -> dict:
     """List mapped sensors with coverage statistics using the GoKaatru Phase 1 inventory contract."""
-    return {"sensors": _build_sensor_rows(require_mapping=True)}
+    return {"sensors": _build_sensor_rows(state, require_mapping=True)}
 
 
-@mcp.tool()
-def get_period_of_record() -> dict:
+def _get_period_of_record(state: SessionState) -> dict:
     """Summarize period of record and sensor inventory per the Phase 1 measurement inventory spec."""
-    if session.timeseries_df is None:
+    if state.timeseries_df is None:
         raise ValueError("Timeseries data is not loaded")
     return {
-        "start": _format_timestamp(session.timeseries_df.index.min()),
-        "end": _format_timestamp(session.timeseries_df.index.max()),
-        "total_records": int(len(session.timeseries_df)),
-        "timestep_minutes": detect_timestep_minutes(session.timeseries_df),
-        "sensors": _build_sensor_rows(require_mapping=False),
+        "start": _format_timestamp(state.timeseries_df.index.min()),
+        "end": _format_timestamp(state.timeseries_df.index.max()),
+        "total_records": int(len(state.timeseries_df)),
+        "timestep_minutes": detect_timestep_minutes(state.timeseries_df),
+        "sensors": _build_sensor_rows(state, require_mapping=False),
     }
 
 
-@mcp.tool()
-def get_data_coverage(sensor_name: str) -> dict:
+def _get_data_coverage(state: SessionState, sensor_name: str) -> dict:
     """Return sensor coverage and gap statistics using the Phase 1 data availability spec."""
-    if session.timeseries_df is None:
+    if state.timeseries_df is None:
         raise ValueError("Timeseries data is not loaded")
-    if sensor_name not in session.timeseries_df.columns:
+    if sensor_name not in state.timeseries_df.columns:
         raise ValueError(f"Sensor column '{sensor_name}' not found in loaded timeseries")
-    timestep_minutes = detect_timestep_minutes(session.timeseries_df)
+    timestep_minutes = detect_timestep_minutes(state.timeseries_df)
     full_index = pd.date_range(
-        session.timeseries_df.index.min(),
-        session.timeseries_df.index.max(),
+        state.timeseries_df.index.min(),
+        state.timeseries_df.index.max(),
         freq=f"{timestep_minutes}min",
     )
-    series = session.timeseries_df[sensor_name].reindex(full_index)
+    series = state.timeseries_df[sensor_name].reindex(full_index)
     gap_lengths = _gap_lengths_in_minutes(series, timestep_minutes)
     total_records = int(len(series))
     valid_records = int(series.notna().sum())
@@ -236,3 +231,33 @@ def get_data_coverage(sensor_name: str) -> dict:
         "largest_gap_minutes": largest_gap,
         "gaps_over_1_hour": gaps_over_1_hour,
     }
+
+
+@mcp.tool()
+def parse_timeseries(file_path: str) -> dict:
+    """Parse a wind timeseries file into session state following the GoKaatru Phase 1 ingest spec."""
+    return _parse_timeseries(session, file_path)
+
+
+@mcp.tool()
+def parse_datamodel(file_path: str) -> dict:
+    """Parse an IEA Task 43 datamodel JSON file into the Phase 1 height-to-sensor mapping."""
+    return _parse_datamodel(session, file_path)
+
+
+@mcp.tool()
+def list_sensors() -> dict:
+    """List mapped sensors with coverage statistics using the GoKaatru Phase 1 inventory contract."""
+    return _list_sensors(session)
+
+
+@mcp.tool()
+def get_period_of_record() -> dict:
+    """Summarize period of record and sensor inventory per the Phase 1 measurement inventory spec."""
+    return _get_period_of_record(session)
+
+
+@mcp.tool()
+def get_data_coverage(sensor_name: str) -> dict:
+    """Return sensor coverage and gap statistics using the Phase 1 data availability spec."""
+    return _get_data_coverage(session, sensor_name)

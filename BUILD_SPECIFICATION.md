@@ -2,31 +2,40 @@
 
 > **காற்று** (*kāṟṟu*) = Wind in Tamil
 >
-> Wind Data Analysis MCP Server + Chat-Driven Frontend
+> Wind Data Analysis MCP Server + Workflow Web App
 
 ---
 
 ## 1. System Overview
 
-GoKaatru is a **Model Context Protocol (MCP) server** exposing wind resource assessment (WRA) analytics as discrete, deterministic tools. An open-source chat frontend connects to the server, lets users bring their own LLM API key, and renders interactive visualizations in a split-pane layout (left = visuals/maps, right = chat).
+GoKaatru is a deterministic wind resource assessment (WRA) engine with two interfaces over the same analytical core:
+
+1. A browser-based workflow web app for analysts
+2. An MCP server for AI clients, automation, and debugging
+
+The browser does not talk to MCP directly. Instead, it uses a thin HTTP API layer that calls the same session-aware backend logic as the MCP wrappers. This keeps the UI explicit and task-oriented while preserving MCP compatibility.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Browser (Open-Source Chat UI)                               │
-│  ┌────────────────────┐  ┌─────────────────────────────────┐ │
-│  │  LEFT PANE          │  │  RIGHT PANE (Chat)              │ │
-│  │  • Maps (Leaflet)   │  │  • User ↔ LLM conversation     │ │
-│  │  • Plotly charts    │  │  • LLM calls MCP tools          │ │
-│  │  • Data tables      │  │  • Text results in chat         │ │
-│  │  • GoKaatru logo    │  │  • Plot refs rendered left      │ │
-│  └────────────────────┘  └─────────────────────────────────┘ │
-│         ▲                           │                        │
-│         └───── MCP tool results ────┘                        │
+│  Browser (Workflow Web App)                                  │
+│  ┌──────────────────────────────────────────────────────────┐ │
+│  │ Sidebar: workflow steps                                 │ │
+│  │ Main pane: forms, charts, maps, tables, run results     │ │
+│  │ Inspector: metrics, warnings, runconfig, status         │ │
+│  └──────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────┘
-          │  MCP (JSON-RPC over stdio/SSE)
+          │  HTTP/JSON
           ▼
 ┌──────────────────────────────────────────────────────────────┐
-│  GoKaatru MCP Server  (Python, FastMCP)                      │
+│  GoKaatru Web API (Python, FastAPI)                          │
+│  • Session registry                                          │
+│  • Upload and workflow endpoints                             │
+│  • Calls shared analytical helpers                           │
+└──────────────────────────────────────────────────────────────┘
+          │
+          ▼
+┌──────────────────────────────────────────────────────────────┐
+│  Shared Analytics Layer                                       │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────┐       │
 │  │ Data I/O │ │ Cleaning │ │ Shear    │ │ LTC/MCP   │       │
 │  │ tools    │ │ tools    │ │ Extrap.  │ │ algorithms│       │
@@ -37,6 +46,12 @@ GoKaatru is a **Model Context Protocol (MCP) server** exposing wind resource ass
 │  │ Config   │ │ Stats    │ │ Uncert.  │ │ Homogen.  │       │
 │  │ Manager  │ │ tools    │ │ tools    │ │ tools     │       │
 │  └──────────┘ └──────────┘ └──────────┘ └───────────┘       │
+└──────────────────────────────────────────────────────────────┘
+          │
+          ▼
+┌──────────────────────────────────────────────────────────────┐
+│  GoKaatru MCP Server  (Python, FastMCP)                      │
+│  • Same logic exposed for AI clients and automation          │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -73,22 +88,34 @@ GoKaatru is a **Model Context Protocol (MCP) server** exposing wind resource ass
 | Air Density | IEC 61400-12-1 formulas | Magnus formula, ideal gas law |
 | Wind Rose | `windrose` (PyPI) | Open-source polar bar plotting |
 
-### 3.2 Frontend — LibreChat
+### 3.2 Web API
 
 | | |
 |---|---|
-| **Project** | [LibreChat](https://github.com/danny-avila/LibreChat) |
-| **License** | MIT |
-| **Why** | Multi-provider LLM support (OpenAI, Anthropic, OpenRouter), built-in MCP tool-call integration, artifact rendering for visuals, BYOK (bring-your-own-key), split-pane capable |
+| **Framework** | FastAPI |
+| **Role** | Thin HTTP layer for browser clients |
+| **Why** | Reuse Python analytics directly, expose typed JSON endpoints, support uploads, and avoid pushing MCP protocol concerns into the browser |
 
-LibreChat is the frontend. Users log in, choose their LLM provider, paste their API key, and interact via chat. MCP tool results (Plotly JSON, GeoJSON, tables) render as artifacts in the conversation or in the side panel.
+### 3.3 Frontend — Workflow Web App
 
-### 3.3 Environment
+| | |
+|---|---|
+| **Framework** | React 19 + TypeScript + Vite |
+| **State** | TanStack Query for server state, Zustand for transient UI state |
+| **Visualization** | Plotly.js for charts, React Leaflet for maps |
+| **Routing** | React Router |
+| **Why** | The product is a structured analyst workflow, not a general chat client. A route-based web app matches the domain and reduces infrastructure complexity. |
+
+The frontend is an in-repo workflow app with explicit pages for data upload, site setup, reanalysis, long-term correction, and results. It renders Plotly JSON, GeoJSON, tables, and run summaries returned by the backend API.
+
+### 3.4 Environment
 
 | Component | Tool |
 |-----------|------|
 | Package manager | `conda` (environment: `gokaatru`) |
 | Python environment | Conda env with pip for MCP-specific packages |
+| Frontend runtime | Node.js 20+ |
+| Frontend package manager | `npm` |
 | Config | `pyproject.toml` |
 | Linting | `ruff` |
 | Testing | `pytest` |
@@ -106,6 +133,17 @@ gokaatru/
 ├── BUILD_SPECIFICATION.md
 ├── server/
 │   ├── __init__.py
+│   ├── api/                     # FastAPI application for the web UI
+│   │   ├── __init__.py
+│   │   ├── main.py
+│   │   ├── deps.py
+│   │   └── routes/
+│   │       ├── health.py
+│   │       ├── sessions.py
+│   │       ├── uploads.py
+│   │       ├── config.py
+│   │       ├── analysis.py
+│   │       └── results.py
 │   ├── main.py                  # FastMCP server entry point
 │   ├── schemas/                 # Pydantic v2 models (all I/O types)
 │   │   ├── __init__.py
@@ -144,7 +182,22 @@ gokaatru/
 │   │   └── validators.py        # Reusable validation helpers
 │   └── state/                   # Session state management
 │       ├── __init__.py
-│       └── session.py           # In-memory session store (project context)
+│       ├── session.py           # Session model (per workspace)
+│       └── manager.py           # Session registry and lookup helpers
+├── frontend/
+│   ├── package.json
+│   ├── vite.config.ts
+│   ├── tsconfig.json
+│   ├── index.html
+│   └── src/
+│       ├── main.tsx
+│       ├── App.tsx
+│       ├── router.tsx
+│       ├── styles.css
+│       ├── lib/
+│       ├── stores/
+│       ├── components/
+│       └── pages/
 ├── tests/
 │   ├── conftest.py
 │   ├── test_shear.py
@@ -152,12 +205,15 @@ gokaatru/
 │   ├── test_extrapolation.py
 │   ├── test_air_density.py
 │   ├── test_uncertainty.py
-│   └── test_era5.py
+│   ├── test_era5.py
+│   ├── test_api_sessions.py
+│   └── test_api_workflow.py
 └── data/                        # Runtime data directory (gitignored)
     ├── uploads/
     ├── era5_cache/
     ├── ltc_results/
-    └── runconfig.json
+  ├── runconfig.json
+  └── sessions/
 ```
 
 ### 4.2 Server Entry Point
@@ -773,10 +829,12 @@ EXPOSE 8080
 CMD ["python", "-m", "server.main", "--sse", "--port", "8080"]
 ```
 
-### Frontend Connection
-- MCP over SSE: Frontend connects to `http://localhost:8080/sse`
-- LLM calls MCP tools via function-calling / tool-use
-- Frontend renders returned Plotly JSON in left pane and text in right pane
+### Web App Connection
+- Browser talks to `http://localhost:8000/api`
+- Each request carries a session identifier so backend state is workspace-scoped
+- FastAPI routes call the same analytical helpers used by the MCP server
+- Plotly JSON and GeoJSON are rendered directly in the web app
+- MCP over SSE remains available at `http://localhost:8080/sse` for AI clients and debugging
 
 ---
 
@@ -809,8 +867,21 @@ CMD ["python", "-m", "server.main", "--sse", "--port", "8080"]
 - Uncertainty: `calculate_uncertainty`
 - All visualization tools
 - Map tools
-- Frontend integration and testing
 - End-to-end workflow validation
+
+### Phase 5 — Integration & Deployment
+- End-to-end workflow test
+- Docker packaging for the MCP server
+- Local development Compose stack
+- Example environment overrides
+- MCP configuration for external clients
+
+### Phase 6 — Workflow Web App
+- Session registry refactor for browser-safe workspaces
+- FastAPI web API over the existing analytical backend
+- React/Vite workflow UI with route-based pages
+- Upload, configuration, ERA5, LTC, and results workspaces
+- Frontend build, API tests, and browser workflow validation
 
 ---
 
@@ -818,9 +889,9 @@ CMD ["python", "-m", "server.main", "--sse", "--port", "8080"]
 
 | # | Question | Decision | Rationale |
 |---|----------|----------|-----------|
-| 1 | Frontend | **LibreChat** | Multi-provider BYOK, MCP tool-call support, artifact rendering, MIT license |
+| 1 | Frontend | **In-repo React/Vite workflow app** | The product is a structured WRA workflow. A purpose-built UI is simpler and more controllable than a chat platform. |
 | 2 | ERA5 Zarr caching | **Local disk cache** | Cache extracted DataFrames as Parquet on first fetch. ~500 MB/node but fast on repeat queries. Stored in `data/era5_cache/` |
-| 3 | State persistence | **Filesystem JSON + CSV** | `runconfig.json` for config, CSV/Parquet for timeseries and LTC results in `data/`. Simple, inspectable, git-friendly, matches existing logic |
-| 4 | Visualization format | **Both (Plotly JSON + PNG fallback)** | Plotly JSON as primary (interactive, artifact-renderable in LibreChat). Base64 PNG auto-generated as fallback for non-interactive contexts |
-| 5 | Multi-user support | **Single-user local** | One user at a time. All state in a single `data/` folder. Simplest path to MVP |
-| 6 | MCP transport | **Both SSE + stdio** | SSE for LibreChat web frontend. stdio for local dev/testing and desktop MCP clients (Claude Desktop, VS Code). FastMCP supports both natively |
+| 3 | State persistence | **Session-scoped filesystem JSON + CSV** | Each browser workspace gets its own in-memory session and `data/sessions/<id>/` folder. Simple, inspectable, and safer than a global singleton. |
+| 4 | Visualization format | **Both (Plotly JSON + PNG fallback)** | Plotly JSON is the primary format for the web UI; Base64 PNG remains the fallback for non-interactive contexts. |
+| 5 | Multi-user support | **Session-scoped local workspaces** | Support multiple browser sessions on one host without adding full authentication or a database in the first web phase. |
+| 6 | External interface | **HTTP API for UI, MCP SSE/stdio for AI and debug** | The browser gets simple JSON endpoints; MCP remains available for desktop clients, automation, and future AI integration. |

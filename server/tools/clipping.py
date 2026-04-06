@@ -9,17 +9,17 @@ import pandas as pd
 from scipy.stats import norm
 
 from server.main import mcp
-from server.state.session import session
+from server.state.session import SessionState, session
 
 
-def _source_series(speed_col: str, source: str) -> pd.Series:
+def _source_series(state: SessionState, speed_col: str, source: str) -> pd.Series:
     """Resolve the long-term corrected source series used for clipping analysis by annual means."""
     if source == "ensemble":
-        if session.ensemble_df is None:
+        if state.ensemble_df is None:
             raise ValueError("Ensemble dataframe is not available. Run run_ensemble first")
-        frame = pd.DataFrame(session.ensemble_df).copy()
+        frame = pd.DataFrame(state.ensemble_df).copy()
     else:
-        payload = session.ltc_results.get(source)
+        payload = state.ltc_results.get(source)
         if payload is None or "df" not in payload:
             raise ValueError(f"LTC result '{source}' is not available")
         frame = pd.DataFrame(payload["df"]).copy()
@@ -31,10 +31,9 @@ def _source_series(speed_col: str, source: str) -> pd.Series:
     return frame[speed_col].sort_index().dropna()
 
 
-@mcp.tool()
-def run_clipping_analysis(speed_col: str, source: str = "ensemble") -> dict:
+def _run_clipping_analysis(state: SessionState, speed_col: str, source: str = "ensemble") -> dict:
     """Minimize combined historic and climate uncertainty using annual means and the clipping methodology."""
-    series = _source_series(speed_col, source)
+    series = _source_series(state, speed_col, source)
     annual_means = series.resample("YE").mean().dropna()
     if len(annual_means) <= 5:
         raise ValueError(f"Clipping analysis requires more than 5 annual means, got {len(annual_means)}")
@@ -75,3 +74,9 @@ def run_clipping_analysis(speed_col: str, source: str = "ensemble") -> dict:
         "iav": full_iav,
         "analysis_data": results,
     }
+
+
+@mcp.tool()
+def run_clipping_analysis(speed_col: str, source: str = "ensemble") -> dict:
+    """Minimize combined historic and climate uncertainty using annual means and the clipping methodology."""
+    return _run_clipping_analysis(session, speed_col, source)

@@ -13,25 +13,25 @@ import pandas as pd
 from server.core.regression import robust_huber_fit, total_least_squares_fit
 from server.core.validators import detect_timestep_minutes
 from server.main import mcp
-from server.state.session import session
+from server.state.session import SessionState, session
 
 MEASURED_COLUMN = "__measured__"
 REFERENCE_COLUMN = "__reference__"
 
 
-def _require_ltc_inputs(short_col: str, long_col: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _require_ltc_inputs(state: SessionState, short_col: str, long_col: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Validate measured and reference datasets required for LTC algorithms."""
-    if session.timeseries_df is None:
+    if state.timeseries_df is None:
         raise ValueError("Measured timeseries is not loaded")
-    if session.era5_interpolated_df is None:
+    if state.era5_interpolated_df is None:
         raise ValueError("Interpolated ERA5 dataframe is not available")
-    if short_col not in session.timeseries_df.columns:
+    if short_col not in state.timeseries_df.columns:
         raise ValueError(f"Measured column '{short_col}' not found in session.timeseries_df")
-    if long_col not in session.era5_interpolated_df.columns:
+    if long_col not in state.era5_interpolated_df.columns:
         raise ValueError(f"Reference column '{long_col}' not found in session.era5_interpolated_df")
     return (
-        session.timeseries_df[[short_col]].copy().rename(columns={short_col: MEASURED_COLUMN}),
-        session.era5_interpolated_df[[long_col]].copy().rename(columns={long_col: REFERENCE_COLUMN}),
+        state.timeseries_df[[short_col]].copy().rename(columns={short_col: MEASURED_COLUMN}),
+        state.era5_interpolated_df[[long_col]].copy().rename(columns={long_col: REFERENCE_COLUMN}),
     )
 
 
@@ -50,9 +50,13 @@ def _prepare_short_term(short_df: pd.DataFrame) -> pd.DataFrame:
     return hourly_mean.loc[coverage >= 0.5]
 
 
-def _concurrent_frame(short_col: str, long_col: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def _concurrent_frame(
+    state: SessionState,
+    short_col: str,
+    long_col: str,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Build the measured, reference, and concurrent datasets used by LTC algorithms."""
-    short_df, long_df = _require_ltc_inputs(short_col, long_col)
+    short_df, long_df = _require_ltc_inputs(state, short_col, long_col)
     prepared_short = _prepare_short_term(short_df)
     concurrent = prepared_short.join(long_df, how="inner").dropna()
     if len(concurrent) < 10:
@@ -97,27 +101,26 @@ def _result_frame(reference_df: pd.DataFrame, corrected: np.ndarray) -> pd.DataF
     return frame
 
 
-def _save_ltc_result(algorithm: str, result_df: pd.DataFrame, metrics: dict[str, object]) -> str:
+def _save_ltc_result(state: SessionState, algorithm: str, result_df: pd.DataFrame, metrics: dict[str, object]) -> str:
     """Persist an LTC result to CSV and store it in session state."""
-    output_dir = Path(session.get_data_dir()) / "ltc_results"
+    output_dir = Path(state.get_data_dir()) / "ltc_results"
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
     output_path = output_dir / f"ltc_{algorithm}_{timestamp}.csv"
     result_df.to_csv(output_path, index=False)
-    session.ltc_results[algorithm] = {"df": result_df.copy(), "metrics": metrics.copy(), "file": str(output_path)}
+    state.ltc_results[algorithm] = {"df": result_df.copy(), "metrics": metrics.copy(), "file": str(output_path)}
     return str(output_path)
 
 
-def _ltc_response(algorithm: str, result_df: pd.DataFrame, metrics: dict[str, object]) -> dict:
+def _ltc_response(state: SessionState, algorithm: str, result_df: pd.DataFrame, metrics: dict[str, object]) -> dict:
     """Save an LTC result and return the standard MCP tool response payload."""
-    result_file = _save_ltc_result(algorithm, result_df, metrics)
+    result_file = _save_ltc_result(state, algorithm, result_df, metrics)
     return {"status": "ok", "algorithm": algorithm, "metrics": metrics, "result_file": result_file}
 
 
-@mcp.tool()
-def run_ltc_linear_least_squares(short_col: str, long_col: str) -> dict:
+def _run_ltc_linear_least_squares(state: SessionState, short_col: str, long_col: str) -> dict:
     """Run robust linear MCP using Huber IRLS and apply the fit to the full long-term record."""
-    _, long_df, concurrent = _concurrent_frame(short_col, long_col)
+    _, long_df, concurrent = _concurrent_frame(state, short_col, long_col)
     measured = concurrent[MEASURED_COLUMN].to_numpy(dtype=float)
     reference = concurrent[REFERENCE_COLUMN].to_numpy(dtype=float)
     slope, intercept, y_hat, r_squared = robust_huber_fit(reference, measured)
@@ -133,13 +136,12 @@ def run_ltc_linear_least_squares(short_col: str, long_col: str) -> dict:
             "total_corrected_points": int(len(long_df)),
         }
     )
-    return _ltc_response("linear_least_squares", _result_frame(long_df, corrected), metrics)
+    return _ltc_response(state, "linear_least_squares", _result_frame(long_df, corrected), metrics)
 
 
-@mcp.tool()
-def run_ltc_total_least_squares(short_col: str, long_col: str) -> dict:
+def _run_ltc_total_least_squares(state: SessionState, short_col: str, long_col: str) -> dict:
     """Run orthogonal total least squares MCP and apply the fit to the full long-term record."""
-    _, long_df, concurrent = _concurrent_frame(short_col, long_col)
+    _, long_df, concurrent = _concurrent_frame(state, short_col, long_col)
     measured = concurrent[MEASURED_COLUMN].to_numpy(dtype=float)
     reference = concurrent[REFERENCE_COLUMN].to_numpy(dtype=float)
     slope, intercept = total_least_squares_fit(reference, measured)
@@ -155,13 +157,12 @@ def run_ltc_total_least_squares(short_col: str, long_col: str) -> dict:
             "total_corrected_points": int(len(long_df)),
         }
     )
-    return _ltc_response("total_least_squares", _result_frame(long_df, corrected), metrics)
+    return _ltc_response(state, "total_least_squares", _result_frame(long_df, corrected), metrics)
 
 
-@mcp.tool()
-def run_ltc_speedsort(short_col: str, long_col: str) -> dict:
+def _run_ltc_speedsort(state: SessionState, short_col: str, long_col: str) -> dict:
     """Run SpeedSort MCP with a dog-leg low-speed segment and TLS on the high-speed tail."""
-    _, long_df, concurrent = _concurrent_frame(short_col, long_col)
+    _, long_df, concurrent = _concurrent_frame(state, short_col, long_col)
     measured = concurrent[MEASURED_COLUMN].to_numpy(dtype=float)
     reference = concurrent[REFERENCE_COLUMN].to_numpy(dtype=float)
     threshold = float(min(4.0, 0.5 * long_df[REFERENCE_COLUMN].mean()))
@@ -189,13 +190,12 @@ def run_ltc_speedsort(short_col: str, long_col: str) -> dict:
             "total_corrected_points": int(len(long_df)),
         }
     )
-    return _ltc_response("speedsort", _result_frame(long_df, corrected), metrics)
+    return _ltc_response(state, "speedsort", _result_frame(long_df, corrected), metrics)
 
 
-@mcp.tool()
-def run_ltc_variance_ratio(short_col: str, long_col: str) -> dict:
+def _run_ltc_variance_ratio(state: SessionState, short_col: str, long_col: str) -> dict:
     """Run variance-ratio MCP using mean and standard-deviation scaling of the reference series."""
-    _, long_df, concurrent = _concurrent_frame(short_col, long_col)
+    _, long_df, concurrent = _concurrent_frame(state, short_col, long_col)
     measured = concurrent[MEASURED_COLUMN].to_numpy(dtype=float)
     reference = concurrent[REFERENCE_COLUMN].to_numpy(dtype=float)
     measured_mean = float(np.mean(measured))
@@ -221,4 +221,28 @@ def run_ltc_variance_ratio(short_col: str, long_col: str) -> dict:
             "total_corrected_points": int(len(long_df)),
         }
     )
-    return _ltc_response("variance_ratio", _result_frame(long_df, corrected), metrics)
+    return _ltc_response(state, "variance_ratio", _result_frame(long_df, corrected), metrics)
+
+
+@mcp.tool()
+def run_ltc_linear_least_squares(short_col: str, long_col: str) -> dict:
+    """Run robust linear MCP using Huber IRLS and apply the fit to the full long-term record."""
+    return _run_ltc_linear_least_squares(session, short_col, long_col)
+
+
+@mcp.tool()
+def run_ltc_total_least_squares(short_col: str, long_col: str) -> dict:
+    """Run orthogonal total least squares MCP and apply the fit to the full long-term record."""
+    return _run_ltc_total_least_squares(session, short_col, long_col)
+
+
+@mcp.tool()
+def run_ltc_speedsort(short_col: str, long_col: str) -> dict:
+    """Run SpeedSort MCP with a dog-leg low-speed segment and TLS on the high-speed tail."""
+    return _run_ltc_speedsort(session, short_col, long_col)
+
+
+@mcp.tool()
+def run_ltc_variance_ratio(short_col: str, long_col: str) -> dict:
+    """Run variance-ratio MCP using mean and standard-deviation scaling of the reference series."""
+    return _run_ltc_variance_ratio(session, short_col, long_col)

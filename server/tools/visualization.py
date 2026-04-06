@@ -14,18 +14,17 @@ from plotly.subplots import make_subplots
 from scipy.stats import weibull_min
 
 from server.main import mcp
-from server.state.session import session
-from server.tools.statistics import compute_scatter_stats
+from server.state.session import SessionState, session
 
 COMPASS_16 = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
 MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
-def _timeseries_frame() -> pd.DataFrame:
+def _timeseries_frame(state: SessionState) -> pd.DataFrame:
     """Return the loaded measured dataframe required by Phase 4 visualization tools."""
-    if session.timeseries_df is None:
+    if state.timeseries_df is None:
         raise ValueError("Timeseries data is not loaded")
-    return session.timeseries_df
+    return state.timeseries_df
 
 
 def _indexed_frame(frame_like: object) -> pd.DataFrame:
@@ -39,9 +38,9 @@ def _indexed_frame(frame_like: object) -> pd.DataFrame:
     return frame.sort_index()
 
 
-def _require_series(sensor_name: str) -> pd.Series:
+def _require_series(state: SessionState, sensor_name: str) -> pd.Series:
     """Return a measured sensor series for direct visualization from the loaded timeseries dataframe."""
-    frame = _timeseries_frame()
+    frame = _timeseries_frame(state)
     if sensor_name not in frame.columns:
         raise ValueError(f"Sensor column '{sensor_name}' not found in loaded timeseries")
     return frame[sensor_name]
@@ -83,10 +82,34 @@ def _wind_speed_bins() -> list[tuple[float, float | None, str]]:
     return [(0.0, 5.0, "0-5"), (5.0, 10.0, "5-10"), (10.0, 15.0, "10-15"), (15.0, 20.0, "15-20"), (20.0, None, "20+")]
 
 
-def _preferred_measured_speed_column() -> str:
+def _scatter_metrics(frame: pd.DataFrame, sensor_a: str, sensor_b: str) -> dict[str, float]:
+    """Compute OLS scatter metrics from an already aligned two-column dataframe."""
+    x_values = frame[sensor_a].to_numpy(dtype=float)
+    y_values = frame[sensor_b].to_numpy(dtype=float)
+    mean_x = float(np.mean(x_values))
+    mean_y = float(np.mean(y_values))
+    centered_x = x_values - mean_x
+    centered_y = y_values - mean_y
+    denominator = float(np.sum(centered_x**2))
+    slope = 0.0 if denominator <= 1e-12 else float(np.sum(centered_x * centered_y) / denominator)
+    intercept = float(mean_y - slope * mean_x)
+    predicted = slope * x_values + intercept
+    residuals = y_values - predicted
+    ss_res = float(np.sum((y_values - predicted) ** 2))
+    ss_tot = float(np.sum((y_values - y_values.mean()) ** 2))
+    r2 = 1.0 if ss_tot == 0.0 else float(1.0 - ss_res / ss_tot)
+    return {
+        "r2": r2,
+        "rmse": float(np.sqrt(np.mean(residuals**2))),
+        "slope": slope,
+        "intercept": intercept,
+    }
+
+
+def _preferred_measured_speed_column(state: SessionState) -> str:
     """Choose the most relevant measured speed column for LTC comparison figures."""
-    frame = _timeseries_frame()
-    hub_height = session.get_hub_height_m()
+    frame = _timeseries_frame(state)
+    hub_height = state.get_hub_height_m()
     if hub_height is not None:
         hub_name = f"Spd_{int(hub_height)}m_hub" if float(hub_height).is_integer() else f"Spd_{hub_height}m_hub"
         if hub_name in frame.columns:
@@ -100,10 +123,9 @@ def _preferred_measured_speed_column() -> str:
     raise ValueError("No measured wind-speed column is available for LTC comparison plotting")
 
 
-@mcp.tool()
-def plot_windrose(speed_sensor: str, direction_sensor: str) -> dict:
+def _plot_windrose(state: SessionState, speed_sensor: str, direction_sensor: str) -> dict:
     """Plot a 16-sector wind rose with stacked speed bins using directional frequency percentages."""
-    frame = pd.concat([_require_series(speed_sensor), _require_series(direction_sensor)], axis=1).dropna()
+    frame = pd.concat([_require_series(state, speed_sensor), _require_series(state, direction_sensor)], axis=1).dropna()
     if frame.empty:
         raise ValueError("Wind rose requires concurrent non-null speed and direction values")
     sector_width = 360.0 / 16.0
@@ -123,10 +145,9 @@ def plot_windrose(speed_sensor: str, direction_sensor: str) -> dict:
     return _plot_result(figure, "Wind Rose")
 
 
-@mcp.tool()
-def plot_weibull(sensor_name: str) -> dict:
+def _plot_weibull(state: SessionState, sensor_name: str) -> dict:
     """Plot the measured speed histogram with a fitted Weibull PDF using $f(v;k,A)$ from wind climatology."""
-    series = _require_series(sensor_name).dropna()
+    series = _require_series(state, sensor_name).dropna()
     positive = series[series > 0.0]
     if positive.empty:
         raise ValueError(f"Sensor '{sensor_name}' has no positive values for Weibull plotting")
@@ -147,27 +168,29 @@ def plot_weibull(sensor_name: str) -> dict:
     return _plot_result(figure, f"Weibull Fit — {sensor_name}")
 
 
-@mcp.tool()
-def plot_diurnal(sensor_names: str) -> dict:
+def _plot_diurnal(state: SessionState, sensor_names: str) -> dict:
     """Plot mean diurnal wind-speed profiles by hour of day for one or more measured sensors."""
     figure = go.Figure()
     for sensor_name in _sensor_names(sensor_names):
-        series = _require_series(sensor_name)
+        series = _require_series(state, sensor_name)
         profile = series.groupby(series.index.hour).mean().reindex(range(24))
         figure.add_trace(go.Scatter(x=list(range(24)), y=profile.tolist(), mode="lines+markers", name=sensor_name))
     figure.update_layout(title="Diurnal Profile", xaxis_title="Hour", yaxis_title="Mean Speed (m/s)")
     return _plot_result(figure, "Diurnal Profile")
 
 
-@mcp.tool()
-def plot_scatter(sensor_a: str, sensor_b: str) -> dict:
+def _plot_scatter(state: SessionState, sensor_a: str, sensor_b: str) -> dict:
     """Plot a measured scatter comparison with OLS line and regression metrics derived from least squares."""
-    frame = pd.concat([_require_series(sensor_a), _require_series(sensor_b)], axis=1, join="inner").dropna()
+    frame = pd.concat(
+        [_require_series(state, sensor_a), _require_series(state, sensor_b)],
+        axis=1,
+        join="inner",
+    ).dropna()
     if frame.empty:
         raise ValueError(f"No concurrent valid data between '{sensor_a}' and '{sensor_b}'")
     if len(frame) > 10000:
         frame = frame.iloc[:: max(1, len(frame) // 10000)]
-    metrics = compute_scatter_stats(sensor_a, sensor_b)
+    metrics = _scatter_metrics(frame, sensor_a, sensor_b)
     x_values = frame[sensor_a].to_numpy(dtype=float)
     line_x = np.linspace(float(x_values.min()), float(x_values.max()), 100)
     line_y = metrics["slope"] * line_x + metrics["intercept"]
@@ -182,10 +205,9 @@ def plot_scatter(sensor_a: str, sensor_b: str) -> dict:
     return _plot_result(figure, title)
 
 
-@mcp.tool()
-def plot_timeseries(sensor_names: str) -> dict:
+def _plot_timeseries(state: SessionState, sensor_names: str) -> dict:
     """Plot one or more measured sensor series, downsampling to daily means for large datasets."""
-    frame = _timeseries_frame()[_sensor_names(sensor_names)].copy()
+    frame = _timeseries_frame(state)[_sensor_names(sensor_names)].copy()
     plot_frame = frame.resample("D").mean() if len(frame) > 50000 else frame
     figure = go.Figure()
     for column in plot_frame.columns:
@@ -194,10 +216,9 @@ def plot_timeseries(sensor_names: str) -> dict:
     return _plot_result(figure, "Timeseries")
 
 
-@mcp.tool()
-def plot_data_coverage() -> dict:
+def _plot_data_coverage(state: SessionState) -> dict:
     """Plot sensor availability as a presence-absence heatmap over time for loaded measured data columns."""
-    frame = _timeseries_frame().copy()
+    frame = _timeseries_frame(state).copy()
     plot_frame = frame.resample("D").mean() if len(frame) > 50000 else frame
     availability = plot_frame.notna().astype(int).T
     figure = go.Figure(
@@ -213,15 +234,14 @@ def plot_data_coverage() -> dict:
     return _plot_result(figure, "Data Coverage")
 
 
-@mcp.tool()
-def plot_shear_table(table_type: str = "shear") -> dict:
+def _plot_shear_table(state: SessionState, table_type: str = "shear") -> dict:
     """Plot the monthly-hourly shear or roughness lookup table as a heatmap for hub extrapolation review."""
     if table_type == "shear":
-        table = session.shear_table
+        table = state.shear_table
         colorscale = "Viridis"
         title = "Shear Table"
     elif table_type == "roughness":
-        table = session.roughness_table
+        table = state.roughness_table
         colorscale = "Earth"
         title = "Roughness Table"
     else:
@@ -235,30 +255,28 @@ def plot_shear_table(table_type: str = "shear") -> dict:
     return _plot_result(figure, title)
 
 
-@mcp.tool()
-def plot_monthly_means(sensor_names: str) -> dict:
+def _plot_monthly_means(state: SessionState, sensor_names: str) -> dict:
     """Plot grouped monthly means for one or more measured sensors using calendar-month aggregation."""
     figure = go.Figure()
     for sensor_name in _sensor_names(sensor_names):
-        monthly = _monthly_mean(_require_series(sensor_name))
+        monthly = _monthly_mean(_require_series(state, sensor_name))
         figure.add_trace(go.Bar(x=MONTH_LABELS, y=monthly.tolist(), name=sensor_name))
     figure.update_layout(title="Monthly Means", xaxis_title="Month", yaxis_title="Mean Speed (m/s)", barmode="group")
     return _plot_result(figure, "Monthly Means")
 
 
-@mcp.tool()
-def plot_ltc_comparison() -> dict:
+def _plot_ltc_comparison(state: SessionState) -> dict:
     """Plot monthly mean and measured-vs-corrected LTC comparisons across all completed correction algorithms."""
-    if not session.ltc_results:
+    if not state.ltc_results:
         raise ValueError("At least one LTC result is required for LTC comparison plotting")
-    measured = _require_series(_preferred_measured_speed_column())
+    measured = _require_series(state, _preferred_measured_speed_column(state))
     figure = make_subplots(rows=2, cols=1, subplot_titles=("Monthly Mean Comparison", "Measured vs Corrected"))
     figure.add_trace(
         go.Scatter(x=MONTH_LABELS, y=_monthly_mean(measured).tolist(), mode="lines+markers", name="Measured"),
         row=1,
         col=1,
     )
-    for algorithm, payload in sorted(session.ltc_results.items()):
+    for algorithm, payload in sorted(state.ltc_results.items()):
         frame = _indexed_frame(payload["df"])
         series = frame["corrected_wind_speed"].dropna()
         figure.add_trace(
@@ -288,26 +306,25 @@ def plot_ltc_comparison() -> dict:
     return _plot_result(figure, "LTC Comparison")
 
 
-@mcp.tool()
-def plot_annual_means() -> dict:
+def _plot_annual_means(state: SessionState) -> dict:
     """Plot annual mean corrected wind speed for all LTC algorithms and the ensemble over the long-term record."""
-    if not session.ltc_results and session.ensemble_df is None:
+    if not state.ltc_results and state.ensemble_df is None:
         raise ValueError("Annual means plotting requires at least one LTC or ensemble result")
     figure = go.Figure()
-    for algorithm, payload in sorted(session.ltc_results.items()):
+    for algorithm, payload in sorted(state.ltc_results.items()):
         frame = _indexed_frame(payload["df"])
         annual = _annual_mean(frame["corrected_wind_speed"].dropna())
         figure.add_trace(go.Scatter(x=annual.index.tolist(), y=annual.tolist(), mode="lines+markers", name=algorithm))
-    if session.ensemble_df is not None:
-        ensemble = _indexed_frame(session.ensemble_df)
+    if state.ensemble_df is not None:
+        ensemble = _indexed_frame(state.ensemble_df)
         annual = _annual_mean(ensemble["Ensemble_Speed"].dropna())
         figure.add_trace(go.Scatter(x=annual.index.tolist(), y=annual.tolist(), mode="lines+markers", name="ensemble"))
     figure.update_layout(title="Annual Mean Wind Speed", xaxis_title="Year", yaxis_title="Mean Speed (m/s)")
     return _plot_result(figure, "Annual Mean Wind Speed")
 
 
-@mcp.tool()
-def plot_uncertainty_breakdown(
+def _plot_uncertainty_breakdown(
+    _state: SessionState,
     total_pct: float,
     measurement_pct: float,
     vertical_pct: float,
@@ -322,3 +339,75 @@ def plot_uncertainty_breakdown(
     figure.add_vline(x=total_pct, line_dash="dash", annotation_text=f"Total {total_pct:.2f}%")
     figure.update_layout(title="Uncertainty Breakdown", xaxis_title="Percent", yaxis_title="")
     return _plot_result(figure, "Uncertainty Breakdown")
+
+
+@mcp.tool()
+def plot_windrose(speed_sensor: str, direction_sensor: str) -> dict:
+    """Plot a 16-sector wind rose with stacked speed bins using directional frequency percentages."""
+    return _plot_windrose(session, speed_sensor, direction_sensor)
+
+
+@mcp.tool()
+def plot_weibull(sensor_name: str) -> dict:
+    """Plot the measured speed histogram with a fitted Weibull PDF using $f(v;k,A)$ from wind climatology."""
+    return _plot_weibull(session, sensor_name)
+
+
+@mcp.tool()
+def plot_diurnal(sensor_names: str) -> dict:
+    """Plot mean diurnal wind-speed profiles by hour of day for one or more measured sensors."""
+    return _plot_diurnal(session, sensor_names)
+
+
+@mcp.tool()
+def plot_scatter(sensor_a: str, sensor_b: str) -> dict:
+    """Plot a measured scatter comparison with OLS line and regression metrics derived from least squares."""
+    return _plot_scatter(session, sensor_a, sensor_b)
+
+
+@mcp.tool()
+def plot_timeseries(sensor_names: str) -> dict:
+    """Plot one or more measured sensor series, downsampling to daily means for large datasets."""
+    return _plot_timeseries(session, sensor_names)
+
+
+@mcp.tool()
+def plot_data_coverage() -> dict:
+    """Plot sensor availability as a presence-absence heatmap over time for loaded measured data columns."""
+    return _plot_data_coverage(session)
+
+
+@mcp.tool()
+def plot_shear_table(table_type: str = "shear") -> dict:
+    """Plot the monthly-hourly shear or roughness lookup table as a heatmap for hub extrapolation review."""
+    return _plot_shear_table(session, table_type)
+
+
+@mcp.tool()
+def plot_monthly_means(sensor_names: str) -> dict:
+    """Plot grouped monthly means for one or more measured sensors using calendar-month aggregation."""
+    return _plot_monthly_means(session, sensor_names)
+
+
+@mcp.tool()
+def plot_ltc_comparison() -> dict:
+    """Plot monthly mean and measured-vs-corrected LTC comparisons across all completed correction algorithms."""
+    return _plot_ltc_comparison(session)
+
+
+@mcp.tool()
+def plot_annual_means() -> dict:
+    """Plot annual mean corrected wind speed for all LTC algorithms and the ensemble over the long-term record."""
+    return _plot_annual_means(session)
+
+
+@mcp.tool()
+def plot_uncertainty_breakdown(
+    total_pct: float,
+    measurement_pct: float,
+    vertical_pct: float,
+    mcp_pct: float,
+    future_pct: float,
+) -> dict:
+    """Plot stacked uncertainty components contributing to total percent uncertainty by RSS convention."""
+    return _plot_uncertainty_breakdown(session, total_pct, measurement_pct, vertical_pct, mcp_pct, future_pct)

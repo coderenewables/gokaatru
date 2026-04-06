@@ -15,7 +15,7 @@ import xarray as xr
 from server.core.spatial import bearing_compass, haversine_km, interpolate_spatial
 from server.main import mcp
 from server.schemas.common import Coordinate
-from server.state.session import session
+from server.state.session import SessionState, session
 
 ERA5_ZARR_URL = "https://data.earthdatahub.destine.eu/era5/reanalysis-era5-single-levels-v0.zarr"
 ERA5_BASE_VARIABLES = ["u100", "v100", "sp", "t2m", "d2m"]
@@ -138,9 +138,9 @@ def _era5_key(latitude: float, longitude: float) -> str:
     return f"{float(latitude)}_{float(longitude)}"
 
 
-def _era5_cache_path(latitude: float, longitude: float) -> Path:
+def _era5_cache_path(state: SessionState, latitude: float, longitude: float) -> Path:
     """Build the standard ERA5 cache parquet path for a node."""
-    cache_dir = Path(session.get_data_dir()) / "era5_cache"
+    cache_dir = Path(state.get_data_dir()) / "era5_cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir / f"ERA5_{latitude}_{longitude}.parquet"
 
@@ -175,15 +175,14 @@ def _load_cached_era5(cache_path: Path, start_date: str, end_date: str) -> tuple
     return subset.sort_index(), True
 
 
-def _store_coordinate(latitude: float, longitude: float) -> None:
+def _store_coordinate(state: SessionState, latitude: float, longitude: float) -> None:
     """Persist the site coordinate in session state for later interpolation tools."""
-    current = session.get_coordinate()
+    current = state.get_coordinate()
     elevation = 0.0 if current is None else current.elevation_m
-    session.set_coordinate(Coordinate(latitude=latitude, longitude=longitude, elevation_m=elevation))
+    state.set_coordinate(Coordinate(latitude=latitude, longitude=longitude, elevation_m=elevation))
 
 
-@mcp.tool()
-def find_era5_nodes(latitude: float, longitude: float) -> dict:
+def _find_era5_nodes(state: SessionState, latitude: float, longitude: float) -> dict:
     """Find the four surrounding ERA5 grid nodes using 0.25° bounds and haversine distance."""
     dataset = _open_era5_dataset()
     lower_lat, upper_lat = _bounding_pair(np.asarray(dataset.latitude.values), latitude)
@@ -199,23 +198,28 @@ def find_era5_nodes(latitude: float, longitude: float) -> dict:
                 "bearing": bearing_compass(latitude, longitude, node_lat, node_lon),
             }
         )
-    session.era5_nodes = sorted(nodes, key=lambda node: float(node["distance_km"]))
-    _store_coordinate(latitude, longitude)
+    state.era5_nodes = sorted(nodes, key=lambda node: float(node["distance_km"]))
+    _store_coordinate(state, latitude, longitude)
     resolution = _grid_resolution(np.asarray(dataset.latitude.values))
     if resolution is None:
         resolution = _grid_resolution(np.asarray(dataset.longitude.values))
-    return {"nodes": session.era5_nodes, "grid_resolution_deg": resolution}
+    return {"nodes": state.era5_nodes, "grid_resolution_deg": resolution}
 
 
-@mcp.tool()
-def extract_era5_data(
+def _extract_era5_data(
+    state: SessionState,
     latitude: float,
     longitude: float,
     start_date: str = "2000-01-01",
     end_date: str = "2025-12-31",
 ) -> dict:
     """Extract ERA5 node data from Zarr, cache it as parquet, and store it in session state."""
-    cache_path = _era5_cache_path(latitude, longitude)
+    try:
+        cache_path = _era5_cache_path(state, latitude, longitude)
+    except TypeError:
+        # Preserve compatibility with tests or callers that monkeypatch the legacy
+        # two-argument cache-path helper signature.
+        cache_path = _era5_cache_path(latitude, longitude)
     cached_df, cache_hit = _load_cached_era5(cache_path, start_date, end_date)
     if cached_df is None:
         dataset = _open_era5_dataset()
@@ -233,8 +237,8 @@ def extract_era5_data(
         frame.index = pd.DatetimeIndex(frame.index, name="time")
         cached_df = frame.sort_index()
         cached_df.to_parquet(cache_path)
-    session.era5_data[_era5_key(latitude, longitude)] = cached_df.copy()
-    _store_coordinate(latitude, longitude)
+    state.era5_data[_era5_key(latitude, longitude)] = cached_df.copy()
+    _store_coordinate(state, latitude, longitude)
     return {
         "status": "ok",
         "latitude": float(latitude),
@@ -247,20 +251,19 @@ def extract_era5_data(
     }
 
 
-@mcp.tool()
-def compute_era5_wind_speed(latitude: float, longitude: float) -> dict:
+def _compute_era5_wind_speed(state: SessionState, latitude: float, longitude: float) -> dict:
     """Compute 100 m wind speed and meteorological direction from ERA5 u and v components."""
     key = _era5_key(latitude, longitude)
-    if key not in session.era5_data:
+    if key not in state.era5_data:
         raise ValueError(f"ERA5 data for node '{key}' is not loaded. Run extract_era5_data first")
-    frame = session.era5_data[key].copy()
+    frame = state.era5_data[key].copy()
     if "u100" not in frame.columns or "v100" not in frame.columns:
         raise ValueError("ERA5 dataframe must contain u100 and v100 columns to compute wind speed")
     u100 = frame["u100"].to_numpy(dtype=float)
     v100 = frame["v100"].to_numpy(dtype=float)
     frame["Spd_100m"] = np.sqrt(u100**2 + v100**2)
     frame["Dir_100m"] = (270.0 - np.degrees(np.arctan2(v100, u100))) % 360.0
-    session.era5_data[key] = frame
+    state.era5_data[key] = frame
     return {
         "status": "ok",
         "mean_speed": float(frame["Spd_100m"].mean()),
@@ -268,21 +271,20 @@ def compute_era5_wind_speed(latitude: float, longitude: float) -> dict:
     }
 
 
-@mcp.tool()
-def interpolate_era5_to_site() -> dict:
+def _interpolate_era5_to_site(state: SessionState) -> dict:
     """Spatially interpolate ERA5 node data to the site using linear interpolation with IDW fallback."""
-    coordinate = session.get_coordinate()
+    coordinate = state.get_coordinate()
     if coordinate is None:
         raise ValueError("Site coordinate is not set. Run find_era5_nodes first")
-    if not session.era5_nodes or len(session.era5_nodes) < 4:
+    if not state.era5_nodes or len(state.era5_nodes) < 4:
         raise ValueError("ERA5 nodes are not available. Run find_era5_nodes first")
-    points = [(float(node["latitude"]), float(node["longitude"])) for node in session.era5_nodes]
+    points = [(float(node["latitude"]), float(node["longitude"])) for node in state.era5_nodes]
     frames = []
-    for node in session.era5_nodes:
+    for node in state.era5_nodes:
         key = _era5_key(float(node["latitude"]), float(node["longitude"]))
-        if key not in session.era5_data:
+        if key not in state.era5_data:
             raise ValueError(f"ERA5 data for node '{key}' is not loaded")
-        frame = session.era5_data[key]
+        frame = state.era5_data[key]
         if "Spd_100m" not in frame.columns or "Dir_100m" not in frame.columns:
             raise ValueError(f"ERA5 node '{key}' must have Spd_100m and Dir_100m. Run compute_era5_wind_speed first")
         frames.append(frame)
@@ -312,11 +314,40 @@ def interpolate_era5_to_site() -> dict:
     result["Dir_100m"] = (270.0 - np.degrees(np.arctan2(np.asarray(interp_v), np.asarray(interp_u)))) % 360.0
     if "Spd_100m" not in result.columns:
         result["Spd_100m"] = np.sqrt(np.asarray(interp_u) ** 2 + np.asarray(interp_v) ** 2)
-    session.era5_interpolated_df = result.sort_index()
+    state.era5_interpolated_df = result.sort_index()
     method_name = "idw" if "idw" in methods_used else "linear"
     return {
         "status": "ok",
-        "rows": int(len(session.era5_interpolated_df)),
+        "rows": int(len(state.era5_interpolated_df)),
         "method": method_name,
-        "variables": session.era5_interpolated_df.columns.tolist(),
+        "variables": state.era5_interpolated_df.columns.tolist(),
     }
+
+
+@mcp.tool()
+def find_era5_nodes(latitude: float, longitude: float) -> dict:
+    """Find the four surrounding ERA5 grid nodes using 0.25° bounds and haversine distance."""
+    return _find_era5_nodes(session, latitude, longitude)
+
+
+@mcp.tool()
+def extract_era5_data(
+    latitude: float,
+    longitude: float,
+    start_date: str = "2000-01-01",
+    end_date: str = "2025-12-31",
+) -> dict:
+    """Extract ERA5 node data from Zarr, cache it as parquet, and store it in session state."""
+    return _extract_era5_data(session, latitude, longitude, start_date, end_date)
+
+
+@mcp.tool()
+def compute_era5_wind_speed(latitude: float, longitude: float) -> dict:
+    """Compute 100 m wind speed and meteorological direction from ERA5 u and v components."""
+    return _compute_era5_wind_speed(session, latitude, longitude)
+
+
+@mcp.tool()
+def interpolate_era5_to_site() -> dict:
+    """Spatially interpolate ERA5 node data to the site using linear interpolation with IDW fallback."""
+    return _interpolate_era5_to_site(session)

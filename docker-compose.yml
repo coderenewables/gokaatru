@@ -8,11 +8,46 @@ services:
     volumes:
       - ./data:/app/data
 
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - librechat_mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   librechat:
     image: ghcr.io/danny-avila/librechat:latest
+    environment:
+      - HOST=0.0.0.0
+      - PORT=3080
+      - MONGO_URI=mongodb://mongodb:27017/LibreChat
+      - DOMAIN_CLIENT=http://localhost:3080
+      - DOMAIN_SERVER=http://localhost:3080
+      - CONFIG_PATH=/app/librechat.yaml
+      - CREDS_KEY=${LIBRECHAT_CREDS_KEY:-f34be427ebb29de8d88c107a71546019685ed8b241d8f2ed00c3df97ad2566f0}
+      - CREDS_IV=${LIBRECHAT_CREDS_IV:-e2341419ec3dd3d19b13a1a87fafcbfb}
+      - JWT_SECRET=${LIBRECHAT_JWT_SECRET:-16f8c0ef4a5d391b26034086c628469d3f9f497f08163ab9b40137092f2909ef}
+      - JWT_REFRESH_SECRET=${LIBRECHAT_JWT_REFRESH_SECRET:-eaa5191f2914e30b9387fd84e254e4ba6fc51b4654968a9b0803b456a54b8418}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-user_provided}
+      - ALLOW_EMAIL_LOGIN=true
+      - ALLOW_REGISTRATION=true
+      - ALLOW_SOCIAL_LOGIN=false
+      - ALLOW_SOCIAL_REGISTRATION=false
+      - NO_INDEX=true
     ports:
       - "3080:3080"
     volumes:
       - ./librechat_config.yaml:/app/librechat.yaml:ro
     depends_on:
-      - gokaatru
+      mongodb:
+        condition: service_healthy
+      gokaatru:
+        condition: service_started
+
+volumes:
+  librechat_mongo_data:

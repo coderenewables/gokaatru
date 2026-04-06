@@ -1332,11 +1332,33 @@ def test_full_wra_workflow(sample_timeseries_df, tmp_path):
 
 Create a configuration guide for connecting LibreChat to GoKaatru:
 
+**File: `.env.example`**
+```dotenv
+# Copy this file to .env for local Docker Compose overrides.
+# Replace these example values before using LibreChat outside local-only development.
+
+EARTHDATAHUB_TOKEN=
+OPENAI_API_KEY=user_provided
+
+LIBRECHAT_CREDS_KEY=replace_with_64_hex_chars
+LIBRECHAT_CREDS_IV=replace_with_32_hex_chars
+LIBRECHAT_JWT_SECRET=replace_with_64_hex_chars
+LIBRECHAT_JWT_REFRESH_SECRET=replace_with_64_hex_chars
+```
+
 **File: `librechat_config.yaml`** (example config snippet)
 ```yaml
 # Add to LibreChat's librechat.yaml under mcpServers.
 # Use `http://gokaatru:8080/sse` when LibreChat runs in the same Docker Compose stack.
 # Use `http://localhost:8080/sse` when LibreChat runs outside Docker on the host machine.
+# The `version` field and `allowedDomains` list are required for current LibreChat builds.
+version: "1.3.6"
+
+mcpSettings:
+  allowedDomains:
+    - http://gokaatru:8080
+    - http://localhost:8080
+
 mcpServers:
   gokaatru:
     type: sse
@@ -1356,14 +1378,49 @@ services:
     volumes:
       - ./data:/app/data
 
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - librechat_mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   librechat:
     image: ghcr.io/danny-avila/librechat:latest
+    environment:
+      - HOST=0.0.0.0
+      - PORT=3080
+      - MONGO_URI=mongodb://mongodb:27017/LibreChat
+      - DOMAIN_CLIENT=http://localhost:3080
+      - DOMAIN_SERVER=http://localhost:3080
+      - CONFIG_PATH=/app/librechat.yaml
+      - CREDS_KEY=${LIBRECHAT_CREDS_KEY:-f34be427ebb29de8d88c107a71546019685ed8b241d8f2ed00c3df97ad2566f0}
+      - CREDS_IV=${LIBRECHAT_CREDS_IV:-e2341419ec3dd3d19b13a1a87fafcbfb}
+      - JWT_SECRET=${LIBRECHAT_JWT_SECRET:-16f8c0ef4a5d391b26034086c628469d3f9f497f08163ab9b40137092f2909ef}
+      - JWT_REFRESH_SECRET=${LIBRECHAT_JWT_REFRESH_SECRET:-eaa5191f2914e30b9387fd84e254e4ba6fc51b4654968a9b0803b456a54b8418}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-user_provided}
+      - ALLOW_EMAIL_LOGIN=true
+      - ALLOW_REGISTRATION=true
+      - ALLOW_SOCIAL_LOGIN=false
+      - ALLOW_SOCIAL_REGISTRATION=false
+      - NO_INDEX=true
     ports:
       - "3080:3080"
     volumes:
       - ./librechat_config.yaml:/app/librechat.yaml:ro
     depends_on:
-      - gokaatru
+      mongodb:
+        condition: service_healthy
+      gokaatru:
+        condition: service_started
+
+volumes:
+  librechat_mongo_data:
 ```
 
 ---
@@ -1417,6 +1474,595 @@ Before declaring the build complete, verify:
 - [ ] `data/` directory is gitignored
 - [ ] Docker build succeeds: `docker build -t gokaatru .`
 - [ ] Docker Compose config renders cleanly: `docker compose config`
+- [ ] Docker Compose runtime starts cleanly: `docker compose up -d` then `docker compose ps`
+
+---
+
+## PHASE 6 — Workflow Web App
+
+**Goal**: Build a simple analyst-facing web app over the existing backend. The browser must use a thin HTTP API, while MCP remains available for AI clients, automation, and debugging.
+
+**Prerequisite**: Phase 5 complete and validated.
+
+---
+
+### Phase 6 Architecture Rules
+
+These rules are non-negotiable for the UI phase:
+
+1. The browser does **not** talk to MCP directly. It talks to a small FastAPI app.
+2. The FastAPI app does **not** duplicate analytics. It calls the same helper functions used by MCP tools.
+3. Session state becomes **workspace-scoped**, not a single global singleton for all browser users.
+4. The UI is **route-based and workflow-driven**, not chat-driven.
+5. Plotly JSON and GeoJSON remain the canonical visualization payloads.
+
+Target runtime topology:
+
+```text
+Browser UI (React/Vite)
+        |
+        v
+FastAPI Web API (/api)
+        |
+        v
+Shared session-aware analytics helpers
+        |
+        +--> FastMCP wrappers (SSE/stdio)
+```
+
+---
+
+### Step 6.1: Python dependencies for the web API
+
+**Update `pyproject.toml`**
+
+Add these runtime dependencies:
+
+```toml
+"fastapi>=0.115",
+"uvicorn[standard]>=0.30",
+"python-multipart>=0.0.9",
+"orjson>=3.10",
+```
+
+Add these dev dependencies:
+
+```toml
+"httpx>=0.28",
+```
+
+Reasoning:
+- `fastapi` gives a thin typed HTTP layer for the browser.
+- `uvicorn` runs the API in development and production.
+- `python-multipart` is required for file upload forms.
+- `orjson` keeps API responses fast for large tables and plot payloads.
+- `httpx` is used by API tests via FastAPI's test client stack.
+
+---
+
+### Step 6.2: Session registry instead of a single global browser workspace
+
+**Create file: `server/state/manager.py`**
+
+Implement:
+
+```python
+class SessionManager:
+    """Registry for browser workspaces keyed by session_id."""
+
+    def create_session(self) -> SessionState: ...
+    def get_session(self, session_id: str) -> SessionState: ...
+    def reset_session(self, session_id: str) -> SessionState: ...
+    def delete_session(self, session_id: str) -> None: ...
+    def list_sessions(self) -> list[dict]: ...
+```
+
+Rules:
+- Use `uuid4().hex` as the session id.
+- Each session gets a directory: `data/sessions/<session_id>/`
+- Inside that folder create:
+  - `uploads/`
+  - `era5_cache/`
+  - `ltc_results/`
+  - `runconfig.json`
+- Keep the existing module-level `session = SessionState()` for MCP compatibility, but treat it as the default MCP session only.
+
+**Update file: `server/state/session.py`**
+
+Add fields:
+- `session_id: str | None`
+- `workspace_dir: Path | None`
+- `created_at: datetime | None`
+- `updated_at: datetime | None`
+
+Update methods:
+- `reset()` should preserve `session_id` and `workspace_dir` if explicitly requested by the manager
+- `get_data_dir()` should return the session-specific directory when `workspace_dir` is set
+- `to_runconfig()` must remain backward compatible
+
+The point of this step is to remove the hidden assumption that one Python process has only one user workflow.
+
+---
+
+### Step 6.3: Shared helper pattern for MCP + API reuse
+
+Do **not** copy tool logic into the API layer.
+
+For every tool exposed in the web app, move the actual implementation into an internal helper that accepts a `SessionState` instance explicitly.
+
+Pattern:
+
+```python
+def _parse_timeseries(state: SessionState, file_path: str) -> dict:
+    ...
+
+@mcp.tool()
+def parse_timeseries(file_path: str) -> dict:
+    return _parse_timeseries(session, file_path)
+```
+
+The FastAPI routes then call `_parse_timeseries(manager.get_session(session_id), file_path)`.
+
+Apply this pattern to the modules needed by the browser workflow first:
+- `server/tools/data_io.py`
+- `server/tools/config.py`
+- `server/tools/cleaning.py`
+- `server/tools/shear.py`
+- `server/tools/extrapolation.py`
+- `server/tools/era5.py`
+- `server/tools/ltc.py`
+- `server/tools/ensemble.py`
+- `server/tools/clipping.py`
+- `server/tools/homogeneity.py`
+- `server/tools/uncertainty.py`
+- `server/tools/visualization.py`
+- `server/tools/map.py`
+
+This is the most important Phase 6 constraint. If analytics are duplicated, the UI and MCP server will drift.
+
+---
+
+### Step 6.4: FastAPI scaffold
+
+**Create files:**
+
+```text
+server/api/__init__.py
+server/api/main.py
+server/api/deps.py
+server/api/schemas.py
+server/api/routes/__init__.py
+server/api/routes/health.py
+server/api/routes/sessions.py
+server/api/routes/uploads.py
+server/api/routes/config.py
+server/api/routes/analysis.py
+server/api/routes/results.py
+```
+
+**File: `server/api/main.py`**
+
+Requirements:
+- Create `FastAPI(title="GoKaatru Web API", version="0.1.0")`
+- Mount all routers under `/api`
+- Add CORS for local dev:
+  - `http://127.0.0.1:5173`
+  - `http://localhost:5173`
+- Add a root health endpoint or redirect to `/api/health`
+
+**File: `server/api/deps.py`**
+
+Implement helpers:
+
+```python
+def get_session_manager() -> SessionManager: ...
+def get_session_state(session_id: str) -> SessionState: ...
+```
+
+Use header name:
+
+```text
+X-GoKaatru-Session
+```
+
+If the header is missing on routes that require a session, return `400` with a clear error.
+
+**File: `server/api/schemas.py`**
+
+Define request/response models for the web layer only. Keep them thin and flat. Include at least:
+- `CreateSessionResponse`
+- `SessionSummaryResponse`
+- `UpdateRunConfigRequest`
+- `ApplyCleaningRuleRequest`
+- `CalculateShearRequest`
+- `BuildTableRequest`
+- `ExtrapolateHubRequest`
+- `FindEra5NodesRequest`
+- `ExtractEra5Request`
+- `RunLtcRequest`
+- `CalculateUncertaintyRequest`
+- `PlotRequest`
+
+Do not put pandas objects in API schemas.
+
+---
+
+### Step 6.5: Web API routes
+
+Implement the routes below. Keep them thin wrappers around the shared helpers.
+
+**File: `server/api/routes/health.py`**
+
+Provide:
+- `GET /api/health`
+
+Return:
+
+```json
+{"status": "ok", "service": "gokaatru-web-api"}
+```
+
+**File: `server/api/routes/sessions.py`**
+
+Provide:
+- `POST /api/sessions` → create a new session
+- `GET /api/sessions/{session_id}` → summary of workflow state
+- `POST /api/sessions/{session_id}/reset` → clear workflow data but keep session id
+- `DELETE /api/sessions/{session_id}` → delete session and workspace directory
+
+Return for create:
+
+```json
+{
+  "session_id": "...",
+  "workspace_dir": "data/sessions/...",
+  "created_at": "...",
+  "completed_steps": []
+}
+```
+
+**File: `server/api/routes/uploads.py`**
+
+Provide:
+- `POST /api/sessions/{session_id}/uploads/timeseries`
+- `POST /api/sessions/{session_id}/uploads/datamodel`
+- `GET /api/sessions/{session_id}/sensors`
+- `GET /api/sessions/{session_id}/coverage/{sensor_name}`
+
+Rules:
+- Save uploaded files into `data/sessions/<id>/uploads/`
+- Then call the shared parsing helpers
+- Return the same flat payloads as the tool wrappers where possible
+
+**File: `server/api/routes/config.py`**
+
+Provide:
+- `GET /api/sessions/{session_id}/config`
+- `PUT /api/sessions/{session_id}/config`
+- `GET /api/sessions/{session_id}/summary`
+
+`PUT` body should support batched updates:
+
+```json
+{
+  "updates": [
+    {"key": "project_name", "value": "North Ridge"},
+    {"key": "location.latitude", "value": 52.4},
+    {"key": "location.longitude", "value": 4.8},
+    {"key": "hub_height_m", "value": 150}
+  ]
+}
+```
+
+**File: `server/api/routes/analysis.py`**
+
+Provide workflow endpoints for the web app MVP:
+- `POST /api/sessions/{session_id}/cleaning/apply`
+- `POST /api/sessions/{session_id}/cleaning/undo`
+- `GET /api/sessions/{session_id}/cleaning/log`
+- `POST /api/sessions/{session_id}/shear/calculate`
+- `POST /api/sessions/{session_id}/shear/table`
+- `POST /api/sessions/{session_id}/roughness/calculate`
+- `POST /api/sessions/{session_id}/roughness/table`
+- `POST /api/sessions/{session_id}/extrapolation/hub`
+- `POST /api/sessions/{session_id}/era5/nodes`
+- `POST /api/sessions/{session_id}/era5/extract`
+- `POST /api/sessions/{session_id}/era5/interpolate`
+- `POST /api/sessions/{session_id}/ltc/{algorithm}` where algorithm is one of:
+  - `linear_least_squares`
+  - `total_least_squares`
+  - `speedsort`
+  - `variance_ratio`
+  - `xgboost`
+- `POST /api/sessions/{session_id}/ensemble`
+- `POST /api/sessions/{session_id}/clipping`
+- `POST /api/sessions/{session_id}/homogeneity/analyze`
+- `POST /api/sessions/{session_id}/homogeneity/apply`
+- `POST /api/sessions/{session_id}/uncertainty`
+
+**File: `server/api/routes/results.py`**
+
+Provide:
+- `GET /api/sessions/{session_id}/results/ltc`
+- `GET /api/sessions/{session_id}/results/ensemble`
+- `POST /api/sessions/{session_id}/plots/{plot_name}`
+- `GET /api/sessions/{session_id}/map/site`
+- `GET /api/sessions/{session_id}/runconfig/export`
+
+The route `POST /api/sessions/{session_id}/plots/{plot_name}` should support the plot tools already implemented in Phase 4 and return the standard `PlotResult` shape.
+
+---
+
+### Step 6.6: Frontend scaffold
+
+Create a dedicated frontend workspace.
+
+**Create files:**
+
+```text
+frontend/package.json
+frontend/tsconfig.json
+frontend/vite.config.ts
+frontend/index.html
+frontend/src/main.tsx
+frontend/src/App.tsx
+frontend/src/router.tsx
+frontend/src/styles.css
+frontend/src/lib/api.ts
+frontend/src/lib/types.ts
+frontend/src/lib/queryClient.ts
+frontend/src/stores/workspaceStore.ts
+```
+
+**Recommended dependencies**
+
+Runtime:
+- `react`
+- `react-dom`
+- `react-router-dom`
+- `@tanstack/react-query`
+- `zustand`
+- `react-hook-form`
+- `zod`
+- `react-plotly.js`
+- `plotly.js-dist-min`
+- `react-leaflet`
+- `leaflet`
+- `clsx`
+
+Dev:
+- `typescript`
+- `vite`
+- `@vitejs/plugin-react`
+- `vitest`
+- `jsdom`
+- `@testing-library/react`
+
+**File: `frontend/vite.config.ts`**
+
+Requirements:
+- Proxy `/api` to `http://127.0.0.1:8000`
+- Optionally proxy `/sse` to `http://127.0.0.1:8080` for debugging only
+
+Do **not** make the browser depend on MCP transport for core functionality.
+
+**Styling rule**
+
+Keep styling simple:
+- Use one CSS variables file in `styles.css`
+- Avoid large UI frameworks in Phase 6
+- Build a small in-repo component library instead of pulling in a full design system
+
+---
+
+### Step 6.7: Frontend shell and routing
+
+**Create files:**
+
+```text
+frontend/src/components/layout/AppShell.tsx
+frontend/src/components/layout/StepNav.tsx
+frontend/src/components/common/PageHeader.tsx
+frontend/src/components/common/MetricCard.tsx
+frontend/src/components/common/StatusBadge.tsx
+frontend/src/components/common/ErrorBanner.tsx
+frontend/src/components/common/EmptyState.tsx
+frontend/src/components/common/FileDropzone.tsx
+frontend/src/components/common/DataTable.tsx
+frontend/src/components/common/PlotlyFigure.tsx
+frontend/src/components/common/GeoJsonMap.tsx
+frontend/src/components/common/LoadingState.tsx
+frontend/src/pages/OverviewPage.tsx
+frontend/src/pages/DataPage.tsx
+frontend/src/pages/SitePage.tsx
+frontend/src/pages/ReanalysisPage.tsx
+frontend/src/pages/LtcPage.tsx
+frontend/src/pages/ResultsPage.tsx
+```
+
+Route tree:
+
+```text
+/
+  /overview
+  /data
+  /site
+  /reanalysis
+  /ltc
+  /results
+```
+
+Shell requirements:
+- Left sidebar with workflow steps and completion state
+- Header with project name, session id, reset action, API health state
+- Main content panel for forms, charts, and tables
+- Right-side inspector for summary cards, warnings, and current runconfig snapshot
+
+Persist `session_id` in local storage using `workspaceStore`.
+
+---
+
+### Step 6.8: Page-by-page UI contract
+
+Do **not** build a generic chat screen. Build workflow pages with explicit actions.
+
+**OverviewPage**
+- Show API health
+- Show current project summary from `/summary`
+- Show completed workflow steps
+- Provide buttons to jump to the next missing step
+
+**DataPage**
+- Upload timeseries file
+- Upload data model file
+- Show detected sensors and coverage table
+- Provide cleaning rule form and cleaning log table
+
+**SitePage**
+- Edit project metadata: project name, measurement type, coordinates, hub height
+- Trigger shear and roughness calculations
+- Render month-hour heatmaps from shear/roughness tables
+- Trigger hub-height extrapolation and show method counts
+
+**ReanalysisPage**
+- Find ERA5 nodes from current site coordinates
+- Show mast and node markers on a map
+- Trigger ERA5 extraction for the selected date range
+- Trigger site interpolation and show row counts and variables
+
+**LtcPage**
+- Run deterministic LTC algorithms and XGBoost
+- Show metrics comparison table
+- Run ensemble
+- Run clipping analysis and homogeneity analysis
+- Run uncertainty calculation from an explicit form
+
+**ResultsPage**
+- Render Plotly figures from plot endpoints
+- Render the site overview map
+- Show annual means, LTC comparison, and uncertainty outputs
+- Show raw runconfig export and generated result file paths
+
+Each page should have:
+- one primary action area
+- one metrics summary row
+- one results region
+- one visible error banner when the latest request fails
+
+---
+
+### Step 6.9: Frontend data flow rules
+
+Use state libraries deliberately:
+
+**TanStack Query** for:
+- session summary
+- sensors and coverage
+- cleaning log
+- ERA5 node list
+- LTC results
+- plot payloads
+
+**Zustand** for:
+- `sessionId`
+- selected sensors
+- currently selected LTC source
+- active date ranges
+- unsaved form drafts
+
+**API client rules**
+
+In `frontend/src/lib/api.ts`:
+- Centralize all fetch logic
+- Always send `X-GoKaatru-Session`
+- Throw typed errors on non-2xx responses
+- Keep one helper per route group: `sessionsApi`, `uploadsApi`, `configApi`, `analysisApi`, `resultsApi`
+
+Do not scatter `fetch()` calls directly inside page components.
+
+---
+
+### Step 6.10: API and UI tests
+
+**Create files:**
+
+```text
+tests/test_api_sessions.py
+tests/test_api_workflow.py
+frontend/src/components/layout/AppShell.test.tsx
+frontend/src/pages/DataPage.test.tsx
+```
+
+**`tests/test_api_sessions.py`**
+
+Cover:
+1. create session
+2. get session summary
+3. reset session
+4. delete session
+5. missing session header returns 400 where required
+
+**`tests/test_api_workflow.py`**
+
+Using `sample_timeseries_df`, cover this browser-oriented flow:
+1. create session
+2. upload timeseries
+3. upload datamodel or seed sensor mapping
+4. update runconfig with location and hub height
+5. calculate shear
+6. build shear table
+7. extrapolate to hub height
+8. run at least one LTC algorithm on seeded or mocked reference data
+9. request one plot endpoint and validate `plotly_json`
+
+**Frontend tests**
+
+Minimal but useful:
+- `AppShell` renders step navigation and outlet region
+- `DataPage` shows uploader and reacts to a mocked sensor response
+
+---
+
+### Step 6.11: Local development commands
+
+Backend API:
+
+```bash
+python -m uvicorn server.api.main:app --reload --port 8000
+```
+
+MCP server for debug/AI clients:
+
+```bash
+python -m server.main --transport sse --host 0.0.0.0 --port 8080
+```
+
+Frontend:
+
+```bash
+npm --prefix frontend install
+npm --prefix frontend run dev
+```
+
+Production frontend build:
+
+```bash
+npm --prefix frontend run build
+```
+
+---
+
+### Step 6.12: Phase 6 validation checklist
+
+Before declaring Phase 6 complete, verify:
+
+- [ ] `python -m pytest tests/test_api_sessions.py tests/test_api_workflow.py -v` passes
+- [ ] `python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000` starts cleanly
+- [ ] `python -m server.main --transport sse --host 0.0.0.0 --port 8080` still starts cleanly
+- [ ] `npm --prefix frontend run build` passes
+- [ ] Browser workflow works for: upload → shear → extrapolation → result plot
+- [ ] Frontend never calls MCP directly for core workflow actions
+- [ ] No duplicated analytics logic between `server/api/` and `server/tools/`
 
 ---
 
@@ -1428,5 +2074,6 @@ Before declaring the build complete, verify:
 | 2 | server/core/regression.py, server/core/formulas.py, server/tools/shear.py, server/tools/extrapolation.py, server/tools/cleaning.py, tests/test_phase2.py | 12 tools |
 | 3 | server/tools/era5.py, server/tools/ltc.py, server/tools/ltc_ml.py, server/tools/air_density.py, tests/test_phase3.py | 11 tools |
 | 4 | server/tools/ensemble.py, server/tools/clipping.py, server/tools/homogeneity.py, server/tools/uncertainty.py, server/tools/visualization.py, server/tools/map.py, tests/test_phase4.py | 19 tools |
-| 5 | tests/test_e2e.py, Dockerfile, docker-compose.yml, librechat_config.yaml, README.md | — |
-| **Total** | **36 files** | **59 tools** |
+| 5 | tests/test_e2e.py, Dockerfile, docker-compose.yml, .env.example, librechat_config.yaml, README.md | — |
+| 6 | server/api/*, server/state/manager.py, frontend/*, tests/test_api_sessions.py, tests/test_api_workflow.py | — |
+| **Current built total through Phase 5** | **37 files** | **59 tools** |

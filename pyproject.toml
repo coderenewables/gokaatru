@@ -9,6 +9,7 @@ description = "Wind Resource Assessment MCP Server"
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=2.0.0",
+    "fastapi>=0.115",
     "pydantic>=2.0",
     "numpy>=1.24",
     "scipy>=1.10",
@@ -16,6 +17,9 @@ dependencies = [
     "pyarrow>=16.0",
     "matplotlib>=3.7",
     "plotly>=5.15",
+    "orjson>=3.10",
+    "python-multipart>=0.0.9",
+    "uvicorn[standard]>=0.30",
     "windrose>=1.9",
     "xarray>=2023.1",
     "zarr>=2.14",
@@ -25,7 +29,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ml = ["xgboost>=1.7", "scikit-learn>=1.2"]
-dev = ["pytest>=7.0", "ruff>=0.1"]
+dev = ["pytest>=7.0", "ruff>=0.1", "httpx>=0.28"]
 
 [tool.ruff]
 line-length = 120

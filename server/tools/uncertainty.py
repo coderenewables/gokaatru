@@ -7,10 +7,11 @@ from __future__ import annotations
 import math
 
 from server.main import mcp
+from server.state.session import SessionState, session
 
 
-@mcp.tool()
-def calculate_uncertainty(
+def _calculate_uncertainty(
+    _state: SessionState,
     measurement_uncertainty_pct: float,
     measurement_height_m: float,
     hub_height_m: float,
@@ -66,3 +67,32 @@ def calculate_uncertainty(
             "is_interpolation": bool(is_interpolation),
         },
     }
+
+
+@mcp.tool()
+def calculate_uncertainty(
+    measurement_uncertainty_pct: float,
+    measurement_height_m: float,
+    hub_height_m: float,
+    shear_method: str,
+    mcp_r_squared: float,
+    concurrent_hours: float,
+    algorithm: str = "speedsort",
+    iav_pct: float = 6.0,
+    shear_std: float = 0.0,
+    is_interpolation: bool = False,
+) -> dict:
+    """Calculate total uncertainty by root-sum-square combination of measurement, vertical, MCP, and future terms."""
+    return _calculate_uncertainty(
+        session,
+        measurement_uncertainty_pct,
+        measurement_height_m,
+        hub_height_m,
+        shear_method,
+        mcp_r_squared,
+        concurrent_hours,
+        algorithm,
+        iav_pct,
+        shear_std,
+        is_interpolation,
+    )

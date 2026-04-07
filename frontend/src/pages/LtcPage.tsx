@@ -22,7 +22,9 @@ const ltcAlgorithms = [
 export function LtcPage() {
   const sessionId = useWorkspaceStore((state) => state.sessionId);
   const selectedLtcAlgorithm = useWorkspaceStore((state) => state.selectedLtcAlgorithm);
+  const selectedLtcSource = useWorkspaceStore((state) => state.selectedLtcSource);
   const setSelectedLtcAlgorithm = useWorkspaceStore((state) => state.setSelectedLtcAlgorithm);
+  const setSelectedLtcSource = useWorkspaceStore((state) => state.setSelectedLtcSource);
   const latestUncertainty = useWorkspaceStore((state) => state.latestUncertainty);
   const setLatestUncertainty = useWorkspaceStore((state) => state.setLatestUncertainty);
   const queryClient = useQueryClient();
@@ -33,7 +35,6 @@ export function LtcPage() {
   const [longDirCol, setLongDirCol] = useState("Dir_100m");
   const [measuredCol, setMeasuredCol] = useState("");
   const [clippingSpeedCol, setClippingSpeedCol] = useState("corrected_wind_speed");
-  const [clippingSource, setClippingSource] = useState("ensemble");
   const [homogeneityMethod, setHomogeneityMethod] = useState("annual");
   const [cutoffYear, setCutoffYear] = useState("");
   const [uncMeasurementPct, setUncMeasurementPct] = useState("2.0");
@@ -109,7 +110,7 @@ export function LtcPage() {
   });
 
   const clippingMutation = useMutation({
-    mutationFn: () => analysisApi.runClipping(sessionId ?? "", { speed_col: clippingSpeedCol, source: clippingSource }),
+    mutationFn: () => analysisApi.runClipping(sessionId ?? "", { speed_col: clippingSpeedCol, source: selectedLtcSource }),
     onSuccess: (result) => {
       setLatestError(null);
       setLatestClipping(result);
@@ -238,7 +239,7 @@ export function LtcPage() {
             </label>
             <label className="form-field">
               <span>Clipping source</span>
-              <select value={clippingSource} onChange={(event) => setClippingSource(event.target.value)}>
+              <select value={selectedLtcSource} onChange={(event) => setSelectedLtcSource(event.target.value)}>
                 <option value="ensemble">ensemble</option>
                 {(ltcResultsQuery.data?.results ?? []).map((result) => (
                   <option key={result.algorithm} value={result.algorithm}>

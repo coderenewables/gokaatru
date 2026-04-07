@@ -12,6 +12,7 @@ import { GeoJsonMap } from "../components/common/GeoJsonMap";
 import { MetricCard } from "../components/common/MetricCard";
 import { PageHeader } from "../components/common/PageHeader";
 import { PlotlyFigure } from "../components/common/PlotlyFigure";
+import type { JsonValue } from "../lib/types";
 
 function uncertaintyPlotPayload(plotResult: ReturnType<typeof useWorkspaceStore.getState>["latestUncertainty"]) {
   if (!plotResult) {
@@ -26,18 +27,27 @@ function uncertaintyPlotPayload(plotResult: ReturnType<typeof useWorkspaceStore.
   };
 }
 
+function draftSection(value: JsonValue | undefined) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : {};
+}
+
 export function ResultsPage() {
   const sessionId = useWorkspaceStore((state) => state.sessionId);
   const latestUncertainty = useWorkspaceStore((state) => state.latestUncertainty);
+  const resultsDraftValue = useWorkspaceStore((state) => state.formDrafts.results);
+  const patchFormDraft = useWorkspaceStore((state) => state.patchFormDraft);
   const [latestError, setLatestError] = useState<unknown>(null);
   const [customPlot, setCustomPlot] = useState<PlotResult | null>(null);
-  const [plotName, setPlotName] = useState("weibull");
-  const [sensorName, setSensorName] = useState("");
-  const [speedSensor, setSpeedSensor] = useState("");
-  const [directionSensor, setDirectionSensor] = useState("");
-  const [sensorNames, setSensorNames] = useState("");
-  const [sensorA, setSensorA] = useState("");
-  const [sensorB, setSensorB] = useState("");
+
+  const resultsDraft = useMemo(() => draftSection(resultsDraftValue), [resultsDraftValue]);
+
+  const plotName = typeof resultsDraft.plotName === "string" ? resultsDraft.plotName : "weibull";
+  const sensorName = typeof resultsDraft.sensorName === "string" ? resultsDraft.sensorName : "";
+  const speedSensor = typeof resultsDraft.speedSensor === "string" ? resultsDraft.speedSensor : "";
+  const directionSensor = typeof resultsDraft.directionSensor === "string" ? resultsDraft.directionSensor : "";
+  const sensorNames = typeof resultsDraft.sensorNames === "string" ? resultsDraft.sensorNames : "";
+  const sensorA = typeof resultsDraft.sensorA === "string" ? resultsDraft.sensorA : "";
+  const sensorB = typeof resultsDraft.sensorB === "string" ? resultsDraft.sensorB : "";
 
   const sensorsQuery = useQuery({
     queryKey: ["results-sensors", sessionId],
@@ -121,19 +131,19 @@ export function ResultsPage() {
   );
 
   useEffect(() => {
-    if (speedSensors[0] && !sensorName) {
-      setSensorName(speedSensors[0].name);
-      setSpeedSensor(speedSensors[0].name);
-      setSensorNames(speedSensors[0].name);
-      setSensorA(speedSensors[0].name);
+    if (speedSensors[0] && resultsDraft.initialized !== true) {
+      patchFormDraft("results", {
+        plotName: "weibull",
+        sensorName: speedSensors[0].name,
+        speedSensor: speedSensors[0].name,
+        sensorNames: speedSensors[0].name,
+        sensorA: speedSensors[0].name,
+        sensorB: speedSensors[1]?.name ?? "",
+        directionSensor: directionSensors[0]?.name ?? "",
+        initialized: true,
+      });
     }
-    if (speedSensors[1] && !sensorB) {
-      setSensorB(speedSensors[1].name);
-    }
-    if (directionSensors[0] && !directionSensor) {
-      setDirectionSensor(directionSensors[0].name);
-    }
-  }, [directionSensor, directionSensors, sensorA, sensorB, sensorName, sensorNames, speedSensor, speedSensors]);
+  }, [directionSensors, patchFormDraft, resultsDraft.initialized, speedSensors]);
 
   if (!sessionId) {
     return (
@@ -188,7 +198,7 @@ export function ResultsPage() {
           <span className="eyebrow">Custom plot request</span>
           <label className="form-field">
             <span>Plot endpoint</span>
-            <select value={plotName} onChange={(event) => setPlotName(event.target.value)}>
+            <select value={plotName} onChange={(event) => patchFormDraft("results", { plotName: event.target.value })}>
               <option value="weibull">weibull</option>
               <option value="windrose">windrose</option>
               <option value="diurnal">diurnal</option>
@@ -199,27 +209,27 @@ export function ResultsPage() {
           <div className="form-grid two-col">
             <label className="form-field">
               <span>Sensor name</span>
-              <input value={sensorName} onChange={(event) => setSensorName(event.target.value)} />
+              <input value={sensorName} onChange={(event) => patchFormDraft("results", { sensorName: event.target.value })} />
             </label>
             <label className="form-field">
               <span>Speed sensor</span>
-              <input value={speedSensor} onChange={(event) => setSpeedSensor(event.target.value)} />
+              <input value={speedSensor} onChange={(event) => patchFormDraft("results", { speedSensor: event.target.value })} />
             </label>
             <label className="form-field">
               <span>Direction sensor</span>
-              <input value={directionSensor} onChange={(event) => setDirectionSensor(event.target.value)} />
+              <input value={directionSensor} onChange={(event) => patchFormDraft("results", { directionSensor: event.target.value })} />
             </label>
             <label className="form-field">
               <span>Sensor names CSV</span>
-              <input value={sensorNames} onChange={(event) => setSensorNames(event.target.value)} />
+              <input value={sensorNames} onChange={(event) => patchFormDraft("results", { sensorNames: event.target.value })} />
             </label>
             <label className="form-field">
               <span>Sensor A</span>
-              <input value={sensorA} onChange={(event) => setSensorA(event.target.value)} />
+              <input value={sensorA} onChange={(event) => patchFormDraft("results", { sensorA: event.target.value })} />
             </label>
             <label className="form-field">
               <span>Sensor B</span>
-              <input value={sensorB} onChange={(event) => setSensorB(event.target.value)} />
+              <input value={sensorB} onChange={(event) => patchFormDraft("results", { sensorB: event.target.value })} />
             </label>
           </div>
           <button className="primary-button" type="button" onClick={() => customPlotMutation.mutate()}>

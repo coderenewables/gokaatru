@@ -10,6 +10,7 @@ import { ErrorBanner } from "../components/common/ErrorBanner";
 import { MetricCard } from "../components/common/MetricCard";
 import { PageHeader } from "../components/common/PageHeader";
 import { PlotlyFigure } from "../components/common/PlotlyFigure";
+import type { JsonValue } from "../lib/types";
 
 function numericString(value: unknown) {
   return typeof value === "number" ? String(value) : "";
@@ -23,20 +24,29 @@ function speedSensorsOnly(sensors: SensorRecord[] | undefined) {
   return (sensors ?? []).filter((sensor) => sensor.sensor_type === "wind_speed").sort((left, right) => right.height_m - left.height_m);
 }
 
+function draftSection(value: JsonValue | undefined) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : {};
+}
+
 export function SitePage() {
   const sessionId = useWorkspaceStore((state) => state.sessionId);
   const selectedSensors = useWorkspaceStore((state) => state.selectedSensors);
   const setSelectedSensors = useWorkspaceStore((state) => state.setSelectedSensors);
+  const siteDraftValue = useWorkspaceStore((state) => state.formDrafts.site);
+  const patchFormDraft = useWorkspaceStore((state) => state.patchFormDraft);
   const queryClient = useQueryClient();
   const [latestError, setLatestError] = useState<unknown>(null);
-  const [projectName, setProjectName] = useState("");
-  const [measurementType, setMeasurementType] = useState("mast");
-  const [latitude, setLatitude] = useState("");
-  const [longitude, setLongitude] = useState("");
-  const [elevation, setElevation] = useState("");
-  const [hubHeight, setHubHeight] = useState("");
-  const [tableAggregation, setTableAggregation] = useState("mean");
   const [latestExtrapolation, setLatestExtrapolation] = useState<ExtrapolationResponse | null>(null);
+
+  const siteDraft = useMemo(() => draftSection(siteDraftValue), [siteDraftValue]);
+
+  const projectName = typeof siteDraft.projectName === "string" ? siteDraft.projectName : "";
+  const measurementType = typeof siteDraft.measurementType === "string" ? siteDraft.measurementType : "mast";
+  const latitude = typeof siteDraft.latitude === "string" ? siteDraft.latitude : "";
+  const longitude = typeof siteDraft.longitude === "string" ? siteDraft.longitude : "";
+  const elevation = typeof siteDraft.elevation === "string" ? siteDraft.elevation : "0";
+  const hubHeight = typeof siteDraft.hubHeight === "string" ? siteDraft.hubHeight : "";
+  const tableAggregation = typeof siteDraft.tableAggregation === "string" ? siteDraft.tableAggregation : "mean";
 
   const configQuery = useQuery({
     queryKey: ["runconfig", sessionId],
@@ -65,16 +75,23 @@ export function SitePage() {
     if (!configQuery.data) {
       return;
     }
+    if (siteDraft.initialized === true) {
+      return;
+    }
     const location = typeof configQuery.data.location === "object" && configQuery.data.location !== null && !Array.isArray(configQuery.data.location)
       ? (configQuery.data.location as Record<string, unknown>)
       : null;
-    setProjectName(typeof configQuery.data.project_name === "string" ? configQuery.data.project_name : "");
-    setMeasurementType(typeof configQuery.data.measurement_type === "string" ? configQuery.data.measurement_type : "mast");
-    setLatitude(typeof recordValue(location, "latitude") === "number" ? String(recordValue(location, "latitude")) : "");
-    setLongitude(typeof recordValue(location, "longitude") === "number" ? String(recordValue(location, "longitude")) : "");
-    setElevation(typeof recordValue(location, "elevation_m") === "number" ? String(recordValue(location, "elevation_m")) : "0");
-    setHubHeight(numericString(configQuery.data.hub_height_m));
-  }, [configQuery.data]);
+    patchFormDraft("site", {
+      projectName: typeof configQuery.data.project_name === "string" ? configQuery.data.project_name : "",
+      measurementType: typeof configQuery.data.measurement_type === "string" ? configQuery.data.measurement_type : "mast",
+      latitude: typeof recordValue(location, "latitude") === "number" ? String(recordValue(location, "latitude")) : "",
+      longitude: typeof recordValue(location, "longitude") === "number" ? String(recordValue(location, "longitude")) : "",
+      elevation: typeof recordValue(location, "elevation_m") === "number" ? String(recordValue(location, "elevation_m")) : "0",
+      hubHeight: numericString(configQuery.data.hub_height_m),
+      tableAggregation: "mean",
+      initialized: true,
+    });
+  }, [configQuery.data, patchFormDraft, siteDraft.initialized]);
 
   useEffect(() => {
     if (selectedSensors.length === 0 && availableSpeedSensors.length >= 2) {
@@ -202,11 +219,11 @@ export function SitePage() {
           <div className="form-grid two-col">
             <label className="form-field">
               <span>Project name</span>
-              <input value={projectName} onChange={(event) => setProjectName(event.target.value)} />
+              <input value={projectName} onChange={(event) => patchFormDraft("site", { projectName: event.target.value })} />
             </label>
             <label className="form-field">
               <span>Measurement type</span>
-              <select value={measurementType} onChange={(event) => setMeasurementType(event.target.value)}>
+              <select value={measurementType} onChange={(event) => patchFormDraft("site", { measurementType: event.target.value })}>
                 <option value="mast">mast</option>
                 <option value="lidar">lidar</option>
                 <option value="sodar">sodar</option>
@@ -214,19 +231,19 @@ export function SitePage() {
             </label>
             <label className="form-field">
               <span>Latitude</span>
-              <input value={latitude} onChange={(event) => setLatitude(event.target.value)} />
+              <input value={latitude} onChange={(event) => patchFormDraft("site", { latitude: event.target.value })} />
             </label>
             <label className="form-field">
               <span>Longitude</span>
-              <input value={longitude} onChange={(event) => setLongitude(event.target.value)} />
+              <input value={longitude} onChange={(event) => patchFormDraft("site", { longitude: event.target.value })} />
             </label>
             <label className="form-field">
               <span>Elevation (m)</span>
-              <input value={elevation} onChange={(event) => setElevation(event.target.value)} />
+              <input value={elevation} onChange={(event) => patchFormDraft("site", { elevation: event.target.value })} />
             </label>
             <label className="form-field">
               <span>Hub height (m)</span>
-              <input value={hubHeight} onChange={(event) => setHubHeight(event.target.value)} />
+              <input value={hubHeight} onChange={(event) => patchFormDraft("site", { hubHeight: event.target.value })} />
             </label>
           </div>
           <button className="primary-button" type="button" onClick={() => saveMetadataMutation.mutate()}>
@@ -238,7 +255,7 @@ export function SitePage() {
           <span className="eyebrow">Shear and extrapolation inputs</span>
           <label className="form-field">
             <span>Aggregation</span>
-            <select value={tableAggregation} onChange={(event) => setTableAggregation(event.target.value)}>
+            <select value={tableAggregation} onChange={(event) => patchFormDraft("site", { tableAggregation: event.target.value })}>
               <option value="mean">mean</option>
               <option value="median">median</option>
               <option value="momm">momm</option>

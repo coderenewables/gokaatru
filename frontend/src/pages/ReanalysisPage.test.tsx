@@ -142,5 +142,8 @@ describe("ReanalysisPage", () => {
     await waitFor(() => {
       expect(analysisApi.interpolateEra5).toHaveBeenCalledWith("session-reanalysis");
     });
+
+    expect(await screen.findByText("idw")).toBeTruthy();
+    expect(screen.getAllByText("u10, v10").length).toBeGreaterThan(0);
   });
 });

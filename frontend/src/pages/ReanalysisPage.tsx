@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { analysisApi, configApi, resultsApi, sessionsApi } from "../lib/api";
-import type { Era5ExtractResponse, Era5Node, SiteMapResponse } from "../lib/types";
+import type { Era5ExtractResponse, Era5InterpolationResponse, Era5Node, SiteMapResponse } from "../lib/types";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { DataTable } from "../components/common/DataTable";
 import { EmptyState } from "../components/common/EmptyState";
@@ -35,8 +35,8 @@ export function ReanalysisPage() {
   const [latestError, setLatestError] = useState<unknown>(null);
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
-  const [latestNodes, setLatestNodes] = useState<Era5Node[] | null>(null);
   const [extractResults, setExtractResults] = useState<Era5ExtractResponse[]>([]);
+  const [latestInterpolation, setLatestInterpolation] = useState<Era5InterpolationResponse | null>(null);
 
   const summaryQuery = useQuery({
     queryKey: ["session-summary", sessionId],
@@ -59,6 +59,13 @@ export function ReanalysisPage() {
     staleTime: 15_000,
   });
 
+  const era5NodesQuery = useQuery({
+    queryKey: ["era5-nodes", sessionId],
+    queryFn: async () => persistedNodes(await resultsApi.getSiteMap(sessionId ?? "")),
+    enabled: sessionId !== null && summaryQuery.data?.completed_steps.includes("era5_nodes") === true,
+    staleTime: 15_000,
+  });
+
   useEffect(() => {
     const location = typeof configQuery.data?.location === "object" && configQuery.data?.location !== null && !Array.isArray(configQuery.data.location)
       ? (configQuery.data.location as Record<string, unknown>)
@@ -71,13 +78,21 @@ export function ReanalysisPage() {
     }
   }, [configQuery.data, latitude, longitude]);
 
-  const nodes = useMemo(() => latestNodes ?? persistedNodes(mapQuery.data), [latestNodes, mapQuery.data]);
+  useEffect(() => {
+    if (mapQuery.data && sessionId !== null) {
+      queryClient.setQueryData(["era5-nodes", sessionId], persistedNodes(mapQuery.data));
+    }
+  }, [mapQuery.data, queryClient, sessionId]);
+
+  const nodes = useMemo(() => era5NodesQuery.data ?? [], [era5NodesQuery.data]);
 
   const findNodesMutation = useMutation({
     mutationFn: () => analysisApi.findEra5Nodes(sessionId ?? "", { latitude: Number(latitude), longitude: Number(longitude) }),
     onSuccess: (result) => {
       setLatestError(null);
-      setLatestNodes(result.nodes);
+      if (sessionId !== null) {
+        queryClient.setQueryData(["era5-nodes", sessionId], result.nodes);
+      }
       void queryClient.invalidateQueries({ queryKey: ["session-summary", sessionId] });
       void queryClient.invalidateQueries({ queryKey: ["site-map", sessionId] });
     },
@@ -106,8 +121,9 @@ export function ReanalysisPage() {
 
   const interpolateMutation = useMutation({
     mutationFn: () => analysisApi.interpolateEra5(sessionId ?? ""),
-    onSuccess: () => {
+    onSuccess: (result) => {
       setLatestError(null);
+      setLatestInterpolation(result);
       void queryClient.invalidateQueries({ queryKey: ["session-summary", sessionId] });
       void queryClient.invalidateQueries({ queryKey: ["site-map", sessionId] });
     },
@@ -131,7 +147,10 @@ export function ReanalysisPage() {
         <MetricCard label="Node count" value={String(nodes.length)} tone="accent" />
         <MetricCard label="Extracted datasets" value={String(extractResults.length)} />
         <MetricCard label="Interpolated" value={summaryQuery.data?.era5_interpolated_loaded ? "Ready" : "Pending"} />
-        <MetricCard label="Date range" value={`${activeDateRange.startDate} to ${activeDateRange.endDate}`} />
+        <MetricCard
+          label="Interpolation rows"
+          value={latestInterpolation ? String(latestInterpolation.rows) : `${activeDateRange.startDate} to ${activeDateRange.endDate}`}
+        />
       </div>
 
       {latestError ? <ErrorBanner error={latestError} /> : null}
@@ -215,6 +234,28 @@ export function ReanalysisPage() {
           emptyTitle="No ERA5 datasets extracted"
           emptyDetail="After node extraction, each loaded node dataset will be summarized here."
         />
+      </article>
+
+      <article className="content-card stack-gap">
+        <span className="eyebrow">Interpolation result</span>
+        {latestInterpolation ? (
+          <dl className="definition-list compact-definition-list">
+            <div>
+              <dt>Rows</dt>
+              <dd>{latestInterpolation.rows}</dd>
+            </div>
+            <div>
+              <dt>Method</dt>
+              <dd>{latestInterpolation.method}</dd>
+            </div>
+            <div>
+              <dt>Variables</dt>
+              <dd>{latestInterpolation.variables.join(", ")}</dd>
+            </div>
+          </dl>
+        ) : (
+          <EmptyState title="No interpolation result" detail="Run site interpolation to inspect the returned row count, method, and variable list." />
+        )}
       </article>
     </section>
   );

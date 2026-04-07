@@ -16,6 +16,27 @@ For a local SSE server that LibreChat or any network client can reach:
 python -m server.main --transport sse --host 0.0.0.0 --port 8080
 ```
 
+## Workflow Web App (Local Development)
+
+Run the analyst-facing workflow stack as three processes:
+
+```bash
+conda activate gokaatru
+pip install -e ".[ml,dev]"
+npm --prefix frontend install
+python -m uvicorn server.api.main:app --reload --port 8000
+python -m server.main --transport sse --host 0.0.0.0 --port 8080
+npm --prefix frontend run dev
+```
+
+Default local endpoints:
+
+- Workflow UI: `http://127.0.0.1:5173`
+- FastAPI web API: `http://127.0.0.1:8000/api`
+- MCP SSE endpoint: `http://127.0.0.1:8080/sse`
+
+The Vite dev server proxies `/api` to the FastAPI app, so the browser workflow never talks to MCP directly for core analysis actions.
+
 ## Quick Start (Docker)
 
 ```bash
@@ -54,13 +75,17 @@ mcpServers:
 
 ## Validation
 
-The completed repository has been validated with 59 registered MCP tools and 40 automated tests.
+The repository has been validated with 59 registered MCP tools plus backend API and frontend workflow coverage.
 
 ```bash
 python -m ruff check server/ tests/
 python -m pytest tests/ -v
+python -m pytest tests/test_api_sessions.py tests/test_api_workflow.py -v
 python -m server.main --help
+python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000
 python -c "import asyncio, json; from server.main import mcp; print(json.dumps([tool.name for tool in asyncio.run(mcp.list_tools())], indent=2))"
+npm --prefix frontend run build
+npm --prefix frontend run test -- --run
 docker build -t gokaatru .
 docker compose config
 docker compose up -d

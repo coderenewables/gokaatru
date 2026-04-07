@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Routes, Route, MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { healthApi, sessionsApi } from "../lib/api";
+import { configApi, healthApi, sessionsApi } from "../lib/api";
 import { OverviewPage } from "./OverviewPage";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 
@@ -17,6 +17,10 @@ vi.mock("../lib/api", async () => {
     sessionsApi: {
       ...actual.sessionsApi,
       get: vi.fn(),
+    },
+    configApi: {
+      ...actual.configApi,
+      getSummary: vi.fn(),
     },
   };
 });
@@ -72,10 +76,27 @@ describe("OverviewPage", () => {
       ltc_algorithms: [],
       completed_steps: ["timeseries", "datamodel"],
     });
+    vi.mocked(configApi.getSummary).mockResolvedValue({
+      completed_steps: ["timeseries", "datamodel"],
+      project_name: "Test site",
+      timeseries_loaded: true,
+      sensor_mapping_loaded: true,
+      cleaning_rules_applied: 0,
+      shear_table_ready: false,
+      roughness_table_ready: false,
+      era5_nodes_loaded: false,
+      era5_data_sets_loaded: 0,
+      era5_interpolated_ready: false,
+      ltc_algorithms_run: [],
+      ensemble_ready: false,
+      coordinate: null,
+      hub_height_m: 120,
+    });
 
     renderOverview();
 
     await screen.findByText("Test site");
+    expect(screen.getByText("Project summary (/summary)")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Go To Next Step" }));
 
     await waitFor(() => {

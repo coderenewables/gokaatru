@@ -2042,6 +2042,7 @@ Frontend:
 ```bash
 npm --prefix frontend install
 npm --prefix frontend run dev
+npm --prefix frontend run test -- --run
 ```
 
 Production frontend build:
@@ -2060,6 +2061,7 @@ Before declaring Phase 6 complete, verify:
 - [ ] `python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000` starts cleanly
 - [ ] `python -m server.main --transport sse --host 0.0.0.0 --port 8080` still starts cleanly
 - [ ] `npm --prefix frontend run build` passes
+- [ ] `npm --prefix frontend run test -- --run` passes
 - [ ] Browser workflow works for: upload → shear → extrapolation → result plot
 - [ ] Frontend never calls MCP directly for core workflow actions
 - [ ] No duplicated analytics logic between `server/api/` and `server/tools/`

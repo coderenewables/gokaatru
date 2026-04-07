@@ -798,6 +798,8 @@ $$p \approx 2 \exp\left(\frac{-6K^2}{n^3 + n^2}\right)$$
 |-------|-------|-----------|
 | Unit | Each core formula function (regression, shear, air density) | pytest |
 | Integration | Tool chain: parse → clean → shear → extrapolate → LTC | pytest |
+| Web API | Session lifecycle and browser workflow endpoints | pytest + FastAPI TestClient |
+| Frontend UI | Shell routing, workflow pages, and API client interactions | Vitest + React Testing Library |
 | Determinism | Same input CSV + seed → bit-identical output | pytest parametrize |
 | Schema | Pydantic model validation round-trip | pytest |
 | Edge cases | Empty data, single-height shear, zero variance, NaN-heavy series | pytest |
@@ -814,9 +816,19 @@ $$p \approx 2 \exp\left(\frac{-6K^2}{n^3 + n^2}\right)$$
 ### Local Development
 ```bash
 conda activate gokaatru
-pip install -e ".[dev]"
-python -m server.main          # stdio mode (for MCP client)
-python -m server.main --sse    # SSE mode (for web frontend)
+pip install -e ".[ml,dev]"
+npm --prefix frontend install
+python -m uvicorn server.api.main:app --reload --port 8000
+python -m server.main --transport sse --host 0.0.0.0 --port 8080
+npm --prefix frontend run dev
+```
+
+Validation commands for the web workflow:
+
+```bash
+python -m pytest tests/test_api_sessions.py tests/test_api_workflow.py -v
+npm --prefix frontend run build
+npm --prefix frontend run test -- --run
 ```
 
 ### Docker (Production)
@@ -826,11 +838,12 @@ COPY . /app
 WORKDIR /app
 RUN pip install --no-cache-dir .
 EXPOSE 8080
-CMD ["python", "-m", "server.main", "--sse", "--port", "8080"]
+CMD ["python", "-m", "server.main", "--transport", "sse", "--port", "8080"]
 ```
 
 ### Web App Connection
 - Browser talks to `http://localhost:8000/api`
+- Vite serves the local frontend at `http://127.0.0.1:5173` and proxies `/api` to the FastAPI app during development
 - Each request carries a session identifier so backend state is workspace-scoped
 - FastAPI routes call the same analytical helpers used by the MCP server
 - Plotly JSON and GeoJSON are rendered directly in the web app

@@ -1,13 +1,30 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 
-import { healthApi, sessionsApi } from "../lib/api";
+import { configApi, healthApi, sessionsApi } from "../lib/api";
 import { findNextIncompletePath, workflowSteps, isWorkflowStepComplete } from "../lib/workflow";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { EmptyState } from "../components/common/EmptyState";
+import { ErrorBanner } from "../components/common/ErrorBanner";
 import { MetricCard } from "../components/common/MetricCard";
 import { PageHeader } from "../components/common/PageHeader";
 import { StatusBadge } from "../components/common/StatusBadge";
+
+function summaryValue(value: unknown) {
+  if (value === null || value === undefined) {
+    return "Not set";
+  }
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No";
+  }
+  if (Array.isArray(value)) {
+    return value.length ? value.join(", ") : "None";
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
 
 export function OverviewPage() {
   const navigate = useNavigate();
@@ -26,6 +43,13 @@ export function OverviewPage() {
     staleTime: 10_000,
   });
 
+  const projectSummaryQuery = useQuery({
+    queryKey: ["analysis-summary", sessionId],
+    queryFn: () => configApi.getSummary(sessionId ?? ""),
+    enabled: sessionId !== null,
+    staleTime: 10_000,
+  });
+
   if (!sessionId) {
     return (
       <section className="page-section">
@@ -36,6 +60,8 @@ export function OverviewPage() {
   }
 
   const summary = summaryQuery.data;
+  const projectSummary = projectSummaryQuery.data;
+  const latestError = healthQuery.error ?? summaryQuery.error ?? projectSummaryQuery.error;
 
   return (
     <section className="page-section">
@@ -51,31 +77,41 @@ export function OverviewPage() {
 
       <div className="metric-grid">
         <MetricCard label="API status" value={healthQuery.data?.status ?? "checking"} tone="accent" />
-        <MetricCard label="Project" value={summary?.project_name ?? "Untitled"} />
+        <MetricCard label="Project" value={projectSummary?.project_name ? String(projectSummary.project_name) : summary?.project_name ?? "Untitled"} />
         <MetricCard label="Completed" value={String(summary?.completed_steps.length ?? 0)} />
         <MetricCard label="Workspace" value={summary?.workspace_dir ?? "Unavailable"} detail={sessionId} />
       </div>
 
-      {summary ? (
+      {latestError ? <ErrorBanner error={latestError} /> : null}
+
+      {summary && projectSummary ? (
         <div className="panel-grid panel-grid-two">
           <article className="content-card stack-gap">
-            <span className="eyebrow">Session summary</span>
+            <span className="eyebrow">Project summary (/summary)</span>
             <dl className="definition-list">
               <div>
-                <dt>Measurement type</dt>
-                <dd>{summary.measurement_type ?? "Not set"}</dd>
+                <dt>Timeseries loaded</dt>
+                <dd>{summaryValue(projectSummary.timeseries_loaded)}</dd>
               </div>
               <div>
-                <dt>Hub height</dt>
-                <dd>{summary.hub_height_m ? `${summary.hub_height_m} m` : "Not set"}</dd>
+                <dt>Sensor mapping</dt>
+                <dd>{summaryValue(projectSummary.sensor_mapping_loaded)}</dd>
               </div>
               <div>
-                <dt>ERA5 interpolated</dt>
-                <dd>{summary.era5_interpolated_loaded ? "Ready" : "Pending"}</dd>
+                <dt>Cleaning rules</dt>
+                <dd>{summaryValue(projectSummary.cleaning_rules_applied)}</dd>
+              </div>
+              <div>
+                <dt>ERA5 datasets</dt>
+                <dd>{summaryValue(projectSummary.era5_data_sets_loaded)}</dd>
+              </div>
+              <div>
+                <dt>Coordinate</dt>
+                <dd>{summaryValue(projectSummary.coordinate)}</dd>
               </div>
               <div>
                 <dt>LTC algorithms</dt>
-                <dd>{summary.ltc_algorithms.length ? summary.ltc_algorithms.join(", ") : "None"}</dd>
+                <dd>{summaryValue(projectSummary.ltc_algorithms_run)}</dd>
               </div>
             </dl>
           </article>
@@ -99,7 +135,7 @@ export function OverviewPage() {
           </article>
         </div>
       ) : (
-        <EmptyState title="Loading session" detail="The workflow summary will appear once the session metadata is loaded." />
+        <EmptyState title="Loading session" detail="The workflow and analysis summary will appear once the current session metadata is loaded." />
       )}
     </section>
   );

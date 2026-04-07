@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 
 import { healthApi, sessionsApi } from "../../lib/api";
 import type { ApiHealthResponse, SessionSummaryResponse } from "../../lib/types";
@@ -64,6 +64,7 @@ function InspectorPanel({ health, summary }: { health?: ApiHealthResponse; summa
 }
 
 export function AppShell() {
+  const navigate = useNavigate();
   const sessionId = useWorkspaceStore((state) => state.sessionId);
   const resetWorkspace = useWorkspaceStore((state) => state.resetWorkspace);
   const setSessionId = useWorkspaceStore((state) => state.setSessionId);
@@ -108,7 +109,11 @@ export function AppShell() {
     },
   });
 
-  const projectName = summaryQuery.data?.project_name ?? "Untitled project";
+  const hasProjectName = typeof summaryQuery.data?.project_name === "string" && summaryQuery.data.project_name.trim().length > 0;
+  const projectName = hasProjectName ? summaryQuery.data?.project_name ?? "" : "Project not named";
+  const headerCopy = hasProjectName
+    ? "Manage the workflow, inspect session state, and continue the next analysis step."
+    : "Set the project name and site metadata from the Site page, then save the metadata to update this header.";
 
   return (
     <div className="app-shell">
@@ -116,10 +121,7 @@ export function AppShell() {
         <div>
           <p className="eyebrow">GoKaatru workflow app</p>
           <h1>{projectName}</h1>
-          <p className="header-copy">
-            Phase 6.7 turns the scaffold into a task-driven analyst client with real uploads, config edits, analysis actions,
-            and results rendered directly from the shared backend routes.
-          </p>
+          <p className="header-copy">{headerCopy}</p>
         </div>
         <div className="header-actions">
           <div className="session-chip">
@@ -130,6 +132,9 @@ export function AppShell() {
             <span>API</span>
             <strong>{healthQuery.data?.status ?? "checking"}</strong>
           </div>
+          <button className="secondary-button" type="button" disabled={!sessionId} onClick={() => navigate("/site")}>
+            {hasProjectName ? "Edit Metadata" : "Name Project"}
+          </button>
           <button className="primary-button" type="button" onClick={() => createSessionMutation.mutate()}>
             {sessionId ? "Replace Session" : "Create Session"}
           </button>

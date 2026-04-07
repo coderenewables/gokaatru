@@ -95,10 +95,34 @@ describe("SitePage", () => {
     renderWithProviders(<SitePage />);
 
     expect(await screen.findByDisplayValue("North Ridge")).toBeTruthy();
+    expect(screen.getByDisplayValue("mast")).toBeTruthy();
     expect(screen.getByDisplayValue("12.34")).toBeTruthy();
     expect(screen.getByDisplayValue("56.78")).toBeTruthy();
+    expect(screen.getByDisplayValue("111")).toBeTruthy();
     expect(await screen.findByText('plot:shear_table:{"table_type":"shear"}')).toBeTruthy();
     expect(screen.getByText('plot:shear_table:{"table_type":"roughness"}')).toBeTruthy();
+  });
+
+  it("repopulates metadata from runconfig when the stored draft is not dirty", async () => {
+    useWorkspaceStore.getState().setSessionId("session-site");
+    useWorkspaceStore.getState().patchFormDraft("site", {
+      projectName: "",
+      measurementType: "mast",
+      latitude: "",
+      longitude: "",
+      elevation: "0",
+      hubHeight: "",
+      initialized: true,
+      dirty: false,
+    });
+
+    renderWithProviders(<SitePage />);
+
+    expect(await screen.findByDisplayValue("North Ridge")).toBeTruthy();
+    expect(screen.getByDisplayValue("12.34")).toBeTruthy();
+    expect(screen.getByDisplayValue("56.78")).toBeTruthy();
+    expect(screen.getByDisplayValue("111")).toBeTruthy();
+    expect(screen.getByDisplayValue("140")).toBeTruthy();
   });
 
   it("saves metadata and runs extrapolation", async () => {

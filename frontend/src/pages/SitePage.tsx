@@ -28,6 +28,33 @@ function draftSection(value: JsonValue | undefined) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : {};
 }
 
+function runconfigSnapshot(
+  projectName: string,
+  measurementType: string,
+  latitude: string,
+  longitude: string,
+  elevation: string,
+  hubHeight: string,
+) {
+  return {
+    project_name: projectName,
+    measurement_type: measurementType,
+    location: {
+      latitude: Number(latitude),
+      longitude: Number(longitude),
+      elevation_m: Number(elevation || 0),
+    },
+    hub_height_m: Number(hubHeight),
+  };
+}
+
+function updateSiteDraft(
+  patchFormDraft: (section: string, patch: Record<string, JsonValue>) => void,
+  patch: Record<string, JsonValue>,
+) {
+  patchFormDraft("site", { ...patch, dirty: true });
+}
+
 export function SitePage() {
   const sessionId = useWorkspaceStore((state) => state.sessionId);
   const selectedSensors = useWorkspaceStore((state) => state.selectedSensors);
@@ -47,6 +74,7 @@ export function SitePage() {
   const elevation = typeof siteDraft.elevation === "string" ? siteDraft.elevation : "0";
   const hubHeight = typeof siteDraft.hubHeight === "string" ? siteDraft.hubHeight : "";
   const tableAggregation = typeof siteDraft.tableAggregation === "string" ? siteDraft.tableAggregation : "mean";
+  const siteDraftDirty = siteDraft.dirty === true;
 
   const configQuery = useQuery({
     queryKey: ["runconfig", sessionId],
@@ -75,7 +103,7 @@ export function SitePage() {
     if (!configQuery.data) {
       return;
     }
-    if (siteDraft.initialized === true) {
+    if (siteDraftDirty) {
       return;
     }
     const location = typeof configQuery.data.location === "object" && configQuery.data.location !== null && !Array.isArray(configQuery.data.location)
@@ -88,10 +116,11 @@ export function SitePage() {
       longitude: typeof recordValue(location, "longitude") === "number" ? String(recordValue(location, "longitude")) : "",
       elevation: typeof recordValue(location, "elevation_m") === "number" ? String(recordValue(location, "elevation_m")) : "0",
       hubHeight: numericString(configQuery.data.hub_height_m),
-      tableAggregation: "mean",
+      tableAggregation,
       initialized: true,
+      dirty: false,
     });
-  }, [configQuery.data, patchFormDraft, siteDraft.initialized]);
+  }, [configQuery.data, patchFormDraft, siteDraftDirty, tableAggregation]);
 
   useEffect(() => {
     if (selectedSensors.length === 0 && availableSpeedSensors.length >= 2) {
@@ -133,9 +162,12 @@ export function SitePage() {
           { key: "hub_height_m", value: Number(hubHeight) },
         ],
       }),
-    onSuccess: () => {
+    onSuccess: (result) => {
       setLatestError(null);
-      void queryClient.invalidateQueries({ queryKey: ["runconfig", sessionId] });
+      patchFormDraft("site", { dirty: false });
+      const fallbackRunconfig = runconfigSnapshot(projectName, measurementType, latitude, longitude, elevation, hubHeight);
+      const nextRunconfig = Object.keys(result.runconfig).length > 0 ? result.runconfig : fallbackRunconfig;
+      queryClient.setQueryData(["runconfig", sessionId], nextRunconfig);
       void queryClient.invalidateQueries({ queryKey: ["analysis-summary", sessionId] });
       void queryClient.invalidateQueries({ queryKey: ["session-summary", sessionId] });
     },
@@ -219,11 +251,11 @@ export function SitePage() {
           <div className="form-grid two-col">
             <label className="form-field">
               <span>Project name</span>
-              <input value={projectName} onChange={(event) => patchFormDraft("site", { projectName: event.target.value })} />
+              <input value={projectName} onChange={(event) => updateSiteDraft(patchFormDraft, { projectName: event.target.value })} />
             </label>
             <label className="form-field">
               <span>Measurement type</span>
-              <select value={measurementType} onChange={(event) => patchFormDraft("site", { measurementType: event.target.value })}>
+              <select value={measurementType} onChange={(event) => updateSiteDraft(patchFormDraft, { measurementType: event.target.value })}>
                 <option value="mast">mast</option>
                 <option value="lidar">lidar</option>
                 <option value="sodar">sodar</option>
@@ -231,19 +263,19 @@ export function SitePage() {
             </label>
             <label className="form-field">
               <span>Latitude</span>
-              <input value={latitude} onChange={(event) => patchFormDraft("site", { latitude: event.target.value })} />
+              <input value={latitude} onChange={(event) => updateSiteDraft(patchFormDraft, { latitude: event.target.value })} />
             </label>
             <label className="form-field">
               <span>Longitude</span>
-              <input value={longitude} onChange={(event) => patchFormDraft("site", { longitude: event.target.value })} />
+              <input value={longitude} onChange={(event) => updateSiteDraft(patchFormDraft, { longitude: event.target.value })} />
             </label>
             <label className="form-field">
               <span>Elevation (m)</span>
-              <input value={elevation} onChange={(event) => patchFormDraft("site", { elevation: event.target.value })} />
+              <input value={elevation} onChange={(event) => updateSiteDraft(patchFormDraft, { elevation: event.target.value })} />
             </label>
             <label className="form-field">
               <span>Hub height (m)</span>
-              <input value={hubHeight} onChange={(event) => patchFormDraft("site", { hubHeight: event.target.value })} />
+              <input value={hubHeight} onChange={(event) => updateSiteDraft(patchFormDraft, { hubHeight: event.target.value })} />
             </label>
           </div>
           <button className="primary-button" type="button" onClick={() => saveMetadataMutation.mutate()}>
@@ -255,7 +287,7 @@ export function SitePage() {
           <span className="eyebrow">Shear and extrapolation inputs</span>
           <label className="form-field">
             <span>Aggregation</span>
-            <select value={tableAggregation} onChange={(event) => patchFormDraft("site", { tableAggregation: event.target.value })}>
+            <select value={tableAggregation} onChange={(event) => updateSiteDraft(patchFormDraft, { tableAggregation: event.target.value, dirty: false })}>
               <option value="mean">mean</option>
               <option value="median">median</option>
               <option value="momm">momm</option>

@@ -11,7 +11,7 @@ import pandas as pd
 
 from server.core.validators import detect_timestep_minutes
 from server.main import mcp
-from server.schemas.common import SensorInfo
+from server.schemas.common import Coordinate, SensorInfo
 from server.state.session import SessionState, session
 
 TIMESTAMP_CANDIDATES = ["Timestamp", "timestamp", "DateTime", "datetime", "Date", "date", "Time", "time"]
@@ -75,6 +75,82 @@ def _extract_measurement_points(node: object) -> list[dict[str, object]]:
             collected.extend(_extract_measurement_points(item))
         return collected
     return []
+
+
+def _extract_measurement_locations(node: object) -> list[dict[str, object]]:
+    """Recursively collect Task 43 measurement_location records from a JSON tree."""
+    if isinstance(node, dict):
+        locations = node.get("measurement_location", [])
+        collected = [item for item in locations if isinstance(item, dict)]
+        for value in node.values():
+            collected.extend(_extract_measurement_locations(value))
+        return collected
+    if isinstance(node, list):
+        collected: list[dict[str, object]] = []
+        for item in node:
+            collected.extend(_extract_measurement_locations(item))
+        return collected
+    return []
+
+
+def _coerce_float(value: object) -> float | None:
+    """Convert numeric-like datamodel fields into floats when possible."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _first_numeric(record: dict[str, object], keys: list[str]) -> float | None:
+    """Return the first numeric value found among the provided datamodel keys."""
+    for key in keys:
+        value = _coerce_float(record.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _normalize_measurement_type(value: object) -> str | None:
+    """Map Task 43 station types onto the workflow UI's measurement-type choices."""
+    if not isinstance(value, str):
+        return None
+    lowered = value.strip().lower()
+    if not lowered:
+        return None
+    if "lidar" in lowered:
+        return "lidar"
+    if "sodar" in lowered:
+        return "sodar"
+    if "mast" in lowered or "tower" in lowered:
+        return "mast"
+    return None
+
+
+def _extract_site_metadata(payload: object) -> dict[str, object]:
+    """Extract project and location metadata from an IEA Task 43 datamodel when present."""
+    locations = _extract_measurement_locations(payload)
+    if not locations:
+        return {}
+    record = locations[0]
+    metadata: dict[str, object] = {}
+    project_name = record.get("name")
+    if isinstance(project_name, str) and project_name.strip():
+        metadata["project_name"] = project_name.strip()
+    latitude = _first_numeric(record, ["latitude_ddeg", "latitude", "lat"])
+    longitude = _first_numeric(record, ["longitude_ddeg", "longitude", "lon"])
+    elevation = _first_numeric(record, ["elevation_m", "elevation", "elevation_amsl_m", "elevation_asl_m"])
+    if latitude is not None and longitude is not None:
+        metadata["coordinate"] = Coordinate(latitude=latitude, longitude=longitude, elevation_m=elevation or 0.0)
+    measurement_type = _normalize_measurement_type(
+        record.get("measurement_station_type_id") or record.get("measurement_type_id") or record.get("measurement_type")
+    )
+    if measurement_type is not None:
+        metadata["measurement_type"] = measurement_type
+    return metadata
 
 
 def _build_sensor_mapping(points: list[dict[str, object]]) -> dict[float, dict[str, str | None]]:
@@ -172,6 +248,7 @@ def _parse_datamodel(state: SessionState, file_path: str) -> dict:
     if not path.exists():
         raise ValueError(f"Datamodel file does not exist: {file_path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
+    site_metadata = _extract_site_metadata(payload)
     mapping = _build_sensor_mapping(_extract_measurement_points(payload))
     if state.timeseries_df is not None:
         mapping = {
@@ -180,11 +257,26 @@ def _parse_datamodel(state: SessionState, file_path: str) -> dict:
             if sensor_map.get("speed_col") in state.timeseries_df.columns
         }
     state.sensor_mapping = dict(sorted(mapping.items(), reverse=True))
-    return {
+    if state.get_project_name() in {None, ""} and isinstance(site_metadata.get("project_name"), str):
+        state.set_project_name(str(site_metadata["project_name"]))
+    if state.get_coordinate() is None and isinstance(site_metadata.get("coordinate"), Coordinate):
+        state.set_coordinate(site_metadata["coordinate"])
+    if state.get_measurement_type() in {None, ""} and isinstance(site_metadata.get("measurement_type"), str):
+        state.set_measurement_type(str(site_metadata["measurement_type"]))
+
+    result = {
         "status": "ok",
         "heights": list(state.sensor_mapping.keys()),
         "mapping": {str(height): sensor_map.copy() for height, sensor_map in state.sensor_mapping.items()},
     }
+    coordinate = state.get_coordinate()
+    if state.get_project_name() is not None:
+        result["project_name"] = state.get_project_name()
+    if coordinate is not None:
+        result["location"] = coordinate.model_dump()
+    if state.get_measurement_type() is not None:
+        result["measurement_type"] = state.get_measurement_type()
+    return result
 
 
 def _list_sensors(state: SessionState) -> dict:

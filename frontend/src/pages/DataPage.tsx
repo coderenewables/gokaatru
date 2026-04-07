@@ -78,6 +78,9 @@ export function DataPage() {
       setLatestError(null);
       setLastUploadPath(String(result.file_path));
       void queryClient.invalidateQueries({ queryKey: ["session-summary", sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ["runconfig", sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ["analysis-summary", sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ["site-map", sessionId] });
       void queryClient.invalidateQueries({ queryKey: ["sensors-coverage", sessionId] });
     },
     onError: (error) => setLatestError(error),

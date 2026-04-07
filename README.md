@@ -37,6 +37,19 @@ Default local endpoints:
 
 The Vite dev server proxies `/api` to the FastAPI app, so the browser workflow never talks to MCP directly for core analysis actions.
 
+On Windows, you can launch the local non-Docker stack with one command:
+
+```powershell
+.\startup.ps1
+```
+
+Useful options:
+
+```powershell
+.\startup.ps1 -OpenBrowser
+.\startup.ps1 -IncludeMcp -OpenBrowser
+```
+
 ## Quick Start (Docker)
 
 ```bash

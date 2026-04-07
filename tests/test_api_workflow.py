@@ -36,6 +36,15 @@ def _timeseries_upload_bytes(sample_timeseries_df: pd.DataFrame) -> bytes:
 def _datamodel_bytes() -> bytes:
     """Build a minimal datamodel JSON payload compatible with the Phase 1 recursive parser."""
     payload = {
+        "measurement_location": [
+            {
+                "name": "North Ridge",
+                "latitude_ddeg": 52.4,
+                "longitude_ddeg": 4.8,
+                "elevation_m": 17.5,
+                "measurement_station_type_id": "floating_lidar",
+            }
+        ],
         "measurement_point": [
             {"name": "Spd_100m", "height_m": 100, "measurement_type_id": "wind_speed"},
             {"name": "Dir_100m", "height_m": 100, "measurement_type_id": "wind_direction"},
@@ -71,6 +80,21 @@ def test_api_workflow(sample_timeseries_df: pd.DataFrame, api_client: tuple[Test
     )
     assert datamodel_response.status_code == 200
     assert 100.0 in datamodel_response.json()["heights"]
+    assert datamodel_response.json()["project_name"] == "North Ridge"
+    assert datamodel_response.json()["measurement_type"] == "lidar"
+    assert datamodel_response.json()["location"] == {
+        "latitude": 52.4,
+        "longitude": 4.8,
+        "elevation_m": 17.5,
+    }
+
+    config_seed_response = client.get(f"/api/sessions/{session_id}/config", headers=headers)
+    assert config_seed_response.status_code == 200
+    assert config_seed_response.json()["location"] == {
+        "latitude": 52.4,
+        "longitude": 4.8,
+        "elevation_m": 17.5,
+    }
 
     sensors_response = client.get(f"/api/sessions/{session_id}/sensors", headers=headers)
     assert sensors_response.status_code == 200

@@ -85,6 +85,9 @@ describe("AppShell", () => {
 
     expect(await screen.findByRole("heading", { name: "North Ridge" })).toBeTruthy();
     expect(screen.getByText("Overview outlet content")).toBeTruthy();
+    expect(screen.getByText("Manage the workflow, inspect session state, and continue the next analysis step.")).toBeTruthy();
+    expect(screen.queryByText(/Phase 6\.7 turns the scaffold/i)).toBeNull();
+    expect(screen.getByRole("button", { name: "Edit Metadata" })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Overview/ })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Data/ })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Site/ })).toBeTruthy();

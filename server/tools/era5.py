@@ -5,6 +5,7 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
 
@@ -20,6 +21,12 @@ from server.state.session import SessionState, session
 ERA5_ZARR_URL = "https://data.earthdatahub.destine.eu/era5/reanalysis-era5-single-levels-v0.zarr"
 ERA5_BASE_VARIABLES = ["u100", "v100", "sp", "t2m", "d2m"]
 ERA5_OPTIONAL_VARIABLES = ["ust", "blh", "sshf"]
+ERA5_FETCH_MAX_ATTEMPTS = 3
+ERA5_FETCH_RETRY_DELAYS_SECONDS = (1.0, 2.0)
+
+
+class Era5UpstreamError(RuntimeError):
+    """Raised when EarthDataHub responds with a transient or incomplete payload."""
 
 
 def _earthdatahub_pat_from_netrc(hostname: str) -> str:
@@ -101,6 +108,47 @@ def _open_era5_dataset() -> xr.Dataset:
     )
 
 
+def _exception_chain(exc: BaseException) -> list[BaseException]:
+    """Flatten an exception and its causes/contexts into a unique chain for classification."""
+    chain: list[BaseException] = []
+    pending: list[BaseException] = [exc]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        current_id = id(current)
+        if current_id in seen:
+            continue
+        seen.add(current_id)
+        chain.append(current)
+        cause = getattr(current, "__cause__", None)
+        context = getattr(current, "__context__", None)
+        if isinstance(cause, BaseException):
+            pending.append(cause)
+        if isinstance(context, BaseException):
+            pending.append(context)
+    return chain
+
+
+def _is_transient_era5_error(exc: BaseException) -> bool:
+    """Identify remote ERA5 payload failures that are worth retrying automatically."""
+    markers = [
+        "response payload is not completed",
+        "not enough data to satisfy content length header",
+        "contentlengtherror",
+        "clientpayloaderror",
+        "forcibly closed by the remote host",
+        "connection reset by peer",
+        "winerror 10054",
+    ]
+    for current in _exception_chain(exc):
+        if isinstance(current, (ConnectionResetError, TimeoutError)):
+            return True
+        message = f"{type(current).__name__}: {current}".lower()
+        if any(marker in message for marker in markers):
+            return True
+    return False
+
+
 def _time_coordinate_name(dataset: xr.Dataset) -> str:
     """Resolve the time coordinate name used by the live ERA5 dataset."""
     for name in ["time", "valid_time"]:
@@ -160,6 +208,13 @@ def _selected_variables(dataset: xr.Dataset) -> list[str]:
     return [variable for variable in desired if variable in dataset.data_vars]
 
 
+def _close_dataset(dataset: object) -> None:
+    """Close xarray datasets when supported so failed attempts do not leak resources."""
+    close = getattr(dataset, "close", None)
+    if callable(close):
+        close()
+
+
 def _load_cached_era5(cache_path: Path, start_date: str, end_date: str) -> tuple[pd.DataFrame | None, bool]:
     """Load cached ERA5 node data when the parquet file covers the requested period."""
     if not cache_path.exists():
@@ -175,6 +230,63 @@ def _load_cached_era5(cache_path: Path, start_date: str, end_date: str) -> tuple
     return subset.sort_index(), True
 
 
+def _read_remote_era5_frame(
+    dataset: xr.Dataset,
+    latitude: float,
+    longitude: float,
+    start_date: str,
+    end_date: str,
+) -> pd.DataFrame:
+    """Read one ERA5 node from the remote Zarr store into a datetime-indexed dataframe."""
+    time_coord = _time_coordinate_name(dataset)
+    variables = _selected_variables(dataset)
+    if not variables:
+        raise ValueError("ERA5 dataset does not expose any expected variables")
+    selected = dataset[variables].sel(latitude=latitude, longitude=longitude, method="nearest")
+    selected = selected.sel({time_coord: slice(start_date, end_date)}).compute()
+    frame = selected.to_dataframe()
+    if isinstance(frame.index, pd.MultiIndex):
+        frame = frame.reset_index().set_index(time_coord)
+    elif time_coord in frame.columns and not isinstance(frame.index, pd.DatetimeIndex):
+        frame = frame.set_index(time_coord)
+    frame.index = pd.DatetimeIndex(frame.index, name="time")
+    return frame.sort_index()
+
+
+def _download_era5_frame_with_retry(
+    latitude: float,
+    longitude: float,
+    start_date: str,
+    end_date: str,
+) -> pd.DataFrame:
+    """Download ERA5 node data with limited retries for transient upstream truncation failures."""
+    last_error: BaseException | None = None
+    for attempt in range(1, ERA5_FETCH_MAX_ATTEMPTS + 1):
+        dataset: xr.Dataset | None = None
+        try:
+            dataset = _open_era5_dataset()
+            return _read_remote_era5_frame(dataset, latitude, longitude, start_date, end_date)
+        except ValueError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            if not _is_transient_era5_error(exc) or attempt >= ERA5_FETCH_MAX_ATTEMPTS:
+                raise Era5UpstreamError(
+                    "ERA5 download failed while reading the remote EarthDataHub payload. "
+                    "Please retry the request; if it keeps failing, reduce the date range and try again."
+                ) from exc
+            delay = ERA5_FETCH_RETRY_DELAYS_SECONDS[min(attempt - 1, len(ERA5_FETCH_RETRY_DELAYS_SECONDS) - 1)]
+            time.sleep(delay)
+        finally:
+            if dataset is not None:
+                _close_dataset(dataset)
+    if last_error is not None:
+        raise Era5UpstreamError(
+            "ERA5 download failed while reading the remote EarthDataHub payload. Please retry the request."
+        ) from last_error
+    raise Era5UpstreamError("ERA5 download failed before any remote request completed.")
+
+
 def _store_coordinate(state: SessionState, latitude: float, longitude: float) -> None:
     """Persist the site coordinate in session state for later interpolation tools."""
     current = state.get_coordinate()
@@ -184,7 +296,14 @@ def _store_coordinate(state: SessionState, latitude: float, longitude: float) ->
 
 def _find_era5_nodes(state: SessionState, latitude: float, longitude: float) -> dict:
     """Find the four surrounding ERA5 grid nodes using 0.25° bounds and haversine distance."""
-    dataset = _open_era5_dataset()
+    try:
+        dataset = _open_era5_dataset()
+    except Exception as exc:  # noqa: BLE001
+        if _is_transient_era5_error(exc):
+            raise Era5UpstreamError(
+                "ERA5 node lookup failed while contacting EarthDataHub. Please retry the request."
+            ) from exc
+        raise
     lower_lat, upper_lat = _bounding_pair(np.asarray(dataset.latitude.values), latitude)
     lower_lon, upper_lon = _bounding_pair(np.asarray(dataset.longitude.values), longitude)
     candidate_points = [(lower_lat, lower_lon), (lower_lat, upper_lon), (upper_lat, lower_lon), (upper_lat, upper_lon)]
@@ -203,6 +322,7 @@ def _find_era5_nodes(state: SessionState, latitude: float, longitude: float) -> 
     resolution = _grid_resolution(np.asarray(dataset.latitude.values))
     if resolution is None:
         resolution = _grid_resolution(np.asarray(dataset.longitude.values))
+    _close_dataset(dataset)
     return {"nodes": state.era5_nodes, "grid_resolution_deg": resolution}
 
 
@@ -222,20 +342,7 @@ def _extract_era5_data(
         cache_path = _era5_cache_path(latitude, longitude)
     cached_df, cache_hit = _load_cached_era5(cache_path, start_date, end_date)
     if cached_df is None:
-        dataset = _open_era5_dataset()
-        time_coord = _time_coordinate_name(dataset)
-        variables = _selected_variables(dataset)
-        if not variables:
-            raise ValueError("ERA5 dataset does not expose any expected variables")
-        selected = dataset[variables].sel(latitude=latitude, longitude=longitude, method="nearest")
-        selected = selected.sel({time_coord: slice(start_date, end_date)}).compute()
-        frame = selected.to_dataframe()
-        if isinstance(frame.index, pd.MultiIndex):
-            frame = frame.reset_index().set_index(time_coord)
-        elif time_coord in frame.columns and not isinstance(frame.index, pd.DatetimeIndex):
-            frame = frame.set_index(time_coord)
-        frame.index = pd.DatetimeIndex(frame.index, name="time")
-        cached_df = frame.sort_index()
+        cached_df = _download_era5_frame_with_retry(latitude, longitude, start_date, end_date)
         cached_df.to_parquet(cache_path)
     state.era5_data[_era5_key(latitude, longitude)] = cached_df.copy()
     _store_coordinate(state, latitude, longitude)

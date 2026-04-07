@@ -16,6 +16,7 @@ import xarray as xr
 from server.state.session import session
 from server.tools.air_density import compute_air_density
 from server.tools.era5 import (
+    Era5UpstreamError,
     _era5_dataset_url,
     _era5_storage_options,
     compute_era5_wind_speed,
@@ -106,6 +107,40 @@ def test_extract_era5_data_supports_valid_time(monkeypatch: pytest.MonkeyPatch, 
     frame = session.era5_data["52.5_4.75"]
     assert isinstance(frame.index, pd.DatetimeIndex)
     assert frame.index.name == "time"
+
+
+def test_extract_era5_data_retries_transient_payload_errors(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Verify transient ERA5 payload truncation errors are retried before succeeding."""
+    attempts = {"count": 0}
+    index = pd.date_range("2024-01-01", periods=2, freq="h")
+    frame = pd.DataFrame(
+        {
+            "u100": [1.0, 1.5],
+            "v100": [2.0, 2.5],
+            "sp": [101325.0, 101325.0],
+            "t2m": [288.15, 288.15],
+            "d2m": [280.15, 280.15],
+        },
+        index=index,
+    )
+    monkeypatch.setattr("server.tools.era5._open_era5_dataset", lambda: object())
+    monkeypatch.setattr("server.tools.era5._era5_cache_path", lambda latitude, longitude: tmp_path / "retry-node.parquet")
+    monkeypatch.setattr("server.tools.era5.time.sleep", lambda _: None)
+
+    def fake_read(dataset: object, latitude: float, longitude: float, start_date: str, end_date: str) -> pd.DataFrame:
+        del dataset, latitude, longitude, start_date, end_date
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise ConnectionResetError(10054, "An existing connection was forcibly closed by the remote host")
+        return frame
+
+    monkeypatch.setattr("server.tools.era5._read_remote_era5_frame", fake_read)
+
+    result = extract_era5_data(52.5, 4.75, "2024-01-01", "2024-01-01T01:00:00")
+
+    assert attempts["count"] == 2
+    assert result["rows"] == 2
+    assert session.era5_data["52.5_4.75"].equals(frame)
 
 
 def test_compute_wind_speed() -> None:

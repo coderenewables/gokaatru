@@ -9,7 +9,7 @@ from typing import Annotated, Callable
 
 from fastapi import APIRouter, Depends
 
-from server.api.deps import get_session_state, to_bad_request
+from server.api.deps import get_session_state, to_bad_gateway, to_bad_request
 from server.api.schemas import (
     ApplyCleaningRuleRequest,
     BuildTableRequest,
@@ -29,7 +29,13 @@ from server.state.session import SessionState
 from server.tools.cleaning import _apply_cleaning_rule, _get_cleaning_log, _undo_cleaning_rule
 from server.tools.clipping import _run_clipping_analysis
 from server.tools.ensemble import _run_ensemble
-from server.tools.era5 import _compute_era5_wind_speed, _extract_era5_data, _find_era5_nodes, _interpolate_era5_to_site
+from server.tools.era5 import (
+    Era5UpstreamError,
+    _compute_era5_wind_speed,
+    _extract_era5_data,
+    _find_era5_nodes,
+    _interpolate_era5_to_site,
+)
 from server.tools.extrapolation import _extrapolate_to_hub_height
 from server.tools.homogeneity import _analyze_homogeneity, _apply_homogeneity_cutoff
 from server.tools.ltc import (
@@ -199,6 +205,8 @@ def find_era5_nodes(
         result = _find_era5_nodes(state, body.latitude, body.longitude)
     except ValueError as exc:
         raise to_bad_request(exc) from exc
+    except Era5UpstreamError as exc:
+        raise to_bad_gateway(exc) from exc
     state.touch()
     return result
 
@@ -216,6 +224,8 @@ def extract_era5(
         wind_result = _compute_era5_wind_speed(state, body.latitude, body.longitude)
     except ValueError as exc:
         raise to_bad_request(exc) from exc
+    except Era5UpstreamError as exc:
+        raise to_bad_gateway(exc) from exc
     state.touch()
     return {**result, **wind_result}
 

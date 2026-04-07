@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from server.api.deps import get_session_manager
 from server.api.main import create_app
 from server.state.manager import SessionManager
+from server.tools.era5 import Era5UpstreamError
 
 
 @pytest.fixture
@@ -75,3 +76,30 @@ def test_session_routes_require_header(client: TestClient) -> None:
     response = client.get(f"/api/sessions/{session_id}")
     assert response.status_code == 400
     assert response.json()["detail"] == "Missing required header 'X-GoKaatru-Session'"
+
+
+def test_era5_extract_upstream_failure_returns_502(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify transient EarthDataHub failures are surfaced as 502 instead of uncaught 500 responses."""
+    create_response = client.post("/api/sessions")
+    session_id = create_response.json()["session_id"]
+    headers = {"X-GoKaatru-Session": session_id}
+
+    def fail_extract(*args: object, **kwargs: object) -> dict:
+        del args, kwargs
+        raise Era5UpstreamError("ERA5 download failed while reading the remote EarthDataHub payload. Please retry the request.")
+
+    monkeypatch.setattr("server.api.routes.analysis._extract_era5_data", fail_extract)
+
+    response = client.post(
+        f"/api/sessions/{session_id}/era5/extract",
+        headers=headers,
+        json={
+            "latitude": 52.4,
+            "longitude": 4.8,
+            "start_date": "2024-01-01",
+            "end_date": "2024-01-02",
+        },
+    )
+
+    assert response.status_code == 502
+    assert "ERA5 download failed" in response.json()["detail"]

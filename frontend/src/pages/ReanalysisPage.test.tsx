@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { analysisApi, configApi, resultsApi, sessionsApi } from "../lib/api";
+import { ApiError, analysisApi, configApi, resultsApi, sessionsApi } from "../lib/api";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { renderWithProviders } from "../test/render";
 import { ReanalysisPage } from "./ReanalysisPage";
@@ -145,5 +145,79 @@ describe("ReanalysisPage", () => {
 
     expect(await screen.findByText("idw")).toBeTruthy();
     expect(screen.getAllByText("u10, v10").length).toBeGreaterThan(0);
+  });
+
+  it("shows an overlay with the current node while extraction is running", async () => {
+    useWorkspaceStore.getState().setSessionId("session-reanalysis");
+    let resolveExtract: ((value: {
+      status: string;
+      latitude: number;
+      longitude: number;
+      rows: number;
+      start: string;
+      end: string;
+      variables: string[];
+      cached: boolean;
+    }) => void) | null = null;
+    vi.mocked(analysisApi.extractEra5).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveExtract = resolve;
+        }),
+    );
+
+    renderWithProviders(<ReanalysisPage />);
+
+    await screen.findByDisplayValue("11.11");
+    fireEvent.click(screen.getByRole("button", { name: "Find ERA5 Nodes" }));
+
+    expect(await screen.findByText("18.2 km")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Extract All Nodes" }));
+
+    expect(await screen.findByRole("status", { name: "ERA5 extraction progress" })).toBeTruthy();
+    expect(screen.getByText("Downloading node 1 of 1")).toBeTruthy();
+    expect(screen.getByText("Node 11.25, 22.35")).toBeTruthy();
+    expect(screen.getByText("0 of 1 node datasets completed.")).toBeTruthy();
+
+    resolveExtract?.({
+      status: "ok",
+      latitude: 11.25,
+      longitude: 22.35,
+      rows: 100,
+      start: "2000-01-01",
+      end: "2025-12-31",
+      variables: ["u10", "v10"],
+      cached: true,
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("status", { name: "ERA5 extraction progress" })).toBeNull();
+    });
+  });
+
+  it("shows a tightened overlay error when the ERA5 API returns a 502", async () => {
+    useWorkspaceStore.getState().setSessionId("session-reanalysis");
+    vi.mocked(analysisApi.extractEra5).mockRejectedValue(
+      new ApiError(502, "ERA5 download failed while reading the remote EarthDataHub payload. Please retry the request."),
+    );
+
+    renderWithProviders(<ReanalysisPage />);
+
+    await screen.findByDisplayValue("11.11");
+    fireEvent.click(screen.getByRole("button", { name: "Find ERA5 Nodes" }));
+
+    expect(await screen.findByText("18.2 km")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Extract All Nodes" }));
+
+    expect(await screen.findByText("ERA5 extraction failed")).toBeTruthy();
+    expect(screen.getByText("EarthDataHub download interrupted")).toBeTruthy();
+    expect(
+      screen.getAllByText(
+        "EarthDataHub interrupted the ERA5 download before the payload completed. Retry extraction. If it fails again, shorten the date range and try again.",
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Dismiss" })).toBeTruthy();
   });
 });

@@ -24,6 +24,11 @@ def to_bad_request(exc: ValueError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
+def to_bad_gateway(exc: RuntimeError) -> HTTPException:
+    """Translate upstream service failures into HTTP 502 responses for the web API."""
+    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+
+
 def completed_steps(state: SessionState) -> list[str]:
     """Summarize coarse workflow milestones completed in the current browser session."""
     steps: list[str] = []

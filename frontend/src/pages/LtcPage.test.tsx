@@ -1,15 +1,25 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { analysisApi, resultsApi, uploadsApi } from "../lib/api";
+import { analysisApi, configApi, resultsApi, uploadsApi } from "../lib/api";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { renderWithProviders } from "../test/render";
 import { LtcPage } from "./LtcPage";
+
+vi.mock("../components/common/PlotlyFigure", () => ({
+  PlotlyFigure: ({ plot, emptyTitle }: { plot?: { title?: string } | null; emptyTitle: string }) => (
+    <div>{plot ? plot.title : emptyTitle}</div>
+  ),
+}));
 
 vi.mock("../lib/api", async () => {
   const actual = await vi.importActual<typeof import("../lib/api")>("../lib/api");
   return {
     ...actual,
+    configApi: {
+      ...actual.configApi,
+      get: vi.fn(),
+    },
     uploadsApi: {
       ...actual.uploadsApi,
       getSensors: vi.fn(),
@@ -27,6 +37,7 @@ vi.mock("../lib/api", async () => {
       ...actual.resultsApi,
       getLtcResults: vi.fn(),
       getEnsembleResults: vi.fn(),
+      getPlot: vi.fn(),
     },
   };
 });
@@ -42,8 +53,26 @@ describe("LtcPage", () => {
         { name: "Dir_80m", height_m: 80, sensor_type: "wind_direction", data_coverage_pct: 97, record_count: 980 },
       ],
     });
+    vi.mocked(configApi.get).mockResolvedValue({ hub_height_m: 150 });
     vi.mocked(resultsApi.getLtcResults).mockResolvedValue({ results: [] });
-    vi.mocked(resultsApi.getEnsembleResults).mockResolvedValue({ available: false });
+    vi.mocked(resultsApi.getEnsembleResults).mockResolvedValue({
+      available: false,
+      reference_columns: ["Spd_100m_hub", "Dir_100m", "sp", "t2m", "d2m"],
+    });
+    vi.mocked(resultsApi.getPlot).mockImplementation(async (_sessionId, plotName, body) => ({
+      plotly_json: JSON.stringify({ data: [{ x: [1], y: [2], type: "scatter" }], layout: {} }),
+      png_base64: null,
+      title:
+        plotName === "ltc_scatter"
+          ? `LTC Scatter — ${String((body as { algorithm?: string }).algorithm ?? "linear_least_squares")}`
+          : plotName === "ltc_residuals"
+            ? `LTC Residuals — ${String((body as { algorithm?: string }).algorithm ?? "linear_least_squares")}`
+            : plotName === "ltc_monthly"
+              ? "Monthly LTC Comparison"
+              : plotName === "ltc_convergence"
+                ? "Annual Convergence"
+                : "Uncertainty Tornado",
+    }));
     vi.mocked(analysisApi.runLtc).mockResolvedValue({ status: "ok", algorithm: "linear_least_squares" });
     vi.mocked(analysisApi.runEnsemble).mockResolvedValue({ status: "ok" });
     vi.mocked(analysisApi.runClipping).mockResolvedValue({
@@ -88,17 +117,17 @@ describe("LtcPage", () => {
     fireEvent.change(shortColumnSelect, { target: { value: "Wind_80m" } });
     fireEvent.change(directionColumnSelect, { target: { value: "Dir_80m" } });
     fireEvent.change(ensembleColumnSelect, { target: { value: "Wind_80m" } });
-    fireEvent.change(screen.getByDisplayValue("Spd_100m"), { target: { value: "ERA5_WS" } });
-    fireEvent.change(screen.getByDisplayValue("Dir_100m"), { target: { value: "ERA5_WD" } });
+    fireEvent.change(screen.getByLabelText("Long reference column"), { target: { value: "Spd_100m_hub" } });
+    fireEvent.change(screen.getByLabelText("Reference direction column"), { target: { value: "Dir_100m" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Run linear_least_squares" }));
 
     await waitFor(() => {
       expect(analysisApi.runLtc).toHaveBeenCalledWith("session-ltc", "linear_least_squares", {
         short_col: "Wind_80m",
-        long_col: "ERA5_WS",
+        long_col: "Spd_100m_hub",
         short_dir_col: "Dir_80m",
-        long_dir_col: "ERA5_WD",
+        long_dir_col: "Dir_100m",
       });
     });
 
@@ -107,5 +136,57 @@ describe("LtcPage", () => {
     await waitFor(() => {
       expect(analysisApi.runEnsemble).toHaveBeenCalledWith("session-ltc", "Wind_80m");
     });
+  });
+
+  it("shows the diagnostic panel when LTC results are available", async () => {
+    useWorkspaceStore.getState().setSessionId("session-ltc");
+    vi.mocked(resultsApi.getLtcResults).mockResolvedValue({
+      results: [
+        {
+          algorithm: "linear_least_squares",
+          rows: 120,
+          metrics: { r_squared: 0.92, concurrent_points: 120 },
+        },
+      ],
+    });
+
+    renderWithProviders(<LtcPage />);
+
+    expect(await screen.findByText("LTC Scatter — linear_least_squares")).toBeTruthy();
+    expect(await screen.findByText("LTC Residuals — linear_least_squares")).toBeTruthy();
+    expect(await screen.findByText("Monthly LTC Comparison")).toBeTruthy();
+    expect(await screen.findByText("Annual Convergence")).toBeTruthy();
+  });
+
+  it("updates the algorithm help text when the selection changes", async () => {
+    useWorkspaceStore.getState().setSessionId("session-ltc");
+    renderWithProviders(<LtcPage />);
+
+    expect(await screen.findByText(/Iteratively reweighted least squares using Huber loss/i)).toBeTruthy();
+    fireEvent.change(screen.getByRole("combobox", { name: /Algorithm/i }), { target: { value: "xgboost" } });
+    expect(await screen.findByText(/Gradient-boosted trees with temporal, directional, and meteorological features/i)).toBeTruthy();
+  });
+
+  it("renders the uncertainty tornado after uncertainty results are available", async () => {
+    useWorkspaceStore.getState().setSessionId("session-ltc");
+    useWorkspaceStore.getState().setLatestUncertainty({
+      total_uncertainty_pct: 10,
+      components: { measurement: 2, vertical_extrapolation: 1, mcp: 5, future_variability: 2 },
+      p_factors: { p50: 1, p75: 0.9326, p90: 0.8718, p99: 0.7674 },
+      inputs: {
+        measurement_height_m: 100,
+        hub_height_m: 150,
+        shear_method: "simple_power_law",
+        mcp_r_squared: 0.9,
+        concurrent_months: 12,
+        iav_pct: 6,
+        algorithm: "linear_least_squares",
+        is_interpolation: false,
+      },
+    });
+
+    renderWithProviders(<LtcPage />);
+
+    expect(await screen.findByText("Uncertainty Tornado")).toBeTruthy();
   });
 });

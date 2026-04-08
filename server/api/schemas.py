@@ -177,6 +177,7 @@ class PlotRequest(BaseModel):
     direction_sensor: str = ""
     sensor_a: str = ""
     sensor_b: str = ""
+    algorithm: str = ""
     table_type: str = "shear"
     total_pct: float = Field(0.0, ge=0)
     measurement_pct: float = Field(0.0, ge=0)

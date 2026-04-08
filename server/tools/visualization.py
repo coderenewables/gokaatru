@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from scipy.stats import weibull_min
+from scipy.stats import norm, weibull_min
 
 from server.main import mcp
 from server.state.session import SessionState, session
@@ -143,6 +143,37 @@ def _preferred_measured_speed_column(state: SessionState) -> str:
     if speed_columns:
         return sorted(speed_columns)[-1]
     raise ValueError("No measured wind-speed column is available for LTC comparison plotting")
+
+
+def _ltc_result_series(state: SessionState, algorithm: str) -> pd.Series:
+    """Return one corrected LTC series indexed by timestamp for diagnostic plotting."""
+    payload = state.ltc_results.get(algorithm)
+    if payload is None:
+        raise ValueError(f"LTC result '{algorithm}' is not available")
+    frame = _indexed_frame(payload["df"])
+    if "corrected_wind_speed" not in frame.columns:
+        raise ValueError(f"LTC result '{algorithm}' is missing the corrected_wind_speed column")
+    return frame["corrected_wind_speed"].dropna()
+
+
+def _ltc_overlap_frame(state: SessionState, algorithm: str) -> pd.DataFrame:
+    """Align measured and corrected LTC series on concurrent timestamps for diagnostics."""
+    measured = _require_series(state, _preferred_measured_speed_column(state)).rename("measured")
+    corrected = _ltc_result_series(state, algorithm).rename("corrected")
+    overlap = pd.concat([measured, corrected], axis=1, join="inner").dropna()
+    if overlap.empty:
+        raise ValueError(f"LTC result '{algorithm}' has no overlap with the measured timeseries")
+    return overlap
+
+
+def _expanding_annual_mean(series: pd.Series) -> tuple[list[int], list[float], float]:
+    """Compute expanding annual-mean convergence for long-term corrected speed series."""
+    annual = series.resample("YE").mean().dropna()
+    if annual.empty:
+        raise ValueError("Annual convergence requires at least one annual mean value")
+    years = annual.index.year.tolist()
+    running = annual.expanding().mean().to_numpy(dtype=float).tolist()
+    return years, running, float(running[-1])
 
 
 def _plot_windrose(state: SessionState, speed_sensor: str, direction_sensor: str) -> dict:
@@ -361,6 +392,198 @@ def _plot_uncertainty_breakdown(
     figure.add_vline(x=total_pct, line_dash="dash", annotation_text=f"Total {total_pct:.2f}%")
     figure.update_layout(title="Uncertainty Breakdown", xaxis_title="Percent", yaxis_title="")
     return _plot_result(figure, "Uncertainty Breakdown")
+
+
+def _plot_ltc_scatter(state: SessionState, algorithm: str) -> dict:
+    """Plot measured vs corrected LTC scatter with OLS fit and a 1:1 reference line."""
+    overlap = _ltc_overlap_frame(state, algorithm)
+    if len(overlap) > 6000:
+        overlap = overlap.iloc[:: max(1, len(overlap) // 6000)]
+    metrics = _scatter_metrics(overlap, "measured", "corrected")
+    line_start = float(min(overlap["measured"].min(), overlap["corrected"].min()))
+    line_end = float(max(overlap["measured"].max(), overlap["corrected"].max()))
+    fit_x = np.linspace(line_start, line_end, 120)
+    fit_y = metrics["slope"] * fit_x + metrics["intercept"]
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scattergl(
+            x=overlap["measured"],
+            y=overlap["corrected"],
+            mode="markers",
+            name="Samples",
+            marker=dict(color="rgba(11, 122, 111, 0.28)", size=6),
+        )
+    )
+    figure.add_trace(go.Scatter(x=fit_x, y=fit_y, mode="lines", name="OLS fit", line=dict(color="#c86a2a", width=3)))
+    figure.add_trace(
+        go.Scatter(
+            x=[line_start, line_end],
+            y=[line_start, line_end],
+            mode="lines",
+            name="1:1 reference",
+            line=dict(color="#5f716a", dash="dash"),
+        )
+    )
+    figure.update_layout(
+        title=(
+            f"LTC Scatter — {algorithm}<br>"
+            f"<sup>R²={metrics['r2']:.3f}, RMSE={metrics['rmse']:.3f}, MBE={float((overlap['corrected'] - overlap['measured']).mean()):.3f}</sup>"
+        ),
+        xaxis_title="Measured Speed (m/s)",
+        yaxis_title="Corrected Speed (m/s)",
+    )
+    return _plot_result(figure, f"LTC Scatter — {algorithm}")
+
+
+def _plot_ltc_residuals(state: SessionState, algorithm: str) -> dict:
+    """Plot residual-vs-predicted and histogram diagnostics for one LTC algorithm."""
+    overlap = _ltc_overlap_frame(state, algorithm)
+    predicted = overlap["corrected"].to_numpy(dtype=float)
+    residuals = predicted - overlap["measured"].to_numpy(dtype=float)
+    if len(overlap) > 6000:
+        sampled = overlap.iloc[:: max(1, len(overlap) // 6000)]
+        sampled_predicted = sampled["corrected"].to_numpy(dtype=float)
+        sampled_residuals = sampled_predicted - sampled["measured"].to_numpy(dtype=float)
+    else:
+        sampled_predicted = predicted
+        sampled_residuals = residuals
+    mean_residual, std_residual = norm.fit(residuals)
+    x_values = np.linspace(float(residuals.min()), float(residuals.max()), 200)
+    y_values = norm.pdf(x_values, mean_residual, std_residual if std_residual > 0 else 1.0)
+    figure = make_subplots(rows=2, cols=1, subplot_titles=("Residuals vs Predicted", "Residual Distribution"))
+    figure.add_trace(
+        go.Scattergl(
+            x=sampled_predicted,
+            y=sampled_residuals,
+            mode="markers",
+            name="Residuals",
+            marker=dict(color="rgba(11, 122, 111, 0.28)", size=6),
+        ),
+        row=1,
+        col=1,
+    )
+    figure.add_hline(y=0.0, line_dash="dash", line_color="#5f716a", row=1, col=1)
+    figure.add_trace(
+        go.Histogram(x=residuals, histnorm="probability density", name="Residual histogram", opacity=0.75),
+        row=2,
+        col=1,
+    )
+    figure.add_trace(
+        go.Scatter(x=x_values, y=y_values, mode="lines", name="Normal fit", line=dict(color="#c86a2a", width=3)),
+        row=2,
+        col=1,
+    )
+    figure.update_xaxes(title_text="Predicted Speed (m/s)", row=1, col=1)
+    figure.update_yaxes(title_text="Corrected - Measured (m/s)", row=1, col=1)
+    figure.update_xaxes(title_text="Residual (m/s)", row=2, col=1)
+    figure.update_yaxes(title_text="Density", row=2, col=1)
+    figure.update_layout(title=f"LTC Residuals — {algorithm}", height=820, barmode="overlay")
+    return _plot_result(figure, f"LTC Residuals — {algorithm}")
+
+
+def _plot_ltc_monthly_comparison(state: SessionState) -> dict:
+    """Plot grouped monthly corrected means for all LTC algorithms with measured seasonal context."""
+    if not state.ltc_results:
+        raise ValueError("At least one LTC result is required for monthly LTC comparison plotting")
+    measured = _require_series(state, _preferred_measured_speed_column(state))
+    figure = go.Figure()
+    for algorithm, payload in sorted(state.ltc_results.items()):
+        frame = _indexed_frame(payload["df"])
+        monthly = _monthly_mean(frame["corrected_wind_speed"].dropna())
+        figure.add_trace(go.Bar(x=MONTH_LABELS, y=monthly.tolist(), name=algorithm))
+    figure.add_trace(
+        go.Scatter(
+            x=MONTH_LABELS,
+            y=_monthly_mean(measured).tolist(),
+            mode="lines+markers",
+            name="Measured",
+            line=dict(color="#c86a2a", width=3),
+        )
+    )
+    figure.update_layout(title="Monthly LTC Comparison", xaxis_title="Month", yaxis_title="Mean Speed (m/s)", barmode="group")
+    return _plot_result(figure, "Monthly LTC Comparison")
+
+
+def _plot_ltc_annual_convergence(state: SessionState) -> dict:
+    """Plot expanding annual-mean convergence for all LTC algorithms and the ensemble when available."""
+    if not state.ltc_results and state.ensemble_df is None:
+        raise ValueError("Annual convergence plotting requires at least one LTC or ensemble result")
+    figure = go.Figure()
+    for algorithm, payload in sorted(state.ltc_results.items()):
+        years, running_mean, final_mean = _expanding_annual_mean(_indexed_frame(payload["df"])["corrected_wind_speed"].dropna())
+        figure.add_trace(go.Scatter(x=years, y=running_mean, mode="lines+markers", name=algorithm))
+        figure.add_trace(
+            go.Scatter(
+                x=years,
+                y=[final_mean] * len(years),
+                mode="lines",
+                name=f"{algorithm} final mean",
+                line=dict(dash="dash"),
+                opacity=0.45,
+            )
+        )
+    if state.ensemble_df is not None:
+        years, running_mean, final_mean = _expanding_annual_mean(_indexed_frame(state.ensemble_df)["Ensemble_Speed"].dropna())
+        figure.add_trace(go.Scatter(x=years, y=running_mean, mode="lines+markers", name="ensemble"))
+        figure.add_trace(
+            go.Scatter(
+                x=years,
+                y=[final_mean] * len(years),
+                mode="lines",
+                name="ensemble final mean",
+                line=dict(dash="dash"),
+                opacity=0.45,
+            )
+        )
+    figure.update_layout(title="Annual Convergence", xaxis_title="Years Included", yaxis_title="Running Mean Speed (m/s)")
+    return _plot_result(figure, "Annual Convergence")
+
+
+def _plot_uncertainty_tornado(
+    _state: SessionState,
+    total_pct: float,
+    measurement_pct: float,
+    vertical_pct: float,
+    mcp_pct: float,
+    future_pct: float,
+) -> dict:
+    """Plot sorted uncertainty components with the total RSS uncertainty highlighted."""
+    components = [
+        ("Measurement", float(measurement_pct)),
+        ("Vertical", float(vertical_pct)),
+        ("MCP", float(mcp_pct)),
+        ("Future", float(future_pct)),
+    ]
+    components.sort(key=lambda item: item[1], reverse=True)
+    labels = ["Total", *[label for label, _ in components]]
+    values = [float(total_pct), *[value for _, value in components]]
+    colors = ["#c86a2a", "#0b7a6f", "#0b7a6f", "#0b7a6f", "#0b7a6f"]
+    figure = go.Figure(
+        data=go.Bar(
+            x=values,
+            y=labels,
+            orientation="h",
+            marker=dict(color=colors),
+            text=[f"{value:.2f}%" for value in values],
+            textposition="outside",
+        )
+    )
+    figure.update_layout(
+        title="Uncertainty Tornado",
+        xaxis_title="Percent",
+        yaxis_title="",
+        annotations=[
+            dict(
+                xref="paper",
+                yref="paper",
+                x=1.0,
+                y=1.08,
+                text=f"Total = √(Σ uᵢ²) = {float(total_pct):.2f}%",
+                showarrow=False,
+            )
+        ],
+    )
+    return _plot_result(figure, "Uncertainty Tornado")
 
 
 def _plot_timeseries_preview(state: SessionState, max_sensors: int = 5) -> dict:

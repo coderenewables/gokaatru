@@ -1,6 +1,9 @@
-import Plot from "react-plotly.js";
+import createPlotlyComponent from "react-plotly.js/factory";
 
 import type { PlotResult } from "../../lib/types";
+import { Plotly } from "../../lib/plotly";
+
+const Plot = createPlotlyComponent(Plotly);
 
 type PlotlyFigureRuntimeProps = {
   plot: PlotResult;

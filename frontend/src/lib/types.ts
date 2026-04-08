@@ -256,6 +256,7 @@ export interface EnsembleResultsResponse {
   available: boolean;
   rows?: number;
   columns?: string[];
+  reference_columns?: string[];
 }
 
 export interface PlotResult {

@@ -22,6 +22,10 @@ from server.tools.visualization import (
     _plot_data_coverage,
     _plot_diurnal,
     _plot_ltc_comparison,
+    _plot_ltc_annual_convergence,
+    _plot_ltc_monthly_comparison,
+    _plot_ltc_residuals,
+    _plot_ltc_scatter,
     _plot_monthly_means,
     _plot_scatter,
     _plot_shear_profile,
@@ -30,6 +34,7 @@ from server.tools.visualization import (
     _plot_timeseries,
     _plot_turbulence_intensity,
     _plot_uncertainty_breakdown,
+    _plot_uncertainty_tornado,
     _plot_weibull,
     _plot_windrose,
 )
@@ -69,10 +74,16 @@ def get_ensemble_results(
 ) -> dict:
     """Return a compact summary of the stored ensemble result, if one exists."""
     del session_id
+    reference_columns = [] if state.era5_interpolated_df is None else pd.DataFrame(state.era5_interpolated_df).columns.tolist()
     if state.ensemble_df is None:
-        return {"available": False}
+        return {"available": False, "reference_columns": reference_columns}
     frame = pd.DataFrame(state.ensemble_df)
-    return {"available": True, "rows": int(len(frame)), "columns": frame.columns.tolist()}
+    return {
+        "available": True,
+        "rows": int(len(frame)),
+        "columns": frame.columns.tolist(),
+        "reference_columns": reference_columns,
+    }
 
 
 @router.post("/plots/{plot_name}", response_model=PlotResult)
@@ -107,8 +118,20 @@ def get_plot(
             body.sensor_b,
         ),
         "ltc_comparison": lambda: _plot_ltc_comparison(state),
+        "ltc_scatter": lambda: _plot_ltc_scatter(state, body.algorithm or "linear_least_squares"),
+        "ltc_residuals": lambda: _plot_ltc_residuals(state, body.algorithm or "linear_least_squares"),
+        "ltc_monthly": lambda: _plot_ltc_monthly_comparison(state),
+        "ltc_convergence": lambda: _plot_ltc_annual_convergence(state),
         "annual_means": lambda: _plot_annual_means(state),
         "uncertainty_breakdown": lambda: _plot_uncertainty_breakdown(
+            state,
+            body.total_pct,
+            body.measurement_pct,
+            body.vertical_pct,
+            body.mcp_pct,
+            body.future_pct,
+        ),
+        "uncertainty_tornado": lambda: _plot_uncertainty_tornado(
             state,
             body.total_pct,
             body.measurement_pct,

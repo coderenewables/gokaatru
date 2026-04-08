@@ -150,6 +150,24 @@ class CalculateUncertaintyRequest(BaseModel):
     is_interpolation: bool = False
 
 
+class SensorStatisticsResponse(BaseModel):
+    """Return detailed descriptive statistics for one loaded sensor in the data explorer UI."""
+
+    sensor_name: str
+    mean: float
+    median: float
+    std: float
+    min_value: float
+    max_value: float
+    count: int
+    coverage_pct: float
+    weibull_k: float
+    weibull_A: float
+    monthly_means: list[float]
+    diurnal_means: list[float]
+    percentiles: dict[str, float]
+
+
 class PlotRequest(BaseModel):
     """Request a named plot with simple string-based arguments from the workflow UI."""
 

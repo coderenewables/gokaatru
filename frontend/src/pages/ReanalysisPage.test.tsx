@@ -161,7 +161,16 @@ describe("ReanalysisPage", () => {
     }) => void) | null = null;
     vi.mocked(analysisApi.extractEra5).mockImplementation(
       () =>
-        new Promise((resolve) => {
+        new Promise<{
+          status: string;
+          latitude: number;
+          longitude: number;
+          rows: number;
+          start: string;
+          end: string;
+          variables: string[];
+          cached: boolean;
+        }>((resolve) => {
           resolveExtract = resolve;
         }),
     );
@@ -180,16 +189,30 @@ describe("ReanalysisPage", () => {
     expect(screen.getByText("Node 11.25, 22.35")).toBeTruthy();
     expect(screen.getByText("0 of 1 node datasets completed.")).toBeTruthy();
 
-    resolveExtract?.({
-      status: "ok",
-      latitude: 11.25,
-      longitude: 22.35,
-      rows: 100,
-      start: "2000-01-01",
-      end: "2025-12-31",
-      variables: ["u10", "v10"],
-      cached: true,
-    });
+    const completeExtract = resolveExtract as
+      | ((value: {
+          status: string;
+          latitude: number;
+          longitude: number;
+          rows: number;
+          start: string;
+          end: string;
+          variables: string[];
+          cached: boolean;
+        }) => void)
+      | null;
+    if (completeExtract !== null) {
+      completeExtract({
+        status: "ok",
+        latitude: 11.25,
+        longitude: 22.35,
+        rows: 100,
+        start: "2000-01-01",
+        end: "2025-12-31",
+        variables: ["u10", "v10"],
+        cached: true,
+      });
+    }
 
     await waitFor(() => {
       expect(screen.queryByRole("status", { name: "ERA5 extraction progress" })).toBeNull();

@@ -8,6 +8,7 @@ import { useWorkspaceStore } from "../stores/workspaceStore";
 import { DataTable } from "../components/common/DataTable";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorBanner } from "../components/common/ErrorBanner";
+import { HelpTooltip } from "../components/common/HelpTooltip";
 import { MetricCard } from "../components/common/MetricCard";
 import { PageHeader } from "../components/common/PageHeader";
 
@@ -75,6 +76,14 @@ export function LtcPage() {
     [sensorsQuery.data],
   );
 
+  const directionSensors = useMemo(
+    () =>
+      (sensorsQuery.data?.sensors ?? [])
+        .filter((sensor) => sensor.sensor_type === "wind_direction")
+        .sort((left, right) => right.height_m - left.height_m),
+    [sensorsQuery.data],
+  );
+
   useEffect(() => {
     if (speedSensors[0] && !shortCol) {
       setShortCol(speedSensors[0].name);
@@ -82,6 +91,12 @@ export function LtcPage() {
       setUncMeasurementHeight(String(speedSensors[0].height_m));
     }
   }, [shortCol, speedSensors]);
+
+  useEffect(() => {
+    if (directionSensors[0] && !shortDirCol) {
+      setShortDirCol(directionSensors[0].name);
+    }
+  }, [directionSensors, shortDirCol]);
 
   const runLtcMutation = useMutation({
     mutationFn: () =>
@@ -187,7 +202,10 @@ export function LtcPage() {
         <article className="content-card stack-gap">
           <span className="eyebrow">Run LTC</span>
           <label className="form-field">
-            <span>Algorithm</span>
+            <span>
+              Algorithm
+              <HelpTooltip text="Select the long-term correction algorithm to run against the concurrent measured and reference data." />
+            </span>
             <select value={selectedLtcAlgorithm} onChange={(event) => setSelectedLtcAlgorithm(event.target.value)}>
               {ltcAlgorithms.map((algorithm) => (
                 <option key={algorithm} value={algorithm}>
@@ -199,7 +217,14 @@ export function LtcPage() {
           <div className="form-grid two-col">
             <label className="form-field">
               <span>Measured short column</span>
-              <input value={shortCol} onChange={(event) => setShortCol(event.target.value)} list="measured-speed-columns" />
+              <select value={shortCol} onChange={(event) => setShortCol(event.target.value)}>
+                <option value="">Select measured wind column</option>
+                {speedSensors.map((sensor) => (
+                  <option key={sensor.name} value={sensor.name}>
+                    {sensor.name}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="form-field">
               <span>Long reference column</span>
@@ -207,23 +232,36 @@ export function LtcPage() {
             </label>
             <label className="form-field">
               <span>Measured direction column</span>
-              <input value={shortDirCol} onChange={(event) => setShortDirCol(event.target.value)} />
+              <select value={shortDirCol} onChange={(event) => setShortDirCol(event.target.value)}>
+                <option value="">Select measured direction column</option>
+                {directionSensors.map((sensor) => (
+                  <option key={sensor.name} value={sensor.name}>
+                    {sensor.name}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="form-field">
               <span>Reference direction column</span>
               <input value={longDirCol} onChange={(event) => setLongDirCol(event.target.value)} />
             </label>
           </div>
-          <datalist id="measured-speed-columns">
-            {speedSensors.map((sensor) => (
-              <option key={sensor.name} value={sensor.name} />
-            ))}
-          </datalist>
           <div className="button-row wrap">
             <button className="primary-button" type="button" onClick={() => runLtcMutation.mutate()}>
               Run {selectedLtcAlgorithm}
             </button>
-            <input value={measuredCol} onChange={(event) => setMeasuredCol(event.target.value)} placeholder="Measured column for ensemble" />
+            <select
+              aria-label="Measured column for ensemble"
+              value={measuredCol}
+              onChange={(event) => setMeasuredCol(event.target.value)}
+            >
+              <option value="">Select measured wind column</option>
+              {speedSensors.map((sensor) => (
+                <option key={sensor.name} value={sensor.name}>
+                  {sensor.name}
+                </option>
+              ))}
+            </select>
             <button className="secondary-button" type="button" onClick={() => runEnsembleMutation.mutate()}>
               Run Ensemble
             </button>
@@ -360,7 +398,10 @@ export function LtcPage() {
               <input value={uncShearMethod} onChange={(event) => setUncShearMethod(event.target.value)} />
             </label>
             <label className="form-field">
-              <span>R²</span>
+              <span>
+                R²
+                <HelpTooltip text="R-squared from the MCP concurrent regression. Higher R² reduces the MCP uncertainty component." />
+              </span>
               <input value={uncRsq} onChange={(event) => setUncRsq(event.target.value)} />
             </label>
             <label className="form-field">

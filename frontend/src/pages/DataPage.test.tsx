@@ -1,10 +1,16 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { analysisApi, uploadsApi } from "../lib/api";
+import { analysisApi, resultsApi, uploadsApi } from "../lib/api";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { renderWithProviders } from "../test/render";
 import { DataPage } from "./DataPage";
+
+vi.mock("../components/common/PlotlyFigure", () => ({
+  PlotlyFigure: ({ plot, emptyTitle }: { plot?: { title?: string } | null; emptyTitle: string }) => (
+    <div>{plot ? plot.title : emptyTitle}</div>
+  ),
+}));
 
 vi.mock("../lib/api", async () => {
   const actual = await vi.importActual<typeof import("../lib/api")>("../lib/api");
@@ -22,6 +28,11 @@ vi.mock("../lib/api", async () => {
       getCleaningLog: vi.fn(),
       applyCleaning: vi.fn(),
       undoCleaning: vi.fn(),
+      getSensorStatistics: vi.fn(),
+    },
+    resultsApi: {
+      ...actual.resultsApi,
+      getPlot: vi.fn(),
     },
   };
 });
@@ -71,6 +82,31 @@ describe("DataPage", () => {
       records_affected: 12,
     });
     vi.mocked(analysisApi.undoCleaning).mockResolvedValue({ status: "ok" });
+    vi.mocked(analysisApi.getSensorStatistics).mockResolvedValue({
+      sensor_name: "Wind_80m",
+      mean: 8.2,
+      median: 8.0,
+      std: 1.1,
+      min_value: 3.4,
+      max_value: 15.8,
+      count: 4900,
+      coverage_pct: 98,
+      weibull_k: 2.1,
+      weibull_A: 9.1,
+      monthly_means: Array.from({ length: 12 }, (_, index) => index + 1),
+      diurnal_means: Array.from({ length: 24 }, (_, index) => index / 10),
+      percentiles: { p10: 4.2, p25: 5.8, p50: 8.0, p75: 9.3, p90: 11.2, p99: 14.4 },
+    });
+    vi.mocked(resultsApi.getPlot).mockImplementation(async (_sessionId, plotName) => ({
+      plotly_json: JSON.stringify({ data: [{ x: [1], y: [2], type: "scatter" }], layout: {} }),
+      png_base64: null,
+      title:
+        plotName === "timeseries_preview"
+          ? "Data Preview — First 7 Days"
+          : plotName === "coverage_timeline"
+            ? "Data Coverage Timeline"
+            : "Cleaning Overlay — Wind_80m",
+    }));
   });
 
   it("shows the empty state when no session exists", () => {
@@ -87,6 +123,14 @@ describe("DataPage", () => {
     expect(screen.getAllByText("Wind_80m").length).toBeGreaterThan(0);
     expect(screen.getAllByText("98.0%").length).toBeGreaterThan(0);
     expect(screen.getAllByText("range_check").length).toBeGreaterThan(0);
+  });
+
+  it("shows preview plots after upload data is available", async () => {
+    useWorkspaceStore.getState().setSessionId("session-1");
+    renderWithProviders(<DataPage />);
+
+    expect(await screen.findByText("Data Preview — First 7 Days")).toBeTruthy();
+    expect(await screen.findByText("Data Coverage Timeline")).toBeTruthy();
   });
 
   it("uploads a timeseries file through the upload dropzone", async () => {
@@ -128,5 +172,29 @@ describe("DataPage", () => {
         end_date: "2024-01-31",
       });
     });
+  });
+
+  it("shows typed cleaning inputs instead of a raw JSON textarea", async () => {
+    useWorkspaceStore.getState().setSessionId("session-1");
+    const { container } = renderWithProviders(<DataPage />);
+
+    await screen.findByText("45 min");
+
+    expect(screen.getByLabelText("Minimum (m/s)")).toBeTruthy();
+    expect(screen.getByLabelText("Maximum (m/s)")).toBeTruthy();
+    expect(container.querySelector("textarea")).toBeNull();
+  });
+
+  it("shows the sensor detail card after clicking a coverage row", async () => {
+    useWorkspaceStore.getState().setSessionId("session-1");
+    renderWithProviders(<DataPage />);
+
+    const sensorCells = await screen.findAllByText("Wind_80m");
+    const coverageCell = sensorCells.find((element) => element.closest("tbody") !== null);
+    const coverageRow = coverageCell?.closest("tr");
+    fireEvent.click(coverageRow as HTMLTableRowElement);
+
+    expect(await screen.findByText("Sensor detail — Wind_80m")).toBeTruthy();
+    expect(screen.getByText("Weibull k")).toBeTruthy();
   });
 });

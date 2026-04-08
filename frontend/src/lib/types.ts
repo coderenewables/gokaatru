@@ -69,6 +69,22 @@ export interface SensorCoverageResponse {
   gaps_over_1_hour: number;
 }
 
+export interface SensorStatisticsResponse {
+  sensor_name: string;
+  mean: number;
+  median: number;
+  std: number;
+  min_value: number;
+  max_value: number;
+  count: number;
+  coverage_pct: number;
+  weibull_k: number;
+  weibull_A: number;
+  monthly_means: number[];
+  diurnal_means: number[];
+  percentiles: Record<string, number>;
+}
+
 export interface RunConfigUpdate {
   key: string;
   value: JsonValue;

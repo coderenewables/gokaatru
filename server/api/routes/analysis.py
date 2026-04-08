@@ -23,6 +23,7 @@ from server.api.schemas import (
     HomogeneityAnalyzeRequest,
     HomogeneityApplyRequest,
     RunLtcRequest,
+    SensorStatisticsResponse,
     UndoCleaningRuleRequest,
 )
 from server.state.session import SessionState
@@ -51,6 +52,7 @@ from server.tools.shear import (
     _calculate_roughness_timeseries,
     _calculate_shear_timeseries,
 )
+from server.tools.statistics import _sensor_statistics
 from server.tools.uncertainty import _calculate_uncertainty
 
 router = APIRouter(prefix="/sessions/{session_id}", tags=["analysis"])
@@ -62,6 +64,20 @@ LTC_ALGORITHMS: dict[str, Callable[..., dict]] = {
     "variance_ratio": _run_ltc_variance_ratio,
     "xgboost": _run_ltc_xgboost,
 }
+
+
+@router.get("/statistics/{sensor_name}", response_model=SensorStatisticsResponse)
+def get_sensor_statistics(
+    session_id: str,
+    sensor_name: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> SensorStatisticsResponse:
+    """Return descriptive statistics, Weibull parameters, and seasonal profiles for one sensor."""
+    del session_id
+    try:
+        return SensorStatisticsResponse(**_sensor_statistics(state, sensor_name))
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
 
 
 @router.post("/cleaning/apply")

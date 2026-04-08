@@ -493,6 +493,14 @@ select {
   color: var(--text-muted);
 }
 
+.data-table-row-interactive {
+  cursor: pointer;
+}
+
+.data-table-row-interactive:hover {
+  background: rgba(11, 122, 111, 0.06);
+}
+
 .table-action {
   padding: 0.45rem 0.8rem;
 }
@@ -598,6 +606,33 @@ select {
 
 .content-note p {
   margin: 6px 0 0;
+}
+
+.help-tooltip {
+  cursor: help;
+  color: var(--text-muted);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.help-tooltip:hover {
+  color: var(--accent);
+}
+
+.field-help {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.sensor-detail-card {
+  border-left: 3px solid var(--accent);
 }
 
 .step-overview-list {

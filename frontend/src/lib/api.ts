@@ -22,6 +22,7 @@ import type {
   RunConfigResponse,
   RunconfigExportResponse,
   SensorCoverageResponse,
+  SensorStatisticsResponse,
   SensorsResponse,
   SessionSummaryResponse,
   SiteMapResponse,
@@ -205,6 +206,12 @@ export const analysisApi = {
     requestJson<UncertaintyResponse>(
       `/sessions/${sessionId}/uncertainty`,
       { method: "POST", body: JSON.stringify(body) },
+      sessionId,
+    ),
+  getSensorStatistics: (sessionId: string, sensorName: string) =>
+    requestJson<SensorStatisticsResponse>(
+      `/sessions/${sessionId}/statistics/${encodeURIComponent(sensorName)}`,
+      {},
       sessionId,
     ),
 };

@@ -65,6 +65,28 @@ def _plot_result(fig: go.Figure, title: str) -> dict:
     return {"plotly_json": fig.to_json(), "png_base64": png_base64, "title": title}
 
 
+def _speed_sensor_pairs(state: SessionState) -> list[tuple[float, str]]:
+    """Return mapped wind-speed sensors sorted from tallest to shortest measurement height."""
+    pairs = [
+        (float(height), str(mapping["speed_col"]))
+        for height, mapping in sorted(state.sensor_mapping.items(), reverse=True)
+        if mapping.get("speed_col") is not None
+    ]
+    if not pairs:
+        raise ValueError("Sensor mapping with wind-speed columns is required")
+    return pairs
+
+
+def _downsample_timeseries(series: pd.Series) -> pd.Series:
+    """Downsample dense time series to daily means to keep browser plots responsive."""
+    return series.resample("D").mean() if len(series) > 50000 else series
+
+
+def _scattergl_mode(length: int) -> str:
+    """Choose a suitable Plotly trace mode for dense or sparse line series."""
+    return "lines+markers" if length <= 300 else "lines"
+
+
 def _monthly_mean(series: pd.Series) -> pd.Series:
     """Aggregate monthly mean wind speed for seasonal comparison plots."""
     return series.groupby(series.index.month).mean().reindex(range(1, 13))
@@ -339,6 +361,232 @@ def _plot_uncertainty_breakdown(
     figure.add_vline(x=total_pct, line_dash="dash", annotation_text=f"Total {total_pct:.2f}%")
     figure.update_layout(title="Uncertainty Breakdown", xaxis_title="Percent", yaxis_title="")
     return _plot_result(figure, "Uncertainty Breakdown")
+
+
+def _plot_timeseries_preview(state: SessionState, max_sensors: int = 5) -> dict:
+    """Plot the first 7 days of mapped wind-speed sensors for immediate post-upload data review."""
+    frame = _timeseries_frame(state)
+    selected = _speed_sensor_pairs(state)[:max_sensors]
+    start = frame.index.min()
+    end = start + pd.Timedelta(days=7)
+    preview = frame.loc[(frame.index >= start) & (frame.index < end), [column for _, column in selected]]
+    if preview.empty:
+        raise ValueError("Preview plot requires at least one week of loaded timeseries data")
+    figure = go.Figure()
+    for height, column in selected:
+        figure.add_trace(
+            go.Scattergl(
+                x=preview.index,
+                y=preview[column],
+                mode=_scattergl_mode(len(preview)),
+                name=f"{column} ({height:.0f} m)",
+                connectgaps=False,
+            )
+        )
+    figure.update_xaxes(rangeslider_visible=True, title="Timestamp")
+    figure.update_yaxes(title="Wind Speed (m/s)")
+    figure.update_layout(title="Data Preview — First 7 Days")
+    return _plot_result(figure, "Data Preview — First 7 Days")
+
+
+def _plot_cleaning_overlay(state: SessionState, sensor_name: str) -> dict:
+    """Overlay raw and cleaned sensor values, highlighting points removed by cleaning rules."""
+    if state.raw_timeseries_df is None or state.timeseries_df is None:
+        raise ValueError("Both raw and cleaned timeseries are required for cleaning overlay plotting")
+    if sensor_name not in state.raw_timeseries_df.columns or sensor_name not in state.timeseries_df.columns:
+        raise ValueError(f"Sensor column '{sensor_name}' not found in loaded timeseries")
+    raw = state.raw_timeseries_df[sensor_name]
+    cleaned = state.timeseries_df[sensor_name]
+    removed = raw.notna() & cleaned.isna()
+    if len(raw) > 50000:
+        cleaned_plot = cleaned.resample("D").mean()
+        removed_plot = raw.where(removed).resample("D").mean().dropna()
+    else:
+        cleaned_plot = cleaned
+        removed_plot = raw.where(removed).dropna()
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scattergl(
+            x=cleaned_plot.index,
+            y=cleaned_plot,
+            mode="lines",
+            name="Cleaned",
+            line=dict(color="#0b7a6f"),
+            connectgaps=False,
+        )
+    )
+    figure.add_trace(
+        go.Scattergl(
+            x=removed_plot.index,
+            y=removed_plot,
+            mode="markers",
+            name="Removed",
+            marker=dict(color="red", opacity=0.4, size=7),
+        )
+    )
+    figure.update_layout(title=f"Cleaning Overlay — {sensor_name}", xaxis_title="Timestamp", yaxis_title="Value")
+    return _plot_result(figure, f"Cleaning Overlay — {sensor_name}")
+
+
+def _plot_coverage_timeline(state: SessionState) -> dict:
+    """Plot monthly per-sensor availability as a horizontal heatmap timeline for mapped sensors."""
+    frame = _timeseries_frame(state)
+    timestep_minutes = pd.Timedelta(minutes=1)
+    if len(frame.index) >= 2:
+        timestep_minutes = pd.Series(frame.index.to_series().diff().dropna()).mode().iloc[0]
+    full_index = pd.date_range(frame.index.min(), frame.index.max(), freq=timestep_minutes)
+    sensor_rows = []
+    sensor_labels = []
+    month_labels: list[str] = []
+    for height, mapping in sorted(state.sensor_mapping.items(), reverse=True):
+        for field_name, sensor_type in {
+            "speed_col": "wind_speed",
+            "dir_col": "wind_direction",
+            "temp_col": "temperature",
+            "pressure_col": "pressure",
+        }.items():
+            column = mapping.get(field_name)
+            if column is None or column not in frame.columns:
+                continue
+            series = frame[column].reindex(full_index)
+            monthly = series.resample("MS").apply(lambda values: float(values.notna().mean()))
+            if not month_labels:
+                month_labels = [timestamp.strftime("%Y-%m") for timestamp in monthly.index]
+            sensor_rows.append(monthly.to_list())
+            sensor_labels.append(f"{column} ({sensor_type}, {height:.0f} m)")
+    if not sensor_rows:
+        raise ValueError("Coverage timeline requires mapped sensors and loaded timeseries data")
+    figure = go.Figure(
+        data=go.Heatmap(
+            x=month_labels,
+            y=sensor_labels,
+            z=np.asarray(sensor_rows, dtype=float),
+            colorscale=[[0.0, "#f3efe6"], [0.5, "#e5dbc5"], [1.0, "#0b7a6f"]],
+            zmin=0.0,
+            zmax=1.0,
+            colorbar=dict(title="Availability"),
+        )
+    )
+    figure.update_layout(title="Data Coverage Timeline", xaxis_title="Month", yaxis_title="Sensor")
+    return _plot_result(figure, "Data Coverage Timeline")
+
+
+def _plot_turbulence_intensity(state: SessionState, speed_sensor: str, sd_sensor: str) -> dict:
+    """Plot raw and representative turbulence intensity profiles with IEC reference classes."""
+    frame = pd.concat([_require_series(state, speed_sensor), _require_series(state, sd_sensor)], axis=1).dropna()
+    valid = frame[(frame[speed_sensor] > 3.0) & (frame[sd_sensor] >= 0.0)].copy()
+    if valid.empty:
+        raise ValueError("Turbulence intensity plotting requires concurrent speed > 3 m/s and non-negative SD values")
+    valid["ti"] = valid[sd_sensor] / valid[speed_sensor]
+    valid = valid.replace([np.inf, -np.inf], np.nan).dropna(subset=["ti"])
+    valid["speed_bin"] = np.floor(valid[speed_sensor]).astype(int)
+    grouped = valid.groupby("speed_bin", observed=False)
+    bin_centers = [float(bin_value) + 0.5 for bin_value in grouped.groups.keys()]
+    mean_ti = grouped["ti"].mean().to_numpy(dtype=float)
+    std_ti = grouped["ti"].std(ddof=0).fillna(0.0).to_numpy(dtype=float)
+    rep_ti = mean_ti + 1.28 * std_ti
+    scatter = valid[[speed_sensor, "ti"]]
+    if len(scatter) > 8000:
+        step = max(1, len(scatter) // 8000)
+        scatter = scatter.iloc[::step]
+    x_min = min(bin_centers)
+    x_max = max(bin_centers)
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scattergl(
+            x=scatter[speed_sensor],
+            y=scatter["ti"],
+            mode="markers",
+            name="Samples",
+            marker=dict(color="rgba(11, 122, 111, 0.22)", size=6),
+        )
+    )
+    figure.add_trace(go.Scatter(x=bin_centers, y=mean_ti, mode="lines+markers", name="Mean TI"))
+    figure.add_trace(
+        go.Scatter(
+            x=bin_centers,
+            y=rep_ti,
+            mode="lines+markers",
+            name="Representative TI",
+            line=dict(dash="dash"),
+        )
+    )
+    for label, value, color in [("IEC Class A", 0.16, "#c86a2a"), ("IEC Class B", 0.14, "#756c4f"), ("IEC Class C", 0.12, "#5f716a")]:
+        figure.add_trace(
+            go.Scatter(
+                x=[x_min, x_max],
+                y=[value, value],
+                mode="lines",
+                name=label,
+                line=dict(dash="dot", color=color),
+            )
+        )
+    figure.update_layout(
+        title=f"Turbulence Intensity — {speed_sensor}",
+        xaxis_title="Wind Speed (m/s)",
+        yaxis_title="TI",
+    )
+    return _plot_result(figure, f"Turbulence Intensity — {speed_sensor}")
+
+
+def _plot_shear_profile(state: SessionState) -> dict:
+    """Plot mean measured wind-speed profile across heights with a fitted power-law curve."""
+    frame = _timeseries_frame(state)
+    speed_pairs = [(height, column) for height, column in _speed_sensor_pairs(state) if column in frame.columns]
+    if len(speed_pairs) < 2:
+        raise ValueError("Shear profile plotting requires at least two mapped wind-speed sensors")
+    heights = np.asarray([height for height, _ in speed_pairs], dtype=float)
+    means = np.asarray([frame[column].dropna().mean() for _, column in speed_pairs], dtype=float)
+    valid = np.isfinite(means) & (means > 0.0)
+    if valid.sum() < 2:
+        raise ValueError("Shear profile plotting requires at least two sensors with positive mean wind speeds")
+    log_heights = np.log(heights[valid])
+    log_speeds = np.log(means[valid])
+    centered_x = log_heights - float(np.mean(log_heights))
+    centered_y = log_speeds - float(np.mean(log_speeds))
+    denominator = float(np.sum(centered_x**2))
+    if denominator <= 1e-12:
+        raise ValueError("Shear profile fit requires distinct measurement heights")
+    alpha = float(np.sum(centered_x * centered_y) / denominator)
+    intercept = float(np.mean(log_speeds) - alpha * np.mean(log_heights))
+    curve_heights = np.linspace(float(heights.min()), float(heights.max()), 100)
+    curve_speeds = np.exp(intercept) * np.power(curve_heights, alpha)
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scatter(
+            x=means[valid],
+            y=heights[valid],
+            mode="markers",
+            name="Measured",
+            marker=dict(size=10, color="#0b7a6f"),
+        )
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=curve_speeds,
+            y=curve_heights,
+            mode="lines",
+            name="Power-law fit",
+            line=dict(color="#c86a2a", width=3),
+        )
+    )
+    figure.update_layout(
+        title="Shear Profile",
+        xaxis_title="Mean Wind Speed (m/s)",
+        yaxis_title="Height (m)",
+        annotations=[
+            dict(
+                xref="paper",
+                yref="paper",
+                x=0.98,
+                y=0.04,
+                text=f"α = {alpha:.3f}",
+                showarrow=False,
+                bgcolor="rgba(255,250,240,0.92)",
+            )
+        ],
+    )
+    return _plot_result(figure, "Shear Profile")
 
 
 @mcp.tool()

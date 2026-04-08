@@ -155,6 +155,6 @@ describe("SitePage", () => {
       });
     });
 
-    expect(await screen.findByText("Wind_150m")).toBeTruthy();
+    expect((await screen.findAllByText("Wind_150m")).length).toBeGreaterThan(0);
   });
 });

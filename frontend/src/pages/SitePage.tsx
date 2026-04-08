@@ -7,6 +7,7 @@ import type { ExtrapolationResponse, SensorRecord } from "../lib/types";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorBanner } from "../components/common/ErrorBanner";
+import { HelpTooltip } from "../components/common/HelpTooltip";
 import { MetricCard } from "../components/common/MetricCard";
 import { PageHeader } from "../components/common/PageHeader";
 import { PlotlyFigure } from "../components/common/PlotlyFigure";
@@ -150,6 +151,23 @@ export function SitePage() {
     staleTime: 15_000,
   });
 
+  const shearProfileQuery = useQuery({
+    queryKey: ["shear-profile", sessionId],
+    queryFn: () => resultsApi.getPlot(sessionId ?? "", "shear_profile", {}),
+    enabled: sessionId !== null && summaryQuery.data?.shear_table_ready === true,
+    staleTime: 15_000,
+  });
+
+  const extrapolationPlotQuery = useQuery({
+    queryKey: ["extrapolation-preview", sessionId, latestExtrapolation?.column_name, selectedSensors.join(",")],
+    queryFn: () =>
+      resultsApi.getPlot(sessionId ?? "", "timeseries", {
+        sensor_names: [...selectedSensors, latestExtrapolation?.column_name ?? ""].filter(Boolean).join(","),
+      }),
+    enabled: sessionId !== null && latestExtrapolation !== null,
+    staleTime: 15_000,
+  });
+
   const saveMetadataMutation = useMutation({
     mutationFn: () =>
       configApi.update(sessionId ?? "", {
@@ -274,7 +292,10 @@ export function SitePage() {
               <input value={elevation} onChange={(event) => updateSiteDraft(patchFormDraft, { elevation: event.target.value })} />
             </label>
             <label className="form-field">
-              <span>Hub height (m)</span>
+              <span>
+                Hub height (m)
+                <HelpTooltip text="The target turbine hub height for extrapolation. Values between measured heights use interpolation; values above use power-law or log-law extrapolation." />
+              </span>
               <input value={hubHeight} onChange={(event) => updateSiteDraft(patchFormDraft, { hubHeight: event.target.value })} />
             </label>
           </div>
@@ -286,7 +307,10 @@ export function SitePage() {
         <article className="content-card stack-gap">
           <span className="eyebrow">Shear and extrapolation inputs</span>
           <label className="form-field">
-            <span>Aggregation</span>
+            <span>
+              Aggregation
+              <HelpTooltip text="MoMM (Mean of Monthly Means) accounts for seasonal and diurnal data gaps. Use mean for well-covered datasets and momm for partial years." />
+            </span>
             <select value={tableAggregation} onChange={(event) => updateSiteDraft(patchFormDraft, { tableAggregation: event.target.value, dirty: false })}>
               <option value="mean">mean</option>
               <option value="median">median</option>
@@ -354,6 +378,31 @@ export function SitePage() {
           emptyTitle="Roughness heatmap unavailable"
           emptyDetail="Calculate roughness and build the roughness table to render the month-hour heatmap."
         />
+      </div>
+
+      <div className="panel-grid panel-grid-two">
+        <PlotlyFigure
+          plot={shearProfileQuery.data}
+          emptyTitle="Shear profile unavailable"
+          emptyDetail="Build the shear table to inspect the fitted mean speed profile across heights."
+        />
+        {latestExtrapolation ? (
+          <article className="content-card stack-gap">
+            <span className="eyebrow">Hub-height extrapolation result</span>
+            <div className="metric-grid">
+              <MetricCard label="Column" value={latestExtrapolation.column_name} />
+              <MetricCard label="Extrapolated" value={String(latestExtrapolation.method_counts.extrapolated)} />
+              <MetricCard label="Interpolated" value={String(latestExtrapolation.method_counts.interpolated)} />
+              <MetricCard label="Direct" value={String(latestExtrapolation.method_counts.direct)} />
+            </div>
+            <PlotlyFigure plot={extrapolationPlotQuery.data} emptyTitle="Loading" emptyDetail="" />
+          </article>
+        ) : (
+          <EmptyState
+            title="Hub-height comparison unavailable"
+            detail="Run hub-height extrapolation to compare the extrapolated series against the measured heights."
+          />
+        )}
       </div>
     </section>
   );

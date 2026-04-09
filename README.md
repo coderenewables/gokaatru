@@ -2,6 +2,8 @@
 
 GoKaatru is a Wind Resource Assessment MCP server for ingesting wind measurement data, cleaning and extrapolating it, correlating it against ERA5 reanalysis, and producing long-term correction, uncertainty, visualization, and mapping outputs. The server exposes 59 MCP tools grouped across data I/O, statistics, shear, ERA5, LTC, post-processing, visualization, and configuration workflows, with `runconfig` as the source of truth for site metadata such as location and hub height.
 
+The workflow web app supports scenario management: save the current analysis state as a named scenario, or upload a `runconfig.json` file to import configuration overrides and automatically execute the LTC → ensemble → uncertainty pipeline, saving the result as a new scenario for comparison.
+
 ## Quick Start (Local)
 
 ```bash
@@ -88,7 +90,7 @@ mcpServers:
 
 ## Validation
 
-The repository has been validated with 59 registered MCP tools plus backend API and frontend workflow coverage.
+The repository has been validated with 59 registered MCP tools, 10 web API endpoint groups, and full backend + frontend test coverage.
 
 ```bash
 python -m ruff check server/ tests/
@@ -202,3 +204,25 @@ docker compose ps
 ## Build Notes
 
 See [BUILD_SPECIFICATION.md](BUILD_SPECIFICATION.md) for the full build contract and [BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md) for the phase-by-phase implementation plan.
+
+## Web API Endpoints
+
+The FastAPI layer exposes session-scoped workflow endpoints under `/api/sessions/{id}/`:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/sessions` | POST | Create a new browser session |
+| `/sessions/{id}/config` | GET/PUT | Read or update runconfig |
+| `/sessions/{id}/config/import` | POST | Import a complete runconfig JSON payload |
+| `/sessions/{id}/summary` | GET | Workflow progress and analysis readiness |
+| `/sessions/{id}/era5/nodes` | POST | Find surrounding ERA5 grid nodes |
+| `/sessions/{id}/era5/extract` | POST | Extract ERA5 node data |
+| `/sessions/{id}/era5/interpolate` | POST | Interpolate ERA5 to site |
+| `/sessions/{id}/ltc/{algorithm}` | POST | Run one LTC algorithm |
+| `/sessions/{id}/ensemble` | POST | Blend LTC algorithms |
+| `/sessions/{id}/uncertainty` | POST | Calculate total uncertainty |
+| `/sessions/{id}/scenarios` | GET/POST | List or save scenarios |
+| `/sessions/{id}/scenarios/run` | POST | Import config + execute pipeline + save scenario |
+| `/sessions/{id}/scenarios/{index}` | DELETE | Remove a saved scenario |
+| `/sessions/{id}/plots/{name}` | POST | Generate a named Plotly figure |
+| `/sessions/{id}/exports/*` | GET | Download timeseries, LTC, ensemble, or runconfig files |

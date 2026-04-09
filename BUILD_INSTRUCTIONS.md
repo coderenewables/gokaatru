@@ -3914,6 +3914,196 @@ Note: if `.split-header-row` already exists in the CSS (it is used on ResultsPag
 
 ---
 
+## PHASE 11 — Import & Run Scenario from Config
+
+**Goal**: Allow users to upload a `runconfig.json` file, automatically execute the LTC → ensemble → uncertainty pipeline using the imported configuration, and save the result as a named scenario — all in one action.
+
+**Prerequisite**: Phase 10 complete and tests passing.
+
+---
+
+### Phase 11 Design Principles
+
+- The import-and-run pipeline is a single synchronous API call — no multi-step orchestration from the frontend.
+- The pipeline reuses existing shared helpers (`_run_ltc_*`, `_run_ensemble`, `_calculate_uncertainty`, `_build_scenario_snapshot`) rather than reimplementing any logic.
+- Runconfig overrides are **merged** into the current session state, not replaced. This allows partial configs (e.g., only changing `hub_height_m`).
+- The pipeline auto-resolves LTC column names from the current sensor mapping and ERA5 interpolation state.
+- Prerequisite data (timeseries + ERA5 interpolation) must already be loaded before running a scenario.
+
+---
+
+### Step 11.1: Backend — Pydantic schemas
+
+**File: `server/api/schemas.py`**
+
+Add two new request models:
+
+```python
+class ImportRunconfigRequest(BaseModel):
+    """Import a complete runconfig JSON payload into the current session."""
+    runconfig: dict[str, JsonValue]
+
+class RunScenarioRequest(BaseModel):
+    """Import a runconfig, execute the LTC → ensemble → uncertainty pipeline, and save the result."""
+    name: str = Field(..., min_length=1, max_length=100)
+    runconfig: dict[str, JsonValue] = Field(default_factory=dict)
+    ltc_algorithms: list[str] = Field(default_factory=lambda: ["speedsort"])
+    uncertainty: CalculateUncertaintyRequest | None = None
+```
+
+The `uncertainty` field is optional — when omitted, the pipeline uses sensible defaults derived from session state (highest sensor height, configured hub height, standard assumptions).
+
+---
+
+### Step 11.2: Backend — Import & pipeline helpers
+
+**File: `server/api/routes/analysis.py`**
+
+Add three internal helper functions:
+
+**`_import_runconfig(state, runconfig)`**
+- Merge the imported config dict into `state.runconfig`.
+- Call `_sync_state_from_runconfig(state)` to project known keys (location, hub_height_m, project_name, measurement_type) back onto the session convenience fields.
+- Return the merged runconfig.
+
+**`_resolve_ltc_columns(state)`**
+- Walk `state.sensor_mapping` sorted by height (descending) to find the highest speed sensor as `short_col`.
+- Find the highest direction sensor as `short_dir_col` (or empty string if none).
+- Use `"Spd_100m"` and `"Dir_100m"` as the long-term reference columns (ERA5 convention).
+- Return `(short_col, long_col, short_dir_col, long_dir_col)`.
+- Raise `ValueError` if no speed sensor is available.
+
+**`_run_scenario_pipeline(state, name, runconfig_overrides, ltc_algorithms, uncertainty_params)`**
+
+Pipeline steps:
+1. **Import config** — merge overrides into session state.
+2. **Preparedness checks** — require `timeseries_df` and `era5_interpolated_df`.
+3. **Resolve columns** — auto-detect measured/reference column pairs.
+4. **Run LTC** — execute each requested algorithm via the `LTC_ALGORITHMS` dispatch dict.
+5. **Ensemble** — if more than one algorithm was requested, run `_run_ensemble`.
+6. **Uncertainty** — if explicit params provided, use them; otherwise build defaults from session state (measurement height from highest sensor, hub height from runconfig, standard IAV/shear assumptions).
+7. **Save scenario** — call `_build_scenario_snapshot` and append to `state.scenarios`.
+
+Return: `{"status": "ok", "scenario_index": N, "name": "...", "steps_completed": [...], "scenario": {...}}`
+
+---
+
+### Step 11.3: Backend — API endpoints
+
+**File: `server/api/routes/analysis.py`**
+
+Add two new routes:
+
+**`POST /sessions/{session_id}/config/import`**
+- Request body: `ImportRunconfigRequest`
+- Calls `_import_runconfig`, touches session.
+- Returns: `{"status": "ok", "runconfig": {...}}`
+
+**`POST /sessions/{session_id}/scenarios/run`**
+- Request body: `RunScenarioRequest`
+- Calls `_run_scenario_pipeline`.
+- Returns the full pipeline result with steps_completed and the saved scenario snapshot.
+
+---
+
+### Step 11.4: Frontend — Types and API client
+
+**File: `frontend/src/lib/types.ts`**
+
+Add:
+```typescript
+export interface RunScenarioUncertaintyParams {
+  measurement_uncertainty_pct: number;
+  measurement_height_m: number;
+  hub_height_m: number;
+  shear_method: string;
+  mcp_r_squared: number;
+  concurrent_hours: number;
+  algorithm?: string;
+  iav_pct?: number;
+  shear_std?: number;
+  is_interpolation?: boolean;
+}
+
+export interface RunScenarioRequest {
+  name: string;
+  runconfig?: Record<string, JsonValue>;
+  ltc_algorithms?: string[];
+  uncertainty?: RunScenarioUncertaintyParams | null;
+}
+
+export interface RunScenarioResponse {
+  status: string;
+  scenario_index: number;
+  name: string;
+  steps_completed: string[];
+  scenario: Scenario;
+}
+```
+
+**File: `frontend/src/lib/api.ts`**
+
+Add to `analysisApi`:
+```typescript
+importRunconfig: (sessionId, runconfig) => requestJson(...)
+runScenario: (sessionId, body: RunScenarioRequest) => requestJson(...)
+```
+
+---
+
+### Step 11.5: Frontend — Import & Run Scenario UI
+
+**File: `frontend/src/pages/ResultsPage.tsx`**
+
+Add a new `<article>` section between the scenario comparison card and the plots grid:
+
+- **File input** (`<input type="file" accept=".json">`) for uploading a runconfig JSON file.
+- **Scenario name input** — auto-populated from `project_name` in the uploaded JSON, or fallback to the filename.
+- **JSON preview** — collapsible `<details>` showing the parsed config with key count.
+- **"Run Scenario from Config" button** — disabled when no file is uploaded or name is empty; shows "Running pipeline…" during execution.
+- **Success message** — shows the scenario name and step count after successful execution.
+- On success: invalidates scenario, LTC results, and runconfig queries.
+
+State variables:
+- `importedRunconfig: Record<string, JsonValue> | null`
+- `importScenarioName: string`
+- `fileInputRef: RefObject<HTMLInputElement>`
+
+The `handleRunconfigFile` callback reads the file via `FileReader`, validates it is a JSON object, and auto-fills the scenario name.
+
+---
+
+### Step 11.6: Tests
+
+**Backend tests** (added to `tests/test_phase10.py`):
+
+1. `test_import_runconfig` — POST config/import with `hub_height_m: 120`, verify state updated.
+2. `test_run_scenario_pipeline` — Seed timeseries + ERA5, POST scenarios/run, verify scenario saved with LTC + uncertainty steps.
+3. `test_run_scenario_with_explicit_uncertainty` — POST with custom uncertainty params, verify `measurement_uncertainty_pct` matches in result.
+4. `test_run_scenario_multiple_algorithms` — POST with `["speedsort", "variance_ratio"]`, verify ensemble step appears.
+5. `test_run_scenario_without_timeseries_fails` — POST without loading data, expect 400.
+
+**Frontend tests** (added to `frontend/src/pages/ResultsPage.test.tsx`):
+
+1. `test_import_run_section_disabled_by_default` — Verify run button is disabled when no file is loaded.
+2. `test_upload_json_enables_run_button` — Upload a mock JSON file, verify button enables and `runScenario` is called on click.
+
+---
+
+### Step 11.7: Phase 11 validation checklist
+
+- [ ] `python -m pytest tests/ -v` — all tests pass (81 total)
+- [ ] `npm --prefix frontend run test -- --run` — all tests pass (36 total)
+- [ ] `npm --prefix frontend run build` — TypeScript compiles, production build succeeds
+- [ ] ResultsPage: upload runconfig.json → name auto-fills → click "Run Scenario from Config" → scenario appears in table
+- [ ] ResultsPage: upload partial config (only `hub_height_m`) → pipeline runs with existing session data
+- [ ] ResultsPage: upload config without timeseries loaded → 400 error displayed
+- [ ] ResultsPage: run 2+ imported scenarios → comparison chart updates
+- [ ] API: `POST /scenarios/run` with explicit uncertainty params → result reflects custom values
+- [ ] API: `POST /scenarios/run` with multiple LTC algorithms → ensemble step executed
+
+---
+
 ## Updated Summary: File Creation Order
 
 | Phase | Files | Tool Count |
@@ -3928,4 +4118,5 @@ Note: if `.split-header-row` already exists in the CSS (it is used on ResultsPag
 | 8 | Update: visualization.py (+5 helpers), results.py (+5 dispatches), schemas.py (+1 field), LtcPage.tsx (workbench redesign), algorithmHelp.ts, tests/test_phase8.py | — |
 | 9 | New: server/api/routes/exports.py. Update: GeoJsonMapRuntime.tsx (rings, terrain, labels), ReanalysisPage.tsx (charts), visualization.py (+2 helpers), api.ts (exportsApi), DataPage/LtcPage/ResultsPage (export buttons), styles.css, tests/test_phase9.py | — |
 | 10 | Update: session.py (+scenarios), analysis.py (+3 endpoints), schemas.py (+1 model), visualization.py (+1 helper), ResultsPage.tsx (dashboard + scenarios), OverviewPage.tsx (scorecard), config.py (summary fields), api.ts, types.ts, styles.css, tests/test_phase10.py | — |
-| **Total through Phase 10** | **~50 files modified/created** | **59 MCP tools + 20 new plot helpers + 8 new API endpoints** |
+| 11 | Update: schemas.py (+2 models), analysis.py (+2 endpoints, +3 helpers), config.py (re-export _sync_state_from_runconfig), api.ts (+2 methods), types.ts (+3 interfaces), ResultsPage.tsx (import & run UI), ResultsPage.test.tsx (+2 tests), test_phase10.py (+5 tests) | — |
+| **Total through Phase 11** | **~50 files modified/created** | **59 MCP tools + 20 plot helpers + 10 API endpoints** |

@@ -11,6 +11,7 @@ const SitePage = lazy(async () => ({ default: (await import("./pages/SitePage"))
 const ReanalysisPage = lazy(async () => ({ default: (await import("./pages/ReanalysisPage")).ReanalysisPage }));
 const LtcPage = lazy(async () => ({ default: (await import("./pages/LtcPage")).LtcPage }));
 const ResultsPage = lazy(async () => ({ default: (await import("./pages/ResultsPage")).ResultsPage }));
+const ChatPage = lazy(async () => ({ default: (await import("./pages/ChatPage")).ChatPage }));
 
 function LazyPage({ component: Component }: { component: React.ComponentType }) {
   return (
@@ -32,6 +33,7 @@ export const appRouter = createBrowserRouter([
       { path: "reanalysis", element: <LazyPage component={ReanalysisPage} /> },
       { path: "ltc", element: <LazyPage component={LtcPage} /> },
       { path: "results", element: <LazyPage component={ResultsPage} /> },
+      { path: "chat", element: <LazyPage component={ChatPage} /> },
     ],
   },
 ]);

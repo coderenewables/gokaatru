@@ -44,6 +44,12 @@ export const workflowSteps: WorkflowStep[] = [
     description: "Plots, maps, exports, and output inspection",
     requiredSteps: [],
   },
+  {
+    path: "/chat",
+    label: "Chat",
+    description: "Ask questions about your data using an AI assistant",
+    requiredSteps: [],
+  },
 ];
 
 export function isWorkflowStepComplete(summary: SessionSummaryResponse | undefined, step: WorkflowStep): boolean {

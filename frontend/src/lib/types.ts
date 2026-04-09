@@ -358,3 +358,30 @@ export interface ApiStatusResponse {
   status: string;
   [key: string]: JsonValue;
 }
+
+// ---------------------------------------------------------------------------
+// Chat
+// ---------------------------------------------------------------------------
+
+export interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export interface ChatRequest {
+  api_key: string;
+  provider: string;
+  model: string;
+  messages: ChatMessage[];
+}
+
+export interface ChatToolCallResult {
+  tool_name: string;
+  arguments: Record<string, JsonValue>;
+  result: JsonValue;
+}
+
+export interface ChatResponse {
+  reply: string;
+  tool_calls_executed: ChatToolCallResult[];
+}

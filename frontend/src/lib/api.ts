@@ -3,6 +3,8 @@ import type {
   AnalysisSummaryResponse,
   ApiHealthResponse,
   ApiStatusResponse,
+  ChatRequest,
+  ChatResponse,
   CleaningApplyResponse,
   CleaningLogResponse,
   ClippingAnalysisResponse,
@@ -260,4 +262,13 @@ export const exportsApi = {
   downloadLtc: (sessionId: string, algorithm: string) => `${API_BASE}/sessions/${sessionId}/exports/ltc/${algorithm}`,
   downloadEnsemble: (sessionId: string) => `${API_BASE}/sessions/${sessionId}/exports/ensemble`,
   downloadRunconfig: (sessionId: string) => `${API_BASE}/sessions/${sessionId}/exports/runconfig`,
+};
+
+export const chatApi = {
+  send: (sessionId: string, body: ChatRequest) =>
+    requestJson<ChatResponse>(
+      `/sessions/${sessionId}/chat`,
+      { method: "POST", body: JSON.stringify(body) },
+      sessionId,
+    ),
 };

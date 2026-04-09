@@ -12,6 +12,28 @@ from server.schemas.common import Coordinate
 from server.state.session import SessionState, session
 
 
+def _speed_sensor_columns(state: SessionState) -> list[str]:
+    """Return mapped wind-speed columns present in the loaded measured dataframe."""
+    if state.timeseries_df is None:
+        return []
+    return [
+        str(mapping["speed_col"])
+        for _height, mapping in sorted(state.sensor_mapping.items(), reverse=True)
+        if mapping.get("speed_col") in state.timeseries_df.columns
+    ]
+
+
+def _avg_coverage(state: SessionState) -> float | None:
+    """Compute mean coverage across mapped wind-speed sensors for overview scorecards."""
+    if state.timeseries_df is None:
+        return None
+    speed_columns = _speed_sensor_columns(state)
+    if not speed_columns:
+        return None
+    coverage_values = [float(state.timeseries_df[column].notna().mean() * 100.0) for column in speed_columns]
+    return float(sum(coverage_values) / len(coverage_values))
+
+
 def _parse_config_value(value: str) -> object:
     """Parse config values as JSON first, then preserve raw strings per the Phase 1 config contract."""
     try:
@@ -94,11 +116,14 @@ def _load_run_config(state: SessionState) -> dict:
 def _get_analysis_summary(state: SessionState) -> dict:
     """Report Phase 1 analysis readiness flags based on populated session-state fields."""
     coordinate = state.get_coordinate()
+    speed_columns = _speed_sensor_columns(state)
     return {
         "project_name": state.get_project_name(),
         "hub_height_m": state.get_hub_height_m(),
         "timeseries_loaded": state.timeseries_df is not None,
         "sensor_mapping_loaded": bool(state.sensor_mapping),
+        "sensor_count": len(speed_columns),
+        "avg_coverage_pct": _avg_coverage(state),
         "cleaning_rules_applied": len(state.cleaning_log),
         "shear_table_ready": state.shear_table is not None,
         "roughness_table_ready": state.roughness_table is not None,
@@ -107,6 +132,7 @@ def _get_analysis_summary(state: SessionState) -> dict:
         "era5_interpolated_ready": state.era5_interpolated_df is not None,
         "ltc_algorithms_run": sorted(state.ltc_results.keys()),
         "ensemble_ready": state.ensemble_df is not None,
+        "scenario_count": len(state.scenarios),
         "coordinate": None if coordinate is None else coordinate.model_dump(),
     }
 

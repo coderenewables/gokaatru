@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { configApi, exportsApi, resultsApi, uploadsApi } from "../lib/api";
-import type { LtcResultSummary, PlotResult } from "../lib/types";
+import { analysisApi, configApi, exportsApi, resultsApi, uploadsApi } from "../lib/api";
+import type { LtcResultSummary, PlotResult, Scenario } from "../lib/types";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { DataTable } from "../components/common/DataTable";
 import { EmptyState } from "../components/common/EmptyState";
@@ -36,8 +36,10 @@ export function ResultsPage() {
   const latestUncertainty = useWorkspaceStore((state) => state.latestUncertainty);
   const resultsDraftValue = useWorkspaceStore((state) => state.formDrafts.results);
   const patchFormDraft = useWorkspaceStore((state) => state.patchFormDraft);
+  const queryClient = useQueryClient();
   const [latestError, setLatestError] = useState<unknown>(null);
   const [customPlot, setCustomPlot] = useState<PlotResult | null>(null);
+  const [scenarioName, setScenarioName] = useState("");
 
   const resultsDraft = useMemo(() => draftSection(resultsDraftValue), [resultsDraftValue]);
 
@@ -70,6 +72,15 @@ export function ResultsPage() {
     staleTime: 10_000,
   });
 
+  const scenariosQuery = useQuery({
+    queryKey: ["scenarios", sessionId],
+    queryFn: () => analysisApi.listScenarios(sessionId ?? ""),
+    enabled: sessionId !== null,
+    staleTime: 10_000,
+  });
+
+  const scenarioCount = scenariosQuery.data?.scenarios.length ?? 0;
+
   const siteMapQuery = useQuery({
     queryKey: ["site-map", sessionId],
     queryFn: () => resultsApi.getSiteMap(sessionId ?? ""),
@@ -98,9 +109,37 @@ export function ResultsPage() {
     staleTime: 10_000,
   });
 
+  const scenarioComparisonQuery = useQuery({
+    queryKey: ["scenario-comparison", sessionId, scenarioCount],
+    queryFn: () => resultsApi.getPlot(sessionId ?? "", "scenario_comparison", {}),
+    enabled: sessionId !== null && scenarioCount >= 2,
+    staleTime: 10_000,
+  });
+
   const exportMutation = useMutation({
     mutationFn: () => resultsApi.exportRunconfig(sessionId ?? ""),
     onSuccess: () => setLatestError(null),
+    onError: (error) => setLatestError(error),
+  });
+
+  const saveScenarioMutation = useMutation({
+    mutationFn: (name: string) => analysisApi.saveScenario(sessionId ?? "", name),
+    onSuccess: () => {
+      setLatestError(null);
+      setScenarioName("");
+      void queryClient.invalidateQueries({ queryKey: ["scenarios", sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ["scenario-comparison", sessionId] });
+    },
+    onError: (error) => setLatestError(error),
+  });
+
+  const deleteScenarioMutation = useMutation({
+    mutationFn: (index: number) => analysisApi.deleteScenario(sessionId ?? "", index),
+    onSuccess: () => {
+      setLatestError(null);
+      void queryClient.invalidateQueries({ queryKey: ["scenarios", sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ["scenario-comparison", sessionId] });
+    },
     onError: (error) => setLatestError(error),
   });
 
@@ -129,6 +168,8 @@ export function ResultsPage() {
     () => (sensorsQuery.data?.sensors ?? []).filter((sensor) => sensor.sensor_type === "wind_direction"),
     [sensorsQuery.data],
   );
+  const latestScenario = scenarioCount > 0 ? scenariosQuery.data?.scenarios[scenarioCount - 1] ?? null : null;
+  const latestScenarioMean = latestScenario?.results.long_term_mean_speed ?? null;
 
   useEffect(() => {
     if (speedSensors[0] && resultsDraft.initialized !== true) {
@@ -159,13 +200,75 @@ export function ResultsPage() {
       <PageHeader title="Results" detail="Render the stored outputs, browse generated files, and request on-demand Plotly figures from the backend." />
 
       <div className="metric-grid">
-        <MetricCard label="Result files" value={String((ltcResultsQuery.data?.results ?? []).filter((result) => result.result_file).length)} tone="accent" />
-        <MetricCard label="Annual means plot" value={annualMeansQuery.data ? "Ready" : "Pending"} />
-        <MetricCard label="Site map" value={siteMapQuery.data ? `${siteMapQuery.data.features.length} features` : "Pending"} />
-        <MetricCard label="Export path" value={exportMutation.data?.file_path ?? "Not exported"} />
+        <MetricCard label="LT Mean Speed" value={latestScenarioMean !== null ? `${latestScenarioMean.toFixed(2)} m/s` : "—"} tone="accent" />
+        <MetricCard label="Total Uncertainty" value={latestUncertainty ? `${latestUncertainty.total_uncertainty_pct.toFixed(2)}%` : "—"} />
+        <MetricCard label="P90 Factor" value={latestUncertainty ? latestUncertainty.p_factors.p90.toFixed(4) : "—"} />
+        <MetricCard label="Scenarios" value={String(scenarioCount)} />
       </div>
 
       {latestError ? <ErrorBanner error={latestError} /> : null}
+
+      <article className="content-card stack-gap">
+        <div className="split-header-row">
+          <span className="eyebrow">Scenario comparison</span>
+          <div className="button-row wrap">
+            <input
+              type="text"
+              className="scenario-name-input"
+              placeholder="Scenario name"
+              value={scenarioName}
+              onChange={(event) => setScenarioName(event.target.value)}
+            />
+            <button
+              className="primary-button"
+              type="button"
+              disabled={!scenarioName.trim() || latestUncertainty === null}
+              onClick={() => saveScenarioMutation.mutate(scenarioName.trim())}
+            >
+              Save Current as Scenario
+            </button>
+          </div>
+        </div>
+        {scenarioCount > 0 ? (
+          <>
+            <PlotlyFigure
+              plot={scenarioComparisonQuery.data}
+              emptyTitle="Scenarios saved"
+              emptyDetail="Save at least 2 scenarios to see the comparison chart."
+            />
+            <DataTable<Scenario>
+              columns={[
+                { key: "name", header: "Scenario", cell: (row) => row.name },
+                { key: "lt_mean", header: "LT Mean (m/s)", cell: (row) => row.results.long_term_mean_speed.toFixed(2) },
+                { key: "unc", header: "Uncertainty %", cell: (row) => row.results.total_uncertainty_pct.toFixed(2) },
+                { key: "p75", header: "P75", cell: (row) => row.results.p75.toFixed(4) },
+                { key: "p90", header: "P90", cell: (row) => row.results.p90.toFixed(4) },
+                { key: "shear", header: "Shear Method", cell: (row) => row.config.shear_method },
+                { key: "ltc", header: "LTC Algorithm", cell: (row) => row.config.ltc_algorithm },
+                { key: "hub", header: "Hub Height", cell: (row) => `${row.config.hub_height_m} m` },
+                {
+                  key: "delete",
+                  header: "",
+                  cell: (_row, index) => (
+                    <button className="ghost-button table-action" type="button" onClick={() => deleteScenarioMutation.mutate(index)}>
+                      Remove
+                    </button>
+                  ),
+                },
+              ]}
+              rows={scenariosQuery.data?.scenarios ?? []}
+              getRowKey={(row, index) => `${row.name}-${index}`}
+              emptyTitle="No scenarios saved"
+              emptyDetail=""
+            />
+          </>
+        ) : (
+          <EmptyState
+            title="No scenarios yet"
+            detail="Complete the LTC workflow with uncertainty, then save the current result as a named scenario. Save multiple scenarios to compare shear methods, algorithms, or hub heights."
+          />
+        )}
+      </article>
 
       <div className="panel-grid panel-grid-two">
         <PlotlyFigure

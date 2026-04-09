@@ -150,6 +150,12 @@ class CalculateUncertaintyRequest(BaseModel):
     is_interpolation: bool = False
 
 
+class SaveScenarioRequest(BaseModel):
+    """Name one saved scenario snapshot captured from the current analysis state."""
+
+    name: str = Field(..., min_length=1, max_length=100)
+
+
 class SensorStatisticsResponse(BaseModel):
     """Return detailed descriptive statistics for one loaded sensor in the data explorer UI."""
 

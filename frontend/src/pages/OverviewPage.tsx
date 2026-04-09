@@ -84,6 +84,22 @@ export function OverviewPage() {
 
       {latestError ? <ErrorBanner error={latestError} /> : null}
 
+      {projectSummary?.timeseries_loaded ? (
+        <article className="content-card stack-gap">
+          <span className="eyebrow">Data quality scorecard</span>
+          <div className="metric-grid">
+            <MetricCard label="Sensors" value={String(projectSummary.sensor_count ?? 0)} />
+            <MetricCard
+              label="Average coverage"
+              value={typeof projectSummary.avg_coverage_pct === "number" ? `${projectSummary.avg_coverage_pct.toFixed(1)}%` : "—"}
+              tone={typeof projectSummary.avg_coverage_pct === "number" && projectSummary.avg_coverage_pct > 90 ? "accent" : "default"}
+            />
+            <MetricCard label="Cleaning rules" value={String(projectSummary.cleaning_rules_applied ?? 0)} />
+            <MetricCard label="LTC algorithms" value={String((projectSummary.ltc_algorithms_run as unknown[] | undefined)?.length ?? 0)} />
+          </div>
+        </article>
+      ) : null}
+
       {summary && projectSummary ? (
         <div className="panel-grid panel-grid-two">
           <article className="content-card stack-gap">

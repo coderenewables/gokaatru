@@ -81,6 +81,8 @@ describe("OverviewPage", () => {
       project_name: "Test site",
       timeseries_loaded: true,
       sensor_mapping_loaded: true,
+      sensor_count: 3,
+      avg_coverage_pct: 94.5,
       cleaning_rules_applied: 0,
       shear_table_ready: false,
       roughness_table_ready: false,
@@ -89,6 +91,7 @@ describe("OverviewPage", () => {
       era5_interpolated_ready: false,
       ltc_algorithms_run: [],
       ensemble_ready: false,
+      scenario_count: 0,
       coordinate: null,
       hub_height_m: 120,
     });
@@ -97,6 +100,8 @@ describe("OverviewPage", () => {
 
     await screen.findByText("Test site");
     expect(screen.getByText("Project summary (/summary)")).toBeTruthy();
+  expect(screen.getByText("Data quality scorecard")).toBeTruthy();
+  expect(screen.getByText("94.5%")) .toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Go To Next Step" }));
 
     await waitFor(() => {

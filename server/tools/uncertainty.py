@@ -11,7 +11,7 @@ from server.state.session import SessionState, session
 
 
 def _calculate_uncertainty(
-    _state: SessionState,
+    state: SessionState,
     measurement_uncertainty_pct: float,
     measurement_height_m: float,
     hub_height_m: float,
@@ -42,7 +42,7 @@ def _calculate_uncertainty(
     u_mcp = float((3.0 / math.sqrt(concurrent_months_eff)) + ((1.0 - r_squared) * algorithm_factor))
     u_future = float(iav_pct / math.sqrt(20.0))
     u_total = float(math.sqrt(u_meas**2 + u_vert**2 + u_mcp**2 + u_future**2))
-    return {
+    result = {
         "total_uncertainty_pct": round(u_total, 2),
         "components": {
             "measurement": round(u_meas, 2),
@@ -67,6 +67,8 @@ def _calculate_uncertainty(
             "is_interpolation": bool(is_interpolation),
         },
     }
+    state.latest_uncertainty = result
+    return result
 
 
 @mcp.tool()

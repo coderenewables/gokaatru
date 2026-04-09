@@ -41,6 +41,8 @@ class SessionState:
     era5_interpolated_df: pd.DataFrame | None
     ltc_results: dict[str, dict[str, object]]
     ensemble_df: pd.DataFrame | None
+    latest_uncertainty: dict[str, object] | None
+    scenarios: list[dict[str, object]]
     runconfig: dict[str, object]
 
     def __init__(self) -> None:
@@ -73,6 +75,8 @@ class SessionState:
         self.era5_interpolated_df = None
         self.ltc_results = {}
         self.ensemble_df = None
+        self.latest_uncertainty = None
+        self.scenarios = []
         self.runconfig = {}
         self.session_id = preserved_session_id
         self.workspace_dir = preserved_workspace_dir

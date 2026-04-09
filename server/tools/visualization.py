@@ -676,6 +676,45 @@ def _plot_uncertainty_tornado(
     return _plot_result(figure, "Uncertainty Tornado")
 
 
+def _scenario_series(state: SessionState) -> tuple[list[str], list[float], list[float], list[float], list[float]]:
+    """Extract scenario comparison series for long-term mean, P75, P90, and total uncertainty."""
+    if not state.scenarios:
+        raise ValueError("Scenario comparison requires at least one saved scenario")
+    names: list[str] = []
+    means: list[float] = []
+    p75_values: list[float] = []
+    p90_values: list[float] = []
+    uncertainties: list[float] = []
+    for scenario in state.scenarios:
+        results = scenario.get("results")
+        if not isinstance(results, dict):
+            raise ValueError("Scenario comparison requires each scenario to include a results payload")
+        mean_speed = float(results.get("long_term_mean_speed", 0.0))
+        names.append(str(scenario.get("name", f"Scenario {len(names) + 1}")))
+        means.append(mean_speed)
+        p75_values.append(mean_speed * float(results.get("p75", 1.0)))
+        p90_values.append(mean_speed * float(results.get("p90", 1.0)))
+        uncertainties.append(float(results.get("total_uncertainty_pct", 0.0)))
+    return names, means, p75_values, p90_values, uncertainties
+
+
+def _plot_scenario_comparison(state: SessionState) -> dict:
+    """Plot saved scenario mean speeds with P-factor bars and total uncertainty overlay."""
+    names, means, p75_values, p90_values, uncertainties = _scenario_series(state)
+    figure = make_subplots(specs=[[{"secondary_y": True}]])
+    figure.add_trace(go.Bar(x=names, y=means, name="LT Mean"), secondary_y=False)
+    figure.add_trace(go.Bar(x=names, y=p75_values, name="P75 speed"), secondary_y=False)
+    figure.add_trace(go.Bar(x=names, y=p90_values, name="P90 speed"), secondary_y=False)
+    figure.add_trace(
+        go.Scatter(x=names, y=uncertainties, mode="lines+markers", name="Total uncertainty", line=dict(color="#c86a2a", width=3)),
+        secondary_y=True,
+    )
+    figure.update_layout(title="Scenario Comparison", barmode="group")
+    figure.update_yaxes(title_text="Wind Speed (m/s)", secondary_y=False)
+    figure.update_yaxes(title_text="Total Uncertainty (%)", secondary_y=True)
+    return _plot_result(figure, "Scenario Comparison")
+
+
 def _plot_timeseries_preview(state: SessionState, max_sensors: int = 5) -> dict:
     """Plot the first 7 days of mapped wind-speed sensors for immediate post-upload data review."""
     frame = _timeseries_frame(state)

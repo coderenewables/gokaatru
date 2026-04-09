@@ -189,6 +189,20 @@ select {
   transform: none;
 }
 
+.scenario-name-input {
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-strong);
+  font-family: var(--display);
+  min-width: 200px;
+}
+
+.scenario-name-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .layout-grid {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 300px;

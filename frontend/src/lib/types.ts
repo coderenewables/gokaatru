@@ -237,6 +237,41 @@ export interface UncertaintyResponse {
   };
 }
 
+export interface ScenarioConfig {
+  shear_method: string;
+  shear_aggregation: string;
+  hub_height_m: number;
+  sensors_used: string[];
+  ltc_algorithm: string;
+  ltc_source: string;
+  cutoff_year: number | null;
+}
+
+export interface ScenarioResults {
+  long_term_mean_speed: number;
+  ensemble_mean_speed: number | null;
+  total_uncertainty_pct: number;
+  p50: number;
+  p75: number;
+  p90: number;
+  p99: number;
+  measurement_uncertainty_pct: number;
+  vertical_uncertainty_pct: number;
+  mcp_uncertainty_pct: number;
+  future_uncertainty_pct: number;
+}
+
+export interface Scenario {
+  name: string;
+  created_at: string;
+  config: ScenarioConfig;
+  results: ScenarioResults;
+}
+
+export interface ScenarioListResponse {
+  scenarios: Scenario[];
+}
+
 export type AnalysisSummaryResponse = Record<string, SessionSummaryMetric> & {
   completed_steps: SessionStep[];
 };

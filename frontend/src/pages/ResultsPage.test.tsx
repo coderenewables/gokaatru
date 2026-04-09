@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { configApi, resultsApi, uploadsApi } from "../lib/api";
+import { analysisApi, configApi, resultsApi, uploadsApi } from "../lib/api";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { renderWithProviders } from "../test/render";
 import { ResultsPage } from "./ResultsPage";
@@ -29,6 +29,12 @@ vi.mock("../lib/api", async () => {
     configApi: {
       ...actual.configApi,
       get: vi.fn(),
+    },
+    analysisApi: {
+      ...actual.analysisApi,
+      listScenarios: vi.fn(),
+      saveScenario: vi.fn(),
+      deleteScenario: vi.fn(),
     },
     resultsApi: {
       ...actual.resultsApi,
@@ -72,6 +78,9 @@ describe("ResultsPage", () => {
       ],
     });
     vi.mocked(configApi.get).mockResolvedValue({ project_name: "North Ridge", hub_height_m: 140 });
+    vi.mocked(analysisApi.listScenarios).mockResolvedValue({ scenarios: [] });
+    vi.mocked(analysisApi.saveScenario).mockResolvedValue({ status: "ok", name: "Scenario A" });
+    vi.mocked(analysisApi.deleteScenario).mockResolvedValue({ status: "ok" });
     vi.mocked(resultsApi.getLtcResults).mockResolvedValue({
       results: [
         { algorithm: "linear_least_squares", metrics: { mean: 8.5 }, result_file: "results/lls.csv", rows: 8760 },
@@ -144,7 +153,85 @@ describe("ResultsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Download Runconfig JSON" }));
 
     expect(window.open).toHaveBeenCalledWith("/api/sessions/session-results/exports/runconfig", "_blank", "noopener");
+  });
 
-    expect(await screen.findByText(/exports\/runconfig.json/)).toBeTruthy();
+  it("disables scenario save when the name is empty", async () => {
+    useWorkspaceStore.getState().setSessionId("session-results");
+    renderWithProviders(<ResultsPage />);
+
+    expect((await screen.findByRole("button", { name: "Save Current as Scenario" })) as HTMLButtonElement).toHaveProperty("disabled", true);
+  });
+
+  it("renders saved scenario rows and the comparison plot", async () => {
+    useWorkspaceStore.getState().setSessionId("session-results");
+    vi.mocked(analysisApi.listScenarios).mockResolvedValue({
+      scenarios: [
+        {
+          name: "Base",
+          created_at: "2026-04-09T00:00:00Z",
+          config: {
+            shear_method: "simple_power_law",
+            shear_aggregation: "momm",
+            hub_height_m: 140,
+            sensors_used: ["Wind_100m"],
+            ltc_algorithm: "linear_least_squares",
+            ltc_source: "linear_least_squares",
+            cutoff_year: null,
+          },
+          results: {
+            long_term_mean_speed: 8.5,
+            ensemble_mean_speed: 8.4,
+            total_uncertainty_pct: 8.2,
+            p50: 1,
+            p75: 0.94,
+            p90: 0.89,
+            p99: 0.8,
+            measurement_uncertainty_pct: 2.1,
+            vertical_uncertainty_pct: 1.8,
+            mcp_uncertainty_pct: 4.2,
+            future_uncertainty_pct: 5.1,
+          },
+        },
+        {
+          name: "Tall hub",
+          created_at: "2026-04-09T00:05:00Z",
+          config: {
+            shear_method: "simple_power_law",
+            shear_aggregation: "momm",
+            hub_height_m: 160,
+            sensors_used: ["Wind_100m"],
+            ltc_algorithm: "linear_least_squares",
+            ltc_source: "linear_least_squares",
+            cutoff_year: null,
+          },
+          results: {
+            long_term_mean_speed: 8.8,
+            ensemble_mean_speed: 8.6,
+            total_uncertainty_pct: 8.7,
+            p50: 1,
+            p75: 0.93,
+            p90: 0.88,
+            p99: 0.79,
+            measurement_uncertainty_pct: 2.1,
+            vertical_uncertainty_pct: 1.9,
+            mcp_uncertainty_pct: 4.4,
+            future_uncertainty_pct: 5.1,
+          },
+        },
+      ],
+    });
+    vi.mocked(resultsApi.getPlot).mockImplementation(async (_sessionId, plotName) => ({
+      title: plotName,
+      plotly_json: JSON.stringify({ data: [], layout: {}, config: {} }),
+      png_base64: null,
+    }));
+
+    renderWithProviders(<ResultsPage />);
+
+    expect(await screen.findByText("Base")).toBeTruthy();
+    expect(screen.getByText("Tall hub")).toBeTruthy();
+    await waitFor(() => {
+      expect(resultsApi.getPlot).toHaveBeenCalledWith("session-results", "scenario_comparison", {});
+    });
   });
 });

@@ -230,3 +230,10 @@ export const resultsApi = {
   exportRunconfig: (sessionId: string) =>
     requestJson<RunconfigExportResponse>(`/sessions/${sessionId}/runconfig/export`, {}, sessionId),
 };
+
+export const exportsApi = {
+  downloadTimeseries: (sessionId: string) => `${API_BASE}/sessions/${sessionId}/exports/timeseries`,
+  downloadLtc: (sessionId: string, algorithm: string) => `${API_BASE}/sessions/${sessionId}/exports/ltc/${algorithm}`,
+  downloadEnsemble: (sessionId: string) => `${API_BASE}/sessions/${sessionId}/exports/ensemble`,
+  downloadRunconfig: (sessionId: string) => `${API_BASE}/sessions/${sessionId}/exports/runconfig`,
+};

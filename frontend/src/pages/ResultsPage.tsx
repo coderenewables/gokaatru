@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 
-import { configApi, resultsApi, uploadsApi } from "../lib/api";
+import { configApi, exportsApi, resultsApi, uploadsApi } from "../lib/api";
 import type { LtcResultSummary, PlotResult } from "../lib/types";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { DataTable } from "../components/common/DataTable";
@@ -247,9 +247,18 @@ export function ResultsPage() {
       <article className="content-card stack-gap">
         <div className="split-header-row">
           <span className="eyebrow">Runconfig and generated files</span>
-          <button className="secondary-button" type="button" onClick={() => exportMutation.mutate()}>
-            Export Runconfig
-          </button>
+          <div className="button-row wrap">
+            <button className="secondary-button" type="button" onClick={() => exportMutation.mutate()}>
+              Export Runconfig
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => window.open(exportsApi.downloadRunconfig(sessionId), "_blank", "noopener")}
+            >
+              Download Runconfig JSON
+            </button>
+          </div>
         </div>
         <DataTable<LtcResultSummary>
           columns={[

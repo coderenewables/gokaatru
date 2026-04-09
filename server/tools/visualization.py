@@ -176,6 +176,96 @@ def _expanding_annual_mean(series: pd.Series) -> tuple[list[int], list[float], f
     return years, running, float(running[-1])
 
 
+def _era5_monthly_speed(frame_like: object) -> pd.Series:
+    """Return monthly mean ERA5 100 m wind speed from one node or interpolated dataframe."""
+    frame = _indexed_frame(frame_like)
+    if "Spd_100m" not in frame.columns:
+        raise ValueError("ERA5 speed plotting requires a Spd_100m column")
+    series = frame["Spd_100m"].dropna()
+    monthly = series.groupby(series.index.month).mean().reindex(range(1, 13))
+    if monthly.dropna().empty:
+        raise ValueError("ERA5 speed plotting requires at least one non-null Spd_100m value")
+    return monthly
+
+
+def _plot_era5_comparison(state: SessionState) -> dict:
+    """Plot monthly mean wind speed for each ERA5 node against the interpolated site estimate."""
+    if not state.era5_data:
+        raise ValueError("ERA5 node data is not available")
+    if state.era5_interpolated_df is None:
+        raise ValueError("ERA5 interpolated site data is not available")
+    figure = go.Figure()
+    for index, (_node_name, frame_like) in enumerate(sorted(state.era5_data.items()), start=1):
+        monthly = _era5_monthly_speed(frame_like)
+        figure.add_trace(go.Scatter(x=MONTH_LABELS, y=monthly.tolist(), mode="lines+markers", name=f"Node {index}"))
+    site_monthly = _era5_monthly_speed(state.era5_interpolated_df)
+    figure.add_trace(
+        go.Scatter(
+            x=MONTH_LABELS,
+            y=site_monthly.tolist(),
+            mode="lines+markers",
+            name="Interpolated site",
+            line=dict(color="#c86a2a", width=4),
+        )
+    )
+    figure.update_layout(title="ERA5 Annual Profile — Nodes vs Site", xaxis_title="Month", yaxis_title="Mean Speed (m/s)")
+    return _plot_result(figure, "ERA5 Annual Profile — Nodes vs Site")
+
+
+def _plot_era5_measured_overlay(state: SessionState) -> dict:
+    """Plot concurrent measured and interpolated ERA5 monthly means with overlap diagnostics."""
+    if state.era5_interpolated_df is None:
+        raise ValueError("ERA5 interpolated site data is not available")
+    measured = _require_series(state, _preferred_measured_speed_column(state)).rename("measured")
+    era5_frame = _indexed_frame(state.era5_interpolated_df)
+    if "Spd_100m" not in era5_frame.columns:
+        raise ValueError("ERA5 interpolated site data must contain Spd_100m")
+    overlap = pd.concat([measured, era5_frame["Spd_100m"].rename("era5")], axis=1, join="inner").dropna()
+    if overlap.empty:
+        raise ValueError("Measured and ERA5 interpolated series do not overlap")
+    monthly = overlap.resample("ME").mean().dropna()
+    if monthly.empty:
+        raise ValueError("Measured and ERA5 overlap does not contain enough data for monthly plotting")
+    metrics = _scatter_metrics(monthly, "era5", "measured")
+    overlap_start = monthly.index.min().strftime("%Y-%m")
+    overlap_end = monthly.index.max().strftime("%Y-%m")
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scatter(
+            x=monthly.index,
+            y=monthly["measured"],
+            mode="lines+markers",
+            name="Measured",
+            line=dict(color="#c86a2a", width=3),
+        )
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=monthly.index,
+            y=monthly["era5"],
+            mode="lines+markers",
+            name="ERA5 site",
+            line=dict(color="#0b7a6f", width=3),
+        )
+    )
+    figure.update_layout(
+        title="Measured vs ERA5 — Concurrent Period",
+        xaxis_title="Month",
+        yaxis_title="Mean Speed (m/s)",
+        annotations=[
+            dict(
+                xref="paper",
+                yref="paper",
+                x=0.01,
+                y=1.1,
+                text=f"R²={metrics['r2']:.3f} | Overlap {overlap_start} to {overlap_end}",
+                showarrow=False,
+            )
+        ],
+    )
+    return _plot_result(figure, "Measured vs ERA5 — Concurrent Period")
+
+
 def _plot_windrose(state: SessionState, speed_sensor: str, direction_sensor: str) -> dict:
     """Plot a 16-sector wind rose with stacked speed bins using directional frequency percentages."""
     frame = pd.concat([_require_series(state, speed_sensor), _require_series(state, direction_sensor)], axis=1).dropna()

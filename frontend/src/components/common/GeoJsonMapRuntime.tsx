@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 import { circleMarker, latLngBounds } from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { GeoJSON, MapContainer, TileLayer, useMap } from "react-leaflet";
+import { Circle, GeoJSON, LayersControl, MapContainer, TileLayer, useMap } from "react-leaflet";
 
 import type { SiteMapResponse } from "../../lib/types";
 
@@ -28,27 +28,79 @@ function FitBounds({ featureCollection }: { featureCollection: SiteMapResponse }
   return null;
 }
 
+function DistanceRings({ center }: { center: [number, number] }) {
+  return (
+    <>
+      {[10, 25, 50].map((radiusKm) => (
+        <Circle
+          key={radiusKm}
+          center={center}
+          radius={radiusKm * 1000}
+          pathOptions={{
+            color: "#0b7a6f",
+            weight: 1,
+            opacity: 0.35,
+            dashArray: "6 4",
+            fill: false,
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
 export function GeoJsonMapRuntime({ featureCollection }: GeoJsonMapRuntimeProps) {
+  const mastFeature = featureCollection.features.find(
+    (feature) => feature.properties.type === "mast" && feature.geometry.type === "Point" && feature.geometry.coordinates.length >= 2,
+  );
+  const mastCenter: [number, number] | null = mastFeature
+    ? [Number(mastFeature.geometry.coordinates[1]), Number(mastFeature.geometry.coordinates[0])]
+    : null;
+
   return (
     <div className="map-card">
       <MapContainer className="geojson-map" center={[20, 0]} zoom={2} scrollWheelZoom={false}>
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <LayersControl position="topright">
+          <LayersControl.BaseLayer checked name="Street">
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+          </LayersControl.BaseLayer>
+          <LayersControl.BaseLayer name="Terrain">
+            <TileLayer
+              attribution='Map data &copy; OpenStreetMap, Tiles &copy; Stadia Maps'
+              url="https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png"
+            />
+          </LayersControl.BaseLayer>
+          <LayersControl.BaseLayer name="Satellite">
+            <TileLayer
+              attribution="&copy; Esri"
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            />
+          </LayersControl.BaseLayer>
+        </LayersControl>
         <GeoJSON
           data={featureCollection as never}
-          pointToLayer={(_feature, latlng) =>
-            circleMarker(latlng, {
-              radius: 7,
-              color: "#0b7a6f",
-              weight: 2,
-              fillColor: "#f3efe3",
+          pointToLayer={(feature, latlng) => {
+            const isMast = (feature.properties as Record<string, unknown>).type === "mast";
+            return circleMarker(latlng, {
+              radius: isMast ? 10 : 6,
+              color: isMast ? "#c86a2a" : "#0b7a6f",
+              weight: isMast ? 3 : 2,
+              fillColor: isMast ? "#fffaf0" : "#f3efe3",
               fillOpacity: 0.95,
-            })
-          }
+            });
+          }}
           onEachFeature={(feature, layer) => {
             const properties = (feature.properties ?? {}) as Record<string, unknown>;
+            if (properties.type === "era5_node") {
+              layer.bindTooltip(`${String(properties.distance_km)} km ${String(properties.bearing)}`, {
+                permanent: true,
+                direction: "top",
+                className: "map-node-label",
+              });
+            }
             const label = Object.entries(properties)
               .map(([key, value]) => `${key}: ${String(value)}`)
               .join("<br />");
@@ -56,6 +108,7 @@ export function GeoJsonMapRuntime({ featureCollection }: GeoJsonMapRuntimeProps)
           }}
         />
         <FitBounds featureCollection={featureCollection} />
+        {mastCenter ? <DistanceRings center={mastCenter} /> : null}
       </MapContainer>
     </div>
   );

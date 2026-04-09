@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { analysisApi, configApi, resultsApi, uploadsApi } from "../lib/api";
+import { analysisApi, configApi, exportsApi, resultsApi, uploadsApi } from "../lib/api";
 import { PlotlyFigure } from "../components/common/PlotlyFigure";
 import { algorithmHelp } from "../lib/algorithmHelp";
 import type { ClippingAnalysisResponse, HomogeneityAnalysisResponse, HomogeneityApplyResponse, LtcResultSummary } from "../lib/types";
@@ -409,6 +409,15 @@ export function LtcPage() {
             <button className="secondary-button" type="button" onClick={() => runEnsembleMutation.mutate()}>
               Run Ensemble
             </button>
+            {ensembleQuery.data?.available ? (
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => window.open(exportsApi.downloadEnsemble(sessionId), "_blank", "noopener")}
+              >
+                Export Ensemble CSV
+              </button>
+            ) : null}
           </div>
         </article>
 
@@ -494,6 +503,19 @@ export function LtcPage() {
               cell: (row) => (
                 <button className="ghost-button table-action" type="button" onClick={() => setFocusedAlgorithm(row.algorithm)}>
                   View
+                </button>
+              ),
+            },
+            {
+              key: "export",
+              header: "Export",
+              cell: (row) => (
+                <button
+                  className="ghost-button table-action"
+                  type="button"
+                  onClick={() => window.open(exportsApi.downloadLtc(sessionId, row.algorithm), "_blank", "noopener")}
+                >
+                  CSV
                 </button>
               ),
             },

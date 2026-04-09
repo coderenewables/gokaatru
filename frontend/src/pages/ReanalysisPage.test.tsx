@@ -12,6 +12,10 @@ vi.mock("../components/common/GeoJsonMap", () => ({
   ),
 }));
 
+vi.mock("../components/common/PlotlyFigure", () => ({
+  PlotlyFigure: ({ plot, emptyTitle }: { plot?: { title?: string } | null; emptyTitle: string }) => <div>{plot ? `plot:${plot.title}` : emptyTitle}</div>,
+}));
+
 vi.mock("../lib/api", async () => {
   const actual = await vi.importActual<typeof import("../lib/api")>("../lib/api");
   return {
@@ -33,6 +37,7 @@ vi.mock("../lib/api", async () => {
     resultsApi: {
       ...actual.resultsApi,
       getSiteMap: vi.fn(),
+      getPlot: vi.fn(),
     },
   };
 });
@@ -71,6 +76,11 @@ describe("ReanalysisPage", () => {
         },
       ],
     });
+    vi.mocked(resultsApi.getPlot).mockImplementation(async (_sessionId, plotName) => ({
+      title: plotName === "era5_comparison" ? "ERA5 Annual Profile — Nodes vs Site" : "Measured vs ERA5 — Concurrent Period",
+      plotly_json: JSON.stringify({ data: [], layout: {}, config: {} }),
+      png_base64: null,
+    }));
     vi.mocked(analysisApi.findEra5Nodes).mockResolvedValue({
       nodes: [
         { latitude: 11.25, longitude: 22.35, distance_km: 18.2, bearing: "NE" },
@@ -145,6 +155,8 @@ describe("ReanalysisPage", () => {
 
     expect(await screen.findByText("idw")).toBeTruthy();
     expect(screen.getAllByText("u10, v10").length).toBeGreaterThan(0);
+    expect(await screen.findByText("plot:ERA5 Annual Profile — Nodes vs Site")).toBeTruthy();
+    expect(await screen.findByText("plot:Measured vs ERA5 — Concurrent Period")).toBeTruthy();
   });
 
   it("shows an overlay with the current node while extraction is running", async () => {

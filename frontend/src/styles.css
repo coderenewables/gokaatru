@@ -700,6 +700,16 @@ select {
   color: var(--text-muted);
 }
 
+.map-node-label {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
 @media (max-width: 1180px) {
   .panel-grid-two,
   .form-grid.two-col {

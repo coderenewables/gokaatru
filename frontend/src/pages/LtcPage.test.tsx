@@ -45,6 +45,7 @@ vi.mock("../lib/api", async () => {
 describe("LtcPage", () => {
   beforeEach(() => {
     useWorkspaceStore.getState().resetWorkspace();
+    vi.spyOn(window, "open").mockImplementation(() => null);
     vi.mocked(uploadsApi.getSensors).mockResolvedValue({
       sensors: [
         { name: "Wind_100m", height_m: 100, sensor_type: "wind_speed", data_coverage_pct: 99, record_count: 1000 },
@@ -188,5 +189,31 @@ describe("LtcPage", () => {
     renderWithProviders(<LtcPage />);
 
     expect(await screen.findByText("Uncertainty Tornado")).toBeTruthy();
+  });
+
+  it("opens LTC and ensemble export URLs for the active session", async () => {
+    useWorkspaceStore.getState().setSessionId("session-ltc");
+    vi.mocked(resultsApi.getLtcResults).mockResolvedValue({
+      results: [
+        {
+          algorithm: "linear_least_squares",
+          rows: 120,
+          metrics: { r_squared: 0.92, concurrent_points: 120 },
+        },
+      ],
+    });
+    vi.mocked(resultsApi.getEnsembleResults).mockResolvedValue({
+      available: true,
+      reference_columns: ["Spd_100m_hub", "Dir_100m"],
+    });
+
+    renderWithProviders(<LtcPage />);
+
+    await screen.findByText("LTC Scatter — linear_least_squares");
+    fireEvent.click(screen.getByRole("button", { name: "CSV" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export Ensemble CSV" }));
+
+    expect(window.open).toHaveBeenNthCalledWith(1, "/api/sessions/session-ltc/exports/ltc/linear_least_squares", "_blank", "noopener");
+    expect(window.open).toHaveBeenNthCalledWith(2, "/api/sessions/session-ltc/exports/ensemble", "_blank", "noopener");
   });
 });

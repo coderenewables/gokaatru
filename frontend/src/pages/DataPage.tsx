@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { analysisApi, resultsApi, uploadsApi } from "../lib/api";
+import { analysisApi, exportsApi, resultsApi, uploadsApi } from "../lib/api";
 import type { CleaningLogEntry, JsonValue, SensorCoverageResponse, SensorRecord } from "../lib/types";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { CleaningRuleParams } from "../components/common/CleaningRuleParams";
@@ -179,6 +179,17 @@ export function DataPage() {
         <MetricCard label="Average coverage" value={averageCoverage} />
         <MetricCard label="Cleaning entries" value={String(cleaningLogQuery.data?.entries.length ?? 0)} />
         <MetricCard label="Latest upload" value={lastUploadPath ?? "None"} />
+      </div>
+
+      <div className="button-row wrap">
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={!sensorsQuery.data?.length}
+          onClick={() => window.open(exportsApi.downloadTimeseries(sessionId), "_blank", "noopener")}
+        >
+          Export Cleaned CSV
+        </button>
       </div>
 
       {latestError ? <ErrorBanner error={latestError} /> : null}

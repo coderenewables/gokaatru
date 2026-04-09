@@ -40,6 +40,7 @@ vi.mock("../lib/api", async () => {
 describe("DataPage", () => {
   beforeEach(() => {
     useWorkspaceStore.getState().resetWorkspace();
+    vi.spyOn(window, "open").mockImplementation(() => null);
     vi.mocked(uploadsApi.getSensors).mockResolvedValue({
       sensors: [
         {
@@ -196,5 +197,15 @@ describe("DataPage", () => {
 
     expect(await screen.findByText("Sensor detail — Wind_80m")).toBeTruthy();
     expect(screen.getByText("Weibull k")).toBeTruthy();
+  });
+
+  it("opens the cleaned CSV export URL for the active session", async () => {
+    useWorkspaceStore.getState().setSessionId("session-1");
+    renderWithProviders(<DataPage />);
+
+    await screen.findByText("45 min");
+    fireEvent.click(screen.getByRole("button", { name: "Export Cleaned CSV" }));
+
+    expect(window.open).toHaveBeenCalledWith("/api/sessions/session-1/exports/timeseries", "_blank", "noopener");
   });
 });

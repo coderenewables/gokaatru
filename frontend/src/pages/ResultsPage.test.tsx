@@ -43,6 +43,7 @@ vi.mock("../lib/api", async () => {
 describe("ResultsPage", () => {
   beforeEach(() => {
     useWorkspaceStore.getState().resetWorkspace();
+    vi.spyOn(window, "open").mockImplementation(() => null);
     useWorkspaceStore.getState().setLatestUncertainty({
       total_uncertainty_pct: 8.2,
       components: {
@@ -139,6 +140,10 @@ describe("ResultsPage", () => {
     await waitFor(() => {
       expect(resultsApi.exportRunconfig).toHaveBeenCalledWith("session-results");
     });
+
+    fireEvent.click(screen.getByRole("button", { name: "Download Runconfig JSON" }));
+
+    expect(window.open).toHaveBeenCalledWith("/api/sessions/session-results/exports/runconfig", "_blank", "noopener");
 
     expect(await screen.findByText(/exports\/runconfig.json/)).toBeTruthy();
   });

@@ -10,6 +10,7 @@ from fastapi.responses import RedirectResponse
 
 from server.api.routes.analysis import router as analysis_router
 from server.api.routes.config import router as config_router
+from server.api.routes.exports import router as exports_router
 from server.api.routes.health import router as health_router
 from server.api.routes.results import router as results_router
 from server.api.routes.sessions import router as sessions_router
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     app.include_router(config_router, prefix="/api")
     app.include_router(analysis_router, prefix="/api")
     app.include_router(results_router, prefix="/api")
+    app.include_router(exports_router, prefix="/api")
 
     @app.get("/")
     def root() -> RedirectResponse:

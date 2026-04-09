@@ -12,6 +12,7 @@ import { GeoJsonMap } from "../components/common/GeoJsonMap";
 import { LoadingState } from "../components/common/LoadingState";
 import { MetricCard } from "../components/common/MetricCard";
 import { PageHeader } from "../components/common/PageHeader";
+import { PlotlyFigure } from "../components/common/PlotlyFigure";
 
 type ExtractProgress = {
   total: number;
@@ -90,6 +91,22 @@ export function ReanalysisPage() {
     queryKey: ["era5-nodes", sessionId],
     queryFn: async () => persistedNodes(await resultsApi.getSiteMap(sessionId ?? "")),
     enabled: sessionId !== null && summaryQuery.data?.completed_steps.includes("era5_nodes") === true,
+    staleTime: 15_000,
+  });
+
+  const hasInterpolation = latestInterpolation !== null || summaryQuery.data?.era5_interpolated_loaded === true;
+
+  const era5ComparisonQuery = useQuery({
+    queryKey: ["era5-comparison", sessionId],
+    queryFn: () => resultsApi.getPlot(sessionId ?? "", "era5_comparison", {}),
+    enabled: sessionId !== null && hasInterpolation,
+    staleTime: 15_000,
+  });
+
+  const era5OverlayQuery = useQuery({
+    queryKey: ["era5-overlay", sessionId],
+    queryFn: () => resultsApi.getPlot(sessionId ?? "", "era5_measured_overlay", {}),
+    enabled: sessionId !== null && hasInterpolation,
     staleTime: 15_000,
   });
 
@@ -329,6 +346,21 @@ export function ReanalysisPage() {
           <EmptyState title="No interpolation result" detail="Run site interpolation to inspect the returned row count, method, and variable list." />
         )}
       </article>
+
+      {hasInterpolation ? (
+        <div className="panel-grid panel-grid-two">
+          <PlotlyFigure
+            plot={era5ComparisonQuery.data}
+            emptyTitle="ERA5 node comparison"
+            emptyDetail="Loading node annual profiles."
+          />
+          <PlotlyFigure
+            plot={era5OverlayQuery.data}
+            emptyTitle="Measured vs ERA5"
+            emptyDetail="Overlay concurrent measured and ERA5 monthly means."
+          />
+        </div>
+      ) : null}
 
       {extractProgress && (extractAllMutation.isPending || extractProgress.errorMessage) ? (
         <div className="progress-overlay" role="status" aria-live="polite" aria-label="ERA5 extraction progress">

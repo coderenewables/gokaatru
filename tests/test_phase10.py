@@ -181,3 +181,150 @@ def test_summary_includes_scenario_count(api_client: tuple[TestClient, SessionMa
 
     assert response.status_code == 200
     assert response.json()["scenario_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Import & Run Scenario tests
+# ---------------------------------------------------------------------------
+
+
+def _seed_pipeline_ready_state(state: SessionState) -> None:
+    """Populate the session with timeseries, sensor mapping, and ERA5 data so the LTC pipeline can run."""
+    import numpy as np
+
+    hours = 8760
+    index = pd.date_range("2020-01-01", periods=hours, freq="h")
+    rng = np.random.default_rng(42)
+    speed_100 = 7.0 + rng.standard_normal(hours) * 1.5
+    speed_80 = 6.5 + rng.standard_normal(hours) * 1.4
+    state.timeseries_df = pd.DataFrame({"Spd_100m_mast": speed_100, "Spd_80m_mast": speed_80}, index=index)
+    state.raw_timeseries_df = state.timeseries_df.copy()
+    state.sensor_mapping = {
+        100.0: {"speed_col": "Spd_100m_mast", "direction_col": None},
+        80.0: {"speed_col": "Spd_80m_mast", "direction_col": None},
+    }
+    state.era5_interpolated_df = pd.DataFrame(
+        {"Spd_100m": 6.8 + rng.standard_normal(hours) * 1.3, "Dir_100m": rng.uniform(0, 360, hours)},
+        index=index,
+    )
+    state.set_hub_height_m(150.0)
+    state.set_project_name("Pipeline test")
+
+
+def test_import_runconfig(api_client: tuple[TestClient, SessionManager]) -> None:
+    """Verify the config import endpoint merges keys into session runconfig."""
+    client, manager = api_client
+    session_id = client.post("/api/sessions").json()["session_id"]
+    headers = {"X-GoKaatru-Session": session_id}
+    state = manager.get_session(session_id)
+    state.set_project_name("Original")
+
+    response = client.post(
+        f"/api/sessions/{session_id}/config/import",
+        headers=headers,
+        json={"runconfig": {"project_name": "Imported", "hub_height_m": 120.0}},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["runconfig"]["project_name"] == "Imported"
+    assert state.get_hub_height_m() == 120.0
+
+
+def test_run_scenario_pipeline(api_client: tuple[TestClient, SessionManager]) -> None:
+    """Verify the run-scenario endpoint executes LTC, uncertainty, and saves a scenario snapshot."""
+    client, manager = api_client
+    session_id = client.post("/api/sessions").json()["session_id"]
+    headers = {"X-GoKaatru-Session": session_id}
+    state = manager.get_session(session_id)
+    _seed_pipeline_ready_state(state)
+
+    response = client.post(
+        f"/api/sessions/{session_id}/scenarios/run",
+        headers=headers,
+        json={
+            "name": "Pipeline scenario",
+            "runconfig": {"hub_height_m": 160.0},
+            "ltc_algorithms": ["speedsort"],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["name"] == "Pipeline scenario"
+    assert "ltc:speedsort" in payload["steps_completed"]
+    assert "uncertainty" in payload["steps_completed"]
+    assert "scenario_saved" in payload["steps_completed"]
+    assert len(state.scenarios) == 1
+    assert state.scenarios[0]["results"]["total_uncertainty_pct"] > 0
+    assert state.get_hub_height_m() == 160.0
+
+
+def test_run_scenario_with_explicit_uncertainty(api_client: tuple[TestClient, SessionManager]) -> None:
+    """Verify the run-scenario endpoint accepts explicit uncertainty parameters."""
+    client, manager = api_client
+    session_id = client.post("/api/sessions").json()["session_id"]
+    headers = {"X-GoKaatru-Session": session_id}
+    state = manager.get_session(session_id)
+    _seed_pipeline_ready_state(state)
+
+    response = client.post(
+        f"/api/sessions/{session_id}/scenarios/run",
+        headers=headers,
+        json={
+            "name": "Custom uncertainty",
+            "ltc_algorithms": ["speedsort"],
+            "uncertainty": {
+                "measurement_uncertainty_pct": 3.0,
+                "measurement_height_m": 100.0,
+                "hub_height_m": 150.0,
+                "shear_method": "simple_power_law",
+                "mcp_r_squared": 0.88,
+                "concurrent_hours": 8760.0,
+                "algorithm": "speedsort",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["scenario"]["results"]["measurement_uncertainty_pct"] == 3.0
+
+
+def test_run_scenario_multiple_algorithms(api_client: tuple[TestClient, SessionManager]) -> None:
+    """Verify the run-scenario endpoint can run multiple LTC algorithms and create an ensemble."""
+    client, manager = api_client
+    session_id = client.post("/api/sessions").json()["session_id"]
+    headers = {"X-GoKaatru-Session": session_id}
+    state = manager.get_session(session_id)
+    _seed_pipeline_ready_state(state)
+
+    response = client.post(
+        f"/api/sessions/{session_id}/scenarios/run",
+        headers=headers,
+        json={
+            "name": "Multi-algo",
+            "ltc_algorithms": ["speedsort", "variance_ratio"],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "ltc:speedsort" in payload["steps_completed"]
+    assert "ltc:variance_ratio" in payload["steps_completed"]
+    assert "ensemble" in payload["steps_completed"]
+
+
+def test_run_scenario_without_timeseries_fails(api_client: tuple[TestClient, SessionManager]) -> None:
+    """Verify run-scenario rejects when timeseries data is missing."""
+    client, manager = api_client
+    session_id = client.post("/api/sessions").json()["session_id"]
+    headers = {"X-GoKaatru-Session": session_id}
+
+    response = client.post(
+        f"/api/sessions/{session_id}/scenarios/run",
+        headers=headers,
+        json={"name": "Should fail", "ltc_algorithms": ["speedsort"]},
+    )
+
+    assert response.status_code == 400
+    assert "Timeseries" in response.json()["detail"]

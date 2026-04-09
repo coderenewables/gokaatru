@@ -21,6 +21,8 @@ import type {
   PlotResult,
   RunConfigResponse,
   RunconfigExportResponse,
+  RunScenarioRequest,
+  RunScenarioResponse,
   ScenarioListResponse,
   SensorCoverageResponse,
   SensorStatisticsResponse,
@@ -224,6 +226,18 @@ export const analysisApi = {
   listScenarios: (sessionId: string) => requestJson<ScenarioListResponse>(`/sessions/${sessionId}/scenarios`, {}, sessionId),
   deleteScenario: (sessionId: string, index: number) =>
     requestJson<ApiStatusResponse>(`/sessions/${sessionId}/scenarios/${index}`, { method: "DELETE" }, sessionId),
+  importRunconfig: (sessionId: string, runconfig: Record<string, unknown>) =>
+    requestJson<{ status: string; runconfig: Record<string, unknown> }>(
+      `/sessions/${sessionId}/config/import`,
+      { method: "POST", body: JSON.stringify({ runconfig }) },
+      sessionId,
+    ),
+  runScenario: (sessionId: string, body: RunScenarioRequest) =>
+    requestJson<RunScenarioResponse>(
+      `/sessions/${sessionId}/scenarios/run`,
+      { method: "POST", body: JSON.stringify(body) },
+      sessionId,
+    ),
 };
 
 export const resultsApi = {

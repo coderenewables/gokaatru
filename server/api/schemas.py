@@ -156,6 +156,21 @@ class SaveScenarioRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
 
 
+class ImportRunconfigRequest(BaseModel):
+    """Import a complete runconfig JSON payload into the current session."""
+
+    runconfig: dict[str, JsonValue]
+
+
+class RunScenarioRequest(BaseModel):
+    """Import a runconfig, execute the LTC \u2192 ensemble \u2192 uncertainty pipeline, and save the result."""
+
+    name: str = Field(..., min_length=1, max_length=100)
+    runconfig: dict[str, JsonValue] = Field(default_factory=dict)
+    ltc_algorithms: list[str] = Field(default_factory=lambda: ["speedsort"])
+    uncertainty: CalculateUncertaintyRequest | None = None
+
+
 class SensorStatisticsResponse(BaseModel):
     """Return detailed descriptive statistics for one loaded sensor in the data explorer UI."""
 

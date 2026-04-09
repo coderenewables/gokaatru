@@ -35,6 +35,7 @@ vi.mock("../lib/api", async () => {
       listScenarios: vi.fn(),
       saveScenario: vi.fn(),
       deleteScenario: vi.fn(),
+      runScenario: vi.fn(),
     },
     resultsApi: {
       ...actual.resultsApi,
@@ -81,6 +82,38 @@ describe("ResultsPage", () => {
     vi.mocked(analysisApi.listScenarios).mockResolvedValue({ scenarios: [] });
     vi.mocked(analysisApi.saveScenario).mockResolvedValue({ status: "ok", name: "Scenario A" });
     vi.mocked(analysisApi.deleteScenario).mockResolvedValue({ status: "ok" });
+    vi.mocked(analysisApi.runScenario).mockResolvedValue({
+      status: "ok",
+      scenario_index: 0,
+      name: "Imported",
+      steps_completed: ["ltc:speedsort", "uncertainty", "scenario_saved"],
+      scenario: {
+        name: "Imported",
+        created_at: "2026-04-09T00:00:00Z",
+        config: {
+          shear_method: "simple_power_law",
+          shear_aggregation: "mean",
+          hub_height_m: 120,
+          sensors_used: [],
+          ltc_algorithm: "speedsort",
+          ltc_source: "speedsort",
+          cutoff_year: null,
+        },
+        results: {
+          long_term_mean_speed: 8.3,
+          ensemble_mean_speed: null,
+          total_uncertainty_pct: 7.5,
+          p50: 1,
+          p75: 0.95,
+          p90: 0.9,
+          p99: 0.82,
+          measurement_uncertainty_pct: 2.0,
+          vertical_uncertainty_pct: 1.5,
+          mcp_uncertainty_pct: 3.8,
+          future_uncertainty_pct: 5.0,
+        },
+      },
+    });
     vi.mocked(resultsApi.getLtcResults).mockResolvedValue({
       results: [
         { algorithm: "linear_least_squares", metrics: { mean: 8.5 }, result_file: "results/lls.csv", rows: 8760 },
@@ -232,6 +265,46 @@ describe("ResultsPage", () => {
     expect(screen.getByText("Tall hub")).toBeTruthy();
     await waitFor(() => {
       expect(resultsApi.getPlot).toHaveBeenCalledWith("session-results", "scenario_comparison", {});
+    });
+  });
+
+  it("renders the import & run scenario section with a disabled button by default", async () => {
+    useWorkspaceStore.getState().setSessionId("session-results");
+    renderWithProviders(<ResultsPage />);
+
+    const runButton = await screen.findByRole("button", { name: "Run Scenario from Config" });
+    expect((runButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/Upload a runconfig JSON file/)).toBeTruthy();
+  });
+
+  it("enables run button after uploading a JSON file and typing a name", async () => {
+    useWorkspaceStore.getState().setSessionId("session-results");
+    renderWithProviders(<ResultsPage />);
+
+    const fileInput = (await screen.findByLabelText("Runconfig JSON file")) as HTMLInputElement;
+    const jsonContent = JSON.stringify({ project_name: "Test Project", hub_height_m: 120 });
+    const file = new File([jsonContent], "test.json", { type: "application/json" });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Preview imported config/)).toBeTruthy();
+    });
+
+    const scenarioInput = screen.getByPlaceholderText("Name for imported scenario") as HTMLInputElement;
+    // The component should auto-fill the name from project_name
+    expect(scenarioInput.value).toBe("Test Project");
+
+    const runButton = screen.getByRole("button", { name: "Run Scenario from Config" });
+    expect((runButton as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(runButton);
+
+    await waitFor(() => {
+      expect(analysisApi.runScenario).toHaveBeenCalledWith("session-results", {
+        name: "Test Project",
+        runconfig: { project_name: "Test Project", hub_height_m: 120 },
+        ltc_algorithms: ["speedsort"],
+      });
     });
   });
 });

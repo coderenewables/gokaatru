@@ -272,6 +272,34 @@ export interface ScenarioListResponse {
   scenarios: Scenario[];
 }
 
+export interface RunScenarioUncertaintyParams {
+  measurement_uncertainty_pct: number;
+  measurement_height_m: number;
+  hub_height_m: number;
+  shear_method: string;
+  mcp_r_squared: number;
+  concurrent_hours: number;
+  algorithm?: string;
+  iav_pct?: number;
+  shear_std?: number;
+  is_interpolation?: boolean;
+}
+
+export interface RunScenarioRequest {
+  name: string;
+  runconfig?: Record<string, JsonValue>;
+  ltc_algorithms?: string[];
+  uncertainty?: RunScenarioUncertaintyParams | null;
+}
+
+export interface RunScenarioResponse {
+  status: string;
+  scenario_index: number;
+  name: string;
+  steps_completed: string[];
+  scenario: Scenario;
+}
+
 export type AnalysisSummaryResponse = Record<string, SessionSummaryMetric> & {
   completed_steps: SessionStep[];
 };

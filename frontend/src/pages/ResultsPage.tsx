@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { analysisApi, configApi, exportsApi, resultsApi, uploadsApi } from "../lib/api";
-import type { LtcResultSummary, PlotResult, Scenario } from "../lib/types";
+import type { LtcResultSummary, PlotResult, RunScenarioRequest, Scenario } from "../lib/types";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { DataTable } from "../components/common/DataTable";
 import { EmptyState } from "../components/common/EmptyState";
@@ -40,6 +40,9 @@ export function ResultsPage() {
   const [latestError, setLatestError] = useState<unknown>(null);
   const [customPlot, setCustomPlot] = useState<PlotResult | null>(null);
   const [scenarioName, setScenarioName] = useState("");
+  const [importedRunconfig, setImportedRunconfig] = useState<Record<string, JsonValue> | null>(null);
+  const [importScenarioName, setImportScenarioName] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resultsDraft = useMemo(() => draftSection(resultsDraftValue), [resultsDraftValue]);
 
@@ -142,6 +145,45 @@ export function ResultsPage() {
     },
     onError: (error) => setLatestError(error),
   });
+
+  const runScenarioMutation = useMutation({
+    mutationFn: (body: RunScenarioRequest) => analysisApi.runScenario(sessionId ?? "", body),
+    onSuccess: () => {
+      setLatestError(null);
+      setImportedRunconfig(null);
+      setImportScenarioName("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      void queryClient.invalidateQueries({ queryKey: ["scenarios", sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ["scenario-comparison", sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ["runconfig", sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ["ltc-results", sessionId] });
+    },
+    onError: (error) => setLatestError(error),
+  });
+
+  const handleRunconfigFile = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result as string) as Record<string, JsonValue>;
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+          setLatestError("Runconfig must be a JSON object");
+          return;
+        }
+        setImportedRunconfig(parsed);
+        if (!importScenarioName) {
+          const pname = typeof parsed.project_name === "string" ? parsed.project_name : file.name.replace(/\.json$/i, "");
+          setImportScenarioName(pname);
+        }
+        setLatestError(null);
+      } catch {
+        setLatestError("Invalid JSON file");
+      }
+    };
+    reader.readAsText(file);
+  }, [importScenarioName]);
 
   const customPlotMutation = useMutation({
     mutationFn: () =>
@@ -268,6 +310,51 @@ export function ResultsPage() {
             detail="Complete the LTC workflow with uncertainty, then save the current result as a named scenario. Save multiple scenarios to compare shear methods, algorithms, or hub heights."
           />
         )}
+      </article>
+
+      <article className="content-card stack-gap">
+        <span className="eyebrow">Import &amp; run scenario from config</span>
+        <p className="muted-text">Upload a runconfig JSON file, then execute the LTC → ensemble → uncertainty pipeline and save the result as a named scenario.</p>
+        <div className="form-grid two-col">
+          <label className="form-field">
+            <span>Runconfig JSON file</span>
+            <input ref={fileInputRef} type="file" accept=".json,application/json" onChange={handleRunconfigFile} />
+          </label>
+          <label className="form-field">
+            <span>Scenario name</span>
+            <input
+              type="text"
+              className="scenario-name-input"
+              placeholder="Name for imported scenario"
+              value={importScenarioName}
+              onChange={(event) => setImportScenarioName(event.target.value)}
+            />
+          </label>
+        </div>
+        {importedRunconfig !== null ? (
+          <details>
+            <summary>Preview imported config ({Object.keys(importedRunconfig).length} keys)</summary>
+            <pre className="code-block" style={{ maxHeight: "12rem", overflow: "auto" }}>{JSON.stringify(importedRunconfig, null, 2)}</pre>
+          </details>
+        ) : null}
+        <button
+          className="primary-button"
+          type="button"
+          disabled={importedRunconfig === null || !importScenarioName.trim() || runScenarioMutation.isPending}
+          onClick={() => {
+            if (!importedRunconfig || !importScenarioName.trim()) return;
+            runScenarioMutation.mutate({
+              name: importScenarioName.trim(),
+              runconfig: importedRunconfig,
+              ltc_algorithms: ["speedsort"],
+            });
+          }}
+        >
+          {runScenarioMutation.isPending ? "Running pipeline…" : "Run Scenario from Config"}
+        </button>
+        {runScenarioMutation.isSuccess ? (
+          <p className="success-text">Scenario "{runScenarioMutation.data.name}" saved with {runScenarioMutation.data.steps_completed.length} steps completed.</p>
+        ) : null}
       </article>
 
       <div className="panel-grid panel-grid-two">

@@ -24,7 +24,9 @@ from server.api.schemas import (
     FindEra5NodesRequest,
     HomogeneityAnalyzeRequest,
     HomogeneityApplyRequest,
+    ImportRunconfigRequest,
     RunLtcRequest,
+    RunScenarioRequest,
     SaveScenarioRequest,
     SensorStatisticsResponse,
     UndoCleaningRuleRequest,
@@ -56,6 +58,7 @@ from server.tools.shear import (
     _calculate_shear_timeseries,
 )
 from server.tools.statistics import _sensor_statistics
+from server.tools.config import _sync_state_from_runconfig
 from server.tools.uncertainty import _calculate_uncertainty
 
 router = APIRouter(prefix="/sessions/{session_id}", tags=["analysis"])
@@ -149,6 +152,125 @@ def _build_scenario_snapshot(state: SessionState, name: str) -> dict[str, object
         "created_at": datetime.now(timezone.utc).isoformat(),
         "config": _scenario_config(state, uncertainty),
         "results": _scenario_results(state, uncertainty),
+    }
+
+
+def _import_runconfig(state: SessionState, runconfig: dict[str, object]) -> dict[str, object]:
+    """Import a runconfig payload into the session, merging over the current runconfig."""
+    state.runconfig.update(runconfig)
+    _sync_state_from_runconfig(state)
+    return dict(state.runconfig)
+
+
+def _resolve_ltc_columns(state: SessionState) -> tuple[str, str, str, str]:
+    """Guess the short/long and direction columns from the current session state."""
+    # Short column: highest-height speed sensor
+    short_col = ""
+    for _height, mapping in sorted(state.sensor_mapping.items(), reverse=True):
+        if isinstance(mapping.get("speed_col"), str):
+            short_col = str(mapping["speed_col"])
+            break
+    if not short_col:
+        raise ValueError("No speed sensor available in the session. Upload timeseries and datamodel first.")
+    # Direction column (optional)
+    short_dir_col = ""
+    for _height, mapping in sorted(state.sensor_mapping.items(), reverse=True):
+        if isinstance(mapping.get("direction_col"), str):
+            short_dir_col = str(mapping["direction_col"])
+            break
+    long_col = "Spd_100m"
+    long_dir_col = "Dir_100m"
+    return short_col, long_col, short_dir_col, long_dir_col
+
+
+def _run_scenario_pipeline(
+    state: SessionState,
+    name: str,
+    runconfig_overrides: dict[str, object],
+    ltc_algorithms: list[str],
+    uncertainty_params: dict[str, object] | None,
+) -> dict[str, object]:
+    """Import config overrides, execute LTC \u2192 ensemble \u2192 uncertainty, and save as a scenario."""
+    # --- 1. Import config ---
+    if runconfig_overrides:
+        _import_runconfig(state, runconfig_overrides)
+
+    # --- 2. Preparedness checks ---
+    if state.timeseries_df is None:
+        raise ValueError("Timeseries data must be loaded before running a scenario")
+    if state.era5_interpolated_df is None:
+        raise ValueError("ERA5 interpolation must be completed before running a scenario")
+
+    short_col, long_col, short_dir_col, long_dir_col = _resolve_ltc_columns(state)
+
+    # --- 3. Run requested LTC algorithms ---
+    steps_completed: list[str] = []
+    for algorithm_name in ltc_algorithms:
+        ltc_fn = LTC_ALGORITHMS.get(algorithm_name)
+        if ltc_fn is None:
+            raise ValueError(f"Unknown LTC algorithm '{algorithm_name}'")
+        if algorithm_name == "xgboost":
+            ltc_fn(state, short_col, long_col, short_dir_col, long_dir_col)
+        else:
+            ltc_fn(state, short_col, long_col)
+        steps_completed.append(f"ltc:{algorithm_name}")
+
+    # --- 4. Ensemble (when multiple algorithms) ---
+    if len(ltc_algorithms) > 1:
+        _run_ensemble(state, short_col)
+        steps_completed.append("ensemble")
+
+    # --- 5. Uncertainty ---
+    if uncertainty_params is None:
+        # Build sensible defaults from session state
+        hub_height = state.get_hub_height_m() or 100.0
+        highest_sensor_height = max(state.sensor_mapping.keys()) if state.sensor_mapping else 80.0
+        uncertainty_params = {
+            "measurement_uncertainty_pct": 2.0,
+            "measurement_height_m": float(highest_sensor_height),
+            "hub_height_m": hub_height,
+            "shear_method": "simple_power_law",
+            "mcp_r_squared": 0.85,
+            "concurrent_hours": 8760.0,
+            "algorithm": ltc_algorithms[0],
+            "iav_pct": 6.0,
+            "shear_std": 0.0,
+            "is_interpolation": False,
+        }
+    else:
+        # Ensure algorithm is in the executed set
+        algo_in_params = str(uncertainty_params.get("algorithm", ltc_algorithms[0]))
+        if algo_in_params not in ltc_algorithms:
+            algo_in_params = ltc_algorithms[0]
+        uncertainty_params["algorithm"] = algo_in_params
+
+    _calculate_uncertainty(
+        state,
+        float(uncertainty_params["measurement_uncertainty_pct"]),
+        float(uncertainty_params["measurement_height_m"]),
+        float(uncertainty_params["hub_height_m"]),
+        str(uncertainty_params["shear_method"]),
+        float(uncertainty_params["mcp_r_squared"]),
+        float(uncertainty_params["concurrent_hours"]),
+        str(uncertainty_params.get("algorithm", ltc_algorithms[0])),
+        float(uncertainty_params.get("iav_pct", 6.0)),
+        float(uncertainty_params.get("shear_std", 0.0)),
+        bool(uncertainty_params.get("is_interpolation", False)),
+    )
+    steps_completed.append("uncertainty")
+
+    # --- 6. Save scenario snapshot ---
+    scenario = _build_scenario_snapshot(state, name)
+    state.scenarios.append(scenario)
+    steps_completed.append("scenario_saved")
+    state.touch()
+
+    return {
+        "status": "ok",
+        "scenario_index": len(state.scenarios) - 1,
+        "name": scenario["name"],
+        "steps_completed": steps_completed,
+        "scenario": scenario,
     }
 
 
@@ -455,6 +577,46 @@ def calculate_uncertainty(
     except ValueError as exc:
         raise to_bad_request(exc) from exc
     state.touch()
+    return result
+
+
+@router.post("/config/import")
+def import_runconfig(
+    session_id: str,
+    body: ImportRunconfigRequest,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict:
+    """Import a complete runconfig JSON payload into the current session, merging over existing keys."""
+    del session_id
+    try:
+        merged = _import_runconfig(state, body.runconfig)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+    state.touch()
+    return {"status": "ok", "runconfig": merged}
+
+
+@router.post("/scenarios/run")
+def run_scenario(
+    session_id: str,
+    body: RunScenarioRequest,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict:
+    """Import runconfig overrides, execute LTC \u2192 ensemble \u2192 uncertainty, and save as a named scenario."""
+    del session_id
+    uncertainty_dict: dict[str, object] | None = None
+    if body.uncertainty is not None:
+        uncertainty_dict = body.uncertainty.model_dump()
+    try:
+        result = _run_scenario_pipeline(
+            state,
+            body.name,
+            dict(body.runconfig),
+            body.ltc_algorithms,
+            uncertainty_dict,
+        )
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
     return result
 
 

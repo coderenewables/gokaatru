@@ -34,6 +34,15 @@ import server.tools.shear  # noqa: F401,E402
 import server.tools.statistics  # noqa: F401,E402
 import server.tools.uncertainty  # noqa: F401,E402
 import server.tools.visualization  # noqa: F401,E402
+import server.tools.windkit.wind  # noqa: F401,E402
+import server.tools.windkit.climate  # noqa: F401,E402
+import server.tools.windkit.climate_stats  # noqa: F401,E402
+import server.tools.windkit.ltc  # noqa: F401,E402
+import server.tools.windkit.topography  # noqa: F401,E402
+import server.tools.windkit.windfarm  # noqa: F401,E402
+import server.tools.windkit.spatial  # noqa: F401,E402
+import server.tools.windkit.plotting  # noqa: F401,E402
+import server.tools.windkit.other  # noqa: F401,E402
 
 
 def main() -> None:

@@ -63,6 +63,8 @@ def completed_steps(state: SessionState) -> list[str]:
         steps.append("ltc")
     if state.ensemble_df is not None:
         steps.append("ensemble")
+    if state.windkit_data:
+        steps.append("windkit")
     return steps
 
 

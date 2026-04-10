@@ -465,6 +465,50 @@ The `brighthub_download_reanalysis` tool accepts a `source` parameter:
 - `earthdatahub` — Download ERA5 data from the EarthDataHub Destine Zarr store (same as `extract_era5_data`)
 - MERRA-2 data always uses the BrightHub API regardless of the `source` parameter
 
+### 5.14 WindKit Tools (142 tools)
+
+WindKit (DTU Wind Energy, v2.0+) integration exposing wind resource assessment functions as MCP tools.
+
+**Module: `server/tools/windkit/wind.py`** — 13 wind function tools
+
+| Tool Name | Description |
+|-----------|-------------|
+| `windkit_wind_speed` | Wind speed from u,v components |
+| `windkit_wind_direction` | Wind direction from u,v components |
+| `windkit_wind_speed_and_direction` | Both speed and direction from u,v |
+| `windkit_wind_vectors` | u,v components from speed and direction |
+| `windkit_wind_direction_difference` | Circular distance between direction arrays |
+| `windkit_wd_to_sector` | Direction to sector indices/centers |
+| `windkit_vinterp_wind_direction` | Vertical interpolation of direction |
+| `windkit_vinterp_wind_speed` | Vertical interpolation of speed |
+| `windkit_rotor_equivalent_wind_speed` | REWS from height profiles |
+| `windkit_shear_extrapolate` | Shear extrapolation to target height |
+| `windkit_shear_exponent` | Compute shear exponent |
+| `windkit_veer_extrapolate` | Veer extrapolation of direction |
+| `windkit_wind_veer` | Compute wind veer from profiles |
+
+**Module: `server/tools/windkit/climate.py`** — 30 climate tools (TSWC 6, BWC 8, WWC 8, GWC 5, GeoWC 2)
+
+**Module: `server/tools/windkit/climate_stats.py`** — 7 statistics tools (met fields, moments, CDF, mean wind speed, power density, cross predictions)
+
+**Module: `server/tools/windkit/ltc.py`** — 2 LTC tools (LinRegMCP, VarRatMCP)
+
+**Module: `server/tools/windkit/topography.py`** — 18 topography tools (landcover, elevation, raster/vector maps, conversion)
+
+**Module: `server/tools/windkit/windfarm.py`** — 16 wind farm tools (turbines, WTG, losses, uncertainty)
+
+**Module: `server/tools/windkit/spatial.py`** — 25+ spatial tools (CRS, create, validate, convert, interpolation, comparison)
+
+**Module: `server/tools/windkit/plotting.py`** — 9 plotting tools (histogram, wind rose, raster, vertical profile, time series)
+
+**Module: `server/tools/windkit/other.py`** — 14 utility tools (tutorial data, Weibull distribution 8, WAsP, coordinates, ERA5)
+
+**Serialization**: All tools use `server/tools/windkit/_serializers.py` for xarray Dataset/DataArray ↔ JSON, GeoDataFrame ↔ GeoJSON, DataFrame ↔ JSON, and Plotly figure ↔ JSON round-trips.
+
+**API**: ~130 FastAPI POST endpoints under `/api/windkit/{category}/{function}` with Pydantic v2 request models in `server/api/windkit_schemas.py`.
+
+**Frontend**: TypeScript API client at `frontend/src/lib/windkitApi.ts` with typed methods for all endpoints.
+
 ---
 
 ## 6. Pydantic v2 Schema Design

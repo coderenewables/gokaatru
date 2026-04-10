@@ -3298,257 +3298,6 @@ export const exportsApi = {
 
 ---
 
-## PHASE 12 — BrightHub Integration (MCP + Web API + Frontend)
-
-**Goal**: Authenticate with BrightHub, browse measurement locations, import timeseries + data model, and download ERA5/MERRA-2 reanalysis data — all accessible as MCP tools for AI assistants AND as REST API endpoints for the workflow web app.
-
-**Prerequisite**: Phase 11 complete and tests passing.
-
----
-
-### Phase 12 Design Principles
-
-1. **Dual exposure**: Every BrightHub operation is both an MCP tool (for AI clients) and a REST endpoint (for the browser).
-2. **Shared core**: All BrightHub API calls live in `server/core/brighthub.py`. MCP tools and REST routes both call the same core functions.
-3. **Session-aware**: BrightHub token is stored in `SessionState.brighthub_token`. MCP tools use the module-level `session` singleton; REST routes use the session manager.
-4. **Import reuses data_io**: The import flow calls `_parse_timeseries` and `_parse_datamodel` from `server/tools/data_io.py` to load data into session state identically to file uploads.
-5. **ERA5 source selection**: ERA5 reanalysis can be downloaded from BrightHub API or EarthDataHub Zarr store. MERRA-2 always uses BrightHub.
-
----
-
-### Step 12.1: BrightHub API client
-
-**File: `server/core/brighthub.py`**
-
-Implement the BrightHub API client (no MCP dependency, no session dependency):
-
-```python
-BRIGHTHUB_BASE_URL = "https://api.brighthub.io"
-BRIGHTHUB_AUTH_URL = f"{BRIGHTHUB_BASE_URL}/auth/token"
-```
-
-**Functions:**
-
-| Function | Description |
-|----------|-------------|
-| `authenticate(client_id, client_secret)` | POST to `/auth/token` with `client_credentials` grant. Return `{"id_token": str, "refresh_token": None}`. |
-| `list_measurement_locations(token)` | GET `/measurement-locations/`. Return list of dicts. |
-| `get_data_model(token, uuid)` | GET `/measurement-locations/{uuid}/data-model`. Return dict. |
-| `get_measurement_location(token, uuid)` | GET `/measurement-locations/{uuid}`. Return dict. |
-| `fetch_timeseries_csv(token, uuid, *, apply_cleaning_log, apply_cleaning_rules, apply_calibration, apply_deadband_offset, apply_orientation_offset)` | GET presigned URL from `/measurement-locations/{uuid}/timeseries-data`, then download CSV text. 5 boolean filter params. |
-| `fetch_reanalysis_nodes(token, lat, lon)` | Query ERA5 + MERRA-2 node endpoints. Sort by distance². Return top 4 ERA5 + top 1 MERRA-2. |
-| `download_reanalysis_data(token, nodes, dataset_name)` | Download timeseries for each node from `/reanalysis/{dataset}/nodes/{lat}/{lon}/data`. |
-
----
-
-### Step 12.2: BrightHub MCP tools
-
-**File: `server/tools/brighthub.py`**
-
-Implements 8 MCP tools. Import `from server.main import mcp` and `from server.state.session import session`.
-
-**Tool: `brighthub_login`**
-```
-@mcp.tool()
-def brighthub_login(client_id: str, client_secret: str) -> dict:
-```
-- Call `core.brighthub.authenticate`. Store `id_token` in `session.brighthub_token`.
-- Return: `{"status": "ok", "authenticated": true}`
-
-**Tool: `brighthub_logout`**
-```
-@mcp.tool()
-def brighthub_logout() -> dict:
-```
-- Set `session.brighthub_token = None`.
-- Return: `{"status": "ok", "authenticated": false}`
-
-**Tool: `brighthub_status`**
-```
-@mcp.tool()
-def brighthub_status() -> dict:
-```
-- Return: `{"authenticated": bool, "has_token": bool}`
-
-**Tool: `brighthub_list_locations`**
-```
-@mcp.tool()
-def brighthub_list_locations() -> dict:
-```
-- Require token. Call `core.brighthub.list_measurement_locations`.
-- Return: `{"locations": [...], "count": N}`
-
-**Tool: `brighthub_get_data_model`**
-```
-@mcp.tool()
-def brighthub_get_data_model(uuid: str) -> dict:
-```
-- Require token. Call `core.brighthub.get_data_model`.
-- Return: `{"uuid": str, "data_model": dict}`
-
-**Tool: `brighthub_import_location`**
-```
-@mcp.tool()
-def brighthub_import_location(
-    uuid: str, name: str = "", latitude_ddeg: float = 0.0, longitude_ddeg: float = 0.0,
-    apply_cleaning_log: bool = True, apply_cleaning_rules: bool = False,
-    apply_calibration: bool = False, apply_deadband_offset: bool = False,
-    apply_orientation_offset: bool = False,
-) -> dict:
-```
-- Require token. Fetch datamodel JSON → save to uploads dir. Fetch timeseries CSV → save to uploads dir.
-- Call `_parse_timeseries(session, path)` and `_parse_datamodel(session, path)`.
-- Set project name, coordinate, brighthub_uuid in runconfig.
-- Return: `{"status": "ok", "uuid": str, "timeseries_rows": int, "timeseries_columns": [...], "timeseries_start": str, "timeseries_end": str, "datamodel_heights": [...], "project_name": str}`
-
-**Tool: `brighthub_find_reanalysis_nodes`**
-```
-@mcp.tool()
-def brighthub_find_reanalysis_nodes(latitude: float, longitude: float) -> dict:
-```
-- Require token. Call `core.brighthub.fetch_reanalysis_nodes`.
-- Return: `{"era5_nodes": [...], "merra2_nodes": [...], "era5_count": int, "merra2_count": int}`
-
-**Tool: `brighthub_download_reanalysis`**
-```
-@mcp.tool()
-def brighthub_download_reanalysis(dataset: str, nodes_json: str, source: str = "brighthub") -> dict:
-```
-- `dataset`: "ERA5" or "MERRA-2". `nodes_json`: JSON array of `{latitude_ddeg, longitude_ddeg}`.
-- `source`: "brighthub" or "earthdatahub" (ERA5 only; MERRA-2 always BrightHub).
-- If earthdatahub: use `era5._extract_era5_data` + `era5._compute_era5_wind_speed`.
-- Return: `{"dataset": str, "source": str, "items": [...], "count": int}`
-
-**Update `server/main.py`** — add:
-```python
-import server.tools.brighthub  # noqa: F401
-```
-
----
-
-### Step 12.3: BrightHub REST API routes
-
-**File: `server/api/routes/brighthub.py`**
-
-Implements 9 REST endpoints under `/sessions/{session_id}/brighthub/`:
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/login` | POST | Authenticate with BrightHub |
-| `/logout` | POST | Clear BrightHub token |
-| `/status` | GET | Check authentication status |
-| `/locations` | GET | List measurement locations |
-| `/locations/{uuid}/datamodel` | GET | Fetch data model |
-| `/reanalysis/nodes` | POST | Find ERA5 + MERRA-2 nodes |
-| `/reanalysis/download` | POST | Download reanalysis data (with `source` field for ERA5) |
-| `/import` | POST | Fetch timeseries + datamodel and load into session |
-
-The download endpoint accepts a `source` field: `"brighthub"` or `"earthdatahub"`.
-When `source=earthdatahub` and `dataset=ERA5`, it calls `era5._extract_era5_data` + `era5._compute_era5_wind_speed` instead of BrightHub API.
-
-**Register the router in `server/api/main.py`:**
-```python
-from server.api.routes.brighthub import router as brighthub_router
-app.include_router(brighthub_router, prefix="/api")
-```
-
----
-
-### Step 12.4: Frontend BrightHub page
-
-**File: `frontend/src/pages/BrightHubPage.tsx`**
-
-Full page with:
-- Login form (client ID + client secret)
-- Measurement locations table (click to import)
-- Import options dialog (5 boolean checkboxes: cleaning log, cleaning rules, calibration, deadband offset, orientation offset)
-- Selected location detail (import progress, data model viewer)
-- Reanalysis node discovery + download
-- ERA5 source toggle (EarthDataHub / BrightHub radio buttons)
-- MERRA-2 always via BrightHub
-
-**Frontend types** (`frontend/src/lib/types.ts`):
-- `BrightHubLoginRequest`, `BrightHubLoginResponse`, `BrightHubStatusResponse`
-- `BrightHubMeasurementLocation`, `BrightHubLocationsResponse`
-- `BrightHubDataModelResponse`
-- `BrightHubReanalysisNode`, `BrightHubReanalysisNodesResponse`
-- `BrightHubReanalysisDownloadResponse` (with `source` field)
-- `BrightHubImportLocationRequest` (with 5 boolean option fields)
-- `BrightHubImportLocationResponse`
-
-**Frontend API** (`frontend/src/lib/api.ts`):
-- `brighthubApi.login()`, `.logout()`, `.status()`, `.getLocations()`, `.getDataModel()`
-- `.getReanalysisNodes()`, `.downloadReanalysis(sessionId, dataset, nodes, source)`
-- `.importLocation(sessionId, req)`
-
-**Router** (`frontend/src/router.tsx`): Add `/brighthub` route with lazy-loaded `BrightHubPage`.
-
-**Workflow nav** (`frontend/src/lib/workflow.ts`): Add "BrightHub" step.
-```
-
-These return URL strings for direct browser download (no fetch needed — use `<a href>` or `window.open`).
-
-**Update file: `frontend/src/pages/DataPage.tsx`**
-
-Add export button in the metrics bar area:
-```tsx
-<button
-  className="secondary-button"
-  type="button"
-  disabled={!sensorsQuery.data?.length}
-  onClick={() => window.open(exportsApi.downloadTimeseries(sessionId ?? ""), "_blank")}
->
-  Export Cleaned CSV
-</button>
-```
-
-**Update file: `frontend/src/pages/LtcPage.tsx`**
-
-Add export buttons per algorithm in the metrics table:
-```tsx
-{
-  key: "export",
-  header: "Export",
-  cell: (row) => (
-    <button
-      className="ghost-button table-action"
-      type="button"
-      onClick={() => window.open(exportsApi.downloadLtc(sessionId ?? "", row.algorithm), "_blank")}
-    >
-      CSV
-    </button>
-  ),
-}
-```
-
-Add ensemble export button:
-```tsx
-{ensembleQuery.data?.available ? (
-  <button
-    className="secondary-button"
-    type="button"
-    onClick={() => window.open(exportsApi.downloadEnsemble(sessionId ?? ""), "_blank")}
-  >
-    Export Ensemble CSV
-  </button>
-) : null}
-```
-
-**Update file: `frontend/src/pages/ResultsPage.tsx`**
-
-Add runconfig JSON download alongside the existing "Export Runconfig" button:
-```tsx
-<button
-  className="secondary-button"
-  type="button"
-  onClick={() => window.open(exportsApi.downloadRunconfig(sessionId ?? ""), "_blank")}
->
-  Download Runconfig JSON
-</button>
-```
-
----
-
 ### Step 9.4: Reanalysis page — ERA5 comparison charts
 
 **Update file: `server/tools/visualization.py`**
@@ -4310,3 +4059,412 @@ The `handleRunconfigFile` callback reads the file via `FileReader`, validates it
 | 10 | Update: session.py (+scenarios), analysis.py (+3 endpoints), schemas.py (+1 model), visualization.py (+1 helper), ResultsPage.tsx (dashboard + scenarios), OverviewPage.tsx (scorecard), config.py (summary fields), api.ts, types.ts, styles.css, tests/test_phase10.py | — |
 | 11 | Update: schemas.py (+2 models), analysis.py (+2 endpoints, +3 helpers), config.py (re-export _sync_state_from_runconfig), api.ts (+2 methods), types.ts (+3 interfaces), ResultsPage.tsx (import & run UI), ResultsPage.test.tsx (+2 tests), test_phase10.py (+5 tests) | — |
 | **Total through Phase 11** | **~50 files modified/created** | **59 MCP tools + 20 plot helpers + 10 API endpoints** |
+
+---
+
+## PHASE 12 — BrightHub Integration (MCP + Web API + Frontend)
+
+**Goal**: Authenticate with BrightHub, browse measurement locations, import timeseries + data model, and download ERA5/MERRA-2 reanalysis data — all accessible as MCP tools for AI assistants AND as REST API endpoints for the workflow web app.
+
+**Prerequisite**: Phase 11 complete and tests passing.
+
+---
+
+### Phase 12 Design Principles
+
+1. **Dual exposure**: Every BrightHub operation is both an MCP tool (for AI clients) and a REST endpoint (for the browser).
+2. **Shared core**: All BrightHub API calls live in `server/core/brighthub.py`. MCP tools and REST routes both call the same core functions.
+3. **Session-aware**: BrightHub token is stored in `SessionState.brighthub_token`. MCP tools use the module-level `session` singleton; REST routes use the session manager.
+4. **Import reuses data_io**: The import flow calls `_parse_timeseries` and `_parse_datamodel` from `server/tools/data_io.py` to load data into session state identically to file uploads.
+5. **ERA5 source selection**: ERA5 reanalysis can be downloaded from BrightHub API or EarthDataHub Zarr store. MERRA-2 always uses BrightHub.
+
+---
+
+### Step 12.1: BrightHub API client
+
+**File: `server/core/brighthub.py`**
+
+Implement the BrightHub API client (no MCP dependency, no session dependency):
+
+```python
+BRIGHTHUB_BASE_URL = "https://api.brighthub.io"
+BRIGHTHUB_AUTH_URL = f"{BRIGHTHUB_BASE_URL}/auth/token"
+```
+
+**Functions:**
+
+| Function | Description |
+|----------|-------------|
+| `authenticate(client_id, client_secret)` | POST to `/auth/token` with `client_credentials` grant. Return `{"id_token": str, "refresh_token": None}`. |
+| `list_measurement_locations(token)` | GET `/measurement-locations/`. Return list of dicts. |
+| `get_data_model(token, uuid)` | GET `/measurement-locations/{uuid}/data-model`. Return dict. |
+| `get_measurement_location(token, uuid)` | GET `/measurement-locations/{uuid}`. Return dict. |
+| `fetch_timeseries_csv(token, uuid, *, apply_cleaning_log, apply_cleaning_rules, apply_calibration, apply_deadband_offset, apply_orientation_offset)` | GET presigned URL from `/measurement-locations/{uuid}/timeseries-data`, then download CSV text. 5 boolean filter params. |
+| `fetch_reanalysis_nodes(token, lat, lon)` | Query ERA5 + MERRA-2 node endpoints. Sort by distance². Return top 4 ERA5 + top 1 MERRA-2. |
+| `download_reanalysis_data(token, nodes, dataset_name)` | Download timeseries for each node from `/reanalysis/{dataset}/nodes/{lat}/{lon}/data`. |
+
+---
+
+### Step 12.2: BrightHub MCP tools
+
+**File: `server/tools/brighthub.py`**
+
+Implements 8 MCP tools. Import `from server.main import mcp` and `from server.state.session import session`.
+
+**Tool: `brighthub_login`**
+```
+@mcp.tool()
+def brighthub_login(client_id: str, client_secret: str) -> dict:
+```
+- Call `core.brighthub.authenticate`. Store `id_token` in `session.brighthub_token`.
+- Return: `{"status": "ok", "authenticated": true}`
+
+**Tool: `brighthub_logout`**
+```
+@mcp.tool()
+def brighthub_logout() -> dict:
+```
+- Set `session.brighthub_token = None`.
+- Return: `{"status": "ok", "authenticated": false}`
+
+**Tool: `brighthub_status`**
+```
+@mcp.tool()
+def brighthub_status() -> dict:
+```
+- Return: `{"authenticated": bool, "has_token": bool}`
+
+**Tool: `brighthub_list_locations`**
+```
+@mcp.tool()
+def brighthub_list_locations() -> dict:
+```
+- Require token. Call `core.brighthub.list_measurement_locations`.
+- Return: `{"locations": [...], "count": N}`
+
+**Tool: `brighthub_get_data_model`**
+```
+@mcp.tool()
+def brighthub_get_data_model(uuid: str) -> dict:
+```
+- Require token. Call `core.brighthub.get_data_model`.
+- Return: `{"uuid": str, "data_model": dict}`
+
+**Tool: `brighthub_import_location`**
+```
+@mcp.tool()
+def brighthub_import_location(
+    uuid: str, name: str = "", latitude_ddeg: float = 0.0, longitude_ddeg: float = 0.0,
+    apply_cleaning_log: bool = True, apply_cleaning_rules: bool = False,
+    apply_calibration: bool = False, apply_deadband_offset: bool = False,
+    apply_orientation_offset: bool = False,
+) -> dict:
+```
+- Require token. Fetch datamodel JSON → save to uploads dir. Fetch timeseries CSV → save to uploads dir.
+- Call `_parse_timeseries(session, path)` and `_parse_datamodel(session, path)`.
+- Set project name, coordinate, brighthub_uuid in runconfig.
+- Return: `{"status": "ok", "uuid": str, "timeseries_rows": int, "timeseries_columns": [...], "timeseries_start": str, "timeseries_end": str, "datamodel_heights": [...], "project_name": str}`
+
+**Tool: `brighthub_find_reanalysis_nodes`**
+```
+@mcp.tool()
+def brighthub_find_reanalysis_nodes(latitude: float, longitude: float) -> dict:
+```
+- Require token. Call `core.brighthub.fetch_reanalysis_nodes`.
+- Return: `{"era5_nodes": [...], "merra2_nodes": [...], "era5_count": int, "merra2_count": int}`
+
+**Tool: `brighthub_download_reanalysis`**
+```
+@mcp.tool()
+def brighthub_download_reanalysis(dataset: str, nodes_json: str, source: str = "brighthub") -> dict:
+```
+- `dataset`: "ERA5" or "MERRA-2". `nodes_json`: JSON array of `{latitude_ddeg, longitude_ddeg}`.
+- `source`: "brighthub" or "earthdatahub" (ERA5 only; MERRA-2 always BrightHub).
+- If earthdatahub: use `era5._extract_era5_data` + `era5._compute_era5_wind_speed`.
+- Return: `{"dataset": str, "source": str, "items": [...], "count": int}`
+
+**Update `server/main.py`** — add:
+```python
+import server.tools.brighthub  # noqa: F401
+```
+
+---
+
+### Step 12.3: BrightHub REST API routes
+
+**File: `server/api/routes/brighthub.py`**
+
+Implements 9 REST endpoints under `/sessions/{session_id}/brighthub/`:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/login` | POST | Authenticate with BrightHub |
+| `/logout` | POST | Clear BrightHub token |
+| `/status` | GET | Check authentication status |
+| `/locations` | GET | List measurement locations |
+| `/locations/{uuid}/datamodel` | GET | Fetch data model |
+| `/reanalysis/nodes` | POST | Find ERA5 + MERRA-2 nodes |
+| `/reanalysis/download` | POST | Download reanalysis data (with `source` field for ERA5) |
+| `/import` | POST | Fetch timeseries + datamodel and load into session |
+
+---
+
+The download endpoint accepts a `source` field: `"brighthub"` or `"earthdatahub"`.
+When `source=earthdatahub` and `dataset=ERA5`, it calls `era5._extract_era5_data` + `era5._compute_era5_wind_speed` instead of BrightHub API.
+
+**Register the router in `server/api/main.py`:**
+```python
+from server.api.routes.brighthub import router as brighthub_router
+app.include_router(brighthub_router, prefix="/api")
+```
+
+---
+
+### Step 12.4: Frontend BrightHub page
+
+**File: `frontend/src/pages/BrightHubPage.tsx`**
+
+Full page with:
+- Login form (client ID + client secret)
+- Measurement locations table (click to import)
+- Import options dialog (5 boolean checkboxes: cleaning log, cleaning rules, calibration, deadband offset, orientation offset)
+- Selected location detail (import progress, data model viewer)
+- Reanalysis node discovery + download
+- ERA5 source toggle (EarthDataHub / BrightHub radio buttons)
+- MERRA-2 always via BrightHub
+
+**Frontend types** (`frontend/src/lib/types.ts`):
+- `BrightHubLoginRequest`, `BrightHubLoginResponse`, `BrightHubStatusResponse`
+- `BrightHubMeasurementLocation`, `BrightHubLocationsResponse`
+- `BrightHubDataModelResponse`
+- `BrightHubReanalysisNode`, `BrightHubReanalysisNodesResponse`
+- `BrightHubReanalysisDownloadResponse` (with `source` field)
+- `BrightHubImportLocationRequest` (with 5 boolean option fields)
+- `BrightHubImportLocationResponse`
+
+**Frontend API** (`frontend/src/lib/api.ts`):
+- `brighthubApi.login()`, `.logout()`, `.status()`, `.getLocations()`, `.getDataModel()`
+- `.getReanalysisNodes()`, `.downloadReanalysis(sessionId, dataset, nodes, source)`
+- `.importLocation(sessionId, req)`
+
+**Router** (`frontend/src/router.tsx`): Add `/brighthub` route with lazy-loaded `BrightHubPage`.
+
+**Workflow nav** (`frontend/src/lib/workflow.ts`): Add "BrightHub" step.
+```
+
+These return URL strings for direct browser download (no fetch needed — use `<a href>` or `window.open`).
+
+**Update file: `frontend/src/pages/DataPage.tsx`**
+
+Add export button in the metrics bar area:
+```tsx
+<button
+  className="secondary-button"
+  type="button"
+  disabled={!sensorsQuery.data?.length}
+  onClick={() => window.open(exportsApi.downloadTimeseries(sessionId ?? ""), "_blank")}
+>
+  Export Cleaned CSV
+</button>
+```
+
+**Update file: `frontend/src/pages/LtcPage.tsx`**
+
+Add export buttons per algorithm in the metrics table:
+```tsx
+{
+  key: "export",
+  header: "Export",
+  cell: (row) => (
+    <button
+      className="ghost-button table-action"
+      type="button"
+      onClick={() => window.open(exportsApi.downloadLtc(sessionId ?? "", row.algorithm), "_blank")}
+    >
+      CSV
+    </button>
+  ),
+}
+```
+
+Add ensemble export button:
+```tsx
+{ensembleQuery.data?.available ? (
+  <button
+    className="secondary-button"
+    type="button"
+    onClick={() => window.open(exportsApi.downloadEnsemble(sessionId ?? ""), "_blank")}
+  >
+    Export Ensemble CSV
+  </button>
+) : null}
+```
+
+**Update file: `frontend/src/pages/ResultsPage.tsx`**
+
+Add runconfig JSON download alongside the existing "Export Runconfig" button:
+```tsx
+<button
+  className="secondary-button"
+  type="button"
+  onClick={() => window.open(exportsApi.downloadRunconfig(sessionId ?? ""), "_blank")}
+>
+  Download Runconfig JSON
+</button>
+```
+
+---
+
+## PHASE 13 — WindKit Integration
+
+**Goal**: Integrate the DTU WindKit library (v2.0+) exposing all available functions as MCP tools and REST API endpoints.
+
+**Prerequisite**: Phase 12 complete and tests passing.
+
+---
+
+### Step 13.1: WindKit package structure
+
+Create the windkit tool package under `server/tools/windkit/`:
+
+**Files:**
+- `server/tools/windkit/__init__.py` — Package docstring
+- `server/tools/windkit/_serializers.py` — Shared serialization helpers:
+  - `_NumpyEncoder` — JSON encoder handling numpy scalars, arrays, pd.Timestamp, datetime
+  - `ds_to_dict(ds)` / `dict_to_ds(data)` — xarray.Dataset round-trip
+  - `da_to_dict(da)` / `dict_to_da(data)` — xarray.DataArray round-trip
+  - `gdf_to_geojson(gdf)` / `geojson_to_gdf(data)` — GeoDataFrame round-trip
+  - `df_to_dict(df)` / `dict_to_df(data)` — pandas DataFrame round-trip (uses `io.StringIO` for `read_json`)
+  - `fig_to_dict(fig)` — Plotly figure serialization
+  - `_ok(data)` — Standard `{"status": "ok", "result": data}` envelope
+
+### Step 13.2: Wind function tools
+
+**File: `server/tools/windkit/wind.py`** — 13 MCP tools:
+
+| Tool | Description |
+|------|-------------|
+| `windkit_wind_speed` | Calculate wind speed from u,v components |
+| `windkit_wind_direction` | Calculate wind direction from u,v components |
+| `windkit_wind_speed_and_direction` | Calculate both speed and direction |
+| `windkit_wind_vectors` | Calculate u,v from speed and direction |
+| `windkit_wind_direction_difference` | Circular distance between two direction arrays |
+| `windkit_wd_to_sector` | Convert directions to sector indices (output_type: 'indices' or 'centers') |
+| `windkit_vinterp_wind_direction` | Vertically interpolate wind direction |
+| `windkit_vinterp_wind_speed` | Vertically interpolate wind speed |
+| `windkit_rotor_equivalent_wind_speed` | Calculate REWS from height profiles |
+| `windkit_shear_extrapolate` | Shear-extrapolate wind speeds |
+| `windkit_shear_exponent` | Compute shear exponent from profiles |
+| `windkit_veer_extrapolate` | Veer-extrapolation of wind direction |
+| `windkit_wind_veer` | Compute wind veer from direction profiles |
+
+### Step 13.3: Climate tools
+
+**File: `server/tools/windkit/climate.py`** — 30 MCP tools for TSWC, BWC, WWC, GWC, GeoWC:
+
+- **TSWC (6)**: validate, is, create, read, from_dataframe, resample
+- **BWC (8)**: validate, is, create, read, from_tswc, to_file, combine, weibull_fit
+- **WWC (8)**: validate, is, create, read, read_mf, to_file, to_bwc, weibull_combined
+- **GWC (5)**: validate, is, create, read, to_file
+- **GeoWC (2)**: validate, is
+
+### Step 13.4: Climate statistics tools
+
+**File: `server/tools/windkit/climate_stats.py`** — 7 MCP tools:
+
+| Tool | Description |
+|------|-------------|
+| `windkit_create_met_fields` | Create met fields dataset (wspd, power_density) |
+| `windkit_mean_ws_moment` | Mean wind speed moment from wind climate |
+| `windkit_ws_cdf` | Wind speed CDF from wind climate |
+| `windkit_ws_freq_gt_mean` | Frequency greater than mean |
+| `windkit_mean_wind_speed` | Mean wind speed from wind climate |
+| `windkit_mean_power_density` | Power density from wind climate |
+| `windkit_get_cross_predictions` | Cross predictions between wind climates |
+
+### Step 13.5: LTC tools
+
+**File: `server/tools/windkit/ltc.py`** — 2 MCP tools: `windkit_ltc_linreg_mcp`, `windkit_ltc_varrat_mcp`
+
+### Step 13.6: Topography tools
+
+**File: `server/tools/windkit/topography.py`** — 18 MCP tools for landcover, elevation, raster maps, vector maps, and map conversion.
+
+### Step 13.7: Wind farm tools
+
+**File: `server/tools/windkit/windfarm.py`** — 16 MCP tools for wind turbines, WTG, losses, and uncertainty.
+
+### Step 13.8: Spatial tools
+
+**File: `server/tools/windkit/spatial.py`** — 25+ MCP tools for CRS, create, validate, convert, interpolation, comparison, and spatial operations.
+
+### Step 13.9: Plotting tools
+
+**File: `server/tools/windkit/plotting.py`** — 9 MCP tools for histogram, wind rose, raster plot, vertical profile, etc.
+
+### Step 13.10: Other tools (Weibull, coordinates, ERA5)
+
+**File: `server/tools/windkit/other.py`** — 14 MCP tools:
+
+| Tool | Description |
+|------|-------------|
+| `windkit_get_tutorial_data` | Download tutorial data |
+| `windkit_load_tutorial_data` | Load tutorial data into memory |
+| `windkit_fit_weibull_wasp_m1_m3_fgtm` | Fit Weibull from moments + fgtm |
+| `windkit_fit_weibull_wasp_m1_m3` | Fit Weibull from 1st/3rd moments |
+| `windkit_fit_weibull_k_sumlogm` | Fit shape parameter from sum-of-log |
+| `windkit_weibull_moment` | Calculate Weibull moment |
+| `windkit_weibull_pdf` | Calculate Weibull PDF |
+| `windkit_weibull_cdf` | Calculate Weibull CDF |
+| `windkit_weibull_freq_gt_mean` | Fraction above mean |
+| `windkit_get_weibull_probability` | Weibull probability for speed bins |
+| `windkit_read_cfdres` | Read WAsP .cfdres file |
+| `windkit_create_sector_coords` | Create sector coordinate array |
+| `windkit_create_wsbin_coords` | Create wind speed bin coordinates |
+| `windkit_get_era5` | Download ERA5 reanalysis data |
+
+### Step 13.11: API schemas and routes
+
+**File: `server/api/windkit_schemas.py`** — Pydantic v2 request models for all WindKit endpoints.
+
+**File: `server/api/routes/windkit.py`** — ~130 FastAPI POST endpoints under `/api/windkit/{category}/{function}`.
+
+### Step 13.12: Session state and registration
+
+- Add `windkit_data: dict` to `SessionState`
+- Add `"windkit"` to workspace subdirectories in `SessionManager`
+- Register all 9 tool module imports in `server/main.py`
+- Register WindKit router in `server/api/main.py`
+
+### Step 13.13: Frontend API client
+
+**File: `frontend/src/lib/windkitApi.ts`** — TypeScript API client with typed methods for all WindKit endpoints.
+
+### Step 13.14: Tests
+
+**File: `tests/test_windkit.py`** — 79 comprehensive tests covering:
+
+1. **Serializer round-trips** (13 tests): NumpyEncoder, Dataset, DataArray, DataFrame, _ok helper
+2. **Wind functions** (10 tests): speed, direction, vectors, direction difference, sectors
+3. **Climate tools** (10 tests): create/validate TSWC, BWC, WWC, GWC, GeoWC
+4. **Weibull distribution** (9 tests): moment, PDF, CDF, freq_gt_mean, probability, fit
+5. **Spatial tools** (17 tests): create point/dataset/cuboid/raster, validation, conversions, CRS, comparison
+6. **Coordinate helpers** (5 tests): sector coords, wsbin coords
+7. **Climate statistics** (3 tests): met fields, mean wind speed, power density
+8. **Pipeline tests** (2 tests): TSWC→BWC, GeoDataFrame conversion
+9. **Sample data tests** (5 tests): Boxkite speed round-trip, sector assignment, HornsRev Weibull fit, location creation, direction differences
+10. **Cross-module workflows** (5 tests): BWC→stats, WWC validation, sector coord matching, PDF/CDF consistency
+
+**Environment**: Tests require `WINDKIT_NAME`, `WINDKIT_EMAIL`, `WINDKIT_INSTITUTION` env vars (set via pytest `monkeypatch` autouse fixture).
+
+**Run**: `python -m pytest tests/test_windkit.py -v`
+
+### Step 13.15: Dependencies
+
+**File: `pyproject.toml`** — Add:
+```
+"windkit>=2.0"
+"geopandas>=0.14"
+"pyproj>=3.6"
+```
+

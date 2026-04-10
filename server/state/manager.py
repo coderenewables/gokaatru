@@ -27,7 +27,7 @@ class SessionManager:
     def _prepare_workspace(self, workspace_dir: Path) -> None:
         """Create the required directory structure and runconfig file for a workspace."""
         workspace_dir.mkdir(parents=True, exist_ok=True)
-        for child in ("uploads", "era5_cache", "ltc_results"):
+        for child in ("uploads", "era5_cache", "ltc_results", "windkit"):
             (workspace_dir / child).mkdir(parents=True, exist_ok=True)
         runconfig_path = workspace_dir / "runconfig.json"
         if not runconfig_path.exists():

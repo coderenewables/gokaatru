@@ -1,6 +1,6 @@
 # GoKaatru
 
-GoKaatru is a Wind Resource Assessment MCP server for ingesting wind measurement data, cleaning and extrapolating it, correlating it against ERA5 reanalysis, and producing long-term correction, uncertainty, visualization, and mapping outputs. The server exposes 67 MCP tools grouped across data I/O, statistics, shear, ERA5, LTC, post-processing, visualization, configuration, and BrightHub workflows, with `runconfig` as the source of truth for site metadata such as location and hub height.
+GoKaatru is a Wind Resource Assessment MCP server for ingesting wind measurement data, cleaning and extrapolating it, correlating it against ERA5 reanalysis, and producing long-term correction, uncertainty, visualization, and mapping outputs. The server exposes 209 MCP tools grouped across data I/O, statistics, shear, ERA5, LTC, post-processing, visualization, configuration, BrightHub workflows, and WindKit integration (142 tools covering wind functions, climate analysis, spatial operations, Weibull distributions, topography, wind farms, and plotting), with `runconfig` as the source of truth for site metadata such as location and hub height.
 
 The workflow web app supports scenario management: save the current analysis state as a named scenario, or upload a `runconfig.json` file to import configuration overrides and automatically execute the LTC → ensemble → uncertainty pipeline, saving the result as a new scenario for comparison.
 
@@ -90,11 +90,12 @@ mcpServers:
 
 ## Validation
 
-The repository has been validated with 67 registered MCP tools, 10 web API endpoint groups, and full backend + frontend test coverage.
+The repository has been validated with 209 registered MCP tools (67 core + 142 WindKit), ~200 web API routes, and full backend + frontend test coverage.
 
 ```bash
 python -m ruff check server/ tests/
 python -m pytest tests/ -v
+python -m pytest tests/test_windkit.py -v
 python -m pytest tests/test_api_sessions.py tests/test_api_workflow.py -v
 python -m server.main --help
 python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000
@@ -197,6 +198,80 @@ docker compose ps
 - `compute_momm`
 - `compute_scatter_stats`
 - `calculate_uncertainty`
+
+### WindKit — Wind Functions (13 tools)
+
+- `windkit_wind_speed`
+- `windkit_wind_direction`
+- `windkit_wind_speed_and_direction`
+- `windkit_wind_vectors`
+- `windkit_wind_direction_difference`
+- `windkit_wd_to_sector`
+- `windkit_vinterp_wind_direction`
+- `windkit_vinterp_wind_speed`
+- `windkit_rotor_equivalent_wind_speed`
+- `windkit_shear_extrapolate`
+- `windkit_shear_exponent`
+- `windkit_veer_extrapolate`
+- `windkit_wind_veer`
+
+### WindKit — Climate (30 tools)
+
+- `windkit_validate_tswc` / `windkit_is_tswc` / `windkit_create_tswc` / `windkit_read_tswc` / `windkit_tswc_from_dataframe` / `windkit_tswc_resample`
+- `windkit_validate_bwc` / `windkit_is_bwc` / `windkit_create_bwc` / `windkit_read_bwc` / `windkit_bwc_from_tswc` / `windkit_bwc_to_file` / `windkit_combine_bwcs` / `windkit_weibull_fit`
+- `windkit_validate_wwc` / `windkit_is_wwc` / `windkit_create_wwc` / `windkit_read_wwc` / `windkit_read_mfwwc` / `windkit_wwc_to_file` / `windkit_wwc_to_bwc` / `windkit_weibull_combined`
+- `windkit_validate_gwc` / `windkit_is_gwc` / `windkit_create_gwc` / `windkit_read_gwc` / `windkit_gwc_to_file`
+- `windkit_validate_geowc` / `windkit_is_geowc`
+
+### WindKit — Climate Statistics (7 tools)
+
+- `windkit_create_met_fields`
+- `windkit_mean_ws_moment`
+- `windkit_ws_cdf`
+- `windkit_ws_freq_gt_mean`
+- `windkit_mean_wind_speed`
+- `windkit_mean_power_density`
+- `windkit_get_cross_predictions`
+
+### WindKit — LTC (2 tools)
+
+- `windkit_ltc_linreg_mcp`
+- `windkit_ltc_varrat_mcp`
+
+### WindKit — Topography (18 tools)
+
+- Landcover: `windkit_get_landcover_table` / `windkit_add_landcover` / `windkit_roughness_to_landcover` / `windkit_landcover_to_roughness` / `windkit_read_landcover_map` / `windkit_write_landcover_map` / `windkit_get_landcover_from_gwa` / `windkit_get_landcover_from_remote`
+- Elevation: `windkit_read_elevation_map` / `windkit_write_elevation_map`
+- Raster: `windkit_create_raster_map` / `windkit_get_raster_from_remote`
+- Vector: `windkit_create_vector_map` / `windkit_get_vector_from_gwa`
+- Conversion: `windkit_lines_to_polygons` / `windkit_polygons_to_lines` / `windkit_snap_to_layer` / `windkit_check_dead_ends` / `windkit_check_lines_cross`
+
+### WindKit — Wind Farm (16 tools)
+
+- Turbines: `windkit_validate_wind_turbines` / `windkit_is_wind_turbines` / `windkit_check_wtg_keys` / `windkit_create_wt_from_dataframe` / `windkit_create_wt_from_arrays` / `windkit_wt_to_geodataframe`
+- WTG: `windkit_validate_wtg` / `windkit_is_wtg` / `windkit_estimate_regulation_type` / `windkit_read_wtg` / `windkit_wtg_power` / `windkit_wtg_cp` / `windkit_wtg_ct`
+- Losses: `windkit_validate_uncertainty_table` / `windkit_get_uncertainty_table` / `windkit_total_uncertainty` / `windkit_uncertainty_table_summary` / `windkit_total_uncertainty_factor`
+
+### WindKit — Spatial (25+ tools)
+
+- CRS: `windkit_get_crs` / `windkit_set_crs` / `windkit_crs_are_equal`
+- Create: `windkit_create_dataset` / `windkit_create_raster` / `windkit_create_point` / `windkit_create_stacked_point` / `windkit_create_cuboid`
+- Validate: `windkit_is_point` / `windkit_is_stacked_point` / `windkit_is_cuboid` / `windkit_is_raster`
+- Convert: `windkit_to_point` / `windkit_to_cuboid` / `windkit_to_stacked_point` / `windkit_to_raster` / `windkit_gdf_to_ds` / `windkit_ds_to_gdf`
+- Interpolation: `windkit_interp_structured_like` / `windkit_interp_unstructured` / `windkit_interp_unstructured_like`
+- Comparison: `windkit_are_spatially_equal` / `windkit_equal_spatial_shape` / `windkit_covers`
+
+### WindKit — Plotting (9 tools)
+
+- `plot_histogram` / `plot_histogram_lines` / `plot_operational_curves` / `plot_raster` / `plot_roughness_rose` / `plot_time_series` / `plot_vertical_profile` / `plot_wind_rose` / `plot_landcover_map`
+
+### WindKit — Other (14 tools)
+
+- Tutorial: `windkit_get_tutorial_data` / `windkit_load_tutorial_data`
+- Weibull: `windkit_fit_weibull_wasp_m1_m3_fgtm` / `windkit_fit_weibull_wasp_m1_m3` / `windkit_fit_weibull_k_sumlogm` / `windkit_weibull_moment` / `windkit_weibull_pdf` / `windkit_weibull_cdf` / `windkit_weibull_freq_gt_mean` / `windkit_get_weibull_probability`
+- Coordinates: `windkit_create_sector_coords` / `windkit_create_wsbin_coords`
+- WAsP: `windkit_read_cfdres`
+- ERA5: `windkit_get_era5`
 
 ### Visualization
 

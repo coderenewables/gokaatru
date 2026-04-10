@@ -17,6 +17,7 @@ from server.api.routes.health import router as health_router
 from server.api.routes.results import router as results_router
 from server.api.routes.sessions import router as sessions_router
 from server.api.routes.uploads import router as uploads_router
+from server.api.routes.windkit import router as windkit_router
 
 
 def create_app() -> FastAPI:
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
     app.include_router(results_router, prefix="/api")
     app.include_router(exports_router, prefix="/api")
     app.include_router(chat_router, prefix="/api")
+    app.include_router(windkit_router, prefix="/api")
 
     @app.get("/")
     def root() -> RedirectResponse:

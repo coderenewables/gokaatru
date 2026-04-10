@@ -45,6 +45,7 @@ class SessionState:
     latest_uncertainty: dict[str, object] | None
     scenarios: list[dict[str, object]]
     runconfig: dict[str, object]
+    windkit_data: dict[str, object]
 
     def __init__(self) -> None:
         """Initialize the singleton session state per the GoKaatru build spec."""
@@ -80,6 +81,7 @@ class SessionState:
         self.latest_uncertainty = None
         self.scenarios = []
         self.runconfig = {}
+        self.windkit_data = {}
         self.session_id = preserved_session_id
         self.workspace_dir = preserved_workspace_dir
         self.created_at = preserved_created_at

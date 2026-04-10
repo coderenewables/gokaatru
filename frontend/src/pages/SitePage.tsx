@@ -13,69 +13,18 @@ import { PageHeader } from "../components/common/PageHeader";
 import { PlotlyFigure } from "../components/common/PlotlyFigure";
 import type { JsonValue } from "../lib/types";
 
-function numericString(value: unknown) {
-  return typeof value === "number" ? String(value) : "";
-}
-
-function recordValue(record: Record<string, unknown> | null, key: string) {
-  return record ? record[key] : undefined;
-}
-
 function speedSensorsOnly(sensors: SensorRecord[] | undefined) {
   return (sensors ?? []).filter((sensor) => sensor.sensor_type === "wind_speed").sort((left, right) => right.height_m - left.height_m);
-}
-
-function draftSection(value: JsonValue | undefined) {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : {};
-}
-
-function runconfigSnapshot(
-  projectName: string,
-  measurementType: string,
-  latitude: string,
-  longitude: string,
-  elevation: string,
-  hubHeight: string,
-) {
-  return {
-    project_name: projectName,
-    measurement_type: measurementType,
-    location: {
-      latitude: Number(latitude),
-      longitude: Number(longitude),
-      elevation_m: Number(elevation || 0),
-    },
-    hub_height_m: Number(hubHeight),
-  };
-}
-
-function updateSiteDraft(
-  patchFormDraft: (section: string, patch: Record<string, JsonValue>) => void,
-  patch: Record<string, JsonValue>,
-) {
-  patchFormDraft("site", { ...patch, dirty: true });
 }
 
 export function SitePage() {
   const sessionId = useWorkspaceStore((state) => state.sessionId);
   const selectedSensors = useWorkspaceStore((state) => state.selectedSensors);
   const setSelectedSensors = useWorkspaceStore((state) => state.setSelectedSensors);
-  const siteDraftValue = useWorkspaceStore((state) => state.formDrafts.site);
-  const patchFormDraft = useWorkspaceStore((state) => state.patchFormDraft);
   const queryClient = useQueryClient();
   const [latestError, setLatestError] = useState<unknown>(null);
   const [latestExtrapolation, setLatestExtrapolation] = useState<ExtrapolationResponse | null>(null);
-
-  const siteDraft = useMemo(() => draftSection(siteDraftValue), [siteDraftValue]);
-
-  const projectName = typeof siteDraft.projectName === "string" ? siteDraft.projectName : "";
-  const measurementType = typeof siteDraft.measurementType === "string" ? siteDraft.measurementType : "mast";
-  const latitude = typeof siteDraft.latitude === "string" ? siteDraft.latitude : "";
-  const longitude = typeof siteDraft.longitude === "string" ? siteDraft.longitude : "";
-  const elevation = typeof siteDraft.elevation === "string" ? siteDraft.elevation : "0";
-  const hubHeight = typeof siteDraft.hubHeight === "string" ? siteDraft.hubHeight : "";
-  const tableAggregation = typeof siteDraft.tableAggregation === "string" ? siteDraft.tableAggregation : "mean";
-  const siteDraftDirty = siteDraft.dirty === true;
+  const [tableAggregation, setTableAggregation] = useState("mean");
 
   const configQuery = useQuery({
     queryKey: ["runconfig", sessionId],
@@ -83,6 +32,8 @@ export function SitePage() {
     enabled: sessionId !== null,
     staleTime: 15_000,
   });
+
+  const hubHeight = typeof configQuery.data?.hub_height_m === "number" ? String(configQuery.data.hub_height_m) : "";
 
   const summaryQuery = useQuery({
     queryKey: ["analysis-summary", sessionId],
@@ -99,29 +50,6 @@ export function SitePage() {
   });
 
   const availableSpeedSensors = useMemo(() => speedSensorsOnly(sensorsQuery.data?.sensors), [sensorsQuery.data]);
-
-  useEffect(() => {
-    if (!configQuery.data) {
-      return;
-    }
-    if (siteDraftDirty) {
-      return;
-    }
-    const location = typeof configQuery.data.location === "object" && configQuery.data.location !== null && !Array.isArray(configQuery.data.location)
-      ? (configQuery.data.location as Record<string, unknown>)
-      : null;
-    patchFormDraft("site", {
-      projectName: typeof configQuery.data.project_name === "string" ? configQuery.data.project_name : "",
-      measurementType: typeof configQuery.data.measurement_type === "string" ? configQuery.data.measurement_type : "mast",
-      latitude: typeof recordValue(location, "latitude") === "number" ? String(recordValue(location, "latitude")) : "",
-      longitude: typeof recordValue(location, "longitude") === "number" ? String(recordValue(location, "longitude")) : "",
-      elevation: typeof recordValue(location, "elevation_m") === "number" ? String(recordValue(location, "elevation_m")) : "0",
-      hubHeight: numericString(configQuery.data.hub_height_m),
-      tableAggregation,
-      initialized: true,
-      dirty: false,
-    });
-  }, [configQuery.data, patchFormDraft, siteDraftDirty, tableAggregation]);
 
   useEffect(() => {
     if (selectedSensors.length === 0 && availableSpeedSensors.length >= 2) {
@@ -144,13 +72,6 @@ export function SitePage() {
     staleTime: 15_000,
   });
 
-  const roughnessPlotQuery = useQuery({
-    queryKey: ["roughness-plot", sessionId],
-    queryFn: () => resultsApi.getPlot(sessionId ?? "", "shear_table", { table_type: "roughness" }),
-    enabled: sessionId !== null && summaryQuery.data?.roughness_table_ready === true,
-    staleTime: 15_000,
-  });
-
   const shearProfileQuery = useQuery({
     queryKey: ["shear-profile", sessionId],
     queryFn: () => resultsApi.getPlot(sessionId ?? "", "shear_profile", {}),
@@ -166,30 +87,6 @@ export function SitePage() {
       }),
     enabled: sessionId !== null && latestExtrapolation !== null,
     staleTime: 15_000,
-  });
-
-  const saveMetadataMutation = useMutation({
-    mutationFn: () =>
-      configApi.update(sessionId ?? "", {
-        updates: [
-          { key: "project_name", value: projectName },
-          { key: "measurement_type", value: measurementType },
-          { key: "location.latitude", value: Number(latitude) },
-          { key: "location.longitude", value: Number(longitude) },
-          { key: "location.elevation_m", value: Number(elevation || 0) },
-          { key: "hub_height_m", value: Number(hubHeight) },
-        ],
-      }),
-    onSuccess: (result) => {
-      setLatestError(null);
-      patchFormDraft("site", { dirty: false });
-      const fallbackRunconfig = runconfigSnapshot(projectName, measurementType, latitude, longitude, elevation, hubHeight);
-      const nextRunconfig = Object.keys(result.runconfig).length > 0 ? result.runconfig : fallbackRunconfig;
-      queryClient.setQueryData(["runconfig", sessionId], nextRunconfig);
-      void queryClient.invalidateQueries({ queryKey: ["analysis-summary", sessionId] });
-      void queryClient.invalidateQueries({ queryKey: ["session-summary", sessionId] });
-    },
-    onError: (error) => setLatestError(error),
   });
 
   const calculateShearMutation = useMutation({
@@ -211,25 +108,6 @@ export function SitePage() {
     onError: (error) => setLatestError(error),
   });
 
-  const calculateRoughnessMutation = useMutation({
-    mutationFn: () => analysisApi.calculateRoughness(sessionId ?? "", heightSensorsJson),
-    onSuccess: () => {
-      setLatestError(null);
-      void queryClient.invalidateQueries({ queryKey: ["analysis-summary", sessionId] });
-    },
-    onError: (error) => setLatestError(error),
-  });
-
-  const buildRoughnessTableMutation = useMutation({
-    mutationFn: () => analysisApi.buildRoughnessTable(sessionId ?? "", tableAggregation),
-    onSuccess: () => {
-      setLatestError(null);
-      void queryClient.invalidateQueries({ queryKey: ["analysis-summary", sessionId] });
-      void queryClient.invalidateQueries({ queryKey: ["roughness-plot", sessionId] });
-    },
-    onError: (error) => setLatestError(error),
-  });
-
   const extrapolateMutation = useMutation({
     mutationFn: () => analysisApi.extrapolateHub(sessionId ?? "", { hub_height_m: Number(hubHeight), shear_model: "power_law" }),
     onSuccess: (result) => {
@@ -244,128 +122,79 @@ export function SitePage() {
   if (!sessionId) {
     return (
       <section className="page-section">
-        <PageHeader title="Site" detail="Edit run metadata, compute shear and roughness, and extrapolate to hub height." />
-        <EmptyState title="Session required" detail="Create a session before editing site metadata or running extrapolation actions." />
+        <PageHeader title="Vertical Extrapolation" detail="Compute shear, then extrapolate measured and reanalysis data to hub height." />
+        <EmptyState title="Session required" detail="Create a session before running shear or extrapolation calculations." />
       </section>
     );
   }
 
   return (
     <section className="page-section">
-      <PageHeader title="Site" detail="Manage the runconfig, build lookup tables, and create the measured hub-height series used downstream." />
+      <PageHeader title="Vertical Extrapolation" detail="Build shear lookup table from measured heights, then extrapolate measured and reanalysis data to hub height." />
 
       <div className="metric-grid">
-        <MetricCard label="Project" value={summaryQuery.data?.project_name ? String(summaryQuery.data.project_name) : "Untitled"} tone="accent" />
-        <MetricCard label="Selected speed sensors" value={String(selectedSensors.length)} />
+        <MetricCard label="Selected speed sensors" value={String(selectedSensors.length)} tone="accent" />
+        <MetricCard label="Hub height" value={hubHeight ? `${hubHeight} m` : "Not set"} />
         <MetricCard label="Shear table" value={summaryQuery.data?.shear_table_ready ? "Ready" : "Pending"} />
-        <MetricCard label="Roughness table" value={summaryQuery.data?.roughness_table_ready ? "Ready" : "Pending"} />
       </div>
 
       {latestError ? <ErrorBanner error={latestError} /> : null}
 
-      <div className="panel-grid panel-grid-two">
-        <article className="content-card stack-gap">
-          <span className="eyebrow">Project metadata</span>
-          <div className="form-grid two-col">
-            <label className="form-field">
-              <span>Project name</span>
-              <input value={projectName} onChange={(event) => updateSiteDraft(patchFormDraft, { projectName: event.target.value })} />
-            </label>
-            <label className="form-field">
-              <span>Measurement type</span>
-              <select value={measurementType} onChange={(event) => updateSiteDraft(patchFormDraft, { measurementType: event.target.value })}>
-                <option value="mast">mast</option>
-                <option value="lidar">lidar</option>
-                <option value="sodar">sodar</option>
-              </select>
-            </label>
-            <label className="form-field">
-              <span>Latitude</span>
-              <input value={latitude} onChange={(event) => updateSiteDraft(patchFormDraft, { latitude: event.target.value })} />
-            </label>
-            <label className="form-field">
-              <span>Longitude</span>
-              <input value={longitude} onChange={(event) => updateSiteDraft(patchFormDraft, { longitude: event.target.value })} />
-            </label>
-            <label className="form-field">
-              <span>Elevation (m)</span>
-              <input value={elevation} onChange={(event) => updateSiteDraft(patchFormDraft, { elevation: event.target.value })} />
-            </label>
-            <label className="form-field">
-              <span>
-                Hub height (m)
-                <HelpTooltip text="The target turbine hub height for extrapolation. Values between measured heights use interpolation; values above use power-law or log-law extrapolation." />
-              </span>
-              <input value={hubHeight} onChange={(event) => updateSiteDraft(patchFormDraft, { hubHeight: event.target.value })} />
-            </label>
-          </div>
-          <button className="primary-button" type="button" onClick={() => saveMetadataMutation.mutate()}>
-            Save Metadata
+      <article className="content-card stack-gap">
+        <span className="eyebrow">Shear and extrapolation inputs</span>
+        <label className="form-field">
+          <span>
+            Aggregation
+            <HelpTooltip text="MoMM (Mean of Monthly Means) accounts for seasonal and diurnal data gaps. Use mean for well-covered datasets and momm for partial years." />
+          </span>
+          <select value={tableAggregation} onChange={(event) => setTableAggregation(event.target.value)}>
+            <option value="mean">mean</option>
+            <option value="median">median</option>
+            <option value="momm">momm</option>
+          </select>
+        </label>
+        <div className="sensor-checkbox-grid">
+          {availableSpeedSensors.map((sensor) => {
+            const checked = selectedSensors.includes(sensor.name);
+            return (
+              <label key={sensor.name} className={checked ? "sensor-chip sensor-chip-selected" : "sensor-chip"}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => {
+                    setSelectedSensors(
+                      checked
+                        ? selectedSensors.filter((name) => name !== sensor.name)
+                        : [...selectedSensors, sensor.name],
+                    );
+                  }}
+                />
+                <span>{sensor.name}</span>
+                <small>{sensor.height_m} m</small>
+              </label>
+            );
+          })}
+        </div>
+        <div className="button-row wrap">
+          <button className="secondary-button" type="button" onClick={() => calculateShearMutation.mutate()}>
+            Calculate Shear
           </button>
-        </article>
-
-        <article className="content-card stack-gap">
-          <span className="eyebrow">Shear and extrapolation inputs</span>
-          <label className="form-field">
-            <span>
-              Aggregation
-              <HelpTooltip text="MoMM (Mean of Monthly Means) accounts for seasonal and diurnal data gaps. Use mean for well-covered datasets and momm for partial years." />
-            </span>
-            <select value={tableAggregation} onChange={(event) => updateSiteDraft(patchFormDraft, { tableAggregation: event.target.value, dirty: false })}>
-              <option value="mean">mean</option>
-              <option value="median">median</option>
-              <option value="momm">momm</option>
-            </select>
-          </label>
-          <div className="sensor-checkbox-grid">
-            {availableSpeedSensors.map((sensor) => {
-              const checked = selectedSensors.includes(sensor.name);
-              return (
-                <label key={sensor.name} className={checked ? "sensor-chip sensor-chip-selected" : "sensor-chip"}>
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => {
-                      setSelectedSensors(
-                        checked
-                          ? selectedSensors.filter((name) => name !== sensor.name)
-                          : [...selectedSensors, sensor.name],
-                      );
-                    }}
-                  />
-                  <span>{sensor.name}</span>
-                  <small>{sensor.height_m} m</small>
-                </label>
-              );
-            })}
+          <button className="secondary-button" type="button" onClick={() => buildShearTableMutation.mutate()}>
+            Build Shear Table
+          </button>
+          <button className="primary-button" type="button" onClick={() => extrapolateMutation.mutate()}>
+            Extrapolate To Hub
+          </button>
+        </div>
+        {latestExtrapolation ? (
+          <div className="content-note">
+            <strong>{latestExtrapolation.column_name}</strong>
+            <p>
+              direct {latestExtrapolation.method_counts.direct}, interpolated {latestExtrapolation.method_counts.interpolated}, extrapolated {latestExtrapolation.method_counts.extrapolated}
+            </p>
           </div>
-          <div className="button-row wrap">
-            <button className="secondary-button" type="button" onClick={() => calculateShearMutation.mutate()}>
-              Calculate Shear
-            </button>
-            <button className="secondary-button" type="button" onClick={() => buildShearTableMutation.mutate()}>
-              Build Shear Table
-            </button>
-            <button className="secondary-button" type="button" onClick={() => calculateRoughnessMutation.mutate()}>
-              Calculate Roughness
-            </button>
-            <button className="secondary-button" type="button" onClick={() => buildRoughnessTableMutation.mutate()}>
-              Build Roughness Table
-            </button>
-            <button className="primary-button" type="button" onClick={() => extrapolateMutation.mutate()}>
-              Extrapolate To Hub
-            </button>
-          </div>
-          {latestExtrapolation ? (
-            <div className="content-note">
-              <strong>{latestExtrapolation.column_name}</strong>
-              <p>
-                direct {latestExtrapolation.method_counts.direct}, interpolated {latestExtrapolation.method_counts.interpolated}, extrapolated {latestExtrapolation.method_counts.extrapolated}
-              </p>
-            </div>
-          ) : null}
-        </article>
-      </div>
+        ) : null}
+      </article>
 
       <div className="panel-grid panel-grid-two">
         <PlotlyFigure
@@ -374,18 +203,13 @@ export function SitePage() {
           emptyDetail="Calculate shear and build the table to render the month-hour heatmap."
         />
         <PlotlyFigure
-          plot={roughnessPlotQuery.data}
-          emptyTitle="Roughness heatmap unavailable"
-          emptyDetail="Calculate roughness and build the roughness table to render the month-hour heatmap."
-        />
-      </div>
-
-      <div className="panel-grid panel-grid-two">
-        <PlotlyFigure
           plot={shearProfileQuery.data}
           emptyTitle="Shear profile unavailable"
           emptyDetail="Build the shear table to inspect the fitted mean speed profile across heights."
         />
+      </div>
+
+      <div className="panel-grid panel-grid-two">
         {latestExtrapolation ? (
           <article className="content-card stack-gap">
             <span className="eyebrow">Hub-height extrapolation result</span>

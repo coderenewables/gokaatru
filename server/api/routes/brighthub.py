@@ -191,11 +191,45 @@ def brighthub_reanalysis_nodes(
     state: Annotated[SessionState, Depends(get_session_state)],
 ) -> ReanalysisNodesResponse:
     """Find nearest ERA5 and MERRA-2 reanalysis nodes for a coordinate."""
+    from server.core.spatial import bearing_compass, haversine_km
+    from server.schemas.common import Coordinate
+
     token = _require_token(state)
     try:
         nodes = fetch_reanalysis_nodes(token, body.latitude, body.longitude)
     except Exception as exc:
         raise to_bad_gateway(RuntimeError(f"BrightHub API error: {exc}")) from exc
+
+    # Persist ERA5 nodes in state so interpolation can find them
+    era5_state_nodes = []
+    for n in nodes.get("era5_nodes", []):
+        nlat, nlon = n["latitude_ddeg"], n["longitude_ddeg"]
+        era5_state_nodes.append({
+            "latitude": nlat,
+            "longitude": nlon,
+            "distance_km": haversine_km(body.latitude, body.longitude, nlat, nlon),
+            "bearing": bearing_compass(body.latitude, body.longitude, nlat, nlon),
+        })
+    state.era5_nodes = sorted(era5_state_nodes, key=lambda nd: float(nd["distance_km"]))
+
+    # Persist MERRA-2 nodes in state
+    merra_state_nodes = []
+    for n in nodes.get("merra2_nodes", []):
+        nlat, nlon = n["latitude_ddeg"], n["longitude_ddeg"]
+        merra_state_nodes.append({
+            "latitude": nlat,
+            "longitude": nlon,
+            "distance_km": haversine_km(body.latitude, body.longitude, nlat, nlon),
+            "bearing": bearing_compass(body.latitude, body.longitude, nlat, nlon),
+        })
+    state.merra_nodes = sorted(merra_state_nodes, key=lambda nd: float(nd["distance_km"]))
+
+    # Store site coordinate for later interpolation
+    current = state.get_coordinate()
+    elev = 0.0 if current is None else current.elevation_m
+    state.set_coordinate(Coordinate(latitude=body.latitude, longitude=body.longitude, elevation_m=elev))
+    state.touch()
+
     return ReanalysisNodesResponse(
         era5_nodes=[ReanalysisNode(**n) for n in nodes.get("era5_nodes", [])],
         merra2_nodes=[ReanalysisNode(**n) for n in nodes.get("merra2_nodes", [])],
@@ -228,7 +262,106 @@ def brighthub_reanalysis_download(
         ts = r.get("timeseries_data")
         row_count = len(ts.get("data", [])) if isinstance(ts, dict) else None
         items.append(ReanalysisDataItem(latitude=r["latitude"], longitude=r["longitude"], rows=row_count))
+        # Store as DataFrame in session state so interpolation works
+        if isinstance(ts, dict):
+            if body.dataset == "ERA5":
+                _store_brighthub_era5_frame(state, r["latitude"], r["longitude"], ts)
+            elif body.dataset == "MERRA-2":
+                _store_brighthub_merra_frame(state, r["latitude"], r["longitude"], ts)
+    state.touch()
     return ReanalysisDownloadResponse(dataset=body.dataset, source="brighthub", items=items)
+
+
+# BrightHub ERA5 column mapping → internal ERA5 convention used by interpolation
+_BH_ERA5_COLUMN_MAP = {
+    "Spd_100m_mps": "Spd_100m",
+    "Dir_100m_deg": "Dir_100m",
+    "Tmp_2m_degC": "t2m",
+    "Prs_0m_hPa": "sp",
+}
+
+
+def _store_brighthub_era5_frame(
+    state: SessionState,
+    latitude: float,
+    longitude: float,
+    ts: dict,
+) -> None:
+    """Parse a BrightHub timeseries JSON payload into a DataFrame and store it in session state."""
+    import pandas as pd
+
+    from server.tools.era5 import _era5_key
+
+    data = ts.get("data", [])
+    if not data:
+        return
+    # BrightHub returns [{"timestamp": ..., "var1": ..., ...}, ...] or
+    # {"columns": [...], "data": [[...], ...]} depending on version.
+    if isinstance(data[0], dict):
+        frame = pd.DataFrame(data)
+    else:
+        columns = ts.get("columns", [])
+        frame = pd.DataFrame(data, columns=columns if columns else None)
+    # Set time index
+    time_col = next((c for c in frame.columns if c.lower() in ("timestamp", "time", "datetime")), None)
+    if time_col is not None:
+        frame[time_col] = pd.to_datetime(frame[time_col], utc=True)
+        frame = frame.set_index(time_col)
+    if not isinstance(frame.index, pd.DatetimeIndex):
+        frame.index = pd.DatetimeIndex(frame.index, name="time")
+    # Strip timezone so index is tz-naive (matches EarthDataHub + measured convention)
+    if frame.index.tz is not None:
+        frame.index = frame.index.tz_localize(None)
+    frame.index.name = "time"
+    # Rename BrightHub columns to internal convention
+    frame = frame.rename(columns=_BH_ERA5_COLUMN_MAP)
+    state.era5_data[_era5_key(latitude, longitude)] = frame.sort_index()
+
+
+def _merra_key(latitude: float, longitude: float) -> str:
+    """Build a dict key for MERRA-2 nodes matching the ERA5 convention."""
+    return f"{latitude}_{longitude}"
+
+
+# BrightHub MERRA-2 column mapping → internal convention
+_BH_MERRA_COLUMN_MAP = {
+    "Spd_100m_mps": "Spd_100m",
+    "Dir_100m_deg": "Dir_100m",
+    "Spd_50m_mps": "Spd_50m",
+    "Dir_50m_deg": "Dir_50m",
+    "Tmp_2m_degC": "t2m",
+    "Prs_0m_hPa": "sp",
+}
+
+
+def _store_brighthub_merra_frame(
+    state: SessionState,
+    latitude: float,
+    longitude: float,
+    ts: dict,
+) -> None:
+    """Parse a BrightHub MERRA-2 JSON payload into a DataFrame and store it in session state."""
+    import pandas as pd
+
+    data = ts.get("data", [])
+    if not data:
+        return
+    if isinstance(data[0], dict):
+        frame = pd.DataFrame(data)
+    else:
+        columns = ts.get("columns", [])
+        frame = pd.DataFrame(data, columns=columns if columns else None)
+    time_col = next((c for c in frame.columns if c.lower() in ("timestamp", "time", "datetime")), None)
+    if time_col is not None:
+        frame[time_col] = pd.to_datetime(frame[time_col], utc=True)
+        frame = frame.set_index(time_col)
+    if not isinstance(frame.index, pd.DatetimeIndex):
+        frame.index = pd.DatetimeIndex(frame.index, name="time")
+    if frame.index.tz is not None:
+        frame.index = frame.index.tz_localize(None)
+    frame.index.name = "time"
+    frame = frame.rename(columns=_BH_MERRA_COLUMN_MAP)
+    state.merra_data[_merra_key(latitude, longitude)] = frame.sort_index()
 
 
 def _download_era5_earthdatahub(

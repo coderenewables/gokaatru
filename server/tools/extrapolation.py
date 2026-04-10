@@ -189,6 +189,74 @@ def _extrapolate_reanalysis_to_hub(
     return {"status": "ok", "column_name": column_name}
 
 
+def _extrapolate_all_reanalysis_nodes(
+    state: SessionState,
+    hub_height_m: float,
+    reference_height_m: float = 100.0,
+) -> dict:
+    """Extrapolate every ERA5/MERRA node and the interpolated series to hub height using the shear table."""
+    if state.shear_table is None:
+        raise ValueError("Hub-height extrapolation of reanalysis data requires session.shear_table")
+
+    ref_col = f"Spd_{int(reference_height_m)}m"
+    hub_col = _hub_column_name(hub_height_m)
+    extrapolated_keys: list[str] = []
+    skipped_keys: list[str] = []
+
+    # --- individual ERA5 nodes ---
+    for key, frame in state.era5_data.items():
+        if ref_col not in frame.columns:
+            skipped_keys.append(key)
+            continue
+        shear = _lookup_table_values(frame.index, state.shear_table)
+        ref_speed = frame[ref_col].to_numpy(dtype=float)
+        frame[hub_col] = _power_extrapolate_array(
+            ref_speed, np.full_like(ref_speed, reference_height_m), hub_height_m, shear,
+        )
+        extrapolated_keys.append(key)
+
+    # --- individual MERRA-2 nodes ---
+    merra_data: dict[str, pd.DataFrame] = getattr(state, "merra_data", {})
+    for key, frame in merra_data.items():
+        if ref_col not in frame.columns:
+            skipped_keys.append(f"merra:{key}")
+            continue
+        shear = _lookup_table_values(frame.index, state.shear_table)
+        ref_speed = frame[ref_col].to_numpy(dtype=float)
+        frame[hub_col] = _power_extrapolate_array(
+            ref_speed, np.full_like(ref_speed, reference_height_m), hub_height_m, shear,
+        )
+        extrapolated_keys.append(f"merra:{key}")
+
+    # --- interpolated ERA5 at site ---
+    interp_done = False
+    if state.era5_interpolated_df is not None and ref_col in state.era5_interpolated_df.columns:
+        shear = _lookup_table_values(state.era5_interpolated_df.index, state.shear_table)
+        ref_speed = state.era5_interpolated_df[ref_col].to_numpy(dtype=float)
+        state.era5_interpolated_df[hub_col] = _power_extrapolate_array(
+            ref_speed, np.full_like(ref_speed, reference_height_m), hub_height_m, shear,
+        )
+        interp_done = True
+
+    return {
+        "status": "ok",
+        "hub_column": hub_col,
+        "extrapolated_nodes": extrapolated_keys,
+        "skipped_nodes": skipped_keys,
+        "interpolated_extrapolated": interp_done,
+    }
+
+
+def _add_shear_to_timeseries(state: SessionState) -> bool:
+    """Copy the shear timeseries into the measured dataset if available."""
+    if state.shear_timeseries_df is None or state.timeseries_df is None:
+        return False
+    if "shear_coefficient" in state.shear_timeseries_df.columns:
+        state.timeseries_df["shear_coefficient"] = state.shear_timeseries_df["shear_coefficient"]
+        return True
+    return False
+
+
 @mcp.tool()
 def extrapolate_to_hub_height(hub_height_m: float, shear_model: str = "power_law") -> dict:
     """Create a hub-height wind-speed series using power-law or log-law shear per IEC 61400-12-1 Annex B."""

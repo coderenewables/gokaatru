@@ -97,6 +97,15 @@ export function LtcPage() {
     staleTime: 10_000,
   });
 
+  const clippingColumnsQuery = useQuery({
+    queryKey: ["clipping-columns", sessionId, selectedLtcSource],
+    queryFn: () => analysisApi.getClippingColumns(sessionId ?? "", selectedLtcSource),
+    enabled: sessionId !== null,
+    staleTime: 10_000,
+  });
+
+  const clippingColumns = useMemo(() => clippingColumnsQuery.data?.columns ?? [], [clippingColumnsQuery.data]);
+
   const referenceColumns = useMemo(() => ensembleQuery.data?.reference_columns ?? fallbackReferenceColumns, [ensembleQuery.data]);
 
   const referenceSpeedColumns = useMemo(() => {
@@ -193,6 +202,13 @@ export function LtcPage() {
       setShortDirCol(directionSensors[0].name);
     }
   }, [directionSensors, shortDirCol]);
+
+  useEffect(() => {
+    if (clippingColumns.length > 0 && !clippingColumns.includes(clippingSpeedCol)) {
+      const preferred = clippingColumns.find((c) => c === "corrected_wind_speed") ?? clippingColumns.find((c) => c === "Ensemble_Speed") ?? clippingColumns[0];
+      setClippingSpeedCol(preferred);
+    }
+  }, [clippingColumns, clippingSpeedCol]);
 
   useEffect(() => {
     if (!referenceSpeedColumns.includes(longCol)) {
@@ -426,7 +442,14 @@ export function LtcPage() {
           <div className="form-grid two-col">
             <label className="form-field">
               <span>Clipping speed column</span>
-              <input value={clippingSpeedCol} onChange={(event) => setClippingSpeedCol(event.target.value)} />
+              <select value={clippingSpeedCol} onChange={(event) => setClippingSpeedCol(event.target.value)}>
+                <option value="">Select column</option>
+                {clippingColumns.map((col) => (
+                  <option key={col} value={col}>
+                    {col}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="form-field">
               <span>Clipping source</span>

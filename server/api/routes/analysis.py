@@ -42,7 +42,11 @@ from server.tools.era5 import (
     _find_era5_nodes,
     _interpolate_era5_to_site,
 )
-from server.tools.extrapolation import _extrapolate_to_hub_height
+from server.tools.extrapolation import (
+    _add_shear_to_timeseries,
+    _extrapolate_all_reanalysis_nodes,
+    _extrapolate_to_hub_height,
+)
 from server.tools.homogeneity import _analyze_homogeneity, _apply_homogeneity_cutoff
 from server.tools.ltc import (
     _run_ltc_linear_least_squares,
@@ -407,12 +411,31 @@ def extrapolate_hub(
     body: ExtrapolateHubRequest,
     state: Annotated[SessionState, Depends(get_session_state)],
 ) -> dict:
-    """Extrapolate measured wind speed to hub height for the current session."""
+    """Extrapolate measured wind speed to hub height for the current session.
+
+    Also copies the shear timeseries into the measured dataset and
+    extrapolates every ERA5, MERRA-2, and interpolated reanalysis node
+    to hub height using the 12x24 shear lookup table.
+    """
     del session_id
     try:
         result = _extrapolate_to_hub_height(state, body.hub_height_m, body.shear_model)
     except ValueError as exc:
         raise to_bad_request(exc) from exc
+
+    # Append shear timeseries column to measured dataset
+    shear_added = _add_shear_to_timeseries(state)
+    result["shear_added"] = shear_added
+
+    # Extrapolate all reanalysis nodes + interpolated to hub height
+    reanalysis_result: dict | None = None
+    if state.shear_table is not None and (state.era5_data or state.era5_interpolated_df is not None):
+        try:
+            reanalysis_result = _extrapolate_all_reanalysis_nodes(state, body.hub_height_m)
+        except ValueError:
+            pass  # non-fatal — reanalysis may not be loaded yet
+    result["reanalysis"] = reanalysis_result
+
     state.touch()
     return result
 
@@ -520,6 +543,30 @@ def run_clipping(
         return _run_clipping_analysis(state, body.speed_col, body.source)
     except ValueError as exc:
         raise to_bad_request(exc) from exc
+
+
+@router.get("/clipping/columns")
+def get_clipping_columns(
+    session_id: str,
+    source: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict:
+    """Return the list of numeric columns available for a given clipping source."""
+    del session_id
+    if source == "ensemble":
+        if state.ensemble_df is None:
+            return {"columns": []}
+        import pandas as pd
+        frame = pd.DataFrame(state.ensemble_df)
+        cols = [c for c in frame.columns if c not in ("Timestamp",) and frame[c].dtype.kind in ("f", "i")]
+        return {"columns": cols}
+    payload = state.ltc_results.get(source)
+    if payload is None or "df" not in payload:
+        return {"columns": []}
+    import pandas as pd
+    frame = pd.DataFrame(payload["df"])
+    cols = [c for c in frame.columns if c not in ("Timestamp",) and frame[c].dtype.kind in ("f", "i")]
+    return {"columns": cols}
 
 
 @router.post("/homogeneity/analyze")

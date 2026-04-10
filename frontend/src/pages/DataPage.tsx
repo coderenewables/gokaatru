@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { analysisApi, exportsApi, resultsApi, uploadsApi } from "../lib/api";
+import { analysisApi, configApi, exportsApi, resultsApi, uploadsApi } from "../lib/api";
 import type { CleaningLogEntry, JsonValue, SensorCoverageResponse, SensorRecord } from "../lib/types";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { CleaningRuleParams } from "../components/common/CleaningRuleParams";
@@ -38,6 +38,15 @@ export function DataPage() {
   const [cleaningParams, setCleaningParams] = useState<Record<string, JsonValue>>(cleaningRuleDefaults.range_check);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+
+  // Project metadata state
+  const [projectName, setProjectName] = useState("");
+  const [measurementType, setMeasurementType] = useState("mast");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [elevation, setElevation] = useState("0");
+  const [hubHeight, setHubHeight] = useState("");
+  const [metadataRevision, setMetadataRevision] = useState(0);
 
   const sensorsQuery = useQuery({
     queryKey: ["sensors-coverage", sessionId],
@@ -85,6 +94,47 @@ export function DataPage() {
     staleTime: 15_000,
   });
 
+  // Project metadata: load from runconfig
+  const configQuery = useQuery({
+    queryKey: ["runconfig", sessionId],
+    queryFn: () => configApi.get(sessionId ?? ""),
+    enabled: sessionId !== null,
+    staleTime: 15_000,
+  });
+
+  useEffect(() => {
+    if (!configQuery.data) return;
+    const loc = typeof configQuery.data.location === "object" && configQuery.data.location !== null && !Array.isArray(configQuery.data.location)
+      ? (configQuery.data.location as Record<string, unknown>) : null;
+    if (typeof configQuery.data.project_name === "string" && configQuery.data.project_name) setProjectName(configQuery.data.project_name);
+    if (typeof configQuery.data.measurement_type === "string" && configQuery.data.measurement_type) setMeasurementType(configQuery.data.measurement_type);
+    if (loc && typeof loc.latitude === "number") setLatitude(String(loc.latitude));
+    if (loc && typeof loc.longitude === "number") setLongitude(String(loc.longitude));
+    if (loc && typeof loc.elevation_m === "number") setElevation(String(loc.elevation_m));
+    if (typeof configQuery.data.hub_height_m === "number") setHubHeight(String(configQuery.data.hub_height_m));
+  }, [configQuery.dataUpdatedAt, metadataRevision]);
+
+  const saveMetadataMutation = useMutation({
+    mutationFn: () =>
+      configApi.update(sessionId ?? "", {
+        updates: [
+          { key: "project_name", value: projectName },
+          { key: "measurement_type", value: measurementType },
+          { key: "location.latitude", value: Number(latitude) },
+          { key: "location.longitude", value: Number(longitude) },
+          { key: "location.elevation_m", value: Number(elevation || 0) },
+          { key: "hub_height_m", value: Number(hubHeight) },
+        ],
+      }),
+    onSuccess: () => {
+      setLatestError(null);
+      void queryClient.invalidateQueries({ queryKey: ["runconfig", sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ["analysis-summary", sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ["session-summary", sessionId] });
+    },
+    onError: (error) => setLatestError(error),
+  });
+
   useEffect(() => {
     const firstSensor = sensorsQuery.data?.[0]?.name;
     if (firstSensor && !sensorName) {
@@ -110,6 +160,7 @@ export function DataPage() {
     onSuccess: (result) => {
       setLatestError(null);
       setLastUploadPath(String(result.file_path));
+      setMetadataRevision((r) => r + 1);
       void queryClient.invalidateQueries({ queryKey: ["session-summary", sessionId] });
       void queryClient.invalidateQueries({ queryKey: ["runconfig", sessionId] });
       void queryClient.invalidateQueries({ queryKey: ["analysis-summary", sessionId] });
@@ -193,6 +244,46 @@ export function DataPage() {
       </div>
 
       {latestError ? <ErrorBanner error={latestError} /> : null}
+
+      <article className="content-card stack-gap">
+        <span className="eyebrow">Project metadata</span>
+        <div className="form-grid two-col">
+          <label className="form-field">
+            <span>Project name</span>
+            <input value={projectName} onChange={(e) => setProjectName(e.target.value)} />
+          </label>
+          <label className="form-field">
+            <span>Measurement type</span>
+            <select value={measurementType} onChange={(e) => setMeasurementType(e.target.value)}>
+              <option value="mast">mast</option>
+              <option value="lidar">lidar</option>
+              <option value="sodar">sodar</option>
+            </select>
+          </label>
+          <label className="form-field">
+            <span>Latitude</span>
+            <input value={latitude} onChange={(e) => setLatitude(e.target.value)} />
+          </label>
+          <label className="form-field">
+            <span>Longitude</span>
+            <input value={longitude} onChange={(e) => setLongitude(e.target.value)} />
+          </label>
+          <label className="form-field">
+            <span>Elevation (m)</span>
+            <input value={elevation} onChange={(e) => setElevation(e.target.value)} />
+          </label>
+          <label className="form-field">
+            <span>
+              Hub height (m)
+              <HelpTooltip text="The target turbine hub height for extrapolation. Values between measured heights use interpolation; values above use power-law or log-law extrapolation." />
+            </span>
+            <input value={hubHeight} onChange={(e) => setHubHeight(e.target.value)} />
+          </label>
+        </div>
+        <button className="primary-button" type="button" onClick={() => saveMetadataMutation.mutate()}>
+          Save Metadata
+        </button>
+      </article>
 
       <div className="panel-grid panel-grid-two">
         <article className="content-card stack-gap">

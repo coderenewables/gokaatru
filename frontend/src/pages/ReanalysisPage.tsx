@@ -2,8 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { ApiError, analysisApi, configApi, resultsApi, sessionsApi } from "../lib/api";
-import type { Era5ExtractResponse, Era5InterpolationResponse, Era5Node, SiteMapResponse } from "../lib/types";
+import { ApiError, analysisApi, brighthubApi, configApi, resultsApi, sessionsApi } from "../lib/api";
+import type {
+  BrightHubReanalysisDownloadResponse,
+  BrightHubReanalysisNode,
+  BrightHubReanalysisNodesResponse,
+  Era5ExtractResponse,
+  Era5InterpolationResponse,
+  Era5Node,
+  SiteMapResponse,
+} from "../lib/types";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { DataTable } from "../components/common/DataTable";
 import { EmptyState } from "../components/common/EmptyState";
@@ -51,7 +59,7 @@ function extractErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message;
   }
-  return "ERA5 extraction failed. Retry the download and check the selected node range.";
+  return "Reanalysis extraction failed. Retry the download and check the selected node range.";
 }
 
 export function ReanalysisPage() {
@@ -65,6 +73,11 @@ export function ReanalysisPage() {
   const [extractResults, setExtractResults] = useState<Era5ExtractResponse[]>([]);
   const [latestInterpolation, setLatestInterpolation] = useState<Era5InterpolationResponse | null>(null);
   const [extractProgress, setExtractProgress] = useState<ExtractProgress | null>(null);
+
+  // Unified reanalysis state
+  const [era5Source, setEra5Source] = useState<"earthdatahub" | "brighthub">("earthdatahub");
+  const [bhNodes, setBhNodes] = useState<BrightHubReanalysisNodesResponse | null>(null);
+  const [bhDownloadResults, setBhDownloadResults] = useState<BrightHubReanalysisDownloadResponse[]>([]);
 
   const summaryQuery = useQuery({
     queryKey: ["session-summary", sessionId],
@@ -130,76 +143,123 @@ export function ReanalysisPage() {
 
   const nodes = useMemo(() => era5NodesQuery.data ?? [], [era5NodesQuery.data]);
 
-  const findNodesMutation = useMutation({
-    mutationFn: () => analysisApi.findEra5Nodes(sessionId ?? "", { latitude: Number(latitude), longitude: Number(longitude) }),
-    onSuccess: (result) => {
-      setLatestError(null);
-      if (sessionId !== null) {
-        queryClient.setQueryData(["era5-nodes", sessionId], result.nodes);
-      }
-      void queryClient.invalidateQueries({ queryKey: ["session-summary", sessionId] });
-      void queryClient.invalidateQueries({ queryKey: ["site-map", sessionId] });
-    },
-    onError: (error) => setLatestError(error),
+  // BrightHub auth status
+  const bhStatusQuery = useQuery({
+    queryKey: ["brighthub-status", sessionId],
+    queryFn: () => brighthubApi.status(sessionId ?? ""),
+    enabled: sessionId !== null,
+    staleTime: 10_000,
   });
+  const isBhAuthenticated = bhStatusQuery.data?.authenticated === true;
 
-  const extractAllMutation = useMutation({
+  // Unified Download: find nodes + extract/download all data in one step
+  const downloadMutation = useMutation({
     mutationFn: async () => {
-      const results: Era5ExtractResponse[] = [];
-      for (let index = 0; index < nodes.length; index += 1) {
-        const node = nodes[index];
-        const label = nodeLabel(node);
-        setExtractProgress({
-          total: nodes.length,
-          completed: index,
-          currentNodeLabel: label,
-          status: `Downloading node ${index + 1} of ${nodes.length}`,
-        });
-        const result = await analysisApi.extractEra5(sessionId ?? "", {
-          latitude: node.latitude,
-          longitude: node.longitude,
-          start_date: activeDateRange.startDate,
-          end_date: activeDateRange.endDate,
-        });
-        results.push(result);
-        setExtractProgress({
-          total: nodes.length,
-          completed: index + 1,
-          currentNodeLabel: label,
-          status: `Downloaded node ${index + 1} of ${nodes.length}`,
-        });
+      const lat = Number(latitude);
+      const lon = Number(longitude);
+      const sid = sessionId ?? "";
+      const era5Results: Era5ExtractResponse[] = [];
+      const bhResults: BrightHubReanalysisDownloadResponse[] = [];
+      let bhNodesResult: BrightHubReanalysisNodesResponse | null = null;
+
+      if (era5Source === "earthdatahub") {
+        // ── Step 1: Find ERA5 nodes from EarthDataHub ──
+        setExtractProgress({ total: 0, completed: 0, currentNodeLabel: null, status: "Finding ERA5 nodes (EarthDataHub)…" });
+        const edhResult = await analysisApi.findEra5Nodes(sid, { latitude: lat, longitude: lon });
+        const foundNodes = edhResult.nodes;
+        if (sessionId !== null) {
+          queryClient.setQueryData(["era5-nodes", sessionId], foundNodes);
+        }
+
+        // ── Step 1b: Find MERRA-2 nodes from BrightHub if authenticated ──
+        if (isBhAuthenticated) {
+          setExtractProgress({ total: foundNodes.length, completed: 0, currentNodeLabel: null, status: "Finding MERRA-2 nodes (BrightHub)…" });
+          bhNodesResult = await brighthubApi.getReanalysisNodes(sid, lat, lon);
+        }
+
+        // ── Step 2: Extract each ERA5 node from EarthDataHub ──
+        for (let i = 0; i < foundNodes.length; i += 1) {
+          const node = foundNodes[i];
+          const label = nodeLabel(node);
+          setExtractProgress({
+            total: foundNodes.length,
+            completed: i,
+            currentNodeLabel: label,
+            status: `ERA5 · Downloading node ${i + 1} of ${foundNodes.length} (EarthDataHub)`,
+          });
+          const result = await analysisApi.extractEra5(sid, {
+            latitude: node.latitude,
+            longitude: node.longitude,
+            start_date: activeDateRange.startDate,
+            end_date: activeDateRange.endDate,
+          });
+          era5Results.push(result);
+        }
+
+        // ── Step 3: Download MERRA-2 from BrightHub ──
+        if (isBhAuthenticated && bhNodesResult && bhNodesResult.merra2_nodes.length > 0) {
+          setExtractProgress((prev) => ({
+            total: prev?.total ?? 0, completed: prev?.total ?? 0, currentNodeLabel: null,
+            status: `MERRA-2 · Downloading ${bhNodesResult!.merra2_nodes.length} nodes (BrightHub)`,
+          }));
+          const bhMerra = await brighthubApi.downloadReanalysis(sid, "MERRA-2", bhNodesResult.merra2_nodes, "brighthub");
+          bhResults.push(bhMerra);
+        }
+      } else {
+        // ── BrightHub source ──
+        if (!isBhAuthenticated) throw new Error("BrightHub authentication required for BrightHub ERA5 source.");
+
+        // Step 1: Find ERA5 + MERRA-2 nodes from BrightHub
+        setExtractProgress({ total: 0, completed: 0, currentNodeLabel: null, status: "Finding nodes (BrightHub)…" });
+        bhNodesResult = await brighthubApi.getReanalysisNodes(sid, lat, lon);
+
+        // Step 2: Download ERA5 from BrightHub
+        if (bhNodesResult.era5_nodes.length > 0) {
+          setExtractProgress({
+            total: bhNodesResult.era5_nodes.length, completed: 0, currentNodeLabel: null,
+            status: `ERA5 · Downloading ${bhNodesResult.era5_nodes.length} nodes (BrightHub)`,
+          });
+          const bhEra5 = await brighthubApi.downloadReanalysis(sid, "ERA5", bhNodesResult.era5_nodes, "brighthub");
+          bhResults.push(bhEra5);
+        }
+
+        // Step 3: Download MERRA-2 from BrightHub
+        if (bhNodesResult.merra2_nodes.length > 0) {
+          setExtractProgress({
+            total: bhNodesResult.era5_nodes.length, completed: bhNodesResult.era5_nodes.length, currentNodeLabel: null,
+            status: `MERRA-2 · Downloading ${bhNodesResult.merra2_nodes.length} nodes (BrightHub)`,
+          });
+          const bhMerra = await brighthubApi.downloadReanalysis(sid, "MERRA-2", bhNodesResult.merra2_nodes, "brighthub");
+          bhResults.push(bhMerra);
+        }
       }
-      return results;
+
+      return { era5Results, bhResults, bhNodesResult };
     },
     onMutate: () => {
       setLatestError(null);
-      setExtractProgress({
-        total: nodes.length,
-        completed: 0,
-        currentNodeLabel: nodes[0] ? nodeLabel(nodes[0]) : null,
-        status: nodes.length > 0 ? `Preparing to download ${nodes.length} ERA5 node datasets` : "Preparing download",
-      });
+      setExtractProgress({ total: 0, completed: 0, currentNodeLabel: null, status: "Preparing reanalysis download…" });
     },
-    onSuccess: (results) => {
+    onSuccess: ({ era5Results, bhResults, bhNodesResult }) => {
       setLatestError(null);
-      setExtractResults(results);
+      setExtractResults(era5Results);
+      setBhDownloadResults(bhResults);
+      setBhNodes(bhNodesResult);
       void queryClient.invalidateQueries({ queryKey: ["session-summary", sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ["site-map", sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ["era5-nodes", sessionId] });
     },
     onError: (error) => {
       const message = extractErrorMessage(error);
       setLatestError(message);
       setExtractProgress((current) => ({
-        total: current?.total ?? nodes.length,
-        completed: current?.completed ?? 0,
+        total: current?.total ?? 0, completed: current?.completed ?? 0,
         currentNodeLabel: current?.currentNodeLabel ?? null,
-        status: "ERA5 extraction failed",
-        errorMessage: message,
+        status: "Reanalysis download failed", errorMessage: message,
       }));
     },
     onSettled: (_data, error) => {
-      if (error == null) {
-        setExtractProgress(null);
-      }
+      if (error == null) setExtractProgress(null);
     },
   });
 
@@ -214,10 +274,13 @@ export function ReanalysisPage() {
     onError: (error) => setLatestError(error),
   });
 
+  const isBusy = downloadMutation.isPending;
+  const merraNodeCount = bhNodes?.merra2_nodes.length ?? 0;
+
   if (!sessionId) {
     return (
       <section className="page-section">
-        <PageHeader title="Reanalysis" detail="Find surrounding ERA5 nodes, extract hourly data, and interpolate it to the site." />
+        <PageHeader title="Reanalysis" detail="Find surrounding ERA5 and MERRA-2 nodes, extract hourly data, and interpolate to the site." />
         <EmptyState title="Session required" detail="Create a session before running reanalysis discovery and extraction." />
       </section>
     );
@@ -225,16 +288,14 @@ export function ReanalysisPage() {
 
   return (
     <section className="page-section">
-      <PageHeader title="Reanalysis" detail="Drive the full ERA5 workflow from site coordinates through extracted node datasets and site interpolation." />
+      <PageHeader title="Reanalysis" detail="ERA5 and MERRA-2 reanalysis data — select source, find nodes, and extract in one step." />
 
       <div className="metric-grid">
-        <MetricCard label="Node count" value={String(nodes.length)} tone="accent" />
-        <MetricCard label="Extracted datasets" value={String(extractResults.length)} />
+        <MetricCard label="ERA5 source" value={era5Source === "earthdatahub" ? "EarthDataHub" : "BrightHub"} tone="accent" />
+        <MetricCard label="ERA5 nodes" value={String(nodes.length)} />
+        <MetricCard label="MERRA-2 nodes" value={String(merraNodeCount)} />
         <MetricCard label="Interpolated" value={summaryQuery.data?.era5_interpolated_loaded ? "Ready" : "Pending"} />
-        <MetricCard
-          label="Interpolation rows"
-          value={latestInterpolation ? String(latestInterpolation.rows) : `${activeDateRange.startDate} to ${activeDateRange.endDate}`}
-        />
+        <MetricCard label="BrightHub" value={isBhAuthenticated ? "Connected" : "Not connected"} tone={isBhAuthenticated ? "accent" : "default"} />
       </div>
 
       {latestError ? <ErrorBanner error={latestError} /> : null}
@@ -268,19 +329,44 @@ export function ReanalysisPage() {
               />
             </label>
           </div>
+
+          <div className="source-toggle">
+            <span className="toggle-label">ERA5 source:</span>
+            <label className="radio-field">
+              <input type="radio" name="era5Source" value="earthdatahub" checked={era5Source === "earthdatahub"} onChange={() => setEra5Source("earthdatahub")} />
+              <span>EarthDataHub</span>
+            </label>
+            <label className="radio-field">
+              <input
+                type="radio"
+                name="era5Source"
+                value="brighthub"
+                checked={era5Source === "brighthub"}
+                onChange={() => setEra5Source("brighthub")}
+                disabled={!isBhAuthenticated}
+              />
+              <span>BrightHub{!isBhAuthenticated ? " (not connected)" : ""}</span>
+            </label>
+          </div>
+          <div className="content-note">
+            <small>MERRA-2 source: <strong>BrightHub</strong>{!isBhAuthenticated ? " — log in on the BrightHub page to enable MERRA-2 downloads" : ""}</small>
+          </div>
+
           <div className="button-row wrap">
-            <button className="primary-button" type="button" onClick={() => findNodesMutation.mutate()}>
-              Find ERA5 Nodes
+            <button
+              className="primary-button"
+              type="button"
+              disabled={isBusy || !latitude || !longitude}
+              onClick={() => downloadMutation.mutate()}
+            >
+              {downloadMutation.isPending ? "Downloading…" : "Download Reanalysis Data"}
             </button>
             <button
               className="secondary-button"
               type="button"
-              disabled={nodes.length === 0 || extractAllMutation.isPending}
-              onClick={() => extractAllMutation.mutate()}
+              disabled={isBusy}
+              onClick={() => interpolateMutation.mutate()}
             >
-              Extract All Nodes
-            </button>
-            <button className="secondary-button" type="button" disabled={extractAllMutation.isPending} onClick={() => interpolateMutation.mutate()}>
               Interpolate Site
             </button>
           </div>
@@ -289,41 +375,84 @@ export function ReanalysisPage() {
         <GeoJsonMap
           featureCollection={mapQuery.data}
           emptyTitle="Map unavailable"
-          emptyDetail="Find ERA5 nodes first to render the mast and node markers."
+          emptyDetail="Find nodes first to render the mast and node markers."
         />
       </div>
 
-      <article className="content-card stack-gap">
-        <span className="eyebrow">ERA5 node table</span>
-        <DataTable<Era5Node>
-          columns={[
-            { key: "lat", header: "Latitude", cell: (row) => row.latitude.toFixed(4) },
-            { key: "lon", header: "Longitude", cell: (row) => row.longitude.toFixed(4) },
-            { key: "distance", header: "Distance", cell: (row) => `${row.distance_km.toFixed(1)} km` },
-            { key: "bearing", header: "Bearing", cell: (row) => row.bearing },
-          ]}
-          rows={nodes}
-          getRowKey={(row) => `${row.latitude}-${row.longitude}`}
-          emptyTitle="No nodes loaded"
-          emptyDetail="Run node discovery to populate the surrounding ERA5 support nodes."
-        />
-      </article>
+      {/* ERA5 node table */}
+      {nodes.length > 0 ? (
+        <article className="content-card stack-gap">
+          <span className="eyebrow">ERA5 nodes ({era5Source === "earthdatahub" ? "EarthDataHub" : "BrightHub"})</span>
+          <DataTable<Era5Node>
+            columns={[
+              { key: "lat", header: "Latitude", cell: (row) => row.latitude.toFixed(4) },
+              { key: "lon", header: "Longitude", cell: (row) => row.longitude.toFixed(4) },
+              { key: "distance", header: "Distance", cell: (row) => `${row.distance_km.toFixed(1)} km` },
+              { key: "bearing", header: "Bearing", cell: (row) => row.bearing },
+            ]}
+            rows={nodes}
+            getRowKey={(row) => `${row.latitude}-${row.longitude}`}
+            emptyTitle="No ERA5 nodes"
+            emptyDetail=""
+          />
+        </article>
+      ) : null}
 
-      <article className="content-card stack-gap">
-        <span className="eyebrow">Extraction results</span>
-        <DataTable<Era5ExtractResponse>
-          columns={[
-            { key: "node", header: "Node", cell: (row) => `${row.latitude.toFixed(2)}, ${row.longitude.toFixed(2)}` },
-            { key: "rows", header: "Rows", cell: (row) => row.rows },
-            { key: "cached", header: "Cached", cell: (row) => (row.cached ? "Yes" : "No") },
-            { key: "vars", header: "Variables", cell: (row) => row.variables.join(", ") },
-          ]}
-          rows={extractResults}
-          getRowKey={(row) => `${row.latitude}-${row.longitude}-${row.start}`}
-          emptyTitle="No ERA5 datasets extracted"
-          emptyDetail="After node extraction, each loaded node dataset will be summarized here."
-        />
-      </article>
+      {/* MERRA-2 node table */}
+      {bhNodes && bhNodes.merra2_nodes.length > 0 ? (
+        <article className="content-card stack-gap">
+          <span className="eyebrow">MERRA-2 nodes (BrightHub)</span>
+          <DataTable<BrightHubReanalysisNode>
+            columns={[
+              { key: "lat", header: "Latitude", cell: (row) => row.latitude_ddeg.toFixed(4) },
+              { key: "lon", header: "Longitude", cell: (row) => row.longitude_ddeg.toFixed(4) },
+              { key: "dist", header: "Distance²", cell: (row) => (row.distance_sq != null ? row.distance_sq.toFixed(6) : "—") },
+            ]}
+            rows={bhNodes.merra2_nodes}
+            getRowKey={(_, i) => `bh-merra2-${i}`}
+            emptyTitle="No MERRA-2 nodes"
+            emptyDetail=""
+          />
+        </article>
+      ) : null}
+
+      {/* EarthDataHub extraction results */}
+      {extractResults.length > 0 ? (
+        <article className="content-card stack-gap">
+          <span className="eyebrow">ERA5 extraction results (EarthDataHub)</span>
+          <DataTable<Era5ExtractResponse>
+            columns={[
+              { key: "node", header: "Node", cell: (row) => `${row.latitude.toFixed(2)}, ${row.longitude.toFixed(2)}` },
+              { key: "rows", header: "Rows", cell: (row) => row.rows },
+              { key: "cached", header: "Cached", cell: (row) => (row.cached ? "Yes" : "No") },
+              { key: "vars", header: "Variables", cell: (row) => row.variables.join(", ") },
+            ]}
+            rows={extractResults}
+            getRowKey={(row) => `${row.latitude}-${row.longitude}-${row.start}`}
+            emptyTitle="No datasets"
+            emptyDetail=""
+          />
+        </article>
+      ) : null}
+
+      {/* BrightHub download results */}
+      {bhDownloadResults.length > 0 ? (
+        <article className="content-card stack-gap">
+          <span className="eyebrow">Download results (BrightHub)</span>
+          {bhDownloadResults.map((result, idx) => (
+            <div key={idx} className="content-note">
+              <strong>{result.dataset}</strong> via {result.source === "earthdatahub" ? "EarthDataHub" : "BrightHub"}
+              {" — "}
+              {result.items.length} node(s):
+              {result.items.map((item, i) => (
+                <span key={i}>
+                  {" "}({item.latitude.toFixed(2)}, {item.longitude.toFixed(2)}: {item.rows ?? "?"} rows)
+                </span>
+              ))}
+            </div>
+          ))}
+        </article>
+      ) : null}
 
       <article className="content-card stack-gap">
         <span className="eyebrow">Interpolation result</span>
@@ -362,14 +491,14 @@ export function ReanalysisPage() {
         </div>
       ) : null}
 
-      {extractProgress && (extractAllMutation.isPending || extractProgress.errorMessage) ? (
-        <div className="progress-overlay" role="status" aria-live="polite" aria-label="ERA5 extraction progress">
+      {extractProgress && (downloadMutation.isPending || extractProgress.errorMessage) ? (
+        <div className="progress-overlay" role="status" aria-live="polite" aria-label="Reanalysis extraction progress">
           <div className="progress-overlay-card">
             {extractProgress.errorMessage ? (
               <>
                 <strong>{extractProgress.status}</strong>
                 <p>{extractProgress.currentNodeLabel ? `Last node: ${extractProgress.currentNodeLabel}` : "No active node"}</p>
-                <ErrorBanner error={extractProgress.errorMessage} title="EarthDataHub download interrupted" />
+                <ErrorBanner error={extractProgress.errorMessage} title="Download interrupted" />
                 <button className="secondary-button" type="button" onClick={() => setExtractProgress(null)}>
                   Dismiss
                 </button>
@@ -377,7 +506,7 @@ export function ReanalysisPage() {
             ) : (
               <>
                 <LoadingState label={extractProgress.status} />
-                <strong>{extractProgress.currentNodeLabel ? `Node ${extractProgress.currentNodeLabel}` : "Starting ERA5 extraction"}</strong>
+                <strong>{extractProgress.currentNodeLabel ? `Node ${extractProgress.currentNodeLabel}` : "Starting reanalysis extraction"}</strong>
                 <p>
                   {extractProgress.completed} of {extractProgress.total} node datasets completed.
                 </p>

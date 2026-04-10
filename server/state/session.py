@@ -40,6 +40,8 @@ class SessionState:
     era5_nodes: list[dict[str, object]] | None
     era5_data: dict[str, pd.DataFrame]
     era5_interpolated_df: pd.DataFrame | None
+    merra_nodes: list[dict[str, object]] | None
+    merra_data: dict[str, pd.DataFrame]
     ltc_results: dict[str, dict[str, object]]
     ensemble_df: pd.DataFrame | None
     latest_uncertainty: dict[str, object] | None
@@ -76,6 +78,8 @@ class SessionState:
         self.era5_nodes = None
         self.era5_data = {}
         self.era5_interpolated_df = None
+        self.merra_nodes = None
+        self.merra_data = {}
         self.ltc_results = {}
         self.ensemble_df = None
         self.latest_uncertainty = None

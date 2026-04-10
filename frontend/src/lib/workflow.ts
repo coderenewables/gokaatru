@@ -23,20 +23,20 @@ export const workflowSteps: WorkflowStep[] = [
   {
     path: "/data",
     label: "Data",
-    description: "Uploads, coverage, and cleaning",
+    description: "Uploads, coverage, cleaning, and project metadata",
     requiredSteps: ["timeseries", "datamodel"],
-  },
-  {
-    path: "/site",
-    label: "Site",
-    description: "Metadata, shear, roughness, and hub-height setup",
-    requiredSteps: ["config", "shear_table", "roughness_table"],
   },
   {
     path: "/reanalysis",
     label: "Reanalysis",
     description: "ERA5 node discovery, extraction, and interpolation",
     requiredSteps: ["era5_nodes", "era5_extract", "era5_interpolate"],
+  },
+  {
+    path: "/site",
+    label: "Vertical Extrapolation",
+    description: "Shear and hub-height extrapolation",
+    requiredSteps: ["shear_table"],
   },
   {
     path: "/ltc",

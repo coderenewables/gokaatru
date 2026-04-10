@@ -165,6 +165,24 @@ def _grid_resolution(values: np.ndarray) -> float:
     return float(positive.min()) if positive.size else 0.0
 
 
+def _normalize_longitude(longitude: float, lon_values: np.ndarray) -> float:
+    """Map a signed longitude (-180..180) into the dataset's convention (typically 0..360)."""
+    lon_min = float(np.min(lon_values))
+    lon_max = float(np.max(lon_values))
+    if lon_min >= 0 and lon_max > 180 and longitude < 0:
+        return longitude % 360
+    if lon_min < 0 and longitude > 180:
+        return longitude - 360
+    return longitude
+
+
+def _to_signed_longitude(longitude: float) -> float:
+    """Convert a 0..360 longitude back to the signed -180..180 convention."""
+    if longitude > 180:
+        return longitude - 360
+    return longitude
+
+
 def _bounding_pair(values: np.ndarray, target: float) -> tuple[float, float]:
     """Select lower and upper bounding grid coordinates around a target value."""
     sorted_values = np.sort(np.unique(np.asarray(values, dtype=float)))
@@ -242,7 +260,8 @@ def _read_remote_era5_frame(
     variables = _selected_variables(dataset)
     if not variables:
         raise ValueError("ERA5 dataset does not expose any expected variables")
-    selected = dataset[variables].sel(latitude=latitude, longitude=longitude, method="nearest")
+    norm_lon = _normalize_longitude(longitude, np.asarray(dataset.longitude.values))
+    selected = dataset[variables].sel(latitude=latitude, longitude=norm_lon, method="nearest")
     selected = selected.sel({time_coord: slice(start_date, end_date)}).compute()
     frame = selected.to_dataframe()
     if isinstance(frame.index, pd.MultiIndex):
@@ -304,17 +323,20 @@ def _find_era5_nodes(state: SessionState, latitude: float, longitude: float) -> 
                 "ERA5 node lookup failed while contacting EarthDataHub. Please retry the request."
             ) from exc
         raise
+    lon_values = np.asarray(dataset.longitude.values)
+    norm_lon = _normalize_longitude(longitude, lon_values)
     lower_lat, upper_lat = _bounding_pair(np.asarray(dataset.latitude.values), latitude)
-    lower_lon, upper_lon = _bounding_pair(np.asarray(dataset.longitude.values), longitude)
+    lower_lon, upper_lon = _bounding_pair(lon_values, norm_lon)
     candidate_points = [(lower_lat, lower_lon), (lower_lat, upper_lon), (upper_lat, lower_lon), (upper_lat, upper_lon)]
     nodes = []
     for node_lat, node_lon in candidate_points:
+        signed_lon = _to_signed_longitude(node_lon)
         nodes.append(
             {
                 "latitude": float(node_lat),
-                "longitude": float(node_lon),
-                "distance_km": haversine_km(latitude, longitude, node_lat, node_lon),
-                "bearing": bearing_compass(latitude, longitude, node_lat, node_lon),
+                "longitude": signed_lon,
+                "distance_km": haversine_km(latitude, longitude, node_lat, signed_lon),
+                "bearing": bearing_compass(latitude, longitude, node_lat, signed_lon),
             }
         )
     state.era5_nodes = sorted(nodes, key=lambda node: float(node["distance_km"]))

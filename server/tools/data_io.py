@@ -209,6 +209,25 @@ def _build_sensor_rows(state: SessionState, require_mapping: bool) -> list[dict[
                 record_count=int(series.notna().sum()),
             )
             sensors.append(sensor.model_dump())
+    # Include extrapolated hub-height columns (Spd_*m_hub) not already in sensor_mapping
+    known_names = {s["name"] for s in sensors}
+    import re
+    hub_pattern = re.compile(r"^Spd_(\d+(?:\.\d+)?)m_hub$")
+    for col in state.timeseries_df.columns:
+        if col in known_names:
+            continue
+        m = hub_pattern.match(col)
+        if m:
+            hub_h = float(m.group(1))
+            series = state.timeseries_df[col]
+            coverage = 0.0 if total_rows == 0 else float(series.notna().sum() / total_rows * 100.0)
+            sensors.append(SensorInfo(
+                name=col,
+                height_m=hub_h,
+                sensor_type="wind_speed",
+                data_coverage_pct=coverage,
+                record_count=int(series.notna().sum()),
+            ).model_dump())
     return sensors
 
 

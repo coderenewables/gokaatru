@@ -203,6 +203,12 @@ export const analysisApi = {
       { method: "POST", body: JSON.stringify(body) },
       sessionId,
     ),
+  getClippingColumns: (sessionId: string, source: string) =>
+    requestJson<{ columns: string[] }>(
+      `/sessions/${sessionId}/clipping/columns?source=${encodeURIComponent(source)}`,
+      {},
+      sessionId,
+    ),
   analyzeHomogeneity: (sessionId: string, method: string) =>
     requestJson<HomogeneityAnalysisResponse>(
       `/sessions/${sessionId}/homogeneity/analyze`,

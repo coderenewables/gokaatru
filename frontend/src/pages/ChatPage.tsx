@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { chatApi } from "../lib/api";
 import type { ChatMessage, ChatResponse, ChatToolCallResult } from "../lib/types";
@@ -152,7 +154,13 @@ export function ChatPage() {
               <div style={{ fontWeight: 600, marginBottom: "0.25rem", fontSize: "0.8rem", textTransform: "uppercase" }}>
                 {msg.role === "user" ? "You" : "GoKaatru"}
               </div>
-              <div style={{ whiteSpace: "pre-wrap" }}>{msg.content}</div>
+              {msg.role === "assistant" ? (
+                <div className="markdown-body">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                </div>
+              ) : (
+                <div style={{ whiteSpace: "pre-wrap" }}>{msg.content}</div>
+              )}
               {msg.toolCalls && msg.toolCalls.length > 0 && (
                 <details style={{ marginTop: "0.5rem" }}>
                   <summary style={{ cursor: "pointer", fontSize: "0.85rem", color: "var(--accent, #0066cc)" }}>

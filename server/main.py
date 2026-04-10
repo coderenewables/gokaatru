@@ -18,6 +18,7 @@ mcp = FastMCP(
 sys.modules.setdefault("server.main", sys.modules[__name__])
 
 import server.tools.air_density  # noqa: F401,E402
+import server.tools.brighthub  # noqa: F401,E402
 import server.tools.cleaning  # noqa: F401,E402
 import server.tools.clipping  # noqa: F401,E402
 import server.tools.config  # noqa: F401,E402

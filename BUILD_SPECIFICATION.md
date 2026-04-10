@@ -172,9 +172,11 @@ gokaatru/
 │   │   ├── uncertainty.py       # Uncertainty + P-values
 │   │   ├── visualization.py     # Plot generation tools
 │   │   ├── map.py               # Map marker generation (mast + ERA5 nodes)
+│   │   ├── brighthub.py         # BrightHub authentication, location browsing, data import
 │   │   └── config.py            # Run configuration management
 │   ├── core/                    # Shared pure-logic modules (no MCP dependency)
 │   │   ├── __init__.py
+│   │   ├── brighthub.py         # BrightHub API client (auth, locations, timeseries, reanalysis)
 │   │   ├── formulas.py          # Cited IEC formulas (power law, log law, etc.)
 │   │   ├── momm.py              # Mean of Monthly Means (Windographer-style)
 │   │   ├── regression.py        # OLS, TLS, Huber robust regression
@@ -246,6 +248,7 @@ import server.tools.air_density
 import server.tools.uncertainty
 import server.tools.visualization
 import server.tools.map
+import server.tools.brighthub
 import server.tools.config
 ```
 
@@ -431,6 +434,36 @@ Each tool is a single-purpose function registered with `@mcp.tool()`. Inputs/out
 | `save_run_config` | Persist runconfig.json to disk. |
 | `load_run_config` | Load runconfig.json from disk. |
 | `get_analysis_summary` | Return summary of all analysis steps completed and their outputs. |
+
+### 5.13 BrightHub Tools
+
+| Tool Name | Description | Source Logic |
+|-----------|-------------|--------------|
+| `brighthub_login` | Authenticate with BrightHub using API key (client_id + client_secret) and store token in session. | `core.brighthub.authenticate` |
+| `brighthub_logout` | Clear the stored BrightHub authentication token. | — |
+| `brighthub_status` | Check whether the session holds a valid BrightHub token. | — |
+| `brighthub_list_locations` | List measurement locations available to the authenticated BrightHub user. | `core.brighthub.list_measurement_locations` |
+| `brighthub_get_data_model` | Fetch the IEA Task 43 data model for a BrightHub measurement location. | `core.brighthub.get_data_model` |
+| `brighthub_import_location` | Fetch timeseries CSV + data model JSON from BrightHub and load into session (parse_timeseries + parse_datamodel). Supports 5 boolean import options (cleaning log, cleaning rules, calibration, deadband offset, orientation offset). | `core.brighthub.fetch_timeseries_csv`, `core.brighthub.get_data_model`, `tools.data_io._parse_timeseries`, `tools.data_io._parse_datamodel` |
+| `brighthub_find_reanalysis_nodes` | Find nearest ERA5 (×4) and MERRA-2 (×1) reanalysis nodes via BrightHub API for a coordinate. | `core.brighthub.fetch_reanalysis_nodes` |
+| `brighthub_download_reanalysis` | Download reanalysis timeseries for specified nodes. Supports BrightHub or EarthDataHub as ERA5 source; MERRA-2 always uses BrightHub. | `core.brighthub.download_reanalysis_data`, `tools.era5._extract_era5_data` |
+
+**BrightHub Import Options (query parameters for timeseries download):**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `apply_cleaning_log` | `true` | Apply the cleaning log to the timeseries |
+| `apply_cleaning_rules` | `false` | Apply cleaning rules |
+| `apply_calibration` | `false` | Apply calibration slope and offset |
+| `apply_deadband_offset` | `false` | Apply wind vane deadband offset |
+| `apply_orientation_offset` | `false` | Apply device orientation offset |
+
+**ERA5 Reanalysis Source Selection:**
+
+The `brighthub_download_reanalysis` tool accepts a `source` parameter:
+- `brighthub` — Download ERA5 data through the BrightHub API
+- `earthdatahub` — Download ERA5 data from the EarthDataHub Destine Zarr store (same as `extract_era5_data`)
+- MERRA-2 data always uses the BrightHub API regardless of the `source` parameter
 
 ---
 

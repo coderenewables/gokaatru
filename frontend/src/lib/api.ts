@@ -306,10 +306,10 @@ export const brighthubApi = {
       { method: "POST", body: JSON.stringify({ latitude, longitude }) },
       sessionId,
     ),
-  downloadReanalysis: (sessionId: string, dataset: string, nodes: { latitude_ddeg: number; longitude_ddeg: number }[]) =>
+  downloadReanalysis: (sessionId: string, dataset: string, nodes: { latitude_ddeg: number; longitude_ddeg: number }[], source: string = "brighthub") =>
     requestJson<BrightHubReanalysisDownloadResponse>(
       `/sessions/${sessionId}/brighthub/reanalysis/download`,
-      { method: "POST", body: JSON.stringify({ dataset, nodes }) },
+      { method: "POST", body: JSON.stringify({ dataset, nodes, source }) },
       sessionId,
     ),
   importLocation: (sessionId: string, req: BrightHubImportLocationRequest) =>

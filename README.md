@@ -1,6 +1,6 @@
 # GoKaatru
 
-GoKaatru is a Wind Resource Assessment MCP server for ingesting wind measurement data, cleaning and extrapolating it, correlating it against ERA5 reanalysis, and producing long-term correction, uncertainty, visualization, and mapping outputs. The server exposes 59 MCP tools grouped across data I/O, statistics, shear, ERA5, LTC, post-processing, visualization, and configuration workflows, with `runconfig` as the source of truth for site metadata such as location and hub height.
+GoKaatru is a Wind Resource Assessment MCP server for ingesting wind measurement data, cleaning and extrapolating it, correlating it against ERA5 reanalysis, and producing long-term correction, uncertainty, visualization, and mapping outputs. The server exposes 67 MCP tools grouped across data I/O, statistics, shear, ERA5, LTC, post-processing, visualization, configuration, and BrightHub workflows, with `runconfig` as the source of truth for site metadata such as location and hub height.
 
 The workflow web app supports scenario management: save the current analysis state as a named scenario, or upload a `runconfig.json` file to import configuration overrides and automatically execute the LTC → ensemble → uncertainty pipeline, saving the result as a new scenario for comparison.
 
@@ -90,7 +90,7 @@ mcpServers:
 
 ## Validation
 
-The repository has been validated with 59 registered MCP tools, 10 web API endpoint groups, and full backend + frontend test coverage.
+The repository has been validated with 67 registered MCP tools, 10 web API endpoint groups, and full backend + frontend test coverage.
 
 ```bash
 python -m ruff check server/ tests/
@@ -113,6 +113,17 @@ docker compose ps
 
 - `compute_air_density`
 - `compute_air_density_timeseries`
+
+### BrightHub
+
+- `brighthub_login`
+- `brighthub_logout`
+- `brighthub_status`
+- `brighthub_list_locations`
+- `brighthub_get_data_model`
+- `brighthub_import_location`
+- `brighthub_find_reanalysis_nodes`
+- `brighthub_download_reanalysis`
 
 ### Cleaning
 
@@ -226,3 +237,11 @@ The FastAPI layer exposes session-scoped workflow endpoints under `/api/sessions
 | `/sessions/{id}/scenarios/{index}` | DELETE | Remove a saved scenario |
 | `/sessions/{id}/plots/{name}` | POST | Generate a named Plotly figure |
 | `/sessions/{id}/exports/*` | GET | Download timeseries, LTC, ensemble, or runconfig files |
+| `/sessions/{id}/brighthub/login` | POST | Authenticate with BrightHub |
+| `/sessions/{id}/brighthub/logout` | POST | Clear BrightHub token |
+| `/sessions/{id}/brighthub/status` | GET | Check BrightHub authentication status |
+| `/sessions/{id}/brighthub/locations` | GET | List BrightHub measurement locations |
+| `/sessions/{id}/brighthub/locations/{uuid}/datamodel` | GET | Fetch data model for a location |
+| `/sessions/{id}/brighthub/reanalysis/nodes` | POST | Find ERA5 + MERRA-2 nodes |
+| `/sessions/{id}/brighthub/reanalysis/download` | POST | Download reanalysis data (ERA5 source: BrightHub or EarthDataHub) |
+| `/sessions/{id}/brighthub/import` | POST | Fetch timeseries + datamodel and load into session |

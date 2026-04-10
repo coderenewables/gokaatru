@@ -86,6 +86,7 @@ class ReanalysisNodesResponse(BaseModel):
 class ReanalysisDownloadRequest(BaseModel):
     dataset: str = Field(..., pattern="^(ERA5|MERRA-2)$")
     nodes: list[ReanalysisNode]
+    source: str = Field("brighthub", pattern="^(brighthub|earthdatahub)$")
 
 
 class ReanalysisDataItem(BaseModel):
@@ -99,6 +100,7 @@ class ReanalysisDataItem(BaseModel):
 
 class ReanalysisDownloadResponse(BaseModel):
     dataset: str
+    source: str = "brighthub"
     items: list[ReanalysisDataItem]
 
 
@@ -205,7 +207,16 @@ def brighthub_reanalysis_download(
     body: ReanalysisDownloadRequest,
     state: Annotated[SessionState, Depends(get_session_state)],
 ) -> ReanalysisDownloadResponse:
-    """Download reanalysis timeseries data for specified nodes."""
+    """Download reanalysis timeseries data for specified nodes.
+
+    For ERA5 data, the ``source`` field selects either BrightHub or the
+    EarthDataHub Zarr store.  MERRA-2 always uses BrightHub.
+    """
+    use_earthdatahub = body.source == "earthdatahub" and body.dataset == "ERA5"
+
+    if use_earthdatahub:
+        return _download_era5_earthdatahub(state, body)
+
     token = _require_token(state)
     node_dicts = [n.model_dump() for n in body.nodes]
     try:
@@ -217,7 +228,32 @@ def brighthub_reanalysis_download(
         ts = r.get("timeseries_data")
         row_count = len(ts.get("data", [])) if isinstance(ts, dict) else None
         items.append(ReanalysisDataItem(latitude=r["latitude"], longitude=r["longitude"], rows=row_count))
-    return ReanalysisDownloadResponse(dataset=body.dataset, items=items)
+    return ReanalysisDownloadResponse(dataset=body.dataset, source="brighthub", items=items)
+
+
+def _download_era5_earthdatahub(
+    state: SessionState,
+    body: ReanalysisDownloadRequest,
+) -> ReanalysisDownloadResponse:
+    """Download ERA5 data from EarthDataHub Zarr store for the requested nodes."""
+    from server.tools.era5 import Era5UpstreamError, _compute_era5_wind_speed, _extract_era5_data
+
+    items: list[ReanalysisDataItem] = []
+    for node in body.nodes:
+        lat, lon = node.latitude_ddeg, node.longitude_ddeg
+        try:
+            result = _extract_era5_data(state, lat, lon)
+            _compute_era5_wind_speed(state, lat, lon)
+        except Era5UpstreamError as exc:
+            raise to_bad_gateway(RuntimeError(f"EarthDataHub ERA5 error: {exc}")) from exc
+        except Exception as exc:
+            raise to_bad_gateway(RuntimeError(f"ERA5 extraction error: {exc}")) from exc
+        items.append(ReanalysisDataItem(
+            latitude=lat,
+            longitude=lon,
+            rows=result.get("rows"),
+        ))
+    return ReanalysisDownloadResponse(dataset="ERA5", source="earthdatahub", items=items)
 
 
 # ---------------------------------------------------------------------------

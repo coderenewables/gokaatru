@@ -757,6 +757,32 @@ select {
   cursor: pointer;
 }
 
+.source-toggle {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.toggle-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.radio-field {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.radio-field input[type="radio"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 .full-width {
   grid-column: 1 / -1;
 }

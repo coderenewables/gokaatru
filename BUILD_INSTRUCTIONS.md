@@ -3296,6 +3296,196 @@ export const exportsApi = {
 };
 ```
 
+---
+
+## PHASE 12 — BrightHub Integration (MCP + Web API + Frontend)
+
+**Goal**: Authenticate with BrightHub, browse measurement locations, import timeseries + data model, and download ERA5/MERRA-2 reanalysis data — all accessible as MCP tools for AI assistants AND as REST API endpoints for the workflow web app.
+
+**Prerequisite**: Phase 11 complete and tests passing.
+
+---
+
+### Phase 12 Design Principles
+
+1. **Dual exposure**: Every BrightHub operation is both an MCP tool (for AI clients) and a REST endpoint (for the browser).
+2. **Shared core**: All BrightHub API calls live in `server/core/brighthub.py`. MCP tools and REST routes both call the same core functions.
+3. **Session-aware**: BrightHub token is stored in `SessionState.brighthub_token`. MCP tools use the module-level `session` singleton; REST routes use the session manager.
+4. **Import reuses data_io**: The import flow calls `_parse_timeseries` and `_parse_datamodel` from `server/tools/data_io.py` to load data into session state identically to file uploads.
+5. **ERA5 source selection**: ERA5 reanalysis can be downloaded from BrightHub API or EarthDataHub Zarr store. MERRA-2 always uses BrightHub.
+
+---
+
+### Step 12.1: BrightHub API client
+
+**File: `server/core/brighthub.py`**
+
+Implement the BrightHub API client (no MCP dependency, no session dependency):
+
+```python
+BRIGHTHUB_BASE_URL = "https://api.brighthub.io"
+BRIGHTHUB_AUTH_URL = f"{BRIGHTHUB_BASE_URL}/auth/token"
+```
+
+**Functions:**
+
+| Function | Description |
+|----------|-------------|
+| `authenticate(client_id, client_secret)` | POST to `/auth/token` with `client_credentials` grant. Return `{"id_token": str, "refresh_token": None}`. |
+| `list_measurement_locations(token)` | GET `/measurement-locations/`. Return list of dicts. |
+| `get_data_model(token, uuid)` | GET `/measurement-locations/{uuid}/data-model`. Return dict. |
+| `get_measurement_location(token, uuid)` | GET `/measurement-locations/{uuid}`. Return dict. |
+| `fetch_timeseries_csv(token, uuid, *, apply_cleaning_log, apply_cleaning_rules, apply_calibration, apply_deadband_offset, apply_orientation_offset)` | GET presigned URL from `/measurement-locations/{uuid}/timeseries-data`, then download CSV text. 5 boolean filter params. |
+| `fetch_reanalysis_nodes(token, lat, lon)` | Query ERA5 + MERRA-2 node endpoints. Sort by distance². Return top 4 ERA5 + top 1 MERRA-2. |
+| `download_reanalysis_data(token, nodes, dataset_name)` | Download timeseries for each node from `/reanalysis/{dataset}/nodes/{lat}/{lon}/data`. |
+
+---
+
+### Step 12.2: BrightHub MCP tools
+
+**File: `server/tools/brighthub.py`**
+
+Implements 8 MCP tools. Import `from server.main import mcp` and `from server.state.session import session`.
+
+**Tool: `brighthub_login`**
+```
+@mcp.tool()
+def brighthub_login(client_id: str, client_secret: str) -> dict:
+```
+- Call `core.brighthub.authenticate`. Store `id_token` in `session.brighthub_token`.
+- Return: `{"status": "ok", "authenticated": true}`
+
+**Tool: `brighthub_logout`**
+```
+@mcp.tool()
+def brighthub_logout() -> dict:
+```
+- Set `session.brighthub_token = None`.
+- Return: `{"status": "ok", "authenticated": false}`
+
+**Tool: `brighthub_status`**
+```
+@mcp.tool()
+def brighthub_status() -> dict:
+```
+- Return: `{"authenticated": bool, "has_token": bool}`
+
+**Tool: `brighthub_list_locations`**
+```
+@mcp.tool()
+def brighthub_list_locations() -> dict:
+```
+- Require token. Call `core.brighthub.list_measurement_locations`.
+- Return: `{"locations": [...], "count": N}`
+
+**Tool: `brighthub_get_data_model`**
+```
+@mcp.tool()
+def brighthub_get_data_model(uuid: str) -> dict:
+```
+- Require token. Call `core.brighthub.get_data_model`.
+- Return: `{"uuid": str, "data_model": dict}`
+
+**Tool: `brighthub_import_location`**
+```
+@mcp.tool()
+def brighthub_import_location(
+    uuid: str, name: str = "", latitude_ddeg: float = 0.0, longitude_ddeg: float = 0.0,
+    apply_cleaning_log: bool = True, apply_cleaning_rules: bool = False,
+    apply_calibration: bool = False, apply_deadband_offset: bool = False,
+    apply_orientation_offset: bool = False,
+) -> dict:
+```
+- Require token. Fetch datamodel JSON → save to uploads dir. Fetch timeseries CSV → save to uploads dir.
+- Call `_parse_timeseries(session, path)` and `_parse_datamodel(session, path)`.
+- Set project name, coordinate, brighthub_uuid in runconfig.
+- Return: `{"status": "ok", "uuid": str, "timeseries_rows": int, "timeseries_columns": [...], "timeseries_start": str, "timeseries_end": str, "datamodel_heights": [...], "project_name": str}`
+
+**Tool: `brighthub_find_reanalysis_nodes`**
+```
+@mcp.tool()
+def brighthub_find_reanalysis_nodes(latitude: float, longitude: float) -> dict:
+```
+- Require token. Call `core.brighthub.fetch_reanalysis_nodes`.
+- Return: `{"era5_nodes": [...], "merra2_nodes": [...], "era5_count": int, "merra2_count": int}`
+
+**Tool: `brighthub_download_reanalysis`**
+```
+@mcp.tool()
+def brighthub_download_reanalysis(dataset: str, nodes_json: str, source: str = "brighthub") -> dict:
+```
+- `dataset`: "ERA5" or "MERRA-2". `nodes_json`: JSON array of `{latitude_ddeg, longitude_ddeg}`.
+- `source`: "brighthub" or "earthdatahub" (ERA5 only; MERRA-2 always BrightHub).
+- If earthdatahub: use `era5._extract_era5_data` + `era5._compute_era5_wind_speed`.
+- Return: `{"dataset": str, "source": str, "items": [...], "count": int}`
+
+**Update `server/main.py`** — add:
+```python
+import server.tools.brighthub  # noqa: F401
+```
+
+---
+
+### Step 12.3: BrightHub REST API routes
+
+**File: `server/api/routes/brighthub.py`**
+
+Implements 9 REST endpoints under `/sessions/{session_id}/brighthub/`:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/login` | POST | Authenticate with BrightHub |
+| `/logout` | POST | Clear BrightHub token |
+| `/status` | GET | Check authentication status |
+| `/locations` | GET | List measurement locations |
+| `/locations/{uuid}/datamodel` | GET | Fetch data model |
+| `/reanalysis/nodes` | POST | Find ERA5 + MERRA-2 nodes |
+| `/reanalysis/download` | POST | Download reanalysis data (with `source` field for ERA5) |
+| `/import` | POST | Fetch timeseries + datamodel and load into session |
+
+The download endpoint accepts a `source` field: `"brighthub"` or `"earthdatahub"`.
+When `source=earthdatahub` and `dataset=ERA5`, it calls `era5._extract_era5_data` + `era5._compute_era5_wind_speed` instead of BrightHub API.
+
+**Register the router in `server/api/main.py`:**
+```python
+from server.api.routes.brighthub import router as brighthub_router
+app.include_router(brighthub_router, prefix="/api")
+```
+
+---
+
+### Step 12.4: Frontend BrightHub page
+
+**File: `frontend/src/pages/BrightHubPage.tsx`**
+
+Full page with:
+- Login form (client ID + client secret)
+- Measurement locations table (click to import)
+- Import options dialog (5 boolean checkboxes: cleaning log, cleaning rules, calibration, deadband offset, orientation offset)
+- Selected location detail (import progress, data model viewer)
+- Reanalysis node discovery + download
+- ERA5 source toggle (EarthDataHub / BrightHub radio buttons)
+- MERRA-2 always via BrightHub
+
+**Frontend types** (`frontend/src/lib/types.ts`):
+- `BrightHubLoginRequest`, `BrightHubLoginResponse`, `BrightHubStatusResponse`
+- `BrightHubMeasurementLocation`, `BrightHubLocationsResponse`
+- `BrightHubDataModelResponse`
+- `BrightHubReanalysisNode`, `BrightHubReanalysisNodesResponse`
+- `BrightHubReanalysisDownloadResponse` (with `source` field)
+- `BrightHubImportLocationRequest` (with 5 boolean option fields)
+- `BrightHubImportLocationResponse`
+
+**Frontend API** (`frontend/src/lib/api.ts`):
+- `brighthubApi.login()`, `.logout()`, `.status()`, `.getLocations()`, `.getDataModel()`
+- `.getReanalysisNodes()`, `.downloadReanalysis(sessionId, dataset, nodes, source)`
+- `.importLocation(sessionId, req)`
+
+**Router** (`frontend/src/router.tsx`): Add `/brighthub` route with lazy-loaded `BrightHubPage`.
+
+**Workflow nav** (`frontend/src/lib/workflow.ts`): Add "BrightHub" step.
+```
+
 These return URL strings for direct browser download (no fetch needed — use `<a href>` or `window.open`).
 
 **Update file: `frontend/src/pages/DataPage.tsx`**

@@ -91,6 +91,9 @@ export function BrightHubPage() {
     apply_orientation_offset: false,
   });
 
+  // ERA5 source selection
+  const [era5Source, setEra5Source] = useState<"brighthub" | "earthdatahub">("earthdatahub");
+
   // Auth status query
   const authStatusQuery = useQuery({
     queryKey: ["brighthub-status", sessionId],
@@ -152,8 +155,8 @@ export function BrightHubPage() {
 
   // Reanalysis download
   const downloadMutation = useMutation({
-    mutationFn: (params: { dataset: string; nodes: BrightHubReanalysisNode[] }) =>
-      brighthubApi.downloadReanalysis(sessionId ?? "", params.dataset, params.nodes),
+    mutationFn: (params: { dataset: string; nodes: BrightHubReanalysisNode[]; source?: string }) =>
+      brighthubApi.downloadReanalysis(sessionId ?? "", params.dataset, params.nodes, params.source ?? "brighthub"),
     onSuccess: () => setLatestError(null),
     onError: (error) => setLatestError(error),
   });
@@ -425,13 +428,36 @@ export function BrightHubPage() {
                 emptyTitle="No ERA5 nodes"
                 emptyDetail="No ERA5 nodes found near this location."
               />
+              <div className="source-toggle">
+                <span className="toggle-label">ERA5 Source:</span>
+                <label className="radio-field">
+                  <input
+                    type="radio"
+                    name="era5Source"
+                    value="earthdatahub"
+                    checked={era5Source === "earthdatahub"}
+                    onChange={() => setEra5Source("earthdatahub")}
+                  />
+                  <span>EarthDataHub</span>
+                </label>
+                <label className="radio-field">
+                  <input
+                    type="radio"
+                    name="era5Source"
+                    value="brighthub"
+                    checked={era5Source === "brighthub"}
+                    onChange={() => setEra5Source("brighthub")}
+                  />
+                  <span>BrightHub</span>
+                </label>
+              </div>
               <button
                 className="secondary-button"
                 type="button"
                 disabled={downloadMutation.isPending}
-                onClick={() => downloadMutation.mutate({ dataset: "ERA5", nodes: era5Nodes })}
+                onClick={() => downloadMutation.mutate({ dataset: "ERA5", nodes: era5Nodes, source: era5Source })}
               >
-                {downloadMutation.isPending ? "Downloading…" : "Download ERA5 Data"}
+                {downloadMutation.isPending ? "Downloading…" : `Download ERA5 Data (${era5Source === "earthdatahub" ? "EarthDataHub" : "BrightHub"})`}
               </button>
             </>
           ) : null}
@@ -450,16 +476,17 @@ export function BrightHubPage() {
                 className="secondary-button"
                 type="button"
                 disabled={downloadMutation.isPending}
-                onClick={() => downloadMutation.mutate({ dataset: "MERRA-2", nodes: merra2Nodes })}
+                onClick={() => downloadMutation.mutate({ dataset: "MERRA-2", nodes: merra2Nodes, source: "brighthub" })}
               >
-                {downloadMutation.isPending ? "Downloading…" : "Download MERRA-2 Data"}
+                {downloadMutation.isPending ? "Downloading…" : "Download MERRA-2 Data (BrightHub)"}
               </button>
             </>
           ) : null}
 
           {downloadMutation.isSuccess ? (
             <div className="success-banner">
-              Downloaded {downloadMutation.data.items.length} node(s) from {downloadMutation.data.dataset}.
+              Downloaded {downloadMutation.data.items.length} node(s) from {downloadMutation.data.dataset} via{" "}
+              {downloadMutation.data.source === "earthdatahub" ? "EarthDataHub" : "BrightHub"}.
               {downloadMutation.data.items.map((item, idx) => (
                 <span key={idx}>
                   {" "}

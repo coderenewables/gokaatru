@@ -442,6 +442,7 @@ export interface BrightHubReanalysisDataItem {
 
 export interface BrightHubReanalysisDownloadResponse {
   dataset: string;
+  source: string;
   items: BrightHubReanalysisDataItem[];
 }
 

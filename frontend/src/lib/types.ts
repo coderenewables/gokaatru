@@ -385,3 +385,87 @@ export interface ChatResponse {
   reply: string;
   tool_calls_executed: ChatToolCallResult[];
 }
+
+// ---------------------------------------------------------------------------
+// BrightHub
+// ---------------------------------------------------------------------------
+
+export interface BrightHubLoginRequest {
+  client_id: string;
+  client_secret: string;
+}
+
+export interface BrightHubLoginResponse {
+  status: string;
+  authenticated: boolean;
+}
+
+export interface BrightHubStatusResponse {
+  authenticated: boolean;
+  has_token: boolean;
+}
+
+export interface BrightHubMeasurementLocation {
+  uuid: string;
+  name: string;
+  latitude_ddeg: number | null;
+  longitude_ddeg: number | null;
+  measurement_station_type_id: string | number | null;
+  [key: string]: JsonValue;
+}
+
+export interface BrightHubLocationsResponse {
+  locations: BrightHubMeasurementLocation[];
+}
+
+export interface BrightHubDataModelResponse {
+  uuid: string;
+  data_model: Record<string, JsonValue>;
+}
+
+export interface BrightHubReanalysisNode {
+  latitude_ddeg: number;
+  longitude_ddeg: number;
+  distance_sq: number | null;
+}
+
+export interface BrightHubReanalysisNodesResponse {
+  era5_nodes: BrightHubReanalysisNode[];
+  merra2_nodes: BrightHubReanalysisNode[];
+}
+
+export interface BrightHubReanalysisDataItem {
+  latitude: number;
+  longitude: number;
+  rows: number | null;
+}
+
+export interface BrightHubReanalysisDownloadResponse {
+  dataset: string;
+  items: BrightHubReanalysisDataItem[];
+}
+
+export interface BrightHubImportLocationRequest {
+  uuid: string;
+  name?: string;
+  latitude_ddeg?: number | null;
+  longitude_ddeg?: number | null;
+  apply_cleaning_log?: boolean;
+  apply_cleaning_rules?: boolean;
+  apply_calibration?: boolean;
+  apply_deadband_offset?: boolean;
+  apply_orientation_offset?: boolean;
+}
+
+export interface BrightHubImportLocationResponse {
+  status: string;
+  uuid: string;
+  timeseries_rows: number;
+  timeseries_columns: string[];
+  timeseries_start: string | null;
+  timeseries_end: string | null;
+  datamodel_heights: number[];
+  project_name: string | null;
+  measurement_type: string | null;
+  location: Record<string, JsonValue> | null;
+}

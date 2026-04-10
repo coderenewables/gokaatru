@@ -15,6 +15,12 @@ export const workflowSteps: WorkflowStep[] = [
     requiredSteps: [],
   },
   {
+    path: "/brighthub",
+    label: "BrightHub",
+    description: "Login, datasets, ERA5 & MERRA-2 access",
+    requiredSteps: [],
+  },
+  {
     path: "/data",
     label: "Data",
     description: "Uploads, coverage, and cleaning",

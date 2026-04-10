@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
 from server.api.routes.analysis import router as analysis_router
+from server.api.routes.brighthub import router as brighthub_router
 from server.api.routes.chat import router as chat_router
 from server.api.routes.config import router as config_router
 from server.api.routes.exports import router as exports_router
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
     app.include_router(uploads_router, prefix="/api")
     app.include_router(config_router, prefix="/api")
     app.include_router(analysis_router, prefix="/api")
+    app.include_router(brighthub_router, prefix="/api")
     app.include_router(results_router, prefix="/api")
     app.include_router(exports_router, prefix="/api")
     app.include_router(chat_router, prefix="/api")

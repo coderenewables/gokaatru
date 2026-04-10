@@ -3,6 +3,14 @@ import type {
   AnalysisSummaryResponse,
   ApiHealthResponse,
   ApiStatusResponse,
+  BrightHubDataModelResponse,
+  BrightHubImportLocationRequest,
+  BrightHubImportLocationResponse,
+  BrightHubLocationsResponse,
+  BrightHubLoginResponse,
+  BrightHubReanalysisDownloadResponse,
+  BrightHubReanalysisNodesResponse,
+  BrightHubStatusResponse,
   ChatRequest,
   ChatResponse,
   CleaningApplyResponse,
@@ -269,6 +277,45 @@ export const chatApi = {
     requestJson<ChatResponse>(
       `/sessions/${sessionId}/chat`,
       { method: "POST", body: JSON.stringify(body) },
+      sessionId,
+    ),
+};
+
+export const brighthubApi = {
+  login: (sessionId: string, clientId: string, clientSecret: string) =>
+    requestJson<BrightHubLoginResponse>(
+      `/sessions/${sessionId}/brighthub/login`,
+      { method: "POST", body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }) },
+      sessionId,
+    ),
+  logout: (sessionId: string) =>
+    requestJson<ApiStatusResponse>(`/sessions/${sessionId}/brighthub/logout`, { method: "POST" }, sessionId),
+  status: (sessionId: string) =>
+    requestJson<BrightHubStatusResponse>(`/sessions/${sessionId}/brighthub/status`, {}, sessionId),
+  getLocations: (sessionId: string) =>
+    requestJson<BrightHubLocationsResponse>(`/sessions/${sessionId}/brighthub/locations`, {}, sessionId),
+  getDataModel: (sessionId: string, uuid: string) =>
+    requestJson<BrightHubDataModelResponse>(
+      `/sessions/${sessionId}/brighthub/locations/${encodeURIComponent(uuid)}/datamodel`,
+      {},
+      sessionId,
+    ),
+  getReanalysisNodes: (sessionId: string, latitude: number, longitude: number) =>
+    requestJson<BrightHubReanalysisNodesResponse>(
+      `/sessions/${sessionId}/brighthub/reanalysis/nodes`,
+      { method: "POST", body: JSON.stringify({ latitude, longitude }) },
+      sessionId,
+    ),
+  downloadReanalysis: (sessionId: string, dataset: string, nodes: { latitude_ddeg: number; longitude_ddeg: number }[]) =>
+    requestJson<BrightHubReanalysisDownloadResponse>(
+      `/sessions/${sessionId}/brighthub/reanalysis/download`,
+      { method: "POST", body: JSON.stringify({ dataset, nodes }) },
+      sessionId,
+    ),
+  importLocation: (sessionId: string, req: BrightHubImportLocationRequest) =>
+    requestJson<BrightHubImportLocationResponse>(
+      `/sessions/${sessionId}/brighthub/import`,
+      { method: "POST", body: JSON.stringify(req) },
       sessionId,
     ),
 };

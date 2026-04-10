@@ -36,6 +36,7 @@ class SessionState:
     roughness_timeseries_df: pd.DataFrame | None
     shear_table: pd.DataFrame | None
     roughness_table: pd.DataFrame | None
+    brighthub_token: str | None
     era5_nodes: list[dict[str, object]] | None
     era5_data: dict[str, pd.DataFrame]
     era5_interpolated_df: pd.DataFrame | None
@@ -70,6 +71,7 @@ class SessionState:
         self.roughness_timeseries_df = None
         self.shear_table = None
         self.roughness_table = None
+        self.brighthub_token = None
         self.era5_nodes = None
         self.era5_data = {}
         self.era5_interpolated_df = None

@@ -90,7 +90,7 @@ describe("AppShell", () => {
     expect(screen.getByRole("button", { name: "Edit Metadata" })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Overview/ })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Data/ })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Site/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Vertical Extrapolation/ })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Reanalysis/ })).toBeTruthy();
     expect(screen.getByRole("link", { name: /LTC/ })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Results/ })).toBeTruthy();

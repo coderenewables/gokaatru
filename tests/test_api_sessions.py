@@ -78,6 +78,41 @@ def test_session_routes_require_header(client: TestClient) -> None:
     assert response.json()["detail"] == "Missing required header 'X-GoKaatru-Session'"
 
 
+def test_config_step_requires_saved_hub_height(client: TestClient) -> None:
+    """Verify workflow config step becomes complete only after hub height is saved with metadata."""
+    create_response = client.post("/api/sessions")
+    session_id = create_response.json()["session_id"]
+    headers = {"X-GoKaatru-Session": session_id}
+
+    without_hub = client.put(
+        f"/api/sessions/{session_id}/config",
+        headers=headers,
+        json={
+            "updates": [
+                {"key": "project_name", "value": "North Ridge"},
+                {"key": "location.latitude", "value": 52.4},
+                {"key": "location.longitude", "value": 4.8},
+            ]
+        },
+    )
+    assert without_hub.status_code == 200
+
+    summary_without_hub = client.get(f"/api/sessions/{session_id}", headers=headers)
+    assert summary_without_hub.status_code == 200
+    assert "config" not in summary_without_hub.json()["completed_steps"]
+
+    with_hub = client.put(
+        f"/api/sessions/{session_id}/config",
+        headers=headers,
+        json={"updates": [{"key": "hub_height_m", "value": 150}]},
+    )
+    assert with_hub.status_code == 200
+
+    summary_with_hub = client.get(f"/api/sessions/{session_id}", headers=headers)
+    assert summary_with_hub.status_code == 200
+    assert "config" in summary_with_hub.json()["completed_steps"]
+
+
 def test_era5_extract_upstream_failure_returns_502(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify transient EarthDataHub failures are surfaced as 502 instead of uncaught 500 responses."""
     create_response = client.post("/api/sessions")

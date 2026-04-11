@@ -24,7 +24,7 @@ export const workflowSteps: WorkflowStep[] = [
     path: "/data",
     label: "Data",
     description: "Uploads, coverage, cleaning, and project metadata",
-    requiredSteps: ["timeseries", "datamodel"],
+    requiredSteps: ["timeseries", "datamodel", "config"],
   },
   {
     path: "/reanalysis",

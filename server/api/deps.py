@@ -36,10 +36,14 @@ def completed_steps(state: SessionState) -> list[str]:
         steps.append("timeseries")
     if state.sensor_mapping:
         steps.append("datamodel")
+    project_name = state.get_project_name()
+    hub_height = state.get_hub_height_m()
     has_config = (
-        state.get_coordinate() is not None
-        or state.get_hub_height_m() is not None
-        or state.get_project_name() is not None
+        project_name is not None
+        and project_name.strip() != ""
+        and state.get_coordinate() is not None
+        and hub_height is not None
+        and hub_height > 0
     )
     if has_config:
         steps.append("config")

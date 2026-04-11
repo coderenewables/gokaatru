@@ -441,7 +441,7 @@ class TestWeibullPDF:
         x = np.linspace(0.01, 40.0, 4000).tolist()
         result = windkit_weibull_pdf(A=10.0, k=2.0, x=json.dumps(x))
         pdf = np.array(result["result"]["pdf"])
-        integral = np.trapz(pdf, x)
+        integral = np.trapezoid(pdf, x)
         assert pytest.approx(integral, abs=0.02) == 1.0
 
 

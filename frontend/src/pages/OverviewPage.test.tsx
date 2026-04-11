@@ -39,6 +39,7 @@ function renderOverview(initialRoute = "/overview") {
         <Routes>
           <Route path="/overview" element={<OverviewPage />} />
           <Route path="/site" element={<div>Site page target</div>} />
+          <Route path="/reanalysis" element={<div>Reanalysis page target</div>} />
           <Route path="/data" element={<div>Data page target</div>} />
         </Routes>
       </MemoryRouter>
@@ -74,10 +75,10 @@ describe("OverviewPage", () => {
       era5_nodes_loaded: false,
       era5_interpolated_loaded: false,
       ltc_algorithms: [],
-      completed_steps: ["timeseries", "datamodel"],
+      completed_steps: ["timeseries", "datamodel", "config"],
     });
     vi.mocked(configApi.getSummary).mockResolvedValue({
-      completed_steps: ["timeseries", "datamodel"],
+      completed_steps: ["timeseries", "datamodel", "config"],
       project_name: "Test site",
       timeseries_loaded: true,
       sensor_mapping_loaded: true,
@@ -105,7 +106,7 @@ describe("OverviewPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Go To Next Step" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Site page target")).toBeTruthy();
+      expect(screen.getByText("Reanalysis page target")).toBeTruthy();
     });
   });
 });

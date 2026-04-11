@@ -100,4 +100,4 @@ def test_geojson_mast_marker() -> None:
 def test_all_tools_registered() -> None:
     """Verify the MCP server registers the full Phase 1-4 tool surface after all imports."""
     tools = asyncio.run(mcp.list_tools())
-    assert len(tools) == 59
+    assert len(tools) == 209

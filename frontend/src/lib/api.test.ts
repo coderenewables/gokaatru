@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { analysisApi, healthApi, uploadsApi } from "./api";
+import { analysisApi, healthApi, uploadsApi, workflowApi } from "./api";
 
 describe("api client", () => {
   const fetchMock = vi.fn<typeof fetch>();
@@ -93,5 +93,27 @@ describe("api client", () => {
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
     expect(headers.get("X-GoKaatru-Session")).toBe("session-456");
     expect(headers.get("Content-Type")).toBeNull();
+  });
+
+  it("requests workflow capabilities with session header", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ capabilities: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await workflowApi.getCapabilities("session-cap");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/sessions/session-cap/workflow/capabilities",
+      expect.objectContaining({
+        headers: expect.any(Headers),
+      }),
+    );
+
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    expect(headers.get("X-GoKaatru-Session")).toBe("session-cap");
+    expect(headers.get("Content-Type")).toBe("application/json");
   });
 });

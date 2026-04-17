@@ -5,6 +5,7 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, JsonValue
 
@@ -205,3 +206,173 @@ class PlotRequest(BaseModel):
     vertical_pct: float = Field(0.0, ge=0)
     mcp_pct: float = Field(0.0, ge=0)
     future_pct: float = Field(0.0, ge=0)
+
+
+class WorkflowExecutionNodeRequest(BaseModel):
+    """Represent one workflow node payload sent by the canvas execution client."""
+
+    id: str = Field(..., min_length=1)
+    kind: Literal["group", "operation", "dataset", "fork"]
+    label: str = ""
+    template_id: str | None = None
+    config: dict[str, JsonValue] = Field(default_factory=dict)
+    status: str | None = None
+
+
+class WorkflowExecutionEdgeRequest(BaseModel):
+    """Represent one directed dependency edge between workflow nodes."""
+
+    source: str = Field(..., min_length=1)
+    target: str = Field(..., min_length=1)
+
+
+class WorkflowExecuteRequest(BaseModel):
+    """Submit an in-memory workflow graph for auto or manual execution."""
+
+    mode: Literal["auto", "manual"] = "auto"
+    nodes: list[WorkflowExecutionNodeRequest] = Field(default_factory=list)
+    edges: list[WorkflowExecutionEdgeRequest] = Field(default_factory=list)
+
+
+class WorkflowExecutionEvent(BaseModel):
+    """Emit one execution lifecycle event for status views and live streaming."""
+
+    run_id: str
+    event_type: str
+    node_id: str | None = None
+    status: str | None = None
+    message: str | None = None
+    timestamp: datetime
+
+
+class WorkflowExecutionResponse(BaseModel):
+    """Return aggregated execution result details for one run or step call."""
+
+    run_id: str
+    status: str
+    node_statuses: dict[str, str] = Field(default_factory=dict)
+    events: list[WorkflowExecutionEvent] = Field(default_factory=list)
+
+
+class WorkflowExecutionStatusResponse(BaseModel):
+    """Return the session-scoped execution status snapshot."""
+
+    run_id: str | None
+    is_running: bool
+    cancelled: bool
+    node_statuses: dict[str, str] = Field(default_factory=dict)
+    events: list[WorkflowExecutionEvent] = Field(default_factory=list)
+
+
+class WorkflowDispatchCapability(BaseModel):
+    """Describe dispatch signature hints for one workflow template id."""
+
+    template_id: str
+    required_params: list[str] = Field(default_factory=list)
+    optional_params: list[str] = Field(default_factory=list)
+
+
+class WorkflowDispatchCapabilitiesResponse(BaseModel):
+    """Return dispatch-capability metadata used by frontend parameter hinting."""
+
+    capabilities: list[WorkflowDispatchCapability] = Field(default_factory=list)
+
+
+class WorkflowForkBranchRequest(BaseModel):
+    """Request forking a new workflow branch session from the current session."""
+
+    name: str | None = None
+    from_node_id: str | None = None
+
+
+class WorkflowForkBranchResponse(BaseModel):
+    """Return forked branch session metadata for frontend branch creation."""
+
+    status: str = "ok"
+    parent_session_id: str
+    branch_session_id: str
+    branch_name: str
+    from_node_id: str | None = None
+
+
+class WorkflowCompareRequest(BaseModel):
+    """Request comparing one parent session against selected branch sessions."""
+
+    branch_session_ids: list[str] = Field(default_factory=list)
+
+
+class WorkflowCompareMetric(BaseModel):
+    """Represent one comparison metric row across selected sessions."""
+
+    name: str
+    unit: str
+    values: dict[str, float | None] = Field(default_factory=dict)
+
+
+class WorkflowCompareDiffEntry(BaseModel):
+    """Represent one runconfig difference between two compared sessions."""
+
+    key: str
+    a: JsonValue
+    b: JsonValue
+
+
+class WorkflowComparePlot(BaseModel):
+    """Represent one Plotly figure payload serialized for dashboard rendering."""
+
+    title: str
+    plotly_json: str
+
+
+class WorkflowComparePlots(BaseModel):
+    """Group all comparison dashboard figures returned from the backend."""
+
+    weibull: WorkflowComparePlot | None = None
+    windrose: list[WorkflowComparePlot] = Field(default_factory=list)
+    ltc_scatter: WorkflowComparePlot | None = None
+    uncertainty_tornado: WorkflowComparePlot | None = None
+
+
+class WorkflowCompareResponse(BaseModel):
+    """Return branch comparison metrics, config diffs, and plot payloads."""
+
+    status: str = "ok"
+    session_ids: list[str] = Field(default_factory=list)
+    metrics: list[WorkflowCompareMetric] = Field(default_factory=list)
+    config_diff: dict[str, list[WorkflowCompareDiffEntry]] = Field(default_factory=dict)
+    plots: WorkflowComparePlots = Field(default_factory=WorkflowComparePlots)
+
+
+class WorkflowSaveSnapshotRequest(BaseModel):
+    """Persist one workflow designer snapshot payload for the active session."""
+
+    snapshot: JsonValue
+
+
+class WorkflowSaveSnapshotResponse(BaseModel):
+    """Return metadata for a snapshot persisted to session workspace storage."""
+
+    status: str = "ok"
+    name: str
+    saved_at: datetime
+
+
+class WorkflowSnapshotSummary(BaseModel):
+    """Describe one saved snapshot available for a session."""
+
+    name: str
+    saved_at: datetime
+
+
+class WorkflowSnapshotListResponse(BaseModel):
+    """Return all workflow snapshots available for the active session."""
+
+    snapshots: list[WorkflowSnapshotSummary] = Field(default_factory=list)
+
+
+class WorkflowLoadSnapshotResponse(BaseModel):
+    """Return one saved workflow snapshot payload."""
+
+    name: str
+    saved_at: datetime
+    snapshot: JsonValue

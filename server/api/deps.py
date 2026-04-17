@@ -8,6 +8,7 @@ from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, status
 
+from server.state.dataset_pool import DatasetPoolManager, dataset_pool_manager
 from server.state.manager import SessionManager, session_manager
 from server.state.session import SessionState
 
@@ -17,6 +18,11 @@ SESSION_HEADER_NAME = "X-GoKaatru-Session"
 def get_session_manager() -> SessionManager:
     """Return the process-local session manager used by the FastAPI layer."""
     return session_manager
+
+
+def get_dataset_pool_manager() -> DatasetPoolManager:
+    """Return the process-local shared dataset pool manager for Phase 2 routes."""
+    return dataset_pool_manager
 
 
 def to_bad_request(exc: ValueError) -> HTTPException:

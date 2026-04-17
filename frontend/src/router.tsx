@@ -2,8 +2,8 @@ import { Suspense, lazy } from "react";
 
 import { Navigate, createBrowserRouter } from "react-router-dom";
 
-import { AppShell } from "./components/layout/AppShell";
 import { LoadingState } from "./components/common/LoadingState";
+import { WorkflowDesigner } from "./components/workflow/WorkflowDesigner";
 
 const OverviewPage = lazy(async () => ({ default: (await import("./pages/OverviewPage")).OverviewPage }));
 const BrightHubPage = lazy(async () => ({ default: (await import("./pages/BrightHubPage")).BrightHubPage }));
@@ -25,7 +25,7 @@ function LazyPage({ component: Component }: { component: React.ComponentType }) 
 export const appRouter = createBrowserRouter([
   {
     path: "/",
-    element: <AppShell />,
+    element: <WorkflowDesigner />,
     children: [
       { index: true, element: <Navigate to="/overview" replace /> },
       { path: "overview", element: <LazyPage component={OverviewPage} /> },

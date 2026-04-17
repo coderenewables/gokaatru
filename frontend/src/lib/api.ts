@@ -4,6 +4,22 @@ import type {
   ApiHealthResponse,
   ApiStatusResponse,
   BrightHubDataModelResponse,
+  DatasetEntryResponse,
+  DatasetListResponse,
+  DatasetLoadResponse,
+  DatasetPreviewResponse,
+  WorkflowExecuteRequest,
+  WorkflowExecutionEvent,
+  WorkflowExecutionResponse,
+  WorkflowExecutionStatusResponse,
+  WorkflowDispatchCapabilitiesResponse,
+  WorkflowCompareRequest,
+  WorkflowCompareResponse,
+  WorkflowLoadSnapshotResponse,
+  WorkflowForkBranchRequest,
+  WorkflowForkBranchResponse,
+  WorkflowSaveSnapshotResponse,
+  WorkflowSnapshotListResponse,
   BrightHubImportLocationRequest,
   BrightHubImportLocationResponse,
   BrightHubLocationsResponse,
@@ -92,6 +108,112 @@ async function uploadFile<T>(path: string, file: File | Blob, filename: string, 
   return requestJson<T>(path, { method: "POST", body: formData }, sessionId);
 }
 
+function postFormDataWithProgress<T>(
+  path: string,
+  formData: FormData,
+  onProgress?: (percent: number) => void,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}${path}`, true);
+    xhr.responseType = "json";
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable || onProgress === undefined) {
+        return;
+      }
+      const percent = Math.max(0, Math.min(100, Math.round((event.loaded / event.total) * 100)));
+      onProgress(percent);
+    };
+
+    xhr.onerror = () => {
+      reject(new ApiError(0, "Network error while uploading dataset"));
+    };
+
+    xhr.onload = () => {
+      const status = xhr.status;
+      const payload = xhr.response ?? xhr.responseText;
+      if (status < 200 || status >= 300) {
+        const detail =
+          typeof payload === "object" && payload !== null && "detail" in (payload as Record<string, unknown>)
+            ? (payload as { detail?: unknown }).detail
+            : payload;
+        reject(new ApiError(status, detail));
+        return;
+      }
+      resolve(payload as T);
+    };
+
+    xhr.send(formData);
+  });
+}
+
+async function streamJsonEvents(
+  path: string,
+  body: unknown,
+  sessionId: string,
+  onEvent: (event: WorkflowExecutionEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  headers.set(SESSION_HEADER, sessionId);
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!response.ok) {
+    const payload = response.headers.get("content-type")?.includes("application/json")
+      ? await response.json()
+      : await response.text();
+    const detail = typeof payload === "object" && payload !== null && "detail" in payload ? payload.detail : payload;
+    throw new ApiError(response.status, detail);
+  }
+
+  if (!response.body) {
+    throw new ApiError(response.status, "Streaming response body is not available");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+
+    while (buffer.includes("\n\n")) {
+      const boundary = buffer.indexOf("\n\n");
+      const rawEvent = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+
+      const dataLines = rawEvent
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trim())
+        .filter((line) => line.length > 0);
+
+      if (dataLines.length === 0) {
+        continue;
+      }
+
+      const merged = dataLines.join("\n");
+      try {
+        onEvent(JSON.parse(merged) as WorkflowExecutionEvent);
+      } catch {
+        // Ignore malformed event payloads and continue consuming the stream.
+      }
+    }
+  }
+}
+
 export const healthApi = {
   get: () => requestJson<ApiHealthResponse>("/health"),
 };
@@ -111,6 +233,94 @@ export const uploadsApi = {
   getSensors: (sessionId: string) => requestJson<SensorsResponse>(`/sessions/${sessionId}/sensors`, {}, sessionId),
   getCoverage: (sessionId: string, sensorName: string) =>
     requestJson<SensorCoverageResponse>(`/sessions/${sessionId}/coverage/${encodeURIComponent(sensorName)}`, {}, sessionId),
+};
+
+export const datasetsApi = {
+  list: () => requestJson<DatasetListResponse>("/datasets"),
+  get: (datasetId: string) => requestJson<DatasetEntryResponse>(`/datasets/${datasetId}`),
+  createWithProgress: (
+    options: {
+      name?: string;
+      timeseriesFile: File | Blob;
+      datamodelFile: File | Blob;
+      timeseriesFilename?: string;
+      datamodelFilename?: string;
+    },
+    onProgress?: (percent: number) => void,
+  ) => {
+    const formData = new FormData();
+    if (options.name && options.name.trim()) {
+      formData.append("name", options.name.trim());
+    }
+    formData.append("timeseries", options.timeseriesFile, options.timeseriesFilename ?? "timeseries.csv");
+    formData.append("datamodel", options.datamodelFile, options.datamodelFilename ?? "datamodel.json");
+    return postFormDataWithProgress<DatasetEntryResponse>("/datasets", formData, onProgress);
+  },
+  create: (options: {
+    name?: string;
+    timeseriesFile: File | Blob;
+    datamodelFile: File | Blob;
+    timeseriesFilename?: string;
+    datamodelFilename?: string;
+  }) => datasetsApi.createWithProgress(options),
+  remove: (datasetId: string) => requestJson<ApiStatusResponse>(`/datasets/${datasetId}`, { method: "DELETE" }),
+  loadIntoSession: (sessionId: string, datasetId: string) =>
+    requestJson<DatasetLoadResponse>(`/sessions/${sessionId}/datasets/${datasetId}/load`, { method: "POST" }, sessionId),
+  getPreview: (datasetId: string, limit = 20) =>
+    requestJson<DatasetPreviewResponse>(`/datasets/${datasetId}/preview?limit=${limit}`),
+};
+
+export const workflowApi = {
+  execute: (sessionId: string, body: WorkflowExecuteRequest) =>
+    requestJson<WorkflowExecutionResponse>(
+      `/sessions/${sessionId}/workflow/execute`,
+      { method: "POST", body: JSON.stringify(body) },
+      sessionId,
+    ),
+  step: (sessionId: string, body: WorkflowExecuteRequest) =>
+    requestJson<WorkflowExecutionResponse>(
+      `/sessions/${sessionId}/workflow/execute/step`,
+      { method: "POST", body: JSON.stringify(body) },
+      sessionId,
+    ),
+  streamExecute: (
+    sessionId: string,
+    body: WorkflowExecuteRequest,
+    onEvent: (event: WorkflowExecutionEvent) => void,
+    signal?: AbortSignal,
+  ) => streamJsonEvents(`/sessions/${sessionId}/workflow/execute/stream`, body, sessionId, onEvent, signal),
+  getStatus: (sessionId: string) =>
+    requestJson<WorkflowExecutionStatusResponse>(`/sessions/${sessionId}/workflow/status`, {}, sessionId),
+  getCapabilities: (sessionId: string) =>
+    requestJson<WorkflowDispatchCapabilitiesResponse>(`/sessions/${sessionId}/workflow/capabilities`, {}, sessionId),
+  forkBranch: (sessionId: string, body: WorkflowForkBranchRequest) =>
+    requestJson<WorkflowForkBranchResponse>(
+      `/sessions/${sessionId}/workflow/branches/fork`,
+      { method: "POST", body: JSON.stringify(body) },
+      sessionId,
+    ),
+  compare: (sessionId: string, body: WorkflowCompareRequest) =>
+    requestJson<WorkflowCompareResponse>(
+      `/sessions/${sessionId}/workflow/compare`,
+      { method: "POST", body: JSON.stringify(body) },
+      sessionId,
+    ),
+  listSnapshots: (sessionId: string) =>
+    requestJson<WorkflowSnapshotListResponse>(`/sessions/${sessionId}/workflow/snapshots`, {}, sessionId),
+  saveSnapshot: (sessionId: string, name: string, snapshot: JsonValue) =>
+    requestJson<WorkflowSaveSnapshotResponse>(
+      `/sessions/${sessionId}/workflow/snapshots/${encodeURIComponent(name)}`,
+      { method: "PUT", body: JSON.stringify({ snapshot }) },
+      sessionId,
+    ),
+  loadSnapshot: (sessionId: string, name: string) =>
+    requestJson<WorkflowLoadSnapshotResponse>(
+      `/sessions/${sessionId}/workflow/snapshots/${encodeURIComponent(name)}`,
+      {},
+      sessionId,
+    ),
+  stop: (sessionId: string) =>
+    requestJson<ApiStatusResponse>(`/sessions/${sessionId}/workflow/stop`, { method: "POST" }, sessionId),
 };
 
 export const configApi = {

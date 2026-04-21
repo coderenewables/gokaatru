@@ -48,6 +48,7 @@ class SessionState:
     scenarios: list[dict[str, object]]
     runconfig: dict[str, object]
     windkit_data: dict[str, object]
+    workflow_execution: dict[str, object]
 
     def __init__(self) -> None:
         """Initialize the singleton session state per the GoKaatru build spec."""
@@ -86,6 +87,13 @@ class SessionState:
         self.scenarios = []
         self.runconfig = {}
         self.windkit_data = {}
+        self.workflow_execution = {
+            "run_id": None,
+            "is_running": False,
+            "cancel_requested": False,
+            "node_statuses": {},
+            "events": [],
+        }
         self.session_id = preserved_session_id
         self.workspace_dir = preserved_workspace_dir
         self.created_at = preserved_created_at

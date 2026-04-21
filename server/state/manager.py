@@ -4,6 +4,7 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
+import copy
 import shutil
 from pathlib import Path
 from uuid import uuid4
@@ -38,6 +39,59 @@ class SessionManager:
         if workspace_dir.exists():
             shutil.rmtree(workspace_dir)
         self._prepare_workspace(workspace_dir)
+
+    def _copy_workspace_tree(self, source: Path, target: Path) -> None:
+        """Copy workspace files from one session directory into another."""
+        if not source.exists():
+            return
+        target.mkdir(parents=True, exist_ok=True)
+        for child in source.iterdir():
+            destination = target / child.name
+            if child.is_dir():
+                shutil.copytree(child, destination, dirs_exist_ok=True)
+            else:
+                shutil.copy2(child, destination)
+
+    def _clone_session_state(self, source: SessionState, target: SessionState) -> None:
+        """Deep-clone in-memory analysis state from source session into target session."""
+        target.project_name = source.project_name
+        target.coordinate = copy.deepcopy(source.coordinate)
+        target.measurement_type = source.measurement_type
+        target.hub_height_m = source.hub_height_m
+
+        target.timeseries_df = None if source.timeseries_df is None else source.timeseries_df.copy(deep=True)
+        target.raw_timeseries_df = None if source.raw_timeseries_df is None else source.raw_timeseries_df.copy(deep=True)
+        target.sensor_mapping = copy.deepcopy(source.sensor_mapping)
+        target.cleaning_log = copy.deepcopy(source.cleaning_log)
+
+        target.shear_timeseries_df = None if source.shear_timeseries_df is None else source.shear_timeseries_df.copy(deep=True)
+        target.roughness_timeseries_df = None if source.roughness_timeseries_df is None else source.roughness_timeseries_df.copy(deep=True)
+        target.shear_table = None if source.shear_table is None else source.shear_table.copy(deep=True)
+        target.roughness_table = None if source.roughness_table is None else source.roughness_table.copy(deep=True)
+
+        target.brighthub_token = source.brighthub_token
+        target.era5_nodes = copy.deepcopy(source.era5_nodes)
+        target.era5_data = {key: frame.copy(deep=True) for key, frame in source.era5_data.items()}
+        target.era5_interpolated_df = (
+            None if source.era5_interpolated_df is None else source.era5_interpolated_df.copy(deep=True)
+        )
+        target.merra_nodes = copy.deepcopy(source.merra_nodes)
+        target.merra_data = {key: frame.copy(deep=True) for key, frame in source.merra_data.items()}
+
+        target.ltc_results = copy.deepcopy(source.ltc_results)
+        target.ensemble_df = None if source.ensemble_df is None else source.ensemble_df.copy(deep=True)
+        target.latest_uncertainty = copy.deepcopy(source.latest_uncertainty)
+        target.scenarios = copy.deepcopy(source.scenarios)
+        target.runconfig = copy.deepcopy(source.runconfig)
+        target.windkit_data = copy.deepcopy(source.windkit_data)
+
+        target.workflow_execution = {
+            "run_id": None,
+            "is_running": False,
+            "cancel_requested": False,
+            "node_statuses": {},
+            "events": [],
+        }
 
     def create_session(self) -> SessionState:
         """Create a new managed SessionState with its own workspace directory."""
@@ -88,6 +142,16 @@ class SessionManager:
                 }
             )
         return sorted(summaries, key=lambda summary: summary["created_at"] or "")
+
+    def fork_session(self, session_id: str) -> SessionState:
+        """Create a new session by cloning workspace files and in-memory state from an existing session."""
+        source = self.get_session(session_id)
+        target = self.create_session()
+        if source.workspace_dir is not None and target.workspace_dir is not None:
+            self._copy_workspace_tree(source.workspace_dir, target.workspace_dir)
+        self._clone_session_state(source, target)
+        target.touch()
+        return target
 
 
 session_manager = SessionManager()

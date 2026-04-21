@@ -354,6 +354,177 @@ export interface UploadResponse {
   [key: string]: JsonValue;
 }
 
+export interface DatasetDateRange {
+  start: string;
+  end: string;
+}
+
+export interface DatasetEntryResponse {
+  id: string;
+  name: string;
+  timeseries_file: string;
+  datamodel_file: string;
+  uploaded_at: string;
+  sensor_count: number;
+  date_range: DatasetDateRange;
+  coverage_summary: Record<string, number>;
+  coverage_pct: number;
+}
+
+export interface DatasetListResponse {
+  datasets: DatasetEntryResponse[];
+}
+
+export interface DatasetLoadResponse {
+  status: string;
+  dataset_id: string;
+  timeseries: UploadResponse;
+  datamodel: UploadResponse;
+}
+
+export interface DatasetPreviewResponse {
+  dataset_id: string;
+  columns: string[];
+  rows: Record<string, JsonValue>[];
+  preview_rows: number;
+  total_rows: number;
+  start: string;
+  end: string;
+  timestep_minutes: number;
+}
+
+export type WorkflowExecutionMode = "auto" | "manual";
+
+export type WorkflowExecutionNodeKind = "group" | "operation" | "dataset" | "fork";
+
+export interface WorkflowExecutionNodeRequest {
+  id: string;
+  kind: WorkflowExecutionNodeKind;
+  label: string;
+  template_id?: string;
+  config: Record<string, JsonValue>;
+  status?: string;
+}
+
+export interface WorkflowExecutionEdgeRequest {
+  source: string;
+  target: string;
+}
+
+export interface WorkflowExecuteRequest {
+  mode: WorkflowExecutionMode;
+  nodes: WorkflowExecutionNodeRequest[];
+  edges: WorkflowExecutionEdgeRequest[];
+}
+
+export interface WorkflowExecutionEvent {
+  run_id: string;
+  event_type: string;
+  node_id?: string | null;
+  status?: string | null;
+  message?: string | null;
+  timestamp: string;
+}
+
+export interface WorkflowExecutionResponse {
+  run_id: string;
+  status: string;
+  node_statuses: Record<string, string>;
+  events: WorkflowExecutionEvent[];
+}
+
+export interface WorkflowExecutionStatusResponse {
+  run_id: string | null;
+  is_running: boolean;
+  cancelled: boolean;
+  node_statuses: Record<string, string>;
+  events: WorkflowExecutionEvent[];
+}
+
+export interface WorkflowDispatchCapability {
+  template_id: string;
+  required_params: string[];
+  optional_params: string[];
+}
+
+export interface WorkflowDispatchCapabilitiesResponse {
+  capabilities: WorkflowDispatchCapability[];
+}
+
+export interface WorkflowForkBranchRequest {
+  name?: string;
+  from_node_id?: string;
+}
+
+export interface WorkflowForkBranchResponse {
+  status: string;
+  parent_session_id: string;
+  branch_session_id: string;
+  branch_name: string;
+  from_node_id?: string | null;
+}
+
+export interface WorkflowCompareRequest {
+  branch_session_ids: string[];
+}
+
+export interface WorkflowCompareMetric {
+  name: string;
+  unit: string;
+  values: Record<string, number | null>;
+}
+
+export interface WorkflowCompareDiffEntry {
+  key: string;
+  a: JsonValue;
+  b: JsonValue;
+}
+
+export interface WorkflowComparePlot {
+  title: string;
+  plotly_json: string;
+}
+
+export interface WorkflowComparePlots {
+  weibull: WorkflowComparePlot | null;
+  windrose: WorkflowComparePlot[];
+  ltc_scatter: WorkflowComparePlot | null;
+  uncertainty_tornado: WorkflowComparePlot | null;
+}
+
+export interface WorkflowCompareResponse {
+  status: string;
+  session_ids: string[];
+  metrics: WorkflowCompareMetric[];
+  config_diff: Record<string, WorkflowCompareDiffEntry[]>;
+  plots: WorkflowComparePlots;
+}
+
+export interface WorkflowSaveSnapshotRequest {
+  snapshot: JsonValue;
+}
+
+export interface WorkflowSaveSnapshotResponse {
+  status: string;
+  name: string;
+  saved_at: string;
+}
+
+export interface WorkflowSnapshotSummary {
+  name: string;
+  saved_at: string;
+}
+
+export interface WorkflowSnapshotListResponse {
+  snapshots: WorkflowSnapshotSummary[];
+}
+
+export interface WorkflowLoadSnapshotResponse {
+  name: string;
+  saved_at: string;
+  snapshot: JsonValue;
+}
+
 export interface ApiStatusResponse {
   status: string;
   [key: string]: JsonValue;

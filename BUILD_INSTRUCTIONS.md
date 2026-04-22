@@ -1269,7 +1269,7 @@ import server.tools.map  # noqa: F401
 
 ## PHASE 5 — Integration & Deployment
 
-**Goal**: Full end-to-end test, LibreChat configuration, Docker packaging.
+**Goal**: Full end-to-end test, Docker packaging.
 
 **Prerequisite**: Phase 4 complete and tests passing.
 
@@ -1328,42 +1328,13 @@ def test_full_wra_workflow(sample_timeseries_df, tmp_path):
 
 ---
 
-### Step 5.2: LibreChat MCP configuration
-
-Create a configuration guide for connecting LibreChat to GoKaatru:
+### Step 5.2: Docker Compose and environment configuration
 
 **File: `.env.example`**
 ```dotenv
 # Copy this file to .env for local Docker Compose overrides.
-# Replace these example values before using LibreChat outside local-only development.
 
 EARTHDATAHUB_TOKEN=
-OPENAI_API_KEY=user_provided
-
-LIBRECHAT_CREDS_KEY=replace_with_64_hex_chars
-LIBRECHAT_CREDS_IV=replace_with_32_hex_chars
-LIBRECHAT_JWT_SECRET=replace_with_64_hex_chars
-LIBRECHAT_JWT_REFRESH_SECRET=replace_with_64_hex_chars
-```
-
-**File: `librechat_config.yaml`** (example config snippet)
-```yaml
-# Add to LibreChat's librechat.yaml under mcpServers.
-# Use `http://gokaatru:8080/sse` when LibreChat runs in the same Docker Compose stack.
-# Use `http://localhost:8080/sse` when LibreChat runs outside Docker on the host machine.
-# The `version` field and `allowedDomains` list are required for current LibreChat builds.
-version: "1.3.6"
-
-mcpSettings:
-  allowedDomains:
-    - http://gokaatru:8080
-    - http://localhost:8080
-
-mcpServers:
-  gokaatru:
-    type: sse
-    url: http://gokaatru:8080/sse
-    timeout: 120000
 ```
 
 **File: `docker-compose.yml`**
@@ -1377,50 +1348,6 @@ services:
       - EARTHDATAHUB_TOKEN=${EARTHDATAHUB_TOKEN:-}
     volumes:
       - ./data:/app/data
-
-  mongodb:
-    image: mongo:7
-    ports:
-      - "27017:27017"
-    volumes:
-      - librechat_mongo_data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  librechat:
-    image: ghcr.io/danny-avila/librechat:latest
-    environment:
-      - HOST=0.0.0.0
-      - PORT=3080
-      - MONGO_URI=mongodb://mongodb:27017/LibreChat
-      - DOMAIN_CLIENT=http://localhost:3080
-      - DOMAIN_SERVER=http://localhost:3080
-      - CONFIG_PATH=/app/librechat.yaml
-      - CREDS_KEY=${LIBRECHAT_CREDS_KEY:-f34be427ebb29de8d88c107a71546019685ed8b241d8f2ed00c3df97ad2566f0}
-      - CREDS_IV=${LIBRECHAT_CREDS_IV:-e2341419ec3dd3d19b13a1a87fafcbfb}
-      - JWT_SECRET=${LIBRECHAT_JWT_SECRET:-16f8c0ef4a5d391b26034086c628469d3f9f497f08163ab9b40137092f2909ef}
-      - JWT_REFRESH_SECRET=${LIBRECHAT_JWT_REFRESH_SECRET:-eaa5191f2914e30b9387fd84e254e4ba6fc51b4654968a9b0803b456a54b8418}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-user_provided}
-      - ALLOW_EMAIL_LOGIN=true
-      - ALLOW_REGISTRATION=true
-      - ALLOW_SOCIAL_LOGIN=false
-      - ALLOW_SOCIAL_REGISTRATION=false
-      - NO_INDEX=true
-    ports:
-      - "3080:3080"
-    volumes:
-      - ./librechat_config.yaml:/app/librechat.yaml:ro
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      gokaatru:
-        condition: service_started
-
-volumes:
-  librechat_mongo_data:
 ```
 
 ---
@@ -1452,7 +1379,7 @@ Write a README with:
 1. One-paragraph description
 2. Quick start (local): `conda activate gokaatru && pip install -e ".[ml,dev]" && python -m server.main`
 3. Quick start (Docker): `docker compose up --build`
-4. LibreChat setup instructions
+4. Docker setup instructions
 5. List of all available tools (grouped by domain)
 6. Link to BUILD_SPECIFICATION.md for details
 
@@ -2076,7 +2003,7 @@ Before declaring Phase 6 complete, verify:
 | 2 | server/core/regression.py, server/core/formulas.py, server/tools/shear.py, server/tools/extrapolation.py, server/tools/cleaning.py, tests/test_phase2.py | 12 tools |
 | 3 | server/tools/era5.py, server/tools/ltc.py, server/tools/ltc_ml.py, server/tools/air_density.py, tests/test_phase3.py | 11 tools |
 | 4 | server/tools/ensemble.py, server/tools/clipping.py, server/tools/homogeneity.py, server/tools/uncertainty.py, server/tools/visualization.py, server/tools/map.py, tests/test_phase4.py | 19 tools |
-| 5 | tests/test_e2e.py, Dockerfile, docker-compose.yml, .env.example, librechat_config.yaml, README.md | — |
+| 5 | tests/test_e2e.py, Dockerfile, docker-compose.yml, .env.example, README.md | — |
 | 6 | server/api/*, server/state/manager.py, frontend/*, tests/test_api_sessions.py, tests/test_api_workflow.py | — |
 | **Current built total through Phase 6** | **37 files** | **59 tools** |
 
@@ -4051,7 +3978,7 @@ The `handleRunconfigFile` callback reads the file via `FileReader`, validates it
 | 2 | server/core/regression.py, server/core/formulas.py, server/tools/shear.py, server/tools/extrapolation.py, server/tools/cleaning.py, tests/test_phase2.py | 12 tools |
 | 3 | server/tools/era5.py, server/tools/ltc.py, server/tools/ltc_ml.py, server/tools/air_density.py, tests/test_phase3.py | 11 tools |
 | 4 | server/tools/ensemble.py, server/tools/clipping.py, server/tools/homogeneity.py, server/tools/uncertainty.py, server/tools/visualization.py, server/tools/map.py, tests/test_phase4.py | 19 tools |
-| 5 | tests/test_e2e.py, Dockerfile, docker-compose.yml, .env.example, librechat_config.yaml, README.md | — |
+| 5 | tests/test_e2e.py, Dockerfile, docker-compose.yml, .env.example, README.md | — |
 | 6 | server/api/*, server/state/manager.py, frontend/*, tests/test_api_sessions.py, tests/test_api_workflow.py | — |
 | 7 | Update: visualization.py (+5 helpers), results.py (+3 dispatches), analysis.py (+1 endpoint), schemas.py (+1 model), DataPage.tsx (redesign), SitePage.tsx (inline charts), HelpTooltip.tsx, styles.css, api.ts, types.ts, tests/test_phase7.py | — |
 | 8 | Update: visualization.py (+5 helpers), results.py (+5 dispatches), schemas.py (+1 field), LtcPage.tsx (workbench redesign), algorithmHelp.ts, tests/test_phase8.py | — |

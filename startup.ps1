@@ -1,6 +1,6 @@
 <#!
 .SYNOPSIS
-Launch the local GoKaatru workflow app without Docker or LibreChat.
+Launch the local GoKaatru workflow app without Docker.
 
 .DESCRIPTION
 Starts the FastAPI web API and the Vite frontend in separate PowerShell windows.

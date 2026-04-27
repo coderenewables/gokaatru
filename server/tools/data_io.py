@@ -25,9 +25,14 @@ SENSOR_FIELDS = {
 
 def _read_tabular_file(file_path: str) -> pd.DataFrame:
     """Load CSV, TSV, or Excel input according to the GoKaatru Phase 1 file-ingest spec."""
-    path = Path(file_path)
+    try:
+        path = Path(file_path).resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise ValueError(f"Invalid file path: {file_path}") from exc
     if not path.exists():
         raise ValueError(f"Input file does not exist: {file_path}")
+    if not path.is_file():
+        raise ValueError(f"Input path is not a regular file: {file_path}")
     suffix = path.suffix.lower()
     if suffix == ".csv":
         return pd.read_csv(path)

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 from typing import Annotated
 
 import pandas as pd
@@ -17,6 +18,16 @@ from server.state.session import SessionState
 from server.tools.config import _get_run_config, _save_run_config
 
 router = APIRouter(prefix="/sessions/{session_id}/exports", tags=["exports"])
+
+# Filenames embedded in the Content-Disposition header must not contain CR/LF
+# or quotes; restrict to a conservative whitelist before formatting.
+_SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _safe_filename(name: str, fallback: str = "download.bin") -> str:
+    """Sanitize a filename so it cannot inject extra HTTP headers or shell metacharacters."""
+    cleaned = _SAFE_FILENAME_RE.sub("_", name).strip("._-")
+    return cleaned or fallback
 
 
 def _frame_for_csv(frame_like: object) -> pd.DataFrame:
@@ -32,20 +43,22 @@ def _csv_download(frame_like: object, filename: str) -> StreamingResponse:
     """Return a CSV attachment response for one in-memory dataframe payload."""
     frame = _frame_for_csv(frame_like)
     csv_text = frame.to_csv(index=False)
+    safe_name = _safe_filename(filename, "export.csv")
     return StreamingResponse(
         io.BytesIO(csv_text.encode("utf-8")),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
     )
 
 
 def _json_download(payload: object, filename: str) -> StreamingResponse:
     """Return a JSON attachment response for one in-memory payload."""
     json_text = json.dumps(payload, indent=2)
+    safe_name = _safe_filename(filename, "export.json")
     return StreamingResponse(
         io.BytesIO(json_text.encode("utf-8")),
         media_type="application/json",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
     )
 
 
@@ -71,8 +84,8 @@ def export_ltc_csv(
     del session_id
     payload = state.ltc_results.get(algorithm)
     if payload is None:
-        raise to_bad_request(ValueError(f"LTC result '{algorithm}' is not available"))
-    return _csv_download(payload.get("df", []), f"ltc_{algorithm}.csv")
+        raise to_bad_request(ValueError(f"LTC result '{_safe_filename(algorithm, 'unknown')}' is not available"))
+    return _csv_download(payload.get("df", []), f"ltc_{_safe_filename(algorithm, 'algorithm')}.csv")
 
 
 @router.get("/ensemble")

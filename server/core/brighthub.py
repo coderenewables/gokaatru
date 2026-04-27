@@ -108,9 +108,40 @@ def fetch_timeseries_csv(
     presigned_url = resp.json().get("url")
     if not presigned_url:
         raise RuntimeError("BrightHub did not return a download URL for this dataset.")
-    download_resp = requests.get(presigned_url, timeout=300)
+
+    # Stream the presigned download with a hard byte cap so a malicious or
+    # accidentally huge response cannot exhaust server memory.
+    max_bytes = 500 * 1024 * 1024  # 500 MiB
+    download_resp = requests.get(presigned_url, timeout=300, stream=True)
     download_resp.raise_for_status()
-    return download_resp.text
+
+    declared = download_resp.headers.get("Content-Length")
+    if declared is not None:
+        try:
+            if int(declared) > max_bytes:
+                download_resp.close()
+                raise RuntimeError(
+                    f"BrightHub timeseries download exceeds the {max_bytes} byte limit"
+                )
+        except ValueError:
+            pass
+
+    chunks: list[bytes] = []
+    received = 0
+    try:
+        for chunk in download_resp.iter_content(chunk_size=64 * 1024):
+            if not chunk:
+                continue
+            received += len(chunk)
+            if received > max_bytes:
+                raise RuntimeError(
+                    f"BrightHub timeseries download exceeds the {max_bytes} byte limit"
+                )
+            chunks.append(chunk)
+    finally:
+        download_resp.close()
+    encoding = download_resp.encoding or "utf-8"
+    return b"".join(chunks).decode(encoding, errors="replace")
 
 
 def fetch_reanalysis_nodes(token: str, lat: float, lon: float) -> dict[str, list[dict]]:
@@ -163,16 +194,24 @@ def download_reanalysis_data(
     and optional ``metadata`` for each node that responded successfully.
     """
     headers = _auth_headers(token)
+    if dataset_name not in {"ERA5", "MERRA-2"}:
+        raise ValueError(f"Unsupported reanalysis dataset: {dataset_name!r}")
     results: list[dict] = []
     for node in nodes:
-        nlat, nlon = node["latitude_ddeg"], node["longitude_ddeg"]
+        try:
+            nlat = float(node["latitude_ddeg"])
+            nlon = float(node["longitude_ddeg"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not (-90.0 <= nlat <= 90.0) or not (-180.0 <= nlon <= 180.0):
+            continue
         if dataset_name == "ERA5":
             variables = "Spd_100m_mps,Dir_100m_deg,Tmp_2m_degC,Prs_0m_hPa"
         else:
             variables = "Spd_50m_mps,Dir_50m_deg,Tmp_2m_degC,Prs_0m_hPa"
-        url = f"{BRIGHTHUB_BASE_URL}/reanalysis/{dataset_name}/nodes/{nlat}/{nlon}/data?variables={variables}"
+        url = f"{BRIGHTHUB_BASE_URL}/reanalysis/{dataset_name}/nodes/{nlat}/{nlon}/data"
         try:
-            r = requests.get(url, headers=headers, timeout=120)
+            r = requests.get(url, headers=headers, params={"variables": variables}, timeout=120)
             if r.status_code == 200:
                 data = r.json()
                 results.append({
@@ -181,6 +220,6 @@ def download_reanalysis_data(
                     "timeseries_data": data.get("timeseries_data"),
                     "metadata": data.get("metadata"),
                 })
-        except requests.RequestException:
+        except (requests.RequestException, ValueError):
             continue
     return results

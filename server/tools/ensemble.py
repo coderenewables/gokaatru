@@ -4,7 +4,7 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -61,7 +61,7 @@ def _ensemble_output_path(state: SessionState) -> Path:
     """Return the standard Phase 4 ensemble CSV output path under data/ltc_results."""
     output_dir = Path(state.get_data_dir()) / "ltc_results"
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     return output_dir / f"ensemble_{timestamp}.csv"
 
 

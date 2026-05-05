@@ -5,6 +5,7 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -214,9 +215,8 @@ def _build_sensor_rows(state: SessionState, require_mapping: bool) -> list[dict[
                 record_count=int(series.notna().sum()),
             )
             sensors.append(sensor.model_dump())
-    # Include extrapolated hub-height columns (Spd_*m_hub) not already in sensor_mapping
+    # Include extrapolated hub-height columns (Spd_*m_hub) not already in sensor_mapping.
     known_names = {s["name"] for s in sensors}
-    import re
     hub_pattern = re.compile(r"^Spd_(\d+(?:\.\d+)?)m_hub$")
     for col in state.timeseries_df.columns:
         if col in known_names:
@@ -233,7 +233,43 @@ def _build_sensor_rows(state: SessionState, require_mapping: bool) -> list[dict[
                 data_coverage_pct=coverage,
                 record_count=int(series.notna().sum()),
             ).model_dump())
-    return sensors
+
+    if require_mapping or sensors:
+        return sensors
+
+    # Fallback inventory for timeseries-only sessions where parse_datamodel has not run yet.
+    inferred: list[dict[str, object]] = []
+    height_pattern = re.compile(r"_(\d+(?:\.\d+)?)m(?:_|$)", flags=re.IGNORECASE)
+    for col in state.timeseries_df.columns:
+        series = state.timeseries_df[col]
+        coverage = 0.0 if total_rows == 0 else float(series.notna().sum() / total_rows * 100.0)
+        lowered = col.lower()
+        if lowered.startswith("spd_"):
+            sensor_type = "wind_speed"
+        elif lowered.startswith("dir_"):
+            sensor_type = "wind_direction"
+        elif lowered.startswith("temp_") or lowered.startswith("tmp_"):
+            sensor_type = "temperature"
+        elif lowered.startswith("pres_") or lowered.startswith("pressure_"):
+            sensor_type = "pressure"
+        else:
+            sensor_type = "unknown"
+
+        match = height_pattern.search(col)
+        height_m = float(match.group(1)) if match else 0.0
+
+        inferred.append(
+            SensorInfo(
+                name=col,
+                height_m=height_m,
+                sensor_type=sensor_type,
+                data_coverage_pct=coverage,
+                record_count=int(series.notna().sum()),
+            ).model_dump()
+        )
+
+    inferred.sort(key=lambda item: (-float(item.get("height_m", 0.0)), str(item.get("name", ""))))
+    return inferred
 
 
 def _gap_lengths_in_minutes(series: pd.Series, timestep_minutes: int) -> list[int]:

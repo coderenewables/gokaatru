@@ -11,10 +11,11 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from server.core.executor import _tool_registry
+from server.core.executor import WorkflowExecutor, _loads_lenient, _tool_registry
 from server.api.deps import get_session_manager
 from server.api.main import create_app
 from server.state.manager import SessionManager
+from server.tools.shear import calculate_shear_timeseries
 
 
 @pytest.fixture
@@ -52,6 +53,61 @@ def test_executor_dispatch_registry_covers_palette_tools() -> None:
     registry = _tool_registry()
     missing = sorted(template_id for template_id in template_ids if template_id not in registry)
     assert missing == []
+
+
+def test_loads_lenient_repairs_windows_paths_with_unicode_prefix() -> None:
+    """Repair raw Windows paths where a directory name begins with the JSON unicode escape prefix."""
+    payload = r'{"file_path":"D:\gokaatru\data\uploads\HKW-B-FLS-Boxkite_timeseries_data.csv","alias":"HKW-B-FLS-Boxkite"}'
+
+    result = _loads_lenient(payload)
+
+    assert result == {
+        "file_path": r"D:\gokaatru\data\uploads\HKW-B-FLS-Boxkite_timeseries_data.csv",
+        "alias": "HKW-B-FLS-Boxkite",
+    }
+
+
+def test_build_kwargs_coerces_list_for_postponed_str_annotations(
+    execution_client: tuple[TestClient, SessionManager],
+) -> None:
+    """Coerce list params into JSON string kwargs when tool annotations are postponed strings."""
+    client, manager = execution_client
+    session_id, _headers = _create_session(client)
+    state = manager.get_session(session_id)
+    executor = WorkflowExecutor(state, [], [])
+
+    kwargs = executor._build_kwargs(
+        calculate_shear_timeseries,
+        {"height_sensors": ["Spd_180m", "Spd_140m"]},
+    )
+
+    assert kwargs == {"height_sensors": '["Spd_180m", "Spd_140m"]'}
+
+
+def test_sensors_endpoint_falls_back_to_timeseries_inference_without_datamodel(
+    execution_client: tuple[TestClient, SessionManager],
+) -> None:
+    """Return inferred sensors from timeseries columns when datamodel mapping has not been loaded."""
+    client, manager = execution_client
+    session_id, headers = _create_session(client)
+    state = manager.get_session(session_id)
+
+    index = pd.date_range("2024-01-01", periods=4, freq="10min")
+    state.timeseries_df = pd.DataFrame(
+        {
+            "Spd_180m": [8.0, 8.2, 8.1, 7.9],
+            "Dir_180m": [0.0, 45.0, 90.0, 135.0],
+        },
+        index=index,
+    )
+    state.sensor_mapping = {}
+
+    response = client.get(f"/api/sessions/{session_id}/sensors", headers=headers)
+    assert response.status_code == 200
+    sensors = response.json()["sensors"]
+    names = {item["name"] for item in sensors}
+    assert "Spd_180m" in names
+    assert "Dir_180m" in names
 
 
 def test_workflow_execute_and_status(execution_client: tuple[TestClient, SessionManager]) -> None:

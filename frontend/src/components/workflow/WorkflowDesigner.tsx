@@ -57,6 +57,15 @@ export function WorkflowDesigner() {
   const setExecutionError = useWorkflowStore((state) => state.setExecutionError);
   const applyWorkflowTemplate = useWorkflowStore((state) => state.applyWorkflowTemplate);
   const removeSelectedNode = useWorkflowStore((state) => state.removeSelectedNode);
+  const hasDeletableSelection = useWorkflowStore((state) => {
+    const selectedNodeId = state.selectedNodeId;
+    if (!selectedNodeId) {
+      return false;
+    }
+    const branchState = state.branchStates[state.activeBranchId];
+    const selectedNode = branchState.nodes.find((node) => node.id === selectedNodeId);
+    return Boolean(selectedNode && selectedNode.data.kind !== "group");
+  });
   const undo = useWorkflowStore((state) => state.undo);
   const redo = useWorkflowStore((state) => state.redo);
   const historyPastDepth = useWorkflowStore((state) => state.historyPast[state.activeBranchId]?.length ?? 0);
@@ -156,8 +165,10 @@ export function WorkflowDesigner() {
       }
 
       if (event.key === "Delete" || event.key === "Backspace") {
-        event.preventDefault();
-        removeSelectedNode();
+        if (hasDeletableSelection) {
+          event.preventDefault();
+          removeSelectedNode();
+        }
         return;
       }
 
@@ -173,7 +184,7 @@ export function WorkflowDesigner() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [comparisonOpen, execution, redo, removeSelectedNode, undo]);
+  }, [comparisonOpen, execution, hasDeletableSelection, redo, removeSelectedNode, undo]);
 
   const healthQuery = useQuery({
     queryKey: ["api-health"],
@@ -425,12 +436,13 @@ export function WorkflowDesigner() {
             isForking={forkBranchMutation.isPending}
             onForkFromNode={(nodeId) => forkBranchMutation.mutate(nodeId)}
           />
+          <section className="workflow-route-outlet">
+            <Outlet />
+          </section>
         </main>
-
-        <aside className="workflow-right-rail">
-          <NodeInspector fallback={<Outlet />} />
-        </aside>
       </div>
+
+      <NodeInspector />
 
       <ComparisonDashboard
         open={comparisonOpen}

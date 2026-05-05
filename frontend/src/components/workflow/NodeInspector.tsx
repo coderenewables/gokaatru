@@ -1,10 +1,11 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { ApiError, configApi, workflowApi } from "../../lib/api";
+import { ApiError, configApi, uploadsApi, workflowApi } from "../../lib/api";
 import type { NodeConfigField } from "../../lib/nodeRegistry";
-import type { JsonValue, WorkflowDispatchCapability } from "../../lib/types";
+import { parseLooseJson } from "../../lib/paramsJson";
+import type { JsonValue, SensorRecord, WorkflowDispatchCapability } from "../../lib/types";
 import type { WorkflowNode } from "../../stores/workflowStore";
 import { useWorkflowStore } from "../../stores/workflowStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
@@ -40,10 +41,10 @@ function hasValue(value: unknown): boolean {
   return true;
 }
 
-function configKeysFromNode(node: WorkflowNode): Set<string> {
+function configKeysFromNode(node: WorkflowNode): { keys: Set<string>; parseError: string | null } {
   const keys = new Set<string>();
   if (node.data.kind !== "operation" || !node.data.config) {
-    return keys;
+    return { keys, parseError: null };
   }
 
   for (const [key, value] of Object.entries(node.data.config)) {
@@ -56,22 +57,24 @@ function configKeysFromNode(node: WorkflowNode): Set<string> {
   }
 
   const rawParams = node.data.config.params_json;
-  if (typeof rawParams === "string") {
-    try {
-      const parsed = JSON.parse(rawParams);
+  let parseError: string | null = null;
+  if (typeof rawParams === "string" && rawParams.trim() !== "" && rawParams.trim() !== "{}") {
+    const result = parseLooseJson(rawParams);
+    if (result.ok) {
+      const parsed = result.value;
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        for (const [key, value] of Object.entries(parsed)) {
+        for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
           if (hasValue(value)) {
             keys.add(key);
           }
         }
       }
-    } catch {
-      // Ignore malformed params_json while still showing inspector state.
+    } else {
+      parseError = result.error;
     }
   }
 
-  return keys;
+  return { keys, parseError };
 }
 
 function requiredParamStatus(required: string, configuredKeys: Set<string>) {
@@ -187,22 +190,166 @@ function buildRunconfigUpdateKey(branchId: string, nodeId: string) {
   return `workflow.branches.${branchId}.nodes.${nodeId}`;
 }
 
-export function NodeInspector({ fallback }: { fallback: ReactNode }) {
-  const sessionId = useWorkspaceStore((state) => state.sessionId);
+function humanizeParamName(name: string): string {
+  return name
+    .split("_")
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
+}
+
+function parseParamsObject(raw: unknown): { params: Record<string, JsonValue>; parseError: string | null } {
+  if (typeof raw !== "string" || raw.trim() === "") {
+    return { params: {}, parseError: null };
+  }
+
+  const parsed = parseLooseJson(raw);
+  if (!parsed.ok) {
+    return { params: {}, parseError: parsed.error };
+  }
+
+  if (!parsed.value || typeof parsed.value !== "object" || Array.isArray(parsed.value)) {
+    return { params: {}, parseError: "params_json must decode to a JSON object" };
+  }
+
+  return { params: parsed.value as Record<string, JsonValue>, parseError: null };
+}
+
+function valueForParam(params: Record<string, JsonValue>, name: string): JsonValue | undefined {
+  if (name in params) {
+    return params[name];
+  }
+  const aliases = PARAM_ALIASES[name] ?? [];
+  for (const alias of aliases) {
+    if (alias in params) {
+      return params[alias];
+    }
+  }
+  return undefined;
+}
+
+function withParamValue(params: Record<string, JsonValue>, name: string, value: JsonValue | undefined) {
+  const next = { ...params };
+  delete next[name];
+  for (const alias of PARAM_ALIASES[name] ?? []) {
+    delete next[alias];
+  }
+
+  if (value === undefined) {
+    return next;
+  }
+  if (typeof value === "string" && value.trim() === "") {
+    return next;
+  }
+  next[name] = value;
+  return next;
+}
+
+function asStringArray(value: JsonValue | undefined): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((item) => String(item));
+}
+
+function inferInputKind(paramName: string):
+  | "text"
+  | "number"
+  | "boolean"
+  | "json"
+  | "sensor-single"
+  | "sensor-multi"
+  | "date" {
+  const normalized = paramName.toLowerCase();
+
+  if (normalized === "height_sensors" || normalized === "sensor_names" || normalized === "sensors") {
+    return "sensor-multi";
+  }
+  if (normalized === "sensor" || normalized === "sensor_name" || normalized === "direction_sensor") {
+    return "sensor-single";
+  }
+  if (normalized === "params" || normalized === "nodes_json") {
+    return "json";
+  }
+  if (normalized.endsWith("_date")) {
+    return "date";
+  }
+  if (normalized.startsWith("is_") || normalized.startsWith("has_") || normalized.startsWith("use_") || normalized.endsWith("_enabled")) {
+    return "boolean";
+  }
+  if (normalized.endsWith("_index") || normalized.endsWith("_count") || normalized === "count" || normalized === "bins") {
+    return "number";
+  }
+  if (normalized === "start" || normalized === "end") {
+    return "number";
+  }
+  if (normalized === "height" || normalized.endsWith("_m")) {
+    return "number";
+  }
+  return "text";
+}
+
+function sensorOptions(records: SensorRecord[]) {
+  const all = records.map((sensor) => sensor.name);
+  const speed = records
+    .filter((sensor) => sensor.sensor_type === "wind_speed" || sensor.name.toLowerCase().startsWith("spd_"))
+    .map((sensor) => sensor.name);
+  const direction = records
+    .filter((sensor) => sensor.sensor_type === "wind_direction" || sensor.name.toLowerCase().startsWith("dir_"))
+    .map((sensor) => sensor.name);
+  return {
+    all,
+    speed: speed.length > 0 ? speed : all,
+    direction: direction.length > 0 ? direction : all,
+  };
+}
+
+export function NodeInspector() {
+  const workspaceSessionId = useWorkspaceStore((state) => state.sessionId);
   const activeBranchId = useWorkflowStore((state) => state.activeBranchId);
+  const activeBranchSessionId = useWorkflowStore((state) => {
+    const branch = state.branches.find((candidate) => candidate.id === state.activeBranchId);
+    return branch?.sessionId ?? null;
+  });
+  const sessionId = activeBranchSessionId ?? workspaceSessionId;
   const branchState = useWorkflowStore((state) => state.branchStates[state.activeBranchId]);
   const selectedNodeId = useWorkflowStore((state) => state.selectedNodeId);
   const updateNodeConfig = useWorkflowStore((state) => state.updateNodeConfig);
+  const selectNode = useWorkflowStore((state) => state.selectNode);
   const executionEvents = useWorkflowStore((state) => state.executionEvents);
   const queryClient = useQueryClient();
   const autoSeededNodeIdsRef = useRef<Set<string>>(new Set());
   const lastPersistedSignatureRef = useRef<string | null>(null);
+
+  const close = () => selectNode(null);
+
+  // Close the inspector popup with Escape so it behaves like a standard modal.
+  useEffect(() => {
+    if (!selectedNodeId) {
+      return;
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNodeId]);
 
   const capabilitiesQuery = useQuery({
     queryKey: ["workflow-dispatch-capabilities", sessionId],
     queryFn: () => workflowApi.getCapabilities(sessionId ?? ""),
     enabled: sessionId !== null,
     staleTime: 60_000,
+  });
+
+  const sensorsQuery = useQuery({
+    queryKey: ["session-sensors", sessionId],
+    queryFn: () => uploadsApi.getSensors(sessionId ?? ""),
+    enabled: sessionId !== null,
+    staleTime: 30_000,
   });
 
   const selectedNode = branchState.nodes.find((node) => node.id === selectedNodeId) ?? null;
@@ -214,7 +361,37 @@ export function NodeInspector({ fallback }: { fallback: ReactNode }) {
     selectedNode?.data.kind === "operation" && selectedNode.data.templateId
       ? capabilitiesQuery.data?.capabilities.find((item) => item.template_id === selectedNode.data.templateId) ?? null
       : null;
-  const configuredKeys = selectedNode ? configKeysFromNode(selectedNode) : new Set<string>();
+  const { keys: configuredKeys, parseError: paramsJsonParseError } = selectedNode
+    ? configKeysFromNode(selectedNode)
+    : { keys: new Set<string>(), parseError: null };
+
+  const parsedParams = selectedNode?.data.kind === "operation" ? parseParamsObject(selectedNode.data.config?.params_json) : { params: {}, parseError: null };
+  const mergedParams = useMemo(() => {
+    if (!selectedNode || selectedNode.data.kind !== "operation") {
+      return {} as Record<string, JsonValue>;
+    }
+    const merged = { ...parsedParams.params };
+    for (const [key, value] of Object.entries(selectedNode.data.config ?? {})) {
+      if (key === "params_json") {
+        continue;
+      }
+      if (!(key in merged) && (typeof value === "string" || typeof value === "number" || typeof value === "boolean")) {
+        merged[key] = value;
+      }
+    }
+    return merged;
+  }, [parsedParams.params, selectedNode]);
+
+  const sensorChoices = useMemo(() => sensorOptions(sensorsQuery.data?.sensors ?? []), [sensorsQuery.data?.sensors]);
+
+  const updateParam = (paramName: string, value: JsonValue | undefined) => {
+    if (!selectedNode || selectedNode.data.kind !== "operation") {
+      return;
+    }
+    const next = withParamValue(mergedParams, paramName, value);
+    updateNodeConfig(selectedNode.id, "params_json", JSON.stringify(next, null, 2));
+  };
+
   const validation = validationSummary(selectedCapability, configuredKeys);
 
   const persistNodeConfigMutation = useMutation({
@@ -284,22 +461,52 @@ export function NodeInspector({ fallback }: { fallback: ReactNode }) {
         ? capabilitiesQuery.error.message
         : null;
 
+  if (!selectedNode) {
+    return null;
+  }
+
   return (
-    <div className="workflow-inspector-stack">
-      <section className="workflow-panel-card workflow-inspector-card">
-        <div className="workflow-panel-header">
-          <div>
-            <span className="eyebrow">Inspector</span>
-            <h2>{selectedNode?.data.label ?? "Select a node"}</h2>
+    <div
+      className="workflow-inspector-modal-backdrop"
+      role="presentation"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          close();
+        }
+      }}
+    >
+      <div
+        className="workflow-inspector-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="workflow-inspector-modal-title"
+      >
+        <section className="workflow-panel-card workflow-inspector-card">
+          <div className="workflow-panel-header">
+            <div>
+              <span className="eyebrow">Inspector</span>
+              <h2 id="workflow-inspector-modal-title">{selectedNode.data.label}</h2>
+            </div>
+            <div className="workflow-inspector-modal-header-actions">
+              <span className="workflow-phase-chip">Branch {activeBranchId}</span>
+              <button
+                type="button"
+                className="workflow-inspector-modal-close"
+                aria-label="Close inspector"
+                onClick={close}
+              >
+                ×
+              </button>
+            </div>
           </div>
-          <span className="workflow-phase-chip">Branch {activeBranchId}</span>
-        </div>
-        {selectedNode ? (
           <div className="workflow-inspector-fields">
             <p className="workflow-inspector-copy">{selectedNode.data.description}</p>
             {selectedNode.data.kind === "operation" && selectedNode.data.fields?.length ? (
               <div className="workflow-field-grid">
                 {selectedNode.data.fields.map((field: NodeConfigField) => {
+                  if (field.key === "params_json") {
+                    return null;
+                  }
                   const currentValue = selectedNode.data.config?.[field.key] ?? field.defaultValue;
 
                   return (
@@ -354,9 +561,144 @@ export function NodeInspector({ fallback }: { fallback: ReactNode }) {
               <p className="muted-text">This node does not expose editable settings in the foundation build.</p>
             )}
 
+            {selectedNode.data.kind === "operation" && selectedCapability ? (
+              <div className="workflow-dispatch-hints">
+                <h3>Parameters</h3>
+                <p className="muted-text">Fill required fields first. Optional fields can be left blank.</p>
+                {sensorsQuery.isLoading ? <p className="muted-text">Loading sensor choices...</p> : null}
+                {sensorsQuery.error ? (
+                  <p className="workflow-error-text">Sensor list unavailable. You can still type values manually.</p>
+                ) : null}
+
+                <div className="workflow-field-grid">
+                  {[...selectedCapability.required_params, ...selectedCapability.optional_params].map((paramName) => {
+                    const required = selectedCapability.required_params.includes(paramName);
+                    const currentValue = valueForParam(mergedParams, paramName);
+                    const inputKind = inferInputKind(paramName);
+                    const isDirectionParam = paramName.toLowerCase() === "direction_sensor";
+                    const options =
+                      inputKind === "sensor-multi"
+                        ? sensorChoices.speed
+                        : inputKind === "sensor-single"
+                          ? isDirectionParam
+                            ? sensorChoices.direction
+                            : sensorChoices.all
+                          : [];
+
+                    return (
+                      <label key={paramName} className="workflow-form-field">
+                        <span>
+                          {humanizeParamName(paramName)}
+                          <span className={`workflow-validation-badge ${required ? "workflow-validation-badge-error" : "workflow-validation-badge-muted"}`}>
+                            {required ? "Required" : "Optional"}
+                          </span>
+                        </span>
+
+                        {paramName.toLowerCase().includes("file") || paramName.toLowerCase().includes("path") ? (
+                          <small className="muted-text">File name or absolute path</small>
+                        ) : null}
+
+                        {inputKind === "sensor-single" ? (
+                          <select
+                            value={typeof currentValue === "string" ? currentValue : ""}
+                            onChange={(event) => updateParam(paramName, event.target.value)}
+                          >
+                            <option value="">Select sensor...</option>
+                            {options.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+
+                        {inputKind === "sensor-multi" ? (
+                          <select
+                            multiple
+                            size={Math.min(8, Math.max(3, options.length || 3))}
+                            value={asStringArray(currentValue)}
+                            onChange={(event) => {
+                              const values = Array.from(event.target.selectedOptions).map((item) => item.value);
+                              updateParam(paramName, values);
+                            }}
+                          >
+                            {options.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+
+                        {inputKind === "boolean" ? (
+                          <button
+                            type="button"
+                            className={`workflow-toggle ${Boolean(currentValue) ? "workflow-toggle-on" : ""}`}
+                            onClick={() => updateParam(paramName, !Boolean(currentValue))}
+                          >
+                            {renderValue(Boolean(currentValue))}
+                          </button>
+                        ) : null}
+
+                        {inputKind === "number" ? (
+                          <input
+                            type="number"
+                            value={typeof currentValue === "number" ? String(currentValue) : ""}
+                            onChange={(event) => {
+                              const raw = event.target.value;
+                              updateParam(paramName, raw === "" ? undefined : Number(raw));
+                            }}
+                          />
+                        ) : null}
+
+                        {inputKind === "date" ? (
+                          <input
+                            type="date"
+                            value={typeof currentValue === "string" ? currentValue : ""}
+                            onChange={(event) => updateParam(paramName, event.target.value)}
+                          />
+                        ) : null}
+
+                        {inputKind === "json" ? (
+                          <textarea
+                            rows={5}
+                            value={typeof currentValue === "string" ? currentValue : JSON.stringify(currentValue ?? {}, null, 2)}
+                            spellCheck={false}
+                            onChange={(event) => {
+                              const text = event.target.value;
+                              const decoded = parseLooseJson(text);
+                              if (decoded.ok) {
+                                updateParam(paramName, decoded.value as JsonValue);
+                              } else {
+                                updateParam(paramName, text);
+                              }
+                            }}
+                          />
+                        ) : null}
+
+                        {inputKind === "text" ? (
+                          <input
+                            type="text"
+                            value={typeof currentValue === "string" || typeof currentValue === "number" ? String(currentValue) : ""}
+                            onChange={(event) => updateParam(paramName, event.target.value)}
+                          />
+                        ) : null}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
             {selectedNode.data.kind === "operation" ? (
               <div className="workflow-dispatch-hints">
                 <h3>Dispatch parameters</h3>
+                {paramsJsonParseError || parsedParams.parseError ? (
+                  <p className="workflow-error-text">
+                    Parameters JSON is invalid: {paramsJsonParseError ?? parsedParams.parseError}. Tip: on Windows, escape backslashes
+                    (e.g. <code>{"D:\\\\path\\\\file.csv"}</code>) or use forward slashes.
+                  </p>
+                ) : null}
                 {capabilitiesQuery.isLoading ? <p className="muted-text">Loading backend signature hints...</p> : null}
                 {capabilityErrorMessage ? <p className="workflow-error-text">{capabilityErrorMessage}</p> : null}
                 {selectedNode.data.templateId ? (
@@ -424,20 +766,8 @@ export function NodeInspector({ fallback }: { fallback: ReactNode }) {
               ))}
             </div>
           </div>
-        ) : (
-          <p className="muted-text">Click a node on the canvas to inspect its configuration and summary.</p>
-        )}
-      </section>
-
-      <section className="workflow-panel-card workflow-detail-card">
-        <div className="workflow-panel-header">
-          <div>
-            <span className="eyebrow">Detail route</span>
-            <h2>Existing page content</h2>
-          </div>
-        </div>
-        <div className="workflow-detail-content">{fallback}</div>
-      </section>
+        </section>
+      </div>
     </div>
   );
 }

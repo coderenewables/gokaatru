@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from server.api.deps import get_session_state, to_bad_request
 from server.state.session import SessionState
-from server.tools.data_io import _get_data_coverage, _list_sensors, _parse_datamodel, _parse_timeseries
+from server.tools.data_io import _build_sensor_rows, _get_data_coverage, _list_sensors, _parse_datamodel, _parse_timeseries
 
 router = APIRouter(prefix="/sessions/{session_id}", tags=["uploads"])
 
@@ -126,6 +126,8 @@ def get_sensors(
     try:
         return _list_sensors(state)
     except ValueError as exc:
+        if "Sensor mapping is not loaded" in str(exc):
+            return {"sensors": _build_sensor_rows(state, require_mapping=False)}
         raise to_bad_request(exc) from exc
 
 

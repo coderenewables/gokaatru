@@ -5,6 +5,7 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import base64
+import json
 from typing import cast
 
 import numpy as np
@@ -47,8 +48,18 @@ def _require_series(state: SessionState, sensor_name: str) -> pd.Series:
 
 
 def _sensor_names(sensor_names: str) -> list[str]:
-    """Parse comma-separated sensor-name arguments used by multi-series visualization tools."""
-    parsed = [name.strip() for name in sensor_names.split(",") if name.strip()]
+    """Parse sensor-name arguments from JSON array or comma-separated string formats."""
+    payload = sensor_names.strip()
+    parsed: list[str] = []
+
+    if payload.startswith("["):
+        decoded = json.loads(payload)
+        if not isinstance(decoded, list):
+            raise ValueError("sensor_names JSON payload must be a list of sensor names")
+        parsed = [str(name).strip() for name in decoded if str(name).strip()]
+    else:
+        parsed = [name.strip() for name in sensor_names.split(",") if name.strip()]
+
     if not parsed:
         raise ValueError("At least one sensor name is required")
     return parsed

@@ -1,7 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { configApi, workflowApi } from "../../lib/api";
+import { configApi, uploadsApi, workflowApi } from "../../lib/api";
 import { type WorkflowNode, useWorkflowStore } from "../../stores/workflowStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { renderWithProviders } from "../../test/render";
@@ -18,6 +18,10 @@ vi.mock("../../lib/api", async () => {
     workflowApi: {
       ...actual.workflowApi,
       getCapabilities: vi.fn(),
+    },
+    uploadsApi: {
+      ...actual.uploadsApi,
+      getSensors: vi.fn(),
     },
   };
 });
@@ -85,6 +89,17 @@ describe("NodeInspector", () => {
         },
       ],
     });
+    vi.mocked(uploadsApi.getSensors).mockResolvedValue({
+      sensors: [
+        {
+          name: "Spd_100m",
+          height_m: 100,
+          sensor_type: "wind_speed",
+          data_coverage_pct: 99.4,
+          record_count: 4321,
+        },
+      ],
+    });
     vi.mocked(configApi.update).mockResolvedValue({
       status: "ok",
       runconfig: {},
@@ -99,7 +114,7 @@ describe("NodeInspector", () => {
   it("seeds untouched params_json with sample values and persists them to runconfig", async () => {
     seedWorkflowStore(buildOperationNode("{}"));
 
-    renderWithProviders(<NodeInspector fallback={<div>Fallback</div>} />);
+    renderWithProviders(<NodeInspector />);
 
     await screen.findByRole("heading", { name: "Apply Cleaning Rule" });
 
@@ -107,9 +122,14 @@ describe("NodeInspector", () => {
       expect(useWorkflowStore.getState().branchStates.main.nodes[0]?.data.config?.params_json).toContain('"rule_type"');
     });
 
-    const paramsField = screen.getByLabelText("Parameters JSON") as HTMLTextAreaElement;
-    expect(paramsField.value).toContain('"sensor": "Spd_100m"');
-    expect(paramsField.value).toContain('"params": {');
+    const ruleTypeField = screen.getByDisplayValue("example_rule_type") as HTMLInputElement;
+    expect(ruleTypeField.value).toBe("example_rule_type");
+
+    const sensorField = screen.getByRole("combobox", { name: /sensor/i }) as HTMLSelectElement;
+    expect(sensorField.value).toBe("Spd_100m");
+
+    const paramsField = screen.getByDisplayValue(/example_key/) as HTMLTextAreaElement;
+    expect(paramsField.value).toContain('"example_key": "value"');
 
     await waitFor(() => {
       expect(configApi.update).toHaveBeenCalledWith("session-inspector", {
@@ -132,13 +152,9 @@ describe("NodeInspector", () => {
   it("keeps an existing params_json draft unchanged when capability hints load", async () => {
     seedWorkflowStore(buildOperationNode('{"custom":true}'));
 
-    renderWithProviders(<NodeInspector fallback={<div>Fallback</div>} />);
+    renderWithProviders(<NodeInspector />);
 
-    const paramsField = (await screen.findByLabelText("Parameters JSON")) as HTMLTextAreaElement;
-
-    await waitFor(() => {
-      expect(paramsField.value).toBe('{"custom":true}');
-    });
+    await screen.findByRole("heading", { name: "Apply Cleaning Rule" });
 
     expect(useWorkflowStore.getState().branchStates.main.nodes[0]?.data.config?.params_json).toBe('{"custom":true}');
     await waitFor(() => {

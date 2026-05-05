@@ -11,7 +11,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from types import ModuleType
-from typing import Any, AsyncIterator, Callable
+from typing import Any, AsyncIterator, Callable, get_type_hints
 from uuid import uuid4
 
 from server.state.session import SessionState
@@ -120,6 +120,60 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+_VALID_JSON_SIMPLE_ESCAPES = set('"\\/bfnrt')
+
+
+def _is_hex_digit(value: str) -> bool:
+    return value.lower() in {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"}
+
+
+def _is_valid_json_escape(payload: str, index: int) -> bool:
+    nxt = payload[index + 1] if index + 1 < len(payload) else ""
+    if nxt == "":
+        return False
+    if nxt in _VALID_JSON_SIMPLE_ESCAPES:
+        return True
+    if nxt != "u":
+        return False
+    if index + 5 >= len(payload):
+        return False
+    return all(_is_hex_digit(payload[index + offset]) for offset in range(2, 6))
+
+
+def _escape_windows_paths(payload: str) -> str:
+    """Escape unescaped backslashes inside string literals (e.g. Windows paths)."""
+    out: list[str] = []
+    in_string = False
+    i = 0
+    while i < len(payload):
+        ch = payload[i]
+        if ch == '"' and (i == 0 or payload[i - 1] != "\\"):
+            in_string = not in_string
+            out.append(ch)
+            i += 1
+            continue
+        if in_string and ch == "\\":
+            if not _is_valid_json_escape(payload, i):
+                out.append("\\\\")
+                i += 1
+                continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _loads_lenient(payload: str) -> object:
+    """Parse JSON, retrying once after escaping unescaped backslashes in string literals."""
+    try:
+        return json.loads(payload)
+    except json.JSONDecodeError:
+        repaired = _escape_windows_paths(payload)
+        if repaired != payload:
+            return json.loads(repaired)
+        raise
+
+
+
 def _as_status(value: str | None, fallback: str = "pending") -> str:
     """Normalize node statuses used by the workflow execution runtime."""
     allowed = {"idle", "pending", "running", "done", "error", "skipped"}
@@ -219,7 +273,7 @@ class WorkflowExecutor:
         elif isinstance(raw, str):
             payload = raw.strip()
             if payload != "":
-                decoded = json.loads(payload)
+                decoded = _loads_lenient(payload)
                 if not isinstance(decoded, dict):
                     raise ValueError("params_json must decode to a JSON object")
                 parsed = dict(decoded)
@@ -249,9 +303,21 @@ class WorkflowExecutor:
                 return params[alias]
         return None
 
-    def _coerce_value(self, parameter: inspect.Parameter, value: object) -> object:
+    def _coerce_value(self, parameter: inspect.Parameter, value: object, annotation: object | None = None) -> object:
         """Coerce one raw params value to the callable parameter annotation where possible."""
-        annotation = parameter.annotation
+        resolved_annotation = parameter.annotation if annotation is None else annotation
+        if isinstance(resolved_annotation, str):
+            normalized = resolved_annotation.strip().replace("builtins.", "")
+            if normalized == "str":
+                resolved_annotation = str
+            elif normalized == "int":
+                resolved_annotation = int
+            elif normalized == "float":
+                resolved_annotation = float
+            elif normalized == "bool":
+                resolved_annotation = bool
+
+        annotation = resolved_annotation
         if annotation is inspect._empty:
             return value
 
@@ -288,6 +354,11 @@ class WorkflowExecutor:
         """Build keyword arguments for a tool callable from node params_json payload."""
         kwargs: dict[str, object] = {}
         signature = inspect.signature(function)
+        try:
+            resolved_hints = get_type_hints(function)
+        except Exception:
+            resolved_hints = {}
+
         for parameter in signature.parameters.values():
             if parameter.kind in {inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD}:
                 continue
@@ -298,7 +369,11 @@ class WorkflowExecutor:
                         f"Missing required parameter '{parameter.name}' for '{function.__name__}'"
                     )
                 continue
-            kwargs[parameter.name] = self._coerce_value(parameter, raw_value)
+            kwargs[parameter.name] = self._coerce_value(
+                parameter,
+                raw_value,
+                resolved_hints.get(parameter.name),
+            )
         return kwargs
 
     def _invoke_tool(self, template_id: str, params: dict[str, object]) -> dict[str, object]:

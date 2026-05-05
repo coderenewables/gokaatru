@@ -412,16 +412,79 @@ select {
 
 .workflow-layout-grid {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr) 420px;
+  grid-template-columns: 320px minmax(0, 1fr);
   gap: 18px;
   margin-top: 18px;
 }
 
-.workflow-sidebar,
-.workflow-right-rail {
+.workflow-sidebar {
   display: grid;
   gap: 18px;
   align-content: start;
+}
+
+.workflow-canvas-panel {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.workflow-route-outlet {
+  display: grid;
+  gap: 14px;
+}
+
+.workflow-route-outlet:empty {
+  display: none;
+}
+
+.workflow-inspector-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 14, 22, 0.55);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.workflow-inspector-modal {
+  width: min(720px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.workflow-inspector-modal .workflow-inspector-card {
+  margin: 0;
+}
+
+.workflow-inspector-modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.workflow-inspector-modal-close {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.workflow-inspector-modal-close:hover {
+  background: var(--surface-strong, rgba(255, 255, 255, 0.06));
 }
 
 .workflow-canvas-panel,
@@ -446,8 +509,7 @@ select {
 }
 
 .workflow-palette-groups,
-.workflow-dataset-list,
-.workflow-inspector-stack {
+.workflow-dataset-list {
   display: grid;
   gap: 14px;
 }
@@ -1118,11 +1180,6 @@ select {
 @media (max-width: 1380px) {
   .workflow-layout-grid {
     grid-template-columns: 300px minmax(0, 1fr);
-  }
-
-  .workflow-right-rail {
-    grid-column: 1 / -1;
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 

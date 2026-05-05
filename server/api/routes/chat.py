@@ -184,7 +184,25 @@ def _resolve_base_url(provider: str) -> str:
     normalized = provider.lower().strip()
     base = _PROVIDER_URLS.get(normalized)
     if base is None:
-        if normalized.startswith("http"):
+        # Custom endpoints must be HTTPS to a public-looking host. Reject http://
+        # and obvious internal/loopback targets so a malicious user cannot point
+        # the server at internal metadata or admin services.
+        if normalized.startswith("https://"):
+            from urllib.parse import urlparse
+
+            parsed = urlparse(normalized)
+            host = (parsed.hostname or "").lower()
+            blocked_hosts = {"localhost", "127.0.0.1", "0.0.0.0", "::1", "metadata.google.internal"}
+            if (
+                not host
+                or host in blocked_hosts
+                or host.endswith(".local")
+                or host.startswith("169.254.")
+                or host.startswith("10.")
+                or host.startswith("192.168.")
+                or host.startswith("172.")  # broad but acceptable for outbound LLM calls
+            ):
+                raise ValueError("Custom provider host is not allowed")
             return normalized.rstrip("/")
         raise ValueError(f"Unknown provider '{provider}'. Supported: {', '.join(sorted(_PROVIDER_URLS))}")
     return base
@@ -204,7 +222,10 @@ def _call_llm(
     tools: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Call an OpenAI-compatible chat completions endpoint synchronously."""
-    url = f"{_resolve_base_url(provider)}/chat/completions"
+    try:
+        url = f"{_resolve_base_url(provider)}/chat/completions"
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     payload: dict[str, Any] = {"model": model, "messages": messages}
     if tools:
@@ -215,7 +236,12 @@ def _call_llm(
         resp = client.post(url, json=payload, headers=headers)
 
     if resp.status_code != 200:
-        raise HTTPException(status_code=resp.status_code, detail=f"LLM API error: {resp.text[:500]}")
+        # Avoid echoing upstream provider response bodies (which may contain
+        # rate-limit secrets, request ids, or partial keys) back to the client.
+        raise HTTPException(
+            status_code=resp.status_code if 400 <= resp.status_code < 600 else 502,
+            detail=f"Upstream LLM provider returned status {resp.status_code}",
+        )
 
     return resp.json()
 
@@ -257,12 +283,17 @@ def chat(
             for tc in pending or []:
                 fn = tc.get("function", {})
                 tool_name = fn.get("name", "")
+                raw_arguments = fn.get("arguments", "{}")
                 try:
-                    arguments = json.loads(fn.get("arguments", "{}"))
-                except json.JSONDecodeError:
+                    arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else dict(raw_arguments)
+                    if not isinstance(arguments, dict):
+                        raise ValueError("tool arguments must decode to a JSON object")
+                    result: Any = _execute_tool(tool_name, arguments, state)
+                except (json.JSONDecodeError, ValueError, TypeError) as exc:
                     arguments = {}
-
-                result = _execute_tool(tool_name, arguments, state)
+                    result = {"error": f"Invalid tool arguments for '{tool_name}': {exc}"}
+                else:
+                    pass
 
                 try:
                     result_str = json.dumps(result, default=str)

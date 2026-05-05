@@ -138,6 +138,7 @@ function CanvasSurface({ onForkFromNode, canFork, isForking }: CanvasSurfaceProp
       <ReactFlow
         fitView
         onlyRenderVisibleElements
+        deleteKeyCode={["Backspace", "Delete"]}
         nodes={branchState.nodes}
         edges={branchState.edges}
         onNodesChange={handleNodesChange}

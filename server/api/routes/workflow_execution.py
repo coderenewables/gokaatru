@@ -79,7 +79,7 @@ def _runtime_snapshot(state: SessionState) -> WorkflowExecutionStatusResponse:
         if not isinstance(item, dict):
             continue
         timestamp_value = item.get("timestamp")
-        timestamp = timestamp_value if isinstance(timestamp_value, datetime) else datetime.utcnow()
+        timestamp = timestamp_value if isinstance(timestamp_value, datetime) else datetime.now(timezone.utc)
         events.append(
             WorkflowExecutionEvent(
                 run_id=str(item.get("run_id", run_id or "")),
@@ -617,7 +617,7 @@ async def execute_workflow_stream(
                 "node_id": None,
                 "status": "error",
                 "message": str(exc),
-                "timestamp": datetime.utcnow(),
+                "timestamp": datetime.now(timezone.utc),
             }
             yield _event_to_sse(event)
 

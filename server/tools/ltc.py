@@ -4,7 +4,7 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -105,7 +105,7 @@ def _save_ltc_result(state: SessionState, algorithm: str, result_df: pd.DataFram
     """Persist an LTC result to CSV and store it in session state."""
     output_dir = Path(state.get_data_dir()) / "ltc_results"
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     output_path = output_dir / f"ltc_{algorithm}_{timestamp}.csv"
     result_df.to_csv(output_path, index=False)
     state.ltc_results[algorithm] = {"df": result_df.copy(), "metrics": metrics.copy(), "file": str(output_path)}

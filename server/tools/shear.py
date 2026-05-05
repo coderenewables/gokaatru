@@ -5,6 +5,7 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import json
+import re
 
 import numpy as np
 import pandas as pd
@@ -17,8 +18,23 @@ from server.state.session import SessionState, session
 def _parse_height_sensors(height_sensors: str) -> dict[float, str]:
     """Parse the height-to-column JSON mapping used by the Phase 2 shear tools."""
     raw_mapping = json.loads(height_sensors)
+    if isinstance(raw_mapping, list):
+        inferred: dict[float, str] = {}
+        for sensor_name in raw_mapping:
+            if not isinstance(sensor_name, str):
+                raise ValueError("height_sensors list entries must be sensor name strings")
+            match = re.search(r"_(\d+(?:\.\d+)?)m(?:_|$)", sensor_name, flags=re.IGNORECASE)
+            if not match:
+                raise ValueError(
+                    f"Could not infer measurement height from sensor '{sensor_name}'. "
+                    "Use names like Spd_180m or provide an explicit mapping."
+                )
+            inferred[float(match.group(1))] = sensor_name
+        raw_mapping = inferred
+
     if not isinstance(raw_mapping, dict):
-        raise ValueError("height_sensors must decode to a JSON object mapping heights to column names")
+        raise ValueError("height_sensors must decode to a JSON object mapping heights to column names or a list of sensor names")
+
     parsed = {float(height): str(column) for height, column in raw_mapping.items()}
     if len(parsed) < 2:
         raise ValueError(f"Shear requires >=2 heights, got {len(parsed)}")

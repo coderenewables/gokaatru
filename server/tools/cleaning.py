@@ -5,7 +5,7 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
@@ -237,7 +237,7 @@ def _apply_cleaning_rule(
         "rule_type": rule_type,
         "sensor": sensor,
         "records_affected": records_affected,
-        "applied_at": datetime.utcnow().isoformat(timespec="seconds"),
+        "applied_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "params": parsed,
         "start_date": start_date,
         "end_date": end_date,

@@ -4,10 +4,27 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
+import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+
+# BrightHub UUIDs are RFC-4122 hex strings; restrict to that shape so they can
+# never be used to escape the per-session uploads directory when interpolated
+# into file paths.
+_BRIGHTHUB_UUID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
+
+def _validate_brighthub_uuid(uuid: str) -> str:
+    """Reject UUIDs containing path separators or traversal tokens to keep filenames safe."""
+    cleaned = uuid.strip()
+    if not _BRIGHTHUB_UUID_PATTERN.fullmatch(cleaned) or ".." in cleaned:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid BrightHub UUID format",
+        )
+    return cleaned
 
 from server.api.deps import get_session_state, to_bad_gateway, to_bad_request
 from server.core.brighthub import (
@@ -51,8 +68,7 @@ class MeasurementLocation(BaseModel):
     longitude_ddeg: float | None = None
     measurement_station_type_id: str | int | None = None
 
-    class Config:
-        extra = "allow"
+    model_config = {"extra": "allow"}
 
 
 class MeasurementLocationsResponse(BaseModel):
@@ -74,8 +90,7 @@ class ReanalysisNode(BaseModel):
     longitude_ddeg: float
     distance_sq: float | None = None
 
-    class Config:
-        extra = "allow"
+    model_config = {"extra": "allow"}
 
 
 class ReanalysisNodesResponse(BaseModel):
@@ -94,8 +109,7 @@ class ReanalysisDataItem(BaseModel):
     longitude: float
     rows: int | None = None
 
-    class Config:
-        extra = "allow"
+    model_config = {"extra": "allow"}
 
 
 class ReanalysisDownloadResponse(BaseModel):
@@ -177,6 +191,7 @@ def brighthub_datamodel(
     state: Annotated[SessionState, Depends(get_session_state)],
 ) -> DataModelResponse:
     """Fetch the data model for one BrightHub measurement location."""
+    uuid = _validate_brighthub_uuid(uuid)
     token = _require_token(state)
     try:
         dm = get_data_model(token, uuid)
@@ -435,6 +450,7 @@ def brighthub_import_location(
 
     from server.tools.data_io import _parse_datamodel, _parse_timeseries
 
+    safe_uuid = _validate_brighthub_uuid(body.uuid)
     token = _require_token(state)
 
     if state.workspace_dir is None:
@@ -448,18 +464,18 @@ def brighthub_import_location(
 
     # 1. Fetch and save datamodel JSON
     try:
-        dm_payload = get_data_model(token, body.uuid)
+        dm_payload = get_data_model(token, safe_uuid)
     except Exception as exc:
         raise to_bad_gateway(RuntimeError(f"Failed to fetch data model: {exc}")) from exc
 
-    datamodel_path = uploads_dir / f"datamodel_{body.uuid}.json"
+    datamodel_path = uploads_dir / f"datamodel_{safe_uuid}.json"
     datamodel_path.write_text(json.dumps(dm_payload, indent=2), encoding="utf-8")
 
     # 2. Fetch and save timeseries CSV
     try:
         csv_text = fetch_timeseries_csv(
             token,
-            body.uuid,
+            safe_uuid,
             apply_cleaning_log=body.apply_cleaning_log,
             apply_cleaning_rules=body.apply_cleaning_rules,
             apply_calibration=body.apply_calibration,
@@ -469,7 +485,7 @@ def brighthub_import_location(
     except Exception as exc:
         raise to_bad_gateway(RuntimeError(f"Failed to fetch timeseries: {exc}")) from exc
 
-    timeseries_path = uploads_dir / f"ts_{body.uuid}.csv"
+    timeseries_path = uploads_dir / f"ts_{safe_uuid}.csv"
     timeseries_path.write_text(csv_text, encoding="utf-8")
 
     # 3. Parse timeseries into session state
@@ -492,11 +508,11 @@ def brighthub_import_location(
         state.set_coordinate(Coordinate(latitude=body.latitude_ddeg, longitude=body.longitude_ddeg))
 
     # 6. Store BrightHub UUID in runconfig for traceability
-    state.runconfig["brighthub_uuid"] = body.uuid
+    state.runconfig["brighthub_uuid"] = safe_uuid
     state.touch()
 
     return ImportLocationResponse(
-        uuid=body.uuid,
+        uuid=safe_uuid,
         timeseries_rows=ts_result.get("rows", 0),
         timeseries_columns=ts_result.get("columns", []),
         timeseries_start=ts_result.get("start"),

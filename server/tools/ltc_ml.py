@@ -5,7 +5,7 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
 
@@ -112,7 +112,7 @@ def _save_xgboost_result(state: SessionState, result_df: pd.DataFrame, metrics: 
     """Persist the XGBoost LTC result to CSV and session state."""
     output_dir = Path(state.get_data_dir()) / "ltc_results"
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     output_path = output_dir / f"ltc_xgboost_{timestamp}.csv"
     result_df.to_csv(output_path, index=False)
     state.ltc_results["xgboost"] = {"df": result_df.copy(), "metrics": dict(metrics), "file": str(output_path)}

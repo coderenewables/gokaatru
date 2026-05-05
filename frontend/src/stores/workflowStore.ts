@@ -1073,9 +1073,6 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             if (node.data.kind !== "operation" && node.data.kind !== "dataset") {
               return node;
             }
-            if (node.data.status === "done") {
-              return node;
-            }
             return {
               ...node,
               data: {

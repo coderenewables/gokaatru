@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 
 import { configApi, healthApi, sessionsApi } from "../lib/api";
+import { usePageTitle } from "../hooks/usePageTitle";
 import { findNextIncompletePath, workflowSteps, isWorkflowStepComplete } from "../lib/workflow";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { EmptyState } from "../components/common/EmptyState";
@@ -27,6 +28,7 @@ function summaryValue(value: unknown) {
 }
 
 export function OverviewPage() {
+  usePageTitle("Overview");
   const navigate = useNavigate();
   const sessionId = useWorkspaceStore((state) => state.sessionId);
 

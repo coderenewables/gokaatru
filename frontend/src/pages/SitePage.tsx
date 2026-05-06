@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { configApi, analysisApi, resultsApi, uploadsApi } from "../lib/api";
+import { usePageTitle } from "../hooks/usePageTitle";
 import type { ExtrapolationResponse, SensorRecord } from "../lib/types";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { EmptyState } from "../components/common/EmptyState";
@@ -18,6 +19,7 @@ function speedSensorsOnly(sensors: SensorRecord[] | undefined) {
 }
 
 export function SitePage() {
+  usePageTitle("Vertical Extrapolation");
   const sessionId = useWorkspaceStore((state) => state.sessionId);
   const selectedSensors = useWorkspaceStore((state) => state.selectedSensors);
   const setSelectedSensors = useWorkspaceStore((state) => state.setSelectedSensors);

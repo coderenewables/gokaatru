@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { paletteGroups, type NodePaletteGroup } from "../../lib/nodeRegistry";
 import { useWorkflowStore } from "../../stores/workflowStore";
+import { useLocation } from "react-router-dom";
 
 type PaletteSection = {
   id: "core" | "windkit";
@@ -31,10 +32,40 @@ function buildGroupsBySection(groups: NodePaletteGroup[]): Record<PaletteSection
   };
 }
 
-export function NodePalette() {
+const CANVAS_PATHS = new Set(["/overview", "/brighthub", "/data", "/reanalysis", "/site", "/ltc", "/results", "/chat"]);
+
+type NodePaletteProps = {
+  defaultBrightHubUuid?: string | null;
+};
+
+export function NodePalette({ defaultBrightHubUuid = null }: NodePaletteProps) {
   const addOperationNode = useWorkflowStore((state) => state.addOperationNode);
   const groupsBySection = useMemo(() => buildGroupsBySection(paletteGroups), []);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(defaultExpandedGroupIds));
+  const [search, setSearch] = useState("");
+  const location = useLocation();
+
+  // Show palette on all workflow pages but contextualise the header hint
+  const isCanvasPage = CANVAS_PATHS.has(location.pathname) || location.pathname === "/";
+  const dragHint = isCanvasPage ? "Click or drag into canvas" : "Click to add to canvas";
+
+  const filteredGroups = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return paletteGroups;
+    return paletteGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter(
+          (item) =>
+            item.label.toLowerCase().includes(q) ||
+            item.category.toLowerCase().includes(q) ||
+            group.label.toLowerCase().includes(q),
+        ),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [search]);
+
+  const filteredGroupsBySection = useMemo(() => buildGroupsBySection(filteredGroups), [filteredGroups]);
 
   const expandAll = () => {
     setExpandedGroups(new Set(paletteGroups.map((group) => group.id)));
@@ -61,9 +92,24 @@ export function NodePalette() {
       <div className="workflow-panel-header">
         <div>
           <span className="eyebrow">Node palette</span>
-          <h2>Drag into canvas</h2>
+          <h2>{dragHint}</h2>
         </div>
         <span className="workflow-phase-chip">{paletteGroups.length} groups</span>
+      </div>
+      <div className="workflow-palette-search">
+        <input
+          type="search"
+          className="workflow-palette-search-input"
+          placeholder="Search nodes…"
+          aria-label="Search nodes"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            if (e.target.value.trim()) {
+              setExpandedGroups(new Set(paletteGroups.map((g) => g.id)));
+            }
+          }}
+        />
       </div>
       <div className="workflow-palette-toolbar">
         <button className="ghost-button" type="button" onClick={expandAll}>
@@ -74,8 +120,11 @@ export function NodePalette() {
         </button>
       </div>
       <div className="workflow-palette-scroll">
+        {search.trim() && filteredGroups.length === 0 && (
+          <p className="workflow-palette-no-results">No nodes match "{search}"</p>
+        )}
         {paletteSections.map((section) => {
-          const sectionGroups = groupsBySection[section.id];
+          const sectionGroups = search.trim() ? filteredGroupsBySection[section.id] : groupsBySection[section.id];
           if (sectionGroups.length === 0) {
             return null;
           }
@@ -124,7 +173,7 @@ export function NodePalette() {
                                 type="button"
                                 className="workflow-palette-item"
                                 draggable
-                                onClick={() => addOperationNode(item.id)}
+                                onClick={() => addOperationNode(item.id, undefined, defaultBrightHubUuid)}
                                 onDragStart={(event) => {
                                   event.dataTransfer.setData("application/gokaatru-node-template", item.id);
                                   event.dataTransfer.effectAllowed = "move";

@@ -27,7 +27,8 @@ function Resolve-PythonExecutable {
     $candidates = @(
         "C:\Users\NathishSeenivasagam\.conda\envs\gokaatru\python.exe",
         (Join-Path $env:USERPROFILE ".conda\envs\gokaatru\python.exe"),
-        (Join-Path $RootPath ".venv\Scripts\python.exe")
+        (Join-Path $RootPath ".venv\Scripts\python.exe"),
+        (Join-Path $env:LOCALAPPDATA "python\bin\python.exe")
     )
 
     foreach ($candidate in $candidates) {
@@ -61,6 +62,7 @@ function New-WindowCommand {
 }
 
 function Start-GoKaatruWindow {
+    [CmdletBinding(SupportsShouldProcess = $true)]
     param(
         [string]$Title,
         [string]$CommandText

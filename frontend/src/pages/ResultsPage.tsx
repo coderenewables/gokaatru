@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { analysisApi, configApi, exportsApi, resultsApi, uploadsApi } from "../lib/api";
+import { usePageTitle } from "../hooks/usePageTitle";
 import type { LtcResultSummary, PlotResult, RunScenarioRequest, Scenario } from "../lib/types";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { DataTable } from "../components/common/DataTable";
@@ -32,6 +33,7 @@ function draftSection(value: JsonValue | undefined) {
 }
 
 export function ResultsPage() {
+  usePageTitle("Results");
   const sessionId = useWorkspaceStore((state) => state.sessionId);
   const latestUncertainty = useWorkspaceStore((state) => state.latestUncertainty);
   const resultsDraftValue = useWorkspaceStore((state) => state.formDrafts.results);

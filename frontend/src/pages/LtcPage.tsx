@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { analysisApi, configApi, exportsApi, resultsApi, uploadsApi } from "../lib/api";
 import { PlotlyFigure } from "../components/common/PlotlyFigure";
+import { usePageTitle } from "../hooks/usePageTitle";
 import { algorithmHelp } from "../lib/algorithmHelp";
 import type { ClippingAnalysisResponse, HomogeneityAnalysisResponse, HomogeneityApplyResponse, LtcResultSummary } from "../lib/types";
 import { useWorkspaceStore } from "../stores/workspaceStore";
@@ -39,6 +40,7 @@ function getNumericMetric(metrics: Record<string, unknown>, keys: string[]) {
 }
 
 export function LtcPage() {
+  usePageTitle("LTC — MCP Correction");
   const sessionId = useWorkspaceStore((state) => state.sessionId);
   const selectedLtcAlgorithm = useWorkspaceStore((state) => state.selectedLtcAlgorithm);
   const selectedLtcSource = useWorkspaceStore((state) => state.selectedLtcSource);

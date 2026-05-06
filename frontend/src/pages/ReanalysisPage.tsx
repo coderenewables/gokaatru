@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, analysisApi, brighthubApi, configApi, resultsApi, sessionsApi } from "../lib/api";
+import { usePageTitle } from "../hooks/usePageTitle";
 import type {
   BrightHubReanalysisDownloadResponse,
   BrightHubReanalysisNode,
@@ -63,6 +64,7 @@ function extractErrorMessage(error: unknown) {
 }
 
 export function ReanalysisPage() {
+  usePageTitle("Reanalysis");
   const sessionId = useWorkspaceStore((state) => state.sessionId);
   const activeDateRange = useWorkspaceStore((state) => state.activeDateRange);
   const setActiveDateRange = useWorkspaceStore((state) => state.setActiveDateRange);

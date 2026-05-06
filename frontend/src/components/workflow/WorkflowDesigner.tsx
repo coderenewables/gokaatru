@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlet } from "react-router-dom";
 
 import { useWorkflowExecution } from "../../hooks/useWorkflowExecution";
-import { ApiError, healthApi, sessionsApi, workflowApi } from "../../lib/api";
+import { ApiError, configApi, healthApi, sessionsApi, workflowApi } from "../../lib/api";
 import { workflowTemplates } from "../../lib/workflowTemplates";
 import { useWorkflowStore } from "../../stores/workflowStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
@@ -41,7 +41,10 @@ export function WorkflowDesigner() {
   const [comparisonOpen, setComparisonOpen] = useState(false);
   const [selectedCompareBranchIds, setSelectedCompareBranchIds] = useState<string[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(workflowTemplates[0]?.id ?? "");
-  const [snapshotName, setSnapshotName] = useState("phase6-main");
+  const [snapshotName, setSnapshotName] = useState(() => {
+    const d = new Date();
+    return `snapshot-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  });
   const [selectedSnapshotName, setSelectedSnapshotName] = useState("");
   const hasHydratedRef = useRef(false);
 
@@ -49,6 +52,9 @@ export function WorkflowDesigner() {
   const resetWorkspace = useWorkspaceStore((state) => state.resetWorkspace);
   const setSessionId = useWorkspaceStore((state) => state.setSessionId);
   const setMainBranchSession = useWorkflowStore((state) => state.setMainBranchSession);
+  const resetWorkflow = useWorkflowStore((state) => state.resetWorkflow);
+  const clearActiveCanvas = useWorkflowStore((state) => state.clearActiveCanvas);
+  const deleteBranch = useWorkflowStore((state) => state.deleteBranch);
   const switchBranch = useWorkflowStore((state) => state.switchBranch);
   const forkBranch = useWorkflowStore((state) => state.forkBranch);
   const branches = useWorkflowStore((state) => state.branches);
@@ -79,6 +85,9 @@ export function WorkflowDesigner() {
   const activeBranch = branches.find((branch) => branch.id === activeBranchId) ?? null;
   const activeBranchSessionId = activeBranch?.sessionId ?? null;
   const mainBranchSessionId = branches.find((branch) => branch.id === "main")?.sessionId ?? null;
+  const activeBranchState = branchStates[activeBranchId];
+  const canClearCanvas = Boolean(activeBranchState?.nodes.some((node) => node.data.kind !== "group"));
+  const canDeleteActiveBranch = activeBranchId !== "main";
   const canFork = branches.length < 4 && activeBranchSessionId !== null;
   const comparableBranches = useMemo(() => branches.filter((branch) => branch.sessionId !== null), [branches]);
   const canCompare = comparableBranches.length >= 2;
@@ -206,6 +215,18 @@ export function WorkflowDesigner() {
     staleTime: 10_000,
   });
 
+  const runconfigQuery = useQuery({
+    queryKey: ["runconfig", sessionId],
+    queryFn: () => configApi.get(sessionId ?? ""),
+    enabled: sessionId !== null,
+    staleTime: 10_000,
+  });
+
+  const defaultBrightHubUuid =
+    typeof runconfigQuery.data?.brighthub_uuid === "string" && runconfigQuery.data.brighthub_uuid.trim() !== ""
+      ? runconfigQuery.data.brighthub_uuid.trim()
+      : null;
+
   useEffect(() => {
     const snapshots = snapshotsQuery.data?.snapshots ?? [];
     if (snapshots.length === 0) {
@@ -239,9 +260,42 @@ export function WorkflowDesigner() {
   const deleteSessionMutation = useMutation({
     mutationFn: () => sessionsApi.remove(sessionId ?? ""),
     onSuccess: () => {
+      resetWorkflow();
       resetWorkspace();
       setMainBranchSession(null);
       void queryClient.invalidateQueries({ queryKey: ["session-summary"] });
+    },
+  });
+
+  const deleteActiveBranchMutation = useMutation({
+    mutationFn: async () => {
+      const targetBranch = branches.find((branch) => branch.id === activeBranchId);
+      if (!targetBranch || targetBranch.id === "main") {
+        throw new Error("Select a fork branch to delete");
+      }
+
+      if (targetBranch.sessionId) {
+        await sessionsApi.remove(targetBranch.sessionId);
+      }
+
+      return targetBranch.id;
+    },
+    onSuccess: (branchId) => {
+      deleteBranch(branchId);
+      setSessionId(useWorkflowStore.getState().getActiveBranchSessionId());
+      setExecutionError(null);
+      void queryClient.invalidateQueries({ queryKey: ["session-summary"] });
+    },
+    onError: (error) => {
+      if (error instanceof ApiError) {
+        setExecutionError(error.message);
+        return;
+      }
+      if (error instanceof Error) {
+        setExecutionError(error.message);
+        return;
+      }
+      setExecutionError("Unable to delete branch");
     },
   });
 
@@ -362,10 +416,15 @@ export function WorkflowDesigner() {
         onCreateSession={() => createSessionMutation.mutate()}
         onResetSession={() => resetSessionMutation.mutate()}
         onDeleteSession={() => deleteSessionMutation.mutate()}
+        onClearCanvas={() => {
+          clearActiveCanvas();
+          setExecutionError(null);
+        }}
         onRunAll={execution.runAll}
         onStep={execution.step}
         onPause={execution.pause}
         onForkBranch={() => forkBranchMutation.mutate(undefined)}
+        onDeleteActiveBranch={() => deleteActiveBranchMutation.mutate()}
         onOpenComparison={() => {
           const branchIds = selectedCompareBranchIds.length > 0 ? selectedCompareBranchIds : comparableBranches.map((branch) => branch.id);
           setSelectedCompareBranchIds(branchIds);
@@ -386,7 +445,7 @@ export function WorkflowDesigner() {
           if (!selectedTemplateId) {
             return;
           }
-          applyWorkflowTemplate(selectedTemplateId);
+          applyWorkflowTemplate(selectedTemplateId, null, defaultBrightHubUuid);
           setExecutionError(null);
         }}
         snapshotName={snapshotName}
@@ -414,8 +473,11 @@ export function WorkflowDesigner() {
         canRetryFailed={hasFailedNodes}
         canFork={canFork}
         isForking={forkBranchMutation.isPending}
+        canDeleteActiveBranch={canDeleteActiveBranch}
+        isDeletingBranch={deleteActiveBranchMutation.isPending}
         canCompare={canCompare}
         isComparing={compareBranchesMutation.isPending}
+        canClearCanvas={canClearCanvas}
         canExecute={execution.canExecute}
         isExecutingWorkflow={execution.isExecuting}
         executionStatusLabel={execution.statusLabel}
@@ -426,12 +488,13 @@ export function WorkflowDesigner() {
 
       <div className="workflow-layout-grid">
         <aside className="workflow-sidebar">
-          <NodePalette />
+          <NodePalette defaultBrightHubUuid={defaultBrightHubUuid} />
           <DatasetPool />
         </aside>
 
         <main className="workflow-canvas-panel">
           <Canvas
+            defaultBrightHubUuid={defaultBrightHubUuid}
             canFork={canFork}
             isForking={forkBranchMutation.isPending}
             onForkFromNode={(nodeId) => forkBranchMutation.mutate(nodeId)}

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { analysisApi, configApi, exportsApi, resultsApi, uploadsApi } from "../lib/api";
+import { usePageTitle } from "../hooks/usePageTitle";
 import type { CleaningLogEntry, JsonValue, SensorCoverageResponse, SensorRecord } from "../lib/types";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { CleaningRuleParams } from "../components/common/CleaningRuleParams";
@@ -28,6 +29,7 @@ const cleaningRuleDefaults: Record<string, Record<string, JsonValue>> = {
 };
 
 export function DataPage() {
+  usePageTitle("Data");
   const sessionId = useWorkspaceStore((state) => state.sessionId);
   const queryClient = useQueryClient();
   const [latestError, setLatestError] = useState<unknown>(null);

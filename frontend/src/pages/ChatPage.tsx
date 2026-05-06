@@ -1,9 +1,10 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { chatApi } from "../lib/api";
+import { usePageTitle } from "../hooks/usePageTitle";
 import type { ChatMessage, ChatResponse, ChatToolCallResult } from "../lib/types";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 import { PageHeader } from "../components/common/PageHeader";
@@ -22,16 +23,35 @@ interface DisplayMessage {
   toolCalls?: ChatToolCallResult[];
 }
 
+const CHAT_STORAGE_KEY = "gokaatru.chat.settings.v1";
+
+function loadChatSettings(): { provider: string; model: string } {
+  try {
+    const raw = sessionStorage.getItem(CHAT_STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as { provider: string; model: string };
+  } catch {
+    // ignore
+  }
+  return { provider: "openai", model: "" };
+}
+
 export function ChatPage() {
+  usePageTitle("Chat");
   const sessionId = useWorkspaceStore((s) => s.sessionId);
 
+  const savedSettings = loadChatSettings();
   const [apiKey, setApiKey] = useState("");
-  const [provider, setProvider] = useState("openai");
-  const [model, setModel] = useState("");
+  const [provider, setProvider] = useState(savedSettings.provider);
+  const [model, setModel] = useState(savedSettings.model);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Persist provider + model (never the API key) to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({ provider, model }));
+  }, [provider, model]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -104,6 +124,7 @@ export function ChatPage() {
               onChange={(e) => setApiKey(e.target.value)}
               placeholder="sk-... or your provider key"
               className="text-input"
+              autoComplete="off"
             />
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
@@ -127,6 +148,10 @@ export function ChatPage() {
             />
           </label>
         </div>
+        <p className="chat-settings-privacy-note">
+          Your API key is used only for this session and is never stored or sent anywhere except directly to the selected provider.
+          Provider and model preferences are saved for this browser tab.
+        </p>
       </article>
 
       {/* Chat messages */}

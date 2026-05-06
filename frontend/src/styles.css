@@ -763,6 +763,80 @@ select {
   position: relative;
 }
 
+.workflow-swimlanes-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.workflow-swimlane {
+  position: absolute;
+  border: 1px dashed rgba(11, 122, 111, 0.26);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(11, 122, 111, 0.06), rgba(11, 122, 111, 0.015));
+  width: 280px;
+  height: 1400px;
+}
+
+.workflow-swimlane-1 {
+  left: 40px;
+  top: 120px;
+}
+
+.workflow-swimlane-2 {
+  left: 340px;
+  top: 120px;
+}
+
+.workflow-swimlane-3 {
+  left: 640px;
+  top: 120px;
+}
+
+.workflow-swimlane-4 {
+  left: 940px;
+  top: 120px;
+}
+
+.workflow-swimlane-5 {
+  left: 1240px;
+  top: 120px;
+}
+
+.workflow-swimlane-6 {
+  left: 1540px;
+  top: 120px;
+}
+
+.workflow-swimlane-header {
+  padding: 10px 12px;
+  border-bottom: 1px dashed rgba(11, 122, 111, 0.2);
+  background: rgba(255, 255, 255, 0.78);
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+}
+
+.workflow-swimlane-kicker {
+  display: inline-flex;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.workflow-swimlane-header h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.workflow-swimlane-header p {
+  margin: 4px 0 0;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
 .workflow-canvas-context-menu {
   position: absolute;
   right: 14px;
@@ -1746,6 +1820,253 @@ select {
 
 .sensor-detail-card {
   border-left: 3px solid var(--accent);
+}
+
+/* ── Toolbar visual groups ── */
+.toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.48);
+  border: 1px solid var(--border);
+}
+
+.toolbar-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+/* ── Danger button ── */
+.topbar-danger-button {
+  border: 1px solid rgba(200, 106, 42, 0.4);
+  border-radius: 999px;
+  padding: 0.8rem 1.2rem;
+  cursor: pointer;
+  transition: transform 160ms ease, background-color 160ms ease;
+  background: rgba(200, 106, 42, 0.1);
+  color: var(--warning);
+}
+.topbar-danger-button:hover {
+  background: rgba(200, 106, 42, 0.2);
+  transform: translateY(-1px);
+}
+.topbar-danger-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Session chip: ID truncation ── */
+.session-chip-id {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+/* ── API status chip tint ── */
+.session-api-ok {
+  border-color: rgba(11, 122, 111, 0.3);
+  background: rgba(11, 122, 111, 0.08);
+}
+
+/* ── Node palette search ── */
+.workflow-palette-search {
+  margin-bottom: 10px;
+}
+
+.workflow-palette-search-input {
+  width: 100%;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.workflow-palette-search-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.workflow-palette-no-results {
+  margin: 0;
+  padding: 12px;
+  text-align: center;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+/* ── StepNav progress bar ── */
+.step-nav-progress {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--border);
+}
+
+.step-nav-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.step-nav-progress-label {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.step-nav-progress-value {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+.step-nav-progress-bar-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-muted);
+  overflow: hidden;
+}
+
+.step-nav-progress-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 400ms ease;
+  width: var(--progress-width, 0%);
+}
+
+/* ── Chat settings bar ── */
+.chat-settings-privacy-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* ── BrightHub info card ── */
+.brighthub-info-card {
+  background: linear-gradient(135deg, rgba(11, 122, 111, 0.07), rgba(255, 255, 255, 0.82));
+  border-color: rgba(11, 122, 111, 0.2);
+}
+
+.brighthub-info-note {
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
+}
+
+/* ── TopBar identity block (no subtitle) ── */
+.workflow-topbar-identity {
+  display: grid;
+  gap: 2px;
+}
+
+/* ── Dark mode ── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #101c1a;
+    --bg-muted: #1a2824;
+    --surface: rgba(22, 36, 33, 0.88);
+    --surface-strong: #1e2f2b;
+    --border: rgba(120, 180, 170, 0.15);
+    --text: #d8ede9;
+    --text-muted: #7aa49c;
+    --accent: #2cc4b3;
+    --accent-soft: rgba(44, 196, 179, 0.14);
+    --accent-strong: #26a899;
+    --warning: #e8894a;
+    --warning-soft: rgba(232, 137, 74, 0.14);
+    --shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  }
+
+  body {
+    background:
+      radial-gradient(circle at top left, rgba(44, 196, 179, 0.09), transparent 34%),
+      radial-gradient(circle at right center, rgba(232, 137, 74, 0.1), transparent 28%),
+      linear-gradient(180deg, #0e1915 0%, var(--bg) 100%);
+  }
+
+  body::before {
+    background-image:
+      linear-gradient(rgba(200, 255, 245, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(200, 255, 245, 0.02) 1px, transparent 1px);
+  }
+
+  .workflow-topbar,
+  .app-header {
+    background: linear-gradient(135deg, rgba(20, 36, 32, 0.96), rgba(16, 30, 28, 0.94));
+  }
+
+  .workflow-palette-group-toggle,
+  .workflow-palette-item,
+  .workflow-dataset-card,
+  .metric-card,
+  .content-card,
+  .session-chip,
+  .toolbar-group {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .workflow-template-select,
+  .workflow-palette-search-input,
+  .form-field input,
+  .form-field select,
+  .form-field textarea,
+  .scenario-name-input,
+  .text-input {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    border-color: var(--border);
+  }
+
+  .secondary-button {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+  }
+
+  .workflow-modal,
+  .dialog-card {
+    background: var(--surface-strong);
+  }
+
+  .step-nav-progress {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .code-block {
+    background: #0c1f1b;
+    color: #a8e6d6;
+  }
+
+  .data-table th {
+    color: var(--text-muted);
+  }
+
+  .data-table-row-interactive:hover {
+    background: rgba(44, 196, 179, 0.06);
+  }
+
+  .file-dropzone {
+    background: linear-gradient(135deg, rgba(44, 196, 179, 0.07), rgba(22, 36, 33, 0.82));
+  }
 }
 
 .step-overview-list {

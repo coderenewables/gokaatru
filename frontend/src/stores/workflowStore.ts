@@ -85,6 +85,9 @@ type WorkflowStore = {
   executionError: string | null;
   setMainBranchSession: (sessionId: string | null) => void;
   setBranchSession: (branchId: string, sessionId: string | null) => void;
+  resetWorkflow: () => void;
+  clearActiveCanvas: () => void;
+  deleteBranch: (branchId: string) => Branch | null;
   switchBranch: (branchId: string) => void;
   forkBranch: (options: { name?: string; forkNodeId?: string | null; sessionId?: string | null }) => Branch | null;
   getActiveBranchSessionId: () => string | null;
@@ -99,10 +102,10 @@ type WorkflowStore = {
   undo: () => void;
   redo: () => void;
   retryFailedNodes: () => boolean;
-  applyWorkflowTemplate: (templateId: string, datasetId?: string | null) => void;
+  applyWorkflowTemplate: (templateId: string, datasetId?: string | null, defaultBrightHubUuid?: string | null) => void;
   serializeSnapshot: () => WorkflowSnapshot;
   hydrateSnapshot: (snapshot: WorkflowSnapshot | null) => void;
-  addOperationNode: (templateId: string, position?: { x: number; y: number }) => void;
+  addOperationNode: (templateId: string, position?: { x: number; y: number }, defaultBrightHubUuid?: string | null) => void;
   addDatasetNode: (datasetId: string, position?: { x: number; y: number }) => void;
   connectNodes: (connection: Connection) => void;
   updateNodeConfig: (nodeId: string, key: string, value: NodeConfigValue) => void;
@@ -129,6 +132,23 @@ function createBranchSnapshot(state: BranchState): BranchSnapshot {
   return {
     nodes: cloneJson(state.nodes),
     edges: cloneJson(state.edges),
+  };
+}
+
+function stripLegacyGroupNodes(snapshot: BranchSnapshot): BranchSnapshot {
+  const removedIds = new Set(
+    snapshot.nodes
+      .filter((node) => node.type === "groupNode" || node.data.kind === "group")
+      .map((node) => node.id),
+  );
+
+  if (removedIds.size === 0) {
+    return snapshot;
+  }
+
+  return {
+    nodes: snapshot.nodes.filter((node) => !removedIds.has(node.id)),
+    edges: snapshot.edges.filter((edge) => !removedIds.has(edge.source) && !removedIds.has(edge.target)),
   };
 }
 
@@ -313,41 +333,12 @@ function cloneBranchNodes(
   });
 }
 
-function createGroupNodes(branchColor: string): WorkflowNode[] {
-  return foundationLaneGroups.map((group, index) => ({
-    id: group.id,
-    type: "groupNode",
-    position: group.position,
-    draggable: false,
-    data: {
-      kind: "group",
-      label: group.label,
-      description: group.description,
-      status: "idle",
-      branchColor,
-      badge: `Lane ${index + 1}`,
-      summary: "Drop operation nodes into this area.",
-    },
-  }));
+function createBaselineNodes(): WorkflowNode[] {
+  return [];
 }
 
-function createGroupEdges(branchColor: string): WorkflowEdge[] {
-  return foundationLaneGroups.slice(0, -1).map((group, index) => ({
-    id: `${group.id}->${foundationLaneGroups[index + 1].id}`,
-    source: group.id,
-    target: foundationLaneGroups[index + 1].id,
-    type: "dataFlowEdge",
-    markerEnd: { type: MarkerType.ArrowClosed, color: branchColor },
-    animated: false,
-    selectable: false,
-    style: {
-      stroke: branchColor,
-    },
-    data: {
-      dataKeys: [],
-      status: "idle",
-    },
-  }));
+function createBaselineEdges(): WorkflowEdge[] {
+  return [];
 }
 
 function resolveDropPosition(existingNodes: WorkflowNode[], position?: { x: number; y: number }) {
@@ -362,8 +353,87 @@ function resolveDropPosition(existingNodes: WorkflowNode[], position?: { x: numb
   };
 }
 
+function normalizeBrightHubUuid(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function withBrightHubUuidDefaults(
+  templateId: string,
+  baseConfig: Record<string, NodeConfigValue>,
+  defaultBrightHubUuid?: string | null,
+): Record<string, NodeConfigValue> {
+  if (!templateId.startsWith("brighthub_")) {
+    return baseConfig;
+  }
+
+  const uuid = normalizeBrightHubUuid(defaultBrightHubUuid);
+  if (!uuid) {
+    return baseConfig;
+  }
+
+  const rawParams = baseConfig.params_json;
+  if (typeof rawParams !== "string") {
+    return {
+      ...baseConfig,
+      params_json: JSON.stringify({ uuid }, null, 2),
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(rawParams) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {
+        ...baseConfig,
+        params_json: JSON.stringify({ uuid }, null, 2),
+      };
+    }
+
+    const params = parsed as Record<string, unknown>;
+    if (typeof params.uuid === "string" && params.uuid.trim() !== "") {
+      return baseConfig;
+    }
+
+    return {
+      ...baseConfig,
+      params_json: JSON.stringify({ ...params, uuid }, null, 2),
+    };
+  } catch {
+    return {
+      ...baseConfig,
+      params_json: JSON.stringify({ uuid }, null, 2),
+    };
+  }
+}
+
 const initialBranchId = "main";
 const initialBranchColor = nextBranchColor(0);
+
+function createInitialWorkflowState() {
+  return {
+    branches: [{ id: initialBranchId, name: "main", color: initialBranchColor, sessionId: null, forkPoint: null }] as Branch[],
+    activeBranchId: initialBranchId,
+    branchStates: {
+      [initialBranchId]: {
+        nodes: createBaselineNodes(),
+        edges: createBaselineEdges(),
+        viewport: { x: 0, y: 0, zoom: 0.8 },
+      },
+    } as Record<string, BranchState>,
+    historyPast: { [initialBranchId]: [] } as Record<string, BranchSnapshot[]>,
+    historyFuture: { [initialBranchId]: [] } as Record<string, BranchSnapshot[]>,
+    datasets: [] as DatasetEntry[],
+    selectedNodeId: null as string | null,
+    executionMode: "auto" as WorkflowExecutionMode,
+    isExecuting: false,
+    activeRunId: null as string | null,
+    executionEvents: [] as WorkflowExecutionEvent[],
+    executionError: null as string | null,
+  };
+}
 
 function summarizeDatasetRange(dataset: DatasetEntry): string {
   const startYear = dataset.date_range.start.slice(0, 4);
@@ -375,24 +445,7 @@ function summarizeDatasetRange(dataset: DatasetEntry): string {
 }
 
 export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
-  branches: [{ id: initialBranchId, name: "main", color: initialBranchColor, sessionId: null, forkPoint: null }],
-  activeBranchId: initialBranchId,
-  branchStates: {
-    [initialBranchId]: {
-      nodes: createGroupNodes(initialBranchColor),
-      edges: createGroupEdges(initialBranchColor),
-      viewport: { x: 0, y: 0, zoom: 0.8 },
-    },
-  },
-  historyPast: { [initialBranchId]: [] },
-  historyFuture: { [initialBranchId]: [] },
-  datasets: [],
-  selectedNodeId: null,
-  executionMode: "auto",
-  isExecuting: false,
-  activeRunId: null,
-  executionEvents: [],
-  executionError: null,
+  ...createInitialWorkflowState(),
   setMainBranchSession: (sessionId) =>
     set((state) => ({
       branches: state.branches.map((branch) =>
@@ -415,6 +468,73 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           : branch,
       ),
     })),
+  resetWorkflow: () => set(createInitialWorkflowState()),
+  clearActiveCanvas: () =>
+    set((state) => {
+      const branchId = state.activeBranchId;
+      const branchState = state.branchStates[branchId];
+      if (!branchState) {
+        return {};
+      }
+
+      return {
+        selectedNodeId: null,
+        isExecuting: false,
+        activeRunId: null,
+        executionEvents: [],
+        executionError: null,
+        historyPast: {
+          ...state.historyPast,
+          [branchId]: pushSnapshot(state.historyPast[branchId] ?? [], createBranchSnapshot(branchState)),
+        },
+        historyFuture: {
+          ...state.historyFuture,
+          [branchId]: [],
+        },
+        branchStates: {
+          ...state.branchStates,
+          [branchId]: {
+            ...branchState,
+            nodes: createBaselineNodes(),
+            edges: createBaselineEdges(),
+          },
+        },
+      };
+    }),
+  deleteBranch: (branchId) => {
+    const state = get();
+    if (branchId === initialBranchId) {
+      return null;
+    }
+    const branch = state.branches.find((candidate) => candidate.id === branchId);
+    if (!branch) {
+      return null;
+    }
+
+    set((prev) => {
+      if (!prev.branches.some((candidate) => candidate.id === branchId)) {
+        return {};
+      }
+
+      const nextBranches = prev.branches.filter((candidate) => candidate.id !== branchId);
+      const { [branchId]: _removedState, ...nextBranchStates } = prev.branchStates;
+      const { [branchId]: _removedPast, ...nextHistoryPast } = prev.historyPast;
+      const { [branchId]: _removedFuture, ...nextHistoryFuture } = prev.historyFuture;
+
+      return {
+        branches: nextBranches,
+        activeBranchId: prev.activeBranchId === branchId ? initialBranchId : prev.activeBranchId,
+        selectedNodeId: null,
+        executionEvents: [],
+        executionError: null,
+        branchStates: nextBranchStates,
+        historyPast: nextHistoryPast,
+        historyFuture: nextHistoryFuture,
+      };
+    });
+
+    return branch;
+  },
   switchBranch: (branchId) =>
     set((state) => {
       const exists = state.branches.some((branch) => branch.id === branchId);
@@ -778,7 +898,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
     return true;
   },
-  applyWorkflowTemplate: (templateId, datasetId = null) =>
+  applyWorkflowTemplate: (templateId, datasetId = null, defaultBrightHubUuid = null) =>
     set((state) => {
       const template = workflowTemplateIndex[templateId];
       if (!template) {
@@ -795,8 +915,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       const dataset =
         (datasetId ? state.datasets.find((entry) => entry.id === datasetId) : null) ?? state.datasets[0] ?? null;
 
-      const nodes: WorkflowNode[] = [...createGroupNodes(branchColor)];
-      const edges: WorkflowEdge[] = [...createGroupEdges(branchColor)];
+      const nodes: WorkflowNode[] = [...createBaselineNodes()];
+      const edges: WorkflowEdge[] = [...createBaselineEdges()];
       let previousNodeId: string | null = null;
 
       if (dataset) {
@@ -829,10 +949,10 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         const laneIndex = laneOffset[step.laneId] ?? 0;
         laneOffset[step.laneId] = laneIndex + 1;
         const nodeId = `${template.id}-op-${index + 1}`;
-        const config = {
+        const config = withBrightHubUuidDefaults(step.templateId, {
           ...buildTemplateConfig(nodeTemplate),
           ...(step.config ?? {}),
-        };
+        }, defaultBrightHubUuid);
 
         nodes.push({
           id: nodeId,
@@ -912,17 +1032,22 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       for (const branch of branches) {
         const candidate = snapshot.branchStates[branch.id];
         if (candidate) {
-          branchStates[branch.id] = {
+          const migrated = stripLegacyGroupNodes({
             nodes: cloneJson(candidate.nodes),
             edges: cloneJson(candidate.edges),
+          });
+
+          branchStates[branch.id] = {
+            nodes: migrated.nodes,
+            edges: migrated.edges,
             viewport: cloneJson(candidate.viewport),
           };
           continue;
         }
 
         branchStates[branch.id] = {
-          nodes: createGroupNodes(branch.color),
-          edges: createGroupEdges(branch.color),
+          nodes: createBaselineNodes(),
+          edges: createBaselineEdges(),
           viewport: { x: 0, y: 0, zoom: 0.8 },
         };
       }
@@ -940,7 +1065,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         selectedNodeId: null,
       };
     }),
-  addOperationNode: (templateId, position) => {
+  addOperationNode: (templateId, position, defaultBrightHubUuid = null) => {
     const template = nodeTemplateIndex[templateId];
     if (!template) {
       return;
@@ -951,6 +1076,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     const activeBranch = state.branches.find((candidate) => candidate.id === state.activeBranchId);
     const nextPosition = resolveDropPosition(branch.nodes, position);
     const nodeId = `${templateId}-${branch.nodes.length + 1}`;
+
+    const config = withBrightHubUuidDefaults(templateId, buildTemplateConfig(template), defaultBrightHubUuid);
 
     const nextNode: WorkflowNode = {
       id: nodeId,
@@ -967,7 +1094,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         templateId,
         summary: template.fields.length ? `${template.fields.length} configurable field${template.fields.length === 1 ? "" : "s"}` : "No parameters required",
         fields: template.fields,
-        config: buildTemplateConfig(template),
+        config,
       },
     };
 

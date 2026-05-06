@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, brighthubApi } from "../lib/api";
+import { usePageTitle } from "../hooks/usePageTitle";
 import type {
   BrightHubImportLocationRequest,
   BrightHubImportLocationResponse,
@@ -69,6 +70,7 @@ function reanalysisNodeColumns(dataset: string): DataTableColumn<BrightHubReanal
 // ---------------------------------------------------------------------------
 
 export function BrightHubPage() {
+  usePageTitle("BrightHub");
   const sessionId = useWorkspaceStore((state) => state.sessionId);
   const queryClient = useQueryClient();
 
@@ -255,6 +257,20 @@ export function BrightHubPage() {
           <MetricCard label="Selected" value={selectedLocation.name || selectedLocation.uuid} />
         ) : null}
       </div>
+
+      {/* What is BrightHub */}
+      {!isAuthenticated && (
+        <article className="content-card brighthub-info-card">
+          <span className="eyebrow">What is BrightHub?</span>
+          <p>
+            BrightHub is a wind energy data platform that provides access to measurement station timeseries, calibrated sensor data, and co-located ERA5 / MERRA-2 reanalysis nodes.
+            Connecting here lets you import site data directly into your analysis session — no file uploads required.
+          </p>
+          <p className="muted-text brighthub-info-note">
+            You will need a BrightHub account with a Client ID and Client Secret. Contact your data provider if you do not have credentials.
+          </p>
+        </article>
+      )}
 
       {/* Login form */}
       {!isAuthenticated ? (

@@ -11,10 +11,12 @@ import {
   applyEdgeChanges,
   applyNodeChanges,
   type NodeTypes,
+  ViewportPortal,
   useReactFlow,
 } from "@xyflow/react";
 import { useEffect, useRef, useState } from "react";
 
+import { foundationLaneGroups } from "../../lib/nodeRegistry";
 import { useWorkflowStore, type WorkflowEdge, type WorkflowNode } from "../../stores/workflowStore";
 import { DataFlowEdge } from "./edges/DataFlowEdge";
 import { DatasetNode } from "./nodes/DatasetNode";
@@ -45,9 +47,31 @@ type CanvasSurfaceProps = {
   onForkFromNode?: (nodeId: string) => void;
   canFork: boolean;
   isForking: boolean;
+  defaultBrightHubUuid?: string | null;
 };
 
-function CanvasSurface({ onForkFromNode, canFork, isForking }: CanvasSurfaceProps) {
+function CanvasSwimLanes() {
+  return (
+    <ViewportPortal>
+      <div className="workflow-swimlanes-layer" aria-hidden>
+        {foundationLaneGroups.map((lane, index) => (
+          <div
+            key={lane.id}
+            className={`workflow-swimlane workflow-swimlane-${index + 1}`}
+          >
+            <div className="workflow-swimlane-header">
+              <span className="workflow-swimlane-kicker">Lane {index + 1}</span>
+              <h3>{lane.label}</h3>
+              <p>{lane.description}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </ViewportPortal>
+  );
+}
+
+function CanvasSurface({ onForkFromNode, canFork, isForking, defaultBrightHubUuid = null }: CanvasSurfaceProps) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const { fitView, screenToFlowPosition } = useReactFlow<WorkflowNode, WorkflowEdge>();
   const [contextNodeId, setContextNodeId] = useState<string | null>(null);
@@ -108,7 +132,7 @@ function CanvasSurface({ onForkFromNode, canFork, isForking }: CanvasSurfaceProp
     const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
 
     if (templateId) {
-      addOperationNode(templateId, position);
+      addOperationNode(templateId, position, defaultBrightHubUuid);
     }
 
     if (datasetId) {
@@ -154,6 +178,7 @@ function CanvasSurface({ onForkFromNode, canFork, isForking }: CanvasSurfaceProp
         edgeTypes={edgeTypes}
         proOptions={{ hideAttribution: true }}
       >
+        <CanvasSwimLanes />
         {!largeWorkflowMode ? <MiniMap pannable zoomable className="workflow-minimap" /> : null}
         <Controls className="workflow-controls" />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} />
@@ -188,12 +213,18 @@ type CanvasProps = {
   onForkFromNode?: (nodeId: string) => void;
   canFork?: boolean;
   isForking?: boolean;
+  defaultBrightHubUuid?: string | null;
 };
 
-export function Canvas({ onForkFromNode, canFork = false, isForking = false }: CanvasProps) {
+export function Canvas({ onForkFromNode, canFork = false, isForking = false, defaultBrightHubUuid = null }: CanvasProps) {
   return (
     <ReactFlowProvider>
-      <CanvasSurface onForkFromNode={onForkFromNode} canFork={canFork} isForking={isForking} />
+      <CanvasSurface
+        onForkFromNode={onForkFromNode}
+        canFork={canFork}
+        isForking={isForking}
+        defaultBrightHubUuid={defaultBrightHubUuid}
+      />
     </ReactFlowProvider>
   );
 }

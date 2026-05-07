@@ -11,4 +11,4 @@ git fetch --all --prune
 git checkout "${BRANCH}"
 git pull --ff-only origin "${BRANCH}"
 
-./deploy/aws/ec2/deploy.sh
+bash ./deploy/aws/ec2/deploy.sh

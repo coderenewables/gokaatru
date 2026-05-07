@@ -1,10 +1,39 @@
-# Deploy GoKaatru on AWS EC2 (Ubuntu + Cloudflare)
+# Deploy GoKaatru on AWS EC2 (No Docker)
 
-This guide deploys the full app stack behind HTTPS on:
+This guide deploys the app on EC2 using:
+
+- `systemd` services for API + MCP
+- built frontend static files
+- `Caddy` for HTTPS and reverse proxy
+
+Deployment target:
 
 - Domain: `gokaatru.coderenewables.com`
 - DNS provider: Cloudflare
 - TLS email: `nithishkannan89@yahoo.com`
+- EC2 host: `ec2-3-137-164-54.us-east-2.compute.amazonaws.com`
+- Repository: `https://github.com/coderenewables/gokaatru`
+
+## 0. First deploy command set (copy/paste)
+
+Replace `<PATH_TO_YOUR_KEY.pem>` with your SSH key path.
+
+```bash
+ssh -i <PATH_TO_YOUR_KEY.pem> ubuntu@ec2-3-137-164-54.us-east-2.compute.amazonaws.com
+
+sudo mkdir -p /opt/gokaatru
+sudo chown -R "$USER":"$USER" /opt/gokaatru
+
+cd /opt
+git clone https://github.com/coderenewables/gokaatru
+cd gokaatru
+bash deploy/aws/ec2/bootstrap-ubuntu.sh
+
+cp .env.production.example .env.production
+nano .env.production
+
+bash deploy/aws/ec2/deploy.sh
+```
 
 ## 1. EC2 prerequisites
 
@@ -14,75 +43,57 @@ Use Ubuntu 22.04/24.04 and allow inbound:
 - TCP 80 (HTTP)
 - TCP 443 (HTTPS)
 
-Then SSH into EC2 and run:
-
-```bash
-sudo mkdir -p /opt/gokaatru
-sudo chown -R "$USER":"$USER" /opt/gokaatru
-```
-
-## 2. Clone repo and bootstrap host
-
-```bash
-cd /opt
-git clone <YOUR_GITHUB_REPO_URL> gokaatru
-cd gokaatru
-bash deploy/aws/ec2/bootstrap-ubuntu.sh
-```
-
-Log out and back in once so Docker group membership is active.
-
-## 3. Configure production env
-
-```bash
-cd /opt/gokaatru
-cp .env.production.example .env.production
-```
-
-Edit `.env.production` and set secrets you need.
-
-## 4. Configure Cloudflare DNS
+## 2. Cloudflare DNS
 
 Create DNS record:
 
 - Type: `A`
-- Name: `gokaatru` (or full host `gokaatru.coderenewables.com`)
+- Name: `gokaatru`
 - Value: `<EC2_PUBLIC_IP>`
 
-For first certificate issuance, use Cloudflare DNS mode as `DNS only` (gray cloud).
-After HTTPS is working, you can switch to proxied mode.
+For first certificate issuance, set record to `DNS only` (gray cloud).
+After HTTPS works, you can switch to proxied mode.
 
-## 5. Deploy
+Cloudflare SSL/TLS mode: `Full (strict)`.
+
+## 3. Deploy
 
 ```bash
 cd /opt/gokaatru
 bash deploy/aws/ec2/deploy.sh
 ```
 
-Check status:
+The deploy script does all of this:
+
+- creates/updates `.venv`
+- installs backend dependencies
+- builds frontend production assets
+- writes systemd service units
+- writes Caddy config
+- restarts services
+
+## 4. Validate
 
 ```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml ps
+systemctl status gokaatru-api --no-pager
+systemctl status gokaatru-mcp --no-pager
+systemctl status caddy --no-pager
 ```
 
-## 6. Verify
+Then test:
 
 - `https://gokaatru.coderenewables.com`
 - `https://gokaatru.coderenewables.com/api/health`
 
-If health works but UI fails, check frontend logs:
+## 5. Logs and troubleshooting
 
 ```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml logs -f frontend
+journalctl -u gokaatru-api -f
+journalctl -u gokaatru-mcp -f
+journalctl -u caddy -f
 ```
 
-If TLS fails, check Caddy logs:
-
-```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml logs -f caddy
-```
-
-## 7. Update to latest code
+## 6. Update to latest code
 
 ```bash
 cd /opt/gokaatru
@@ -91,7 +102,7 @@ bash deploy/aws/ec2/update.sh
 
 ## Stack summary
 
-- `caddy`: TLS + reverse proxy
-- `frontend`: static React build via nginx
-- `api`: FastAPI on port 8000 (internal)
-- `mcp`: FastMCP SSE on port 8080 (internal)
+- `gokaatru-api` on `127.0.0.1:8000`
+- `gokaatru-mcp` on `127.0.0.1:8080`
+- `caddy` on `:80` and `:443`
+- frontend served as static files from `frontend/dist`

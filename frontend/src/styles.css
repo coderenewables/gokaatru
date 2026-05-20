@@ -333,28 +333,29 @@ select {
 
 .workflow-topbar {
   display: grid;
-  gap: 18px;
-  padding: 24px;
+  gap: 10px;
+  padding: 14px 18px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: linear-gradient(135deg, rgba(255, 251, 243, 0.95), rgba(233, 241, 238, 0.92));
   box-shadow: var(--shadow);
   backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .workflow-topbar-main,
 .workflow-toolbar-row {
   display: flex;
   justify-content: space-between;
-  gap: 18px;
+  gap: 10px;
   align-items: flex-start;
 }
 
 .workflow-topbar h1,
 .workflow-panel-header h2 {
   margin: 0;
-  font-size: clamp(1.7rem, 2vw, 2.4rem);
-  letter-spacing: -0.04em;
+  font-size: clamp(1.1rem, 1.4vw, 1.5rem);
+  letter-spacing: -0.03em;
 }
 
 .workflow-topbar-actions,
@@ -399,6 +400,17 @@ select {
   background: rgba(255, 255, 255, 0.74);
 }
 
+.workflow-detail-link-complete {
+  border-color: rgba(11, 122, 111, 0.25);
+  color: var(--accent-strong);
+}
+
+.nav-step-check {
+  margin-right: 4px;
+  font-size: 0.7em;
+  opacity: 0.7;
+}
+
 .workflow-detail-link-active,
 .workflow-branch-chip-active {
   background: rgba(11, 122, 111, 0.12);
@@ -434,8 +446,121 @@ select {
   gap: 14px;
 }
 
+.workflow-routing-hint {
+  display: grid;
+  gap: 10px;
+}
+
+.workflow-routing-hint-inspector {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.workflow-routing-hint-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.workflow-routing-hint-header h3 {
+  margin: 4px 0 6px;
+  font-size: 1rem;
+}
+
+.workflow-routing-hint-header p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.workflow-routing-hint-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.workflow-routing-hint-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(11, 122, 111, 0.18);
+  background: rgba(11, 122, 111, 0.08);
+  color: var(--accent-strong);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .workflow-route-outlet:empty {
   display: none;
+}
+
+/* ── Node context banner ── */
+
+.node-context-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius, 10px);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.65);
+  animation: node-banner-in 160ms ease both;
+}
+
+@keyframes node-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.node-context-banner-match {
+  border-color: rgba(11, 122, 111, 0.3);
+  background: rgba(11, 122, 111, 0.06);
+  color: var(--accent-strong);
+}
+
+.node-context-banner-redirect {
+  border-color: rgba(31, 111, 164, 0.3);
+  background: rgba(31, 111, 164, 0.05);
+}
+
+.node-context-banner-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.node-context-banner > span:nth-child(2) {
+  flex: 1;
+}
+
+.node-context-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.node-context-banner-actions .ghost-button {
+  padding: 0;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
 }
 
 .workflow-inspector-modal-backdrop {
@@ -1072,6 +1197,16 @@ select {
 .workflow-dispatch-grid p {
   margin: 0;
   font-size: 0.82rem;
+}
+
+@media (max-width: 900px) {
+  .workflow-routing-hint-header {
+    display: grid;
+  }
+
+  .workflow-routing-hint-tags {
+    justify-content: flex-start;
+  }
 }
 
 .workflow-dispatch-validation {
@@ -1970,6 +2105,12 @@ select {
 .brighthub-info-note {
   margin-top: 0.5rem;
   font-size: 0.82rem;
+}
+
+.brighthub-description {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.6;
 }
 
 /* ── TopBar identity block (no subtitle) ── */

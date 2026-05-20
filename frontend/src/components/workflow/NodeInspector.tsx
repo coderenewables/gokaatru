@@ -6,6 +6,7 @@ import { ApiError, configApi, uploadsApi, workflowApi } from "../../lib/api";
 import type { NodeConfigField } from "../../lib/nodeRegistry";
 import { parseLooseJson } from "../../lib/paramsJson";
 import type { JsonValue, SensorRecord, WorkflowDispatchCapability } from "../../lib/types";
+import { useWorkflowUiStore } from "../../stores/workflowUiStore";
 import type { WorkflowNode } from "../../stores/workflowStore";
 import { useWorkflowStore } from "../../stores/workflowStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
@@ -305,22 +306,22 @@ function sensorOptions(records: SensorRecord[]) {
 
 export function NodeInspector() {
   const workspaceSessionId = useWorkspaceStore((state) => state.sessionId);
-  const activeBranchId = useWorkflowStore((state) => state.activeBranchId);
+  const activeBranchId = useWorkflowUiStore((state) => state.activeBranchId);
+  const selectedNodeId = useWorkflowUiStore((state) => state.selectedNodeId);
+  const setSelectedNodeId = useWorkflowUiStore((state) => state.setSelectedNodeId);
   const activeBranchSessionId = useWorkflowStore((state) => {
-    const branch = state.branches.find((candidate) => candidate.id === state.activeBranchId);
+    const branch = state.branches.find((candidate) => candidate.id === activeBranchId);
     return branch?.sessionId ?? null;
   });
   const sessionId = activeBranchSessionId ?? workspaceSessionId;
-  const branchState = useWorkflowStore((state) => state.branchStates[state.activeBranchId]);
-  const selectedNodeId = useWorkflowStore((state) => state.selectedNodeId);
+  const branchState = useWorkflowStore((state) => state.branchStates[activeBranchId]);
   const updateNodeConfig = useWorkflowStore((state) => state.updateNodeConfig);
-  const selectNode = useWorkflowStore((state) => state.selectNode);
   const executionEvents = useWorkflowStore((state) => state.executionEvents);
   const queryClient = useQueryClient();
   const autoSeededNodeIdsRef = useRef<Set<string>>(new Set());
   const lastPersistedSignatureRef = useRef<string | null>(null);
 
-  const close = () => selectNode(null);
+  const close = () => setSelectedNodeId(null);
 
   // Close the inspector popup with Escape so it behaves like a standard modal.
   useEffect(() => {
@@ -389,7 +390,7 @@ export function NodeInspector() {
       return;
     }
     const next = withParamValue(mergedParams, paramName, value);
-    updateNodeConfig(selectedNode.id, "params_json", JSON.stringify(next, null, 2));
+    updateNodeConfig(activeBranchId, selectedNode.id, "params_json", JSON.stringify(next, null, 2));
   };
 
   const validation = validationSummary(selectedCapability, configuredKeys);
@@ -426,7 +427,7 @@ export function NodeInspector() {
     }
 
     autoSeededNodeIdsRef.current.add(selectedNode.id);
-    updateNodeConfig(selectedNode.id, "params_json", JSON.stringify(buildSampleParams(selectedCapability), null, 2));
+    updateNodeConfig(activeBranchId, selectedNode.id, "params_json", JSON.stringify(buildSampleParams(selectedCapability), null, 2));
   }, [selectedCapability, selectedNode, updateNodeConfig]);
 
   useEffect(() => {
@@ -515,7 +516,7 @@ export function NodeInspector() {
                       {field.type === "select" ? (
                         <select
                           value={String(currentValue)}
-                          onChange={(event) => updateNodeConfig(selectedNode.id, field.key, event.target.value)}
+                          onChange={(event) => updateNodeConfig(activeBranchId, selectedNode.id, field.key, event.target.value)}
                         >
                           {field.options?.map((option: { label: string; value: string }) => (
                             <option key={option.value} value={option.value}>
@@ -527,7 +528,7 @@ export function NodeInspector() {
                         <button
                           type="button"
                           className={`workflow-toggle ${currentValue ? "workflow-toggle-on" : ""}`}
-                          onClick={() => updateNodeConfig(selectedNode.id, field.key, !Boolean(currentValue))}
+                          onClick={() => updateNodeConfig(activeBranchId, selectedNode.id, field.key, !Boolean(currentValue))}
                         >
                           {renderValue(Boolean(currentValue))}
                         </button>
@@ -537,7 +538,7 @@ export function NodeInspector() {
                           value={String(currentValue)}
                           placeholder={field.placeholder}
                           spellCheck={false}
-                          onChange={(event) => updateNodeConfig(selectedNode.id, field.key, event.target.value)}
+                          onChange={(event) => updateNodeConfig(activeBranchId, selectedNode.id, field.key, event.target.value)}
                         />
                       ) : (
                         <input
@@ -546,6 +547,7 @@ export function NodeInspector() {
                           placeholder={field.placeholder}
                           onChange={(event) =>
                             updateNodeConfig(
+                              activeBranchId,
                               selectedNode.id,
                               field.key,
                               field.type === "number" ? Number(event.target.value) : event.target.value,

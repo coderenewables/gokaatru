@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef } from "react";
 
 import { ApiError, workflowApi } from "../lib/api";
+import { useWorkflowUiStore } from "../stores/workflowUiStore";
 import { useWorkflowStore } from "../stores/workflowStore";
 
 function toErrorMessage(error: unknown): string {
@@ -14,8 +15,9 @@ function toErrorMessage(error: unknown): string {
 }
 
 export function useWorkflowExecution() {
+  const activeBranchId = useWorkflowUiStore((state) => state.activeBranchId);
   const sessionId = useWorkflowStore((state) => {
-    const activeBranch = state.branches.find((branch) => branch.id === state.activeBranchId);
+    const activeBranch = state.branches.find((branch) => branch.id === activeBranchId);
     return activeBranch?.sessionId ?? null;
   });
   const isExecuting = useWorkflowStore((state) => state.isExecuting);
@@ -48,15 +50,15 @@ export function useWorkflowExecution() {
       const controller = new AbortController();
       streamControllerRef.current = controller;
 
-      prepareExecution(mode, resetStatuses);
-      const payload = buildExecutionRequest(mode);
+      prepareExecution(activeBranchId, mode, resetStatuses);
+      const payload = buildExecutionRequest(activeBranchId, mode);
 
       try {
         await workflowApi.streamExecute(
           sessionId,
           payload,
           (event) => {
-            applyExecutionEvent(event);
+            applyExecutionEvent(activeBranchId, event);
           },
           controller.signal,
         );
@@ -72,7 +74,7 @@ export function useWorkflowExecution() {
         }
       }
     },
-    [applyExecutionEvent, buildExecutionRequest, prepareExecution, sessionId, setExecutionError, stopExecution],
+    [activeBranchId, applyExecutionEvent, buildExecutionRequest, prepareExecution, sessionId, setExecutionError, stopExecution],
   );
 
   const runAll = useCallback(async () => {
@@ -85,14 +87,14 @@ export function useWorkflowExecution() {
       return;
     }
 
-    const hasFailedNodes = retryFailedNodes();
+    const hasFailedNodes = retryFailedNodes(activeBranchId);
     if (!hasFailedNodes) {
       setExecutionError("No failed nodes are available for retry.");
       return;
     }
 
     await streamExecute("auto", false);
-  }, [retryFailedNodes, sessionId, setExecutionError, streamExecute]);
+  }, [activeBranchId, retryFailedNodes, sessionId, setExecutionError, streamExecute]);
 
   const step = useCallback(async () => {
     if (!sessionId) {
@@ -100,18 +102,18 @@ export function useWorkflowExecution() {
       return;
     }
 
-    prepareExecution("manual", false);
-    const payload = buildExecutionRequest("manual");
+    prepareExecution(activeBranchId, "manual", false);
+    const payload = buildExecutionRequest(activeBranchId, "manual");
 
     try {
       const result = await workflowApi.step(sessionId, payload);
-      applyExecutionResult(result);
+      applyExecutionResult(activeBranchId, result);
       setExecutionError(null);
     } catch (error) {
       setExecutionError(toErrorMessage(error));
       stopExecution();
     }
-  }, [applyExecutionResult, buildExecutionRequest, prepareExecution, sessionId, setExecutionError, stopExecution]);
+  }, [activeBranchId, applyExecutionResult, buildExecutionRequest, prepareExecution, sessionId, setExecutionError, stopExecution]);
 
   const pause = useCallback(async () => {
     if (streamControllerRef.current) {

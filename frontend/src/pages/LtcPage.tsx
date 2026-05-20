@@ -331,6 +331,7 @@ export function LtcPage() {
     <section className="page-section">
       <PageHeader title="LTC" detail="Run deterministic and ML LTC algorithms, compare outputs, and execute the downstream risk-analysis actions." />
 
+
       <div className="metric-grid">
         <MetricCard label="LTC runs" value={String(ltcResultsQuery.data?.results.length ?? 0)} tone="accent" />
         <MetricCard label="Ensemble" value={ensembleQuery.data?.available ? "Ready" : "Pending"} />

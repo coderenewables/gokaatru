@@ -25,14 +25,14 @@ interface DisplayMessage {
 
 const CHAT_STORAGE_KEY = "gokaatru.chat.settings.v1";
 
-function loadChatSettings(): { provider: string; model: string } {
+function loadChatSettings(): { provider: string; model: string; apiKey: string } {
   try {
     const raw = sessionStorage.getItem(CHAT_STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as { provider: string; model: string };
+    if (raw) return JSON.parse(raw) as { provider: string; model: string; apiKey: string };
   } catch {
     // ignore
   }
-  return { provider: "openai", model: "" };
+  return { provider: "openai", model: "", apiKey: "" };
 }
 
 export function ChatPage() {
@@ -40,7 +40,7 @@ export function ChatPage() {
   const sessionId = useWorkspaceStore((s) => s.sessionId);
 
   const savedSettings = loadChatSettings();
-  const [apiKey, setApiKey] = useState("");
+  const [apiKey, setApiKey] = useState(savedSettings.apiKey ?? "");
   const [provider, setProvider] = useState(savedSettings.provider);
   const [model, setModel] = useState(savedSettings.model);
   const [input, setInput] = useState("");
@@ -48,10 +48,10 @@ export function ChatPage() {
   const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Persist provider + model (never the API key) to sessionStorage
+  // Persist provider + model + API key to sessionStorage (sessionStorage clears on tab close)
   useEffect(() => {
-    sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({ provider, model }));
-  }, [provider, model]);
+    sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({ provider, model, apiKey }));
+  }, [provider, model, apiKey]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

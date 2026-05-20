@@ -16,7 +16,8 @@ import {
 } from "@xyflow/react";
 import { useEffect, useRef, useState } from "react";
 
-import { foundationLaneGroups } from "../../lib/nodeRegistry";
+import { foundationLaneGroups } from "../../lib/workflowCanvasModel";
+import { useWorkflowUiStore } from "../../stores/workflowUiStore";
 import { useWorkflowStore, type WorkflowEdge, type WorkflowNode } from "../../stores/workflowStore";
 import { DataFlowEdge } from "./edges/DataFlowEdge";
 import { DatasetNode } from "./nodes/DatasetNode";
@@ -76,14 +77,14 @@ function CanvasSurface({ onForkFromNode, canFork, isForking, defaultBrightHubUui
   const { fitView, screenToFlowPosition } = useReactFlow<WorkflowNode, WorkflowEdge>();
   const [contextNodeId, setContextNodeId] = useState<string | null>(null);
   const [contextNodeLabel, setContextNodeLabel] = useState<string | null>(null);
-  const activeBranchId = useWorkflowStore((state) => state.activeBranchId);
-  const branchState = useWorkflowStore((state) => state.branchStates[state.activeBranchId]);
+  const activeBranchId = useWorkflowUiStore((state) => state.activeBranchId);
+  const setSelectedNodeId = useWorkflowUiStore((state) => state.setSelectedNodeId);
+  const branchState = useWorkflowStore((state) => state.branchStates[activeBranchId]);
   const setNodes = useWorkflowStore((state) => state.setNodes);
   const setEdges = useWorkflowStore((state) => state.setEdges);
   const connectNodes = useWorkflowStore((state) => state.connectNodes);
   const addOperationNode = useWorkflowStore((state) => state.addOperationNode);
   const addDatasetNode = useWorkflowStore((state) => state.addDatasetNode);
-  const selectNode = useWorkflowStore((state) => state.selectNode);
   const largeWorkflowMode = branchState.nodes.length >= 120;
 
   useEffect(() => {
@@ -132,17 +133,17 @@ function CanvasSurface({ onForkFromNode, canFork, isForking, defaultBrightHubUui
     const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
 
     if (templateId) {
-      addOperationNode(templateId, position, defaultBrightHubUuid);
+      setSelectedNodeId(addOperationNode(activeBranchId, templateId, position, defaultBrightHubUuid));
     }
 
     if (datasetId) {
-      addDatasetNode(datasetId, position);
+      setSelectedNodeId(addDatasetNode(activeBranchId, datasetId, position));
     }
   };
 
   const handleNodeContextMenu: NodeMouseHandler<WorkflowNode> = (event, node) => {
     event.preventDefault();
-    selectNode(node.id);
+    setSelectedNodeId(node.id);
     if ((node.data.kind === "operation" || node.data.kind === "dataset") && node.data.status === "done") {
       setContextNodeId(node.id);
       setContextNodeLabel(node.data.label);
@@ -167,11 +168,11 @@ function CanvasSurface({ onForkFromNode, canFork, isForking, defaultBrightHubUui
         edges={branchState.edges}
         onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
-        onConnect={connectNodes}
+        onConnect={(connection) => connectNodes(activeBranchId, connection)}
         onNodeContextMenu={handleNodeContextMenu}
-        onNodeClick={(_, node) => selectNode(node.id)}
+        onNodeClick={(_, node) => setSelectedNodeId(node.id)}
         onPaneClick={() => {
-          selectNode(null);
+          setSelectedNodeId(null);
           closeContextMenu();
         }}
         nodeTypes={nodeTypes}

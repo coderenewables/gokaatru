@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { paletteGroups, type NodePaletteGroup } from "../../lib/nodeRegistry";
+import { useWorkflowUiStore } from "../../stores/workflowUiStore";
 import { useWorkflowStore } from "../../stores/workflowStore";
 import { useLocation } from "react-router-dom";
 
@@ -32,13 +33,15 @@ function buildGroupsBySection(groups: NodePaletteGroup[]): Record<PaletteSection
   };
 }
 
-const CANVAS_PATHS = new Set(["/overview", "/brighthub", "/data", "/reanalysis", "/site", "/ltc", "/results", "/chat"]);
+const CANVAS_PATHS = new Set(["/overview", "/brighthub", "/data", "/reanalysis", "/site", "/ltc", "/results"]);
 
 type NodePaletteProps = {
   defaultBrightHubUuid?: string | null;
 };
 
 export function NodePalette({ defaultBrightHubUuid = null }: NodePaletteProps) {
+  const activeBranchId = useWorkflowUiStore((state) => state.activeBranchId);
+  const setSelectedNodeId = useWorkflowUiStore((state) => state.setSelectedNodeId);
   const addOperationNode = useWorkflowStore((state) => state.addOperationNode);
   const groupsBySection = useMemo(() => buildGroupsBySection(paletteGroups), []);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(defaultExpandedGroupIds));
@@ -47,7 +50,9 @@ export function NodePalette({ defaultBrightHubUuid = null }: NodePaletteProps) {
 
   // Show palette on all workflow pages but contextualise the header hint
   const isCanvasPage = CANVAS_PATHS.has(location.pathname) || location.pathname === "/";
-  const dragHint = isCanvasPage ? "Click or drag into canvas" : "Click to add to canvas";
+  const dragHint = "Click or drag into canvas";
+
+  if (!isCanvasPage) return null;
 
   const filteredGroups = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -154,7 +159,7 @@ export function NodePalette({ defaultBrightHubUuid = null }: NodePaletteProps) {
                         type="button"
                         className="workflow-palette-group-toggle"
                         onClick={() => toggleGroup(group.id)}
-                        aria-expanded={isExpanded}
+                        aria-expanded={isExpanded ? "true" : "false"}
                         aria-controls={`palette-group-${group.id}`}
                       >
                         <span className="workflow-palette-group-title">{group.label}</span>
@@ -173,7 +178,7 @@ export function NodePalette({ defaultBrightHubUuid = null }: NodePaletteProps) {
                                 type="button"
                                 className="workflow-palette-item"
                                 draggable
-                                onClick={() => addOperationNode(item.id, undefined, defaultBrightHubUuid)}
+                                onClick={() => setSelectedNodeId(addOperationNode(activeBranchId, item.id, undefined, defaultBrightHubUuid))}
                                 onDragStart={(event) => {
                                   event.dataTransfer.setData("application/gokaatru-node-template", item.id);
                                   event.dataTransfer.effectAllowed = "move";

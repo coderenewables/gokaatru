@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { Outlet } from "react-router-dom";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Outlet } from "react-router-dom";
 
 import { useWorkflowExecution } from "../../hooks/useWorkflowExecution";
 import { ApiError, configApi, healthApi, sessionsApi, workflowApi } from "../../lib/api";
 import { workflowTemplates } from "../../lib/workflowTemplates";
+import { useWorkflowUiStore } from "../../stores/workflowUiStore";
 import { useWorkflowStore } from "../../stores/workflowStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { Canvas } from "./Canvas";
@@ -38,44 +39,49 @@ function toErrorMessage(error: unknown): string {
 }
 
 export function WorkflowDesigner() {
-  const [comparisonOpen, setComparisonOpen] = useState(false);
-  const [selectedCompareBranchIds, setSelectedCompareBranchIds] = useState<string[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(workflowTemplates[0]?.id ?? "");
-  const [snapshotName, setSnapshotName] = useState(() => {
-    const d = new Date();
-    return `snapshot-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  });
-  const [selectedSnapshotName, setSelectedSnapshotName] = useState("");
   const hasHydratedRef = useRef(false);
 
   const sessionId = useWorkspaceStore((state) => state.sessionId);
   const resetWorkspace = useWorkspaceStore((state) => state.resetWorkspace);
   const setSessionId = useWorkspaceStore((state) => state.setSessionId);
+  const comparisonOpen = useWorkflowUiStore((state) => state.comparisonOpen);
+  const selectedCompareBranchIds = useWorkflowUiStore((state) => state.selectedCompareBranchIds);
+  const selectedTemplateId = useWorkflowUiStore((state) => state.selectedTemplateId);
+  const snapshotName = useWorkflowUiStore((state) => state.snapshotName);
+  const selectedSnapshotName = useWorkflowUiStore((state) => state.selectedSnapshotName);
+  const setComparisonOpen = useWorkflowUiStore((state) => state.setComparisonOpen);
+  const setSelectedCompareBranchIds = useWorkflowUiStore((state) => state.setSelectedCompareBranchIds);
+  const syncSelectedCompareBranchIds = useWorkflowUiStore((state) => state.syncSelectedCompareBranchIds);
+  const setSelectedTemplateId = useWorkflowUiStore((state) => state.setSelectedTemplateId);
+  const setSnapshotName = useWorkflowUiStore((state) => state.setSnapshotName);
+  const setSelectedSnapshotName = useWorkflowUiStore((state) => state.setSelectedSnapshotName);
+  const activeBranchId = useWorkflowUiStore((state) => state.activeBranchId);
+  const selectedNodeId = useWorkflowUiStore((state) => state.selectedNodeId);
+  const setActiveBranchId = useWorkflowUiStore((state) => state.setActiveBranchId);
+  const syncAvailableBranches = useWorkflowUiStore((state) => state.syncAvailableBranches);
+  const resetWorkflowUi = useWorkflowUiStore((state) => state.resetWorkflowUi);
   const setMainBranchSession = useWorkflowStore((state) => state.setMainBranchSession);
   const resetWorkflow = useWorkflowStore((state) => state.resetWorkflow);
-  const clearActiveCanvas = useWorkflowStore((state) => state.clearActiveCanvas);
+  const clearBranchCanvas = useWorkflowStore((state) => state.clearBranchCanvas);
   const deleteBranch = useWorkflowStore((state) => state.deleteBranch);
-  const switchBranch = useWorkflowStore((state) => state.switchBranch);
   const forkBranch = useWorkflowStore((state) => state.forkBranch);
   const branches = useWorkflowStore((state) => state.branches);
-  const activeBranchId = useWorkflowStore((state) => state.activeBranchId);
   const getForkCandidateNodeId = useWorkflowStore((state) => state.getForkCandidateNodeId);
   const setExecutionError = useWorkflowStore((state) => state.setExecutionError);
   const applyWorkflowTemplate = useWorkflowStore((state) => state.applyWorkflowTemplate);
-  const removeSelectedNode = useWorkflowStore((state) => state.removeSelectedNode);
+  const removeNode = useWorkflowStore((state) => state.removeNode);
   const hasDeletableSelection = useWorkflowStore((state) => {
-    const selectedNodeId = state.selectedNodeId;
     if (!selectedNodeId) {
       return false;
     }
-    const branchState = state.branchStates[state.activeBranchId];
+    const branchState = state.branchStates[activeBranchId];
     const selectedNode = branchState.nodes.find((node) => node.id === selectedNodeId);
     return Boolean(selectedNode && selectedNode.data.kind !== "group");
   });
   const undo = useWorkflowStore((state) => state.undo);
   const redo = useWorkflowStore((state) => state.redo);
-  const historyPastDepth = useWorkflowStore((state) => state.historyPast[state.activeBranchId]?.length ?? 0);
-  const historyFutureDepth = useWorkflowStore((state) => state.historyFuture[state.activeBranchId]?.length ?? 0);
+  const historyPastDepth = useWorkflowStore((state) => state.historyPast[activeBranchId]?.length ?? 0);
+  const historyFutureDepth = useWorkflowStore((state) => state.historyFuture[activeBranchId]?.length ?? 0);
   const serializeSnapshot = useWorkflowStore((state) => state.serializeSnapshot);
   const hydrateSnapshot = useWorkflowStore((state) => state.hydrateSnapshot);
   const branchStates = useWorkflowStore((state) => state.branchStates);
@@ -112,14 +118,12 @@ export function WorkflowDesigner() {
 
   useEffect(() => {
     const availableIds = comparableBranches.map((branch) => branch.id);
-    setSelectedCompareBranchIds((previous) => {
-      const filtered = previous.filter((branchId) => availableIds.includes(branchId));
-      if (filtered.length > 0) {
-        return filtered;
-      }
-      return availableIds;
-    });
-  }, [comparableBranches]);
+    syncSelectedCompareBranchIds(availableIds);
+  }, [comparableBranches, syncSelectedCompareBranchIds]);
+
+  useEffect(() => {
+    syncAvailableBranches(branches.map((branch) => branch.id));
+  }, [branches, syncAvailableBranches]);
 
   useEffect(() => {
     if (hasHydratedRef.current) {
@@ -156,16 +160,16 @@ export function WorkflowDesigner() {
       if (withModifier && key === "z") {
         event.preventDefault();
         if (event.shiftKey) {
-          redo();
+          redo(activeBranchId);
           return;
         }
-        undo();
+        undo(activeBranchId);
         return;
       }
 
       if (withModifier && key === "y") {
         event.preventDefault();
-        redo();
+        redo(activeBranchId);
         return;
       }
 
@@ -176,7 +180,7 @@ export function WorkflowDesigner() {
       if (event.key === "Delete" || event.key === "Backspace") {
         if (hasDeletableSelection) {
           event.preventDefault();
-          removeSelectedNode();
+          removeNode(activeBranchId, selectedNodeId!);
         }
         return;
       }
@@ -193,7 +197,7 @@ export function WorkflowDesigner() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [comparisonOpen, execution, hasDeletableSelection, redo, removeSelectedNode, undo]);
+  }, [activeBranchId, comparisonOpen, execution, hasDeletableSelection, redo, removeNode, selectedNodeId, undo]);
 
   const healthQuery = useQuery({
     queryKey: ["api-health"],
@@ -234,12 +238,11 @@ export function WorkflowDesigner() {
       return;
     }
 
-    setSelectedSnapshotName((current) => {
-      if (current && snapshots.some((snapshot) => snapshot.name === current)) {
-        return current;
-      }
-      return snapshots[0].name;
-    });
+    const next =
+      selectedSnapshotName && snapshots.some((snapshot) => snapshot.name === selectedSnapshotName)
+        ? selectedSnapshotName
+        : snapshots[0].name;
+    setSelectedSnapshotName(next);
   }, [snapshotsQuery.data]);
 
   const createSessionMutation = useMutation({
@@ -253,17 +256,24 @@ export function WorkflowDesigner() {
   const resetSessionMutation = useMutation({
     mutationFn: () => sessionsApi.reset(sessionId ?? ""),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["session-summary", sessionId] });
+      resetWorkflow();
+      resetWorkflowUi();
+      resetWorkspace();
+      setMainBranchSession(null);
+      void queryClient.invalidateQueries({ queryKey: ["session-summary"] });
     },
   });
 
   const deleteSessionMutation = useMutation({
     mutationFn: () => sessionsApi.remove(sessionId ?? ""),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["session-summary"] });
+    },
+    onSettled: () => {
       resetWorkflow();
+      resetWorkflowUi();
       resetWorkspace();
       setMainBranchSession(null);
-      void queryClient.invalidateQueries({ queryKey: ["session-summary"] });
     },
   });
 
@@ -281,8 +291,10 @@ export function WorkflowDesigner() {
       return targetBranch.id;
     },
     onSuccess: (branchId) => {
+      const mainBranch = useWorkflowStore.getState().branches.find((b) => b.id === "main") ?? null;
       deleteBranch(branchId);
-      setSessionId(useWorkflowStore.getState().getActiveBranchSessionId());
+      setActiveBranchId("main");
+      setSessionId(mainBranch?.sessionId ?? null);
       setExecutionError(null);
       void queryClient.invalidateQueries({ queryKey: ["session-summary"] });
     },
@@ -304,7 +316,7 @@ export function WorkflowDesigner() {
       if (!activeBranchSessionId) {
         throw new Error("Create or select a branch session before forking");
       }
-      const resolvedForkNodeId = forkNodeId ?? getForkCandidateNodeId();
+      const resolvedForkNodeId = forkNodeId ?? getForkCandidateNodeId(activeBranchId, selectedNodeId);
       const suggestedName = `branch-${branches.length}`;
       return workflowApi.forkBranch(activeBranchSessionId, {
         name: suggestedName,
@@ -312,12 +324,13 @@ export function WorkflowDesigner() {
       });
     },
     onSuccess: (response) => {
-      const created = forkBranch({
+      const created = forkBranch(activeBranchId, {
         name: response.branch_name,
         forkNodeId: response.from_node_id,
         sessionId: response.branch_session_id,
       });
       if (created) {
+        setActiveBranchId(created.id);
         setSessionId(created.sessionId);
         setExecutionError(null);
       }
@@ -358,10 +371,11 @@ export function WorkflowDesigner() {
         throw new Error("Create a session before saving workflow snapshots");
       }
 
-      const name = snapshotName.trim();
-      if (!name) {
-        throw new Error("Enter a snapshot name before saving");
-      }
+      const freshDefault = () => {
+        const d = new Date();
+        return `snapshot-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
+      };
+      const name = snapshotName.trim() || freshDefault();
 
       return workflowApi.saveSnapshot(targetSessionId, name, serializeSnapshot() as unknown as JsonValue);
     },
@@ -417,7 +431,7 @@ export function WorkflowDesigner() {
         onResetSession={() => resetSessionMutation.mutate()}
         onDeleteSession={() => deleteSessionMutation.mutate()}
         onClearCanvas={() => {
-          clearActiveCanvas();
+          clearBranchCanvas(activeBranchId);
           setExecutionError(null);
         }}
         onRunAll={execution.runAll}
@@ -435,9 +449,11 @@ export function WorkflowDesigner() {
         }}
         onSelectBranch={(branchId) => {
           const branch = branches.find((candidate) => candidate.id === branchId);
-          switchBranch(branchId);
+          setActiveBranchId(branchId);
           setSessionId(branch?.sessionId ?? null);
         }}
+        branches={branches}
+        activeBranchId={activeBranchId}
         templateOptions={workflowTemplates.map((template) => ({ id: template.id, label: template.label }))}
         selectedTemplateId={selectedTemplateId}
         onSelectTemplate={setSelectedTemplateId}
@@ -445,7 +461,7 @@ export function WorkflowDesigner() {
           if (!selectedTemplateId) {
             return;
           }
-          applyWorkflowTemplate(selectedTemplateId, null, defaultBrightHubUuid);
+          applyWorkflowTemplate(activeBranchId, selectedTemplateId, null, defaultBrightHubUuid);
           setExecutionError(null);
         }}
         snapshotName={snapshotName}
@@ -465,8 +481,8 @@ export function WorkflowDesigner() {
         onLoadSnapshot={() => loadSnapshotMutation.mutate()}
         isSavingSnapshot={saveSnapshotMutation.isPending}
         isLoadingSnapshot={loadSnapshotMutation.isPending}
-        onUndo={undo}
-        onRedo={redo}
+        onUndo={() => undo(activeBranchId)}
+        onRedo={() => redo(activeBranchId)}
         onRetryFailed={execution.retryFailed}
         canUndo={canUndo}
         canRedo={canRedo}

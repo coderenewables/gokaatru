@@ -2,13 +2,14 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 
 import type { ApiHealthResponse, SessionSummaryResponse } from "../../lib/types";
-import { workflowSteps } from "../../lib/workflow";
-import { useWorkflowStore } from "../../stores/workflowStore";
+import { isWorkflowStepComplete, workflowSteps } from "../../lib/workflow";
 
 type TopBarProps = {
   health?: ApiHealthResponse;
   summary?: SessionSummaryResponse;
   sessionId: string | null;
+  branches: Array<{ id: string; name: string }>;
+  activeBranchId: string;
   onCreateSession: () => void;
   onResetSession: () => void;
   onDeleteSession: () => void;
@@ -59,19 +60,16 @@ function shortId(id: string | null): string {
   return id.length > 12 ? `${id.slice(0, 8)}…` : id;
 }
 
-const NAV_LABELS: Record<string, string> = {
-  "/site": "V. Extrapolation",
-  "/ltc": "LTC (MCP)",
-};
-
-function navLabel(step: { path: string; label: string }): string {
-  return NAV_LABELS[step.path] ?? step.label;
+function navLabel(step: (typeof workflowSteps)[number]): string {
+  return step.shortLabel;
 }
 
 export function TopBar({
   health,
   summary,
   sessionId,
+  branches,
+  activeBranchId,
   onCreateSession,
   onResetSession,
   onDeleteSession,
@@ -116,9 +114,6 @@ export function TopBar({
   isResetting,
   isDeleting,
 }: TopBarProps) {
-  const branches = useWorkflowStore((state) => state.branches);
-  const activeBranchId = useWorkflowStore((state) => state.activeBranchId);
-
   const [pendingAction, setPendingAction] = useState<"reset" | "delete" | "template" | "clearCanvas" | "deleteFork" | null>(null);
 
   const noSessionReason = "Create a session first";
@@ -215,7 +210,7 @@ export function TopBar({
         <div className="workflow-topbar-main">
           <div className="workflow-topbar-identity">
             <span className="eyebrow">GoKaatru</span>
-            <h1>{summary?.project_name?.trim() ? summary.project_name : "Wind Resource Analysis"}</h1>
+            {summary?.project_name?.trim() ? <h1>{summary.project_name}</h1> : null}
           </div>
           <div className="workflow-topbar-actions">
             <div className="session-chip" title={sessionId ?? undefined}>
@@ -290,7 +285,7 @@ export function TopBar({
               <input
                 aria-label="Workflow snapshot name"
                 className="workflow-template-select"
-                placeholder="snapshot name"
+                placeholder="auto-named on save"
                 value={snapshotName}
                 onChange={(event) => onSnapshotNameChange(event.target.value)}
               />
@@ -444,16 +439,22 @@ export function TopBar({
 
         {/* ── Row 3: page navigation ── */}
         <nav className="workflow-detail-nav" aria-label="Workflow detail routes">
-          {workflowSteps.map((step) => (
-            <NavLink
-              key={step.path}
-              to={step.path}
-              title={step.description}
-              className={({ isActive }) => `workflow-detail-link ${isActive ? "workflow-detail-link-active" : ""}`}
-            >
-              {navLabel(step)}
-            </NavLink>
-          ))}
+          {workflowSteps.map((step) => {
+            const complete = isWorkflowStepComplete(summary, step);
+            return (
+              <NavLink
+                key={step.path}
+                to={step.path}
+                title={step.description}
+                className={({ isActive }) =>
+                  `workflow-detail-link${isActive ? " workflow-detail-link-active" : ""}${complete ? " workflow-detail-link-complete" : ""}`
+                }
+              >
+                {complete ? <span className="nav-step-check" aria-hidden="true">✓</span> : null}
+                {navLabel(step)}
+              </NavLink>
+            );
+          })}
         </nav>
       </header>
     </>

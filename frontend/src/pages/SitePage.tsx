@@ -12,7 +12,6 @@ import { HelpTooltip } from "../components/common/HelpTooltip";
 import { MetricCard } from "../components/common/MetricCard";
 import { PageHeader } from "../components/common/PageHeader";
 import { PlotlyFigure } from "../components/common/PlotlyFigure";
-import type { JsonValue } from "../lib/types";
 
 function speedSensorsOnly(sensors: SensorRecord[] | undefined) {
   return (sensors ?? []).filter((sensor) => sensor.sensor_type === "wind_speed").sort((left, right) => right.height_m - left.height_m);

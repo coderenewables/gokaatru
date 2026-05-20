@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { datasetsApi, healthApi, sessionsApi, workflowApi } from "../../lib/api";
+import { configApi, datasetsApi, healthApi, sessionsApi, workflowApi } from "../../lib/api";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { WorkflowDesigner } from "./WorkflowDesigner";
 
@@ -33,6 +33,10 @@ vi.mock("../../lib/api", async () => {
       ...actual.workflowApi,
       getCapabilities: vi.fn(),
       listSnapshots: vi.fn(),
+    },
+    configApi: {
+      ...actual.configApi,
+      get: vi.fn(),
     },
   };
 });
@@ -125,6 +129,7 @@ describe("WorkflowDesigner", () => {
       ],
     });
     vi.mocked(workflowApi.listSnapshots).mockResolvedValue({ snapshots: [] });
+    vi.mocked(configApi.get).mockResolvedValue({});
   });
 
   it("renders the workflow shell and nested route content", async () => {
@@ -132,7 +137,7 @@ describe("WorkflowDesigner", () => {
 
     expect(await screen.findByRole("heading", { name: "North Ridge" })).toBeTruthy();
     expect(screen.getByText("Overview outlet content")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Drag into canvas" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Click or drag into canvas" })).toBeTruthy();
     expect(screen.getByText("Shared inputs")).toBeTruthy();
     expect(screen.getByText("Apply Cleaning Rule")).toBeTruthy();
     expect(screen.getByText("HornsRev-MAST")).toBeTruthy();

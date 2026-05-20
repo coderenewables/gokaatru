@@ -11,12 +11,12 @@ import type {
 } from "../lib/types";
 import {
   buildTemplateConfig,
-  foundationLaneGroups,
   nodeTemplateIndex,
   type NodeConfigValue,
   type NodeStatus,
   type WorkflowNodeData,
 } from "../lib/nodeRegistry";
+import { foundationLaneGroups, inferLaneIdForTemplate } from "../lib/workflowCanvasModel";
 import { workflowTemplateIndex } from "../lib/workflowTemplates";
 
 export type WorkflowNode = Node<WorkflowNodeData>;
@@ -65,19 +65,17 @@ type DatasetEntry = {
 export type WorkflowSnapshot = {
   version: number;
   branches: Branch[];
-  activeBranchId: string;
   branchStates: Record<string, BranchState>;
   datasets: DatasetEntry[];
+  activeBranchId?: string;
 };
 
 type WorkflowStore = {
   branches: Branch[];
-  activeBranchId: string;
   branchStates: Record<string, BranchState>;
   historyPast: Record<string, BranchSnapshot[]>;
   historyFuture: Record<string, BranchSnapshot[]>;
   datasets: DatasetEntry[];
-  selectedNodeId: string | null;
   executionMode: WorkflowExecutionMode;
   isExecuting: boolean;
   activeRunId: string | null;
@@ -86,37 +84,35 @@ type WorkflowStore = {
   setMainBranchSession: (sessionId: string | null) => void;
   setBranchSession: (branchId: string, sessionId: string | null) => void;
   resetWorkflow: () => void;
-  clearActiveCanvas: () => void;
+  clearBranchCanvas: (branchId: string) => void;
   deleteBranch: (branchId: string) => Branch | null;
-  switchBranch: (branchId: string) => void;
-  forkBranch: (options: { name?: string; forkNodeId?: string | null; sessionId?: string | null }) => Branch | null;
-  getActiveBranchSessionId: () => string | null;
-  getForkCandidateNodeId: () => string | null;
+  forkBranch: (sourceBranchId: string, options: { name?: string; forkNodeId?: string | null; sessionId?: string | null }) => Branch | null;
+  getBranchSessionId: (branchId: string) => string | null;
+  getForkCandidateNodeId: (branchId: string, selectedNodeId?: string | null) => string | null;
   setDatasets: (datasets: DatasetEntry[]) => void;
   upsertDataset: (dataset: DatasetEntry) => void;
   removeDataset: (datasetId: string) => void;
   setNodes: (branchId: string, nodes: WorkflowNode[]) => void;
   setEdges: (branchId: string, edges: WorkflowEdge[]) => void;
-  selectNode: (nodeId: string | null) => void;
-  removeSelectedNode: () => void;
-  undo: () => void;
-  redo: () => void;
-  retryFailedNodes: () => boolean;
-  applyWorkflowTemplate: (templateId: string, datasetId?: string | null, defaultBrightHubUuid?: string | null) => void;
+  removeNode: (branchId: string, nodeId: string) => void;
+  undo: (branchId: string) => void;
+  redo: (branchId: string) => void;
+  retryFailedNodes: (branchId: string) => boolean;
+  applyWorkflowTemplate: (branchId: string, templateId: string, datasetId?: string | null, defaultBrightHubUuid?: string | null) => string | null;
   serializeSnapshot: () => WorkflowSnapshot;
   hydrateSnapshot: (snapshot: WorkflowSnapshot | null) => void;
-  addOperationNode: (templateId: string, position?: { x: number; y: number }, defaultBrightHubUuid?: string | null) => void;
-  addDatasetNode: (datasetId: string, position?: { x: number; y: number }) => void;
-  connectNodes: (connection: Connection) => void;
-  updateNodeConfig: (nodeId: string, key: string, value: NodeConfigValue) => void;
+  addOperationNode: (branchId: string, templateId: string, position?: { x: number; y: number }, defaultBrightHubUuid?: string | null) => string | null;
+  addDatasetNode: (branchId: string, datasetId: string, position?: { x: number; y: number }) => string | null;
+  connectNodes: (branchId: string, connection: Connection) => void;
+  updateNodeConfig: (branchId: string, nodeId: string, key: string, value: NodeConfigValue) => void;
   setExecutionMode: (mode: WorkflowExecutionMode) => void;
-  prepareExecution: (mode: WorkflowExecutionMode, resetStatuses?: boolean) => void;
-  applyExecutionEvent: (event: WorkflowExecutionEvent) => void;
-  applyExecutionResult: (result: WorkflowExecutionResponse) => void;
+  prepareExecution: (branchId: string, mode: WorkflowExecutionMode, resetStatuses?: boolean) => void;
+  applyExecutionEvent: (branchId: string, event: WorkflowExecutionEvent) => void;
+  applyExecutionResult: (branchId: string, result: WorkflowExecutionResponse) => void;
   setExecutionError: (message: string | null) => void;
   stopExecution: () => void;
   clearExecutionEvents: () => void;
-  buildExecutionRequest: (mode?: WorkflowExecutionMode) => WorkflowExecuteRequest;
+  buildExecutionRequest: (branchId: string, mode?: WorkflowExecutionMode) => WorkflowExecuteRequest;
 };
 
 const MAX_BRANCHES = 4;
@@ -415,7 +411,6 @@ const initialBranchColor = nextBranchColor(0);
 function createInitialWorkflowState() {
   return {
     branches: [{ id: initialBranchId, name: "main", color: initialBranchColor, sessionId: null, forkPoint: null }] as Branch[],
-    activeBranchId: initialBranchId,
     branchStates: {
       [initialBranchId]: {
         nodes: createBaselineNodes(),
@@ -426,7 +421,6 @@ function createInitialWorkflowState() {
     historyPast: { [initialBranchId]: [] } as Record<string, BranchSnapshot[]>,
     historyFuture: { [initialBranchId]: [] } as Record<string, BranchSnapshot[]>,
     datasets: [] as DatasetEntry[],
-    selectedNodeId: null as string | null,
     executionMode: "auto" as WorkflowExecutionMode,
     isExecuting: false,
     activeRunId: null as string | null,
@@ -469,16 +463,14 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       ),
     })),
   resetWorkflow: () => set(createInitialWorkflowState()),
-  clearActiveCanvas: () =>
+  clearBranchCanvas: (branchId) =>
     set((state) => {
-      const branchId = state.activeBranchId;
       const branchState = state.branchStates[branchId];
       if (!branchState) {
         return {};
       }
 
       return {
-        selectedNodeId: null,
         isExecuting: false,
         activeRunId: null,
         executionEvents: [],
@@ -523,8 +515,6 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
       return {
         branches: nextBranches,
-        activeBranchId: prev.activeBranchId === branchId ? initialBranchId : prev.activeBranchId,
-        selectedNodeId: null,
         executionEvents: [],
         executionError: null,
         branchStates: nextBranchStates,
@@ -535,27 +525,14 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
     return branch;
   },
-  switchBranch: (branchId) =>
-    set((state) => {
-      const exists = state.branches.some((branch) => branch.id === branchId);
-      if (!exists) {
-        return {};
-      }
-      return {
-        activeBranchId: branchId,
-        selectedNodeId: null,
-        executionEvents: [],
-        executionError: null,
-      };
-    }),
-  forkBranch: (options) => {
+  forkBranch: (sourceBranchId, options) => {
     const state = get();
     if (state.branches.length >= MAX_BRANCHES) {
       return null;
     }
 
-    const sourceBranch = state.branches.find((branch) => branch.id === state.activeBranchId);
-    const sourceBranchState = state.branchStates[state.activeBranchId];
+    const sourceBranch = state.branches.find((branch) => branch.id === sourceBranchId);
+    const sourceBranchState = state.branchStates[sourceBranchId];
     if (!sourceBranch || !sourceBranchState) {
       return null;
     }
@@ -570,7 +547,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
     const branchName = options.name && options.name.trim() ? options.name.trim() : `branch-${suffix}`;
     const branchColor = nextBranchColor(branchIndex);
-    const forkNodeId = options.forkNodeId ?? state.selectedNodeId;
+  const forkNodeId = options.forkNodeId ?? null;
 
     const forkedBranch: Branch = {
       id: branchId,
@@ -597,8 +574,6 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
     set((prev) => ({
       branches: [...prev.branches, forkedBranch],
-      activeBranchId: forkedBranch.id,
-      selectedNodeId: null,
       executionEvents: [],
       executionError: null,
       historyPast: {
@@ -621,19 +596,19 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
     return forkedBranch;
   },
-  getActiveBranchSessionId: () => {
+  getBranchSessionId: (branchId) => {
     const state = get();
-    const branch = state.branches.find((candidate) => candidate.id === state.activeBranchId);
+    const branch = state.branches.find((candidate) => candidate.id === branchId);
     return branch?.sessionId ?? null;
   },
-  getForkCandidateNodeId: () => {
+  getForkCandidateNodeId: (branchId, selectedNodeId = null) => {
     const state = get();
-    const branch = state.branchStates[state.activeBranchId];
+    const branch = state.branchStates[branchId];
     if (!branch) {
       return null;
     }
-    if (state.selectedNodeId) {
-      const selected = branch.nodes.find((node) => node.id === state.selectedNodeId);
+    if (selectedNodeId) {
+      const selected = branch.nodes.find((node) => node.id === selectedNodeId);
       if (selected && (selected.data.kind === "operation" || selected.data.kind === "dataset") && selected.data.status === "done") {
         return selected.id;
       }
@@ -666,23 +641,15 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         return {};
       }
 
-      const shouldTrackHistory = branchId === state.activeBranchId;
-      const historyPast = shouldTrackHistory
-        ? {
-            ...state.historyPast,
-            [branchId]: pushSnapshot(state.historyPast[branchId] ?? [], createBranchSnapshot(branchState)),
-          }
-        : state.historyPast;
-      const historyFuture = shouldTrackHistory
-        ? {
-            ...state.historyFuture,
-            [branchId]: [],
-          }
-        : state.historyFuture;
-
       return {
-        historyPast,
-        historyFuture,
+        historyPast: {
+          ...state.historyPast,
+          [branchId]: pushSnapshot(state.historyPast[branchId] ?? [], createBranchSnapshot(branchState)),
+        },
+        historyFuture: {
+          ...state.historyFuture,
+          [branchId]: [],
+        },
         branchStates: {
           ...state.branchStates,
           [branchId]: {
@@ -699,23 +666,15 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         return {};
       }
 
-      const shouldTrackHistory = branchId === state.activeBranchId;
-      const historyPast = shouldTrackHistory
-        ? {
-            ...state.historyPast,
-            [branchId]: pushSnapshot(state.historyPast[branchId] ?? [], createBranchSnapshot(branchState)),
-          }
-        : state.historyPast;
-      const historyFuture = shouldTrackHistory
-        ? {
-            ...state.historyFuture,
-            [branchId]: [],
-          }
-        : state.historyFuture;
-
       return {
-        historyPast,
-        historyFuture,
+        historyPast: {
+          ...state.historyPast,
+          [branchId]: pushSnapshot(state.historyPast[branchId] ?? [], createBranchSnapshot(branchState)),
+        },
+        historyFuture: {
+          ...state.historyFuture,
+          [branchId]: [],
+        },
         branchStates: {
           ...state.branchStates,
           [branchId]: {
@@ -725,26 +684,22 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         },
       };
     }),
-  selectNode: (selectedNodeId) => set({ selectedNodeId }),
-  removeSelectedNode: () =>
+  removeNode: (branchId, nodeId) =>
     set((state) => {
-      const selectedNodeId = state.selectedNodeId;
-      if (!selectedNodeId) {
+      const branchState = state.branchStates[branchId];
+      if (!branchState) {
         return {};
       }
 
-      const branchId = state.activeBranchId;
-      const branchState = state.branchStates[branchId];
-      const selectedNode = branchState.nodes.find((node) => node.id === selectedNodeId);
+      const selectedNode = branchState.nodes.find((node) => node.id === nodeId);
       if (!selectedNode || selectedNode.data.kind === "group") {
         return {};
       }
 
-      const nextNodes = branchState.nodes.filter((node) => node.id !== selectedNodeId);
-      const nextEdges = branchState.edges.filter((edge) => edge.source !== selectedNodeId && edge.target !== selectedNodeId);
+      const nextNodes = branchState.nodes.filter((node) => node.id !== nodeId);
+      const nextEdges = branchState.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId);
 
       return {
-        selectedNodeId: null,
         historyPast: {
           ...state.historyPast,
           [branchId]: pushSnapshot(state.historyPast[branchId] ?? [], createBranchSnapshot(branchState)),
@@ -763,10 +718,12 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         },
       };
     }),
-  undo: () =>
+  undo: (branchId) =>
     set((state) => {
-      const branchId = state.activeBranchId;
       const branchState = state.branchStates[branchId];
+      if (!branchState) {
+        return {};
+      }
       const past = state.historyPast[branchId] ?? [];
       if (past.length === 0) {
         return {};
@@ -777,7 +734,6 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       const future = state.historyFuture[branchId] ?? [];
 
       return {
-        selectedNodeId: null,
         historyPast: {
           ...state.historyPast,
           [branchId]: past.slice(0, -1),
@@ -792,11 +748,13 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         },
       };
     }),
-  redo: () =>
+  redo: (branchId) =>
     set((state) => {
-      const branchId = state.activeBranchId;
       const branchState = state.branchStates[branchId];
       const future = state.historyFuture[branchId] ?? [];
+      if (!branchState) {
+        return {};
+      }
       if (future.length === 0) {
         return {};
       }
@@ -806,7 +764,6 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       const past = state.historyPast[branchId] ?? [];
 
       return {
-        selectedNodeId: null,
         historyPast: {
           ...state.historyPast,
           [branchId]: pushSnapshot(past, current),
@@ -821,9 +778,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         },
       };
     }),
-  retryFailedNodes: () => {
+  retryFailedNodes: (branchId) => {
     const state = get();
-    const branchId = state.activeBranchId;
     const branchState = state.branchStates[branchId];
     if (!branchState) {
       return false;
@@ -877,7 +833,6 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     set((prev) => ({
       executionEvents: [],
       executionError: null,
-      selectedNodeId: null,
       historyPast: {
         ...prev.historyPast,
         [branchId]: pushSnapshot(prev.historyPast[branchId] ?? [], createBranchSnapshot(branchState)),
@@ -898,17 +853,19 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
     return true;
   },
-  applyWorkflowTemplate: (templateId, datasetId = null, defaultBrightHubUuid = null) =>
-    set((state) => {
+  applyWorkflowTemplate: (branchId, templateId, datasetId = null, defaultBrightHubUuid = null) => {
+    const state = get();
       const template = workflowTemplateIndex[templateId];
       if (!template) {
-        return {};
+        return null;
       }
 
-      const branchId = state.activeBranchId;
       const activeBranch = state.branches.find((branch) => branch.id === branchId);
       const branchColor = activeBranch?.color ?? initialBranchColor;
       const branchState = state.branchStates[branchId];
+      if (!branchState) {
+        return null;
+      }
       const laneById = Object.fromEntries(foundationLaneGroups.map((lane) => [lane.id, lane]));
       const laneOffset: Record<string, number> = {};
 
@@ -918,6 +875,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       const nodes: WorkflowNode[] = [...createBaselineNodes()];
       const edges: WorkflowEdge[] = [...createBaselineEdges()];
       let previousNodeId: string | null = null;
+      let firstOperationNodeId: string | null = null;
 
       if (dataset) {
         const datasetNodeId = `${template.id}-dataset`;
@@ -927,6 +885,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           position: { x: 120, y: 360 },
           data: {
             kind: "dataset",
+            laneId: "group-dataset",
             label: dataset.name,
             description: `${dataset.sensor_count} sensors across ${summarizeDatasetRange(dataset)}`,
             status: "done",
@@ -949,6 +908,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         const laneIndex = laneOffset[step.laneId] ?? 0;
         laneOffset[step.laneId] = laneIndex + 1;
         const nodeId = `${template.id}-op-${index + 1}`;
+        if (!firstOperationNodeId) {
+          firstOperationNodeId = nodeId;
+        }
         const config = withBrightHubUuidDefaults(step.templateId, {
           ...buildTemplateConfig(nodeTemplate),
           ...(step.config ?? {}),
@@ -963,6 +925,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           },
           data: {
             kind: "operation",
+            laneId: step.laneId,
             label: nodeTemplate.label,
             description: nodeTemplate.description,
             category: nodeTemplate.category,
@@ -991,8 +954,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         previousNodeId = nodeId;
       }
 
-      return {
-        selectedNodeId: previousNodeId,
+      set({
         historyPast: {
           ...state.historyPast,
           [branchId]: pushSnapshot(state.historyPast[branchId] ?? [], createBranchSnapshot(branchState)),
@@ -1009,14 +971,15 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             edges,
           },
         },
-      };
-    }),
+      });
+
+      return firstOperationNodeId;
+    },
   serializeSnapshot: () => {
     const state = get();
     return {
       version: WORKFLOW_SNAPSHOT_VERSION,
       branches: cloneJson(state.branches.map((branch) => ({ ...branch, sessionId: null }))),
-      activeBranchId: state.activeBranchId,
       branchStates: cloneJson(state.branchStates),
       datasets: cloneJson(state.datasets),
     };
@@ -1052,28 +1015,26 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         };
       }
 
-      const branchIds = new Set(branches.map((branch) => branch.id));
-      const activeBranchId = branchIds.has(snapshot.activeBranchId) ? snapshot.activeBranchId : branches[0].id;
-
       return {
         branches,
-        activeBranchId,
         branchStates,
         historyPast: createHistoryIndex(branches),
         historyFuture: createHistoryIndex(branches),
         datasets: cloneJson(snapshot.datasets),
-        selectedNodeId: null,
       };
     }),
-  addOperationNode: (templateId, position, defaultBrightHubUuid = null) => {
+  addOperationNode: (branchId, templateId, position, defaultBrightHubUuid = null) => {
     const template = nodeTemplateIndex[templateId];
     if (!template) {
-      return;
+      return null;
     }
 
     const state = get();
-    const branch = state.branchStates[state.activeBranchId];
-    const activeBranch = state.branches.find((candidate) => candidate.id === state.activeBranchId);
+    const branch = state.branchStates[branchId];
+    if (!branch) {
+      return null;
+    }
+    const activeBranch = state.branches.find((candidate) => candidate.id === branchId);
     const nextPosition = resolveDropPosition(branch.nodes, position);
     const nodeId = `${templateId}-${branch.nodes.length + 1}`;
 
@@ -1085,6 +1046,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       position: nextPosition,
       data: {
         kind: "operation",
+        laneId: inferLaneIdForTemplate(templateId, template.category) ?? undefined,
         label: template.label,
         description: template.description,
         category: template.category,
@@ -1098,16 +1060,19 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       },
     };
 
-    state.setNodes(state.activeBranchId, [...branch.nodes, nextNode]);
-    state.selectNode(nodeId);
+    state.setNodes(branchId, [...branch.nodes, nextNode]);
+    return nodeId;
   },
-  addDatasetNode: (datasetId, position) => {
+  addDatasetNode: (branchId, datasetId, position) => {
     const state = get();
-    const branch = state.branchStates[state.activeBranchId];
-    const activeBranch = state.branches.find((candidate) => candidate.id === state.activeBranchId);
+    const branch = state.branchStates[branchId];
+    if (!branch) {
+      return null;
+    }
+    const activeBranch = state.branches.find((candidate) => candidate.id === branchId);
     const dataset = state.datasets.find((entry) => entry.id === datasetId);
     if (!dataset) {
-      return;
+      return null;
     }
 
     const nextPosition = resolveDropPosition(branch.nodes, position);
@@ -1118,6 +1083,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       position: nextPosition,
       data: {
         kind: "dataset",
+        laneId: "group-dataset",
         label: dataset.name,
         description: `${dataset.sensor_count} sensors across ${summarizeDatasetRange(dataset)}`,
         status: "done",
@@ -1128,13 +1094,16 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       },
     };
 
-    state.setNodes(state.activeBranchId, [...branch.nodes, nextNode]);
-    state.selectNode(nodeId);
+    state.setNodes(branchId, [...branch.nodes, nextNode]);
+    return nodeId;
   },
-  connectNodes: (connection) => {
+  connectNodes: (branchId, connection) => {
     const state = get();
-    const branch = state.branchStates[state.activeBranchId];
-    const activeBranch = state.branches.find((candidate) => candidate.id === state.activeBranchId);
+    const branch = state.branchStates[branchId];
+    if (!branch) {
+      return;
+    }
+    const activeBranch = state.branches.find((candidate) => candidate.id === branchId);
     const nextEdges = addEdge(
       {
         ...connection,
@@ -1151,14 +1120,17 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       },
       branch.edges,
     ) as WorkflowEdge[];
-    state.setEdges(state.activeBranchId, nextEdges);
+    state.setEdges(branchId, nextEdges);
   },
-  updateNodeConfig: (nodeId, key, value) => {
+  updateNodeConfig: (branchId, nodeId, key, value) => {
     const state = get();
-    const branch = state.branchStates[state.activeBranchId];
+    const branch = state.branchStates[branchId];
+    if (!branch) {
+      return;
+    }
     const descendants = collectDescendants(nodeId, branch.edges);
     state.setNodes(
-      state.activeBranchId,
+      branchId,
       branch.nodes.map((node) => {
         if (node.id === nodeId && node.data.kind === "operation") {
           return {
@@ -1191,9 +1163,12 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     );
   },
   setExecutionMode: (mode) => set({ executionMode: mode }),
-  prepareExecution: (mode, resetStatuses = true) =>
+  prepareExecution: (branchId, mode, resetStatuses = true) =>
     set((state) => {
-      const branch = state.branchStates[state.activeBranchId];
+      const branch = state.branchStates[branchId];
+      if (!branch) {
+        return {};
+      }
       const nodes: WorkflowNode[] = !resetStatuses
         ? branch.nodes
         : branch.nodes.map((node) => {
@@ -1218,16 +1193,19 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         executionError: null,
         branchStates: {
           ...state.branchStates,
-          [state.activeBranchId]: {
+          [branchId]: {
             ...branch,
             nodes,
           },
         },
       };
     }),
-  applyExecutionEvent: (event) =>
+  applyExecutionEvent: (branchId, event) =>
     set((state) => {
-      const branch = state.branchStates[state.activeBranchId];
+      const branch = state.branchStates[branchId];
+      if (!branch) {
+        return {};
+      }
       const nextStatus = asNodeStatus(event.status ?? undefined);
       const eventNodeId = event.node_id ?? null;
 
@@ -1275,7 +1253,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         executionEvents: [...state.executionEvents, event].slice(-300),
         branchStates: {
           ...state.branchStates,
-          [state.activeBranchId]: {
+          [branchId]: {
             ...branch,
             nodes,
             edges,
@@ -1283,9 +1261,12 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         },
       };
     }),
-  applyExecutionResult: (result) =>
+  applyExecutionResult: (branchId, result) =>
     set((state) => {
-      const branch = state.branchStates[state.activeBranchId];
+      const branch = state.branchStates[branchId];
+      if (!branch) {
+        return {};
+      }
       const nodes: WorkflowNode[] = branch.nodes.map((node) => {
         const status = asNodeStatus(result.node_statuses[node.id]);
         if (!status) {
@@ -1307,7 +1288,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         executionEvents: [...state.executionEvents, ...result.events].slice(-300),
         branchStates: {
           ...state.branchStates,
-          [state.activeBranchId]: {
+          [branchId]: {
             ...branch,
             nodes,
           },
@@ -1317,9 +1298,16 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   setExecutionError: (message) => set({ executionError: message }),
   stopExecution: () => set({ isExecuting: false }),
   clearExecutionEvents: () => set({ executionEvents: [], executionError: null }),
-  buildExecutionRequest: (mode) => {
+  buildExecutionRequest: (branchId, mode) => {
     const state = get();
-    const branch = state.branchStates[state.activeBranchId];
+    const branch = state.branchStates[branchId];
+    if (!branch) {
+      return {
+        mode: mode ?? state.executionMode,
+        nodes: [],
+        edges: [],
+      };
+    }
     return {
       mode: mode ?? state.executionMode,
       nodes: branch.nodes.map((node) => ({

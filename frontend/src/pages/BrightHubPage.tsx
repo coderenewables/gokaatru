@@ -194,6 +194,15 @@ export function BrightHubPage() {
     return (
       <section className="page-section">
         <PageHeader title="BrightHub" detail="Authenticate with BrightHub to browse datasets, measurement locations, and reanalysis data (ERA5 & MERRA-2)." />
+        <div className="content-card">
+          <p className="text-muted brighthub-description">
+            <strong>BrightHub</strong> is an external wind resource database. Once authenticated, GoKaatru can
+            browse available measurement stations, import timeseries and data models directly into your project,
+            and fetch ERA5 / MERRA-2 reanalysis nodes near your site. You will need a BrightHub{" "}
+            <em>Client ID</em> and <em>Client Secret</em> — contact your BrightHub account manager or visit the
+            BrightHub portal to obtain credentials.
+          </p>
+        </div>
         <EmptyState title="No active session" detail="Create a session from the header to start." />
       </section>
     );
@@ -242,6 +251,17 @@ export function BrightHubPage() {
           ) : null
         }
       />
+
+      {!isAuthenticated && !authStatusQuery.isLoading ? (
+        <div className="content-card">
+          <p className="text-muted brighthub-description">
+            <strong>BrightHub</strong> is an external wind resource database. Once authenticated, GoKaatru can
+            browse available measurement stations, import timeseries and data models directly into your project,
+            and fetch ERA5 / MERRA-2 reanalysis nodes near your site. Enter your <em>Client ID</em> and{" "}
+            <em>Client Secret</em> below to connect.
+          </p>
+        </div>
+      ) : null}
 
       {latestError ? <ErrorBanner error={latestError} /> : null}
 

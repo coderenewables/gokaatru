@@ -2,6 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { configApi, uploadsApi, workflowApi } from "../../lib/api";
+import { useWorkflowUiStore } from "../../stores/workflowUiStore";
 import { type WorkflowNode, useWorkflowStore } from "../../stores/workflowStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { renderWithProviders } from "../../test/render";
@@ -60,7 +61,6 @@ function buildOperationNode(paramsJson: string): WorkflowNode {
 function seedWorkflowStore(node: WorkflowNode) {
   useWorkflowStore.setState({
     branches: [{ id: "main", name: "main", color: "#0b7a6f", sessionId: "session-inspector", forkPoint: null }],
-    activeBranchId: "main",
     branchStates: {
       main: {
         nodes: [node],
@@ -70,9 +70,12 @@ function seedWorkflowStore(node: WorkflowNode) {
     },
     historyPast: { main: [] },
     historyFuture: { main: [] },
-    selectedNodeId: node.id,
     executionEvents: [],
     executionError: null,
+  });
+  useWorkflowUiStore.setState({
+    activeBranchId: "main",
+    selectedNodeId: node.id,
   });
 }
 

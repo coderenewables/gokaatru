@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, datasetsApi } from "../../lib/api";
+import { useWorkflowUiStore } from "../../stores/workflowUiStore";
 import { useWorkflowStore } from "../../stores/workflowStore";
 
 function toErrorMessage(error: unknown): string {
@@ -25,8 +26,10 @@ function summarizeRange(start: string, end: string): string {
 }
 
 export function DatasetPool() {
+  const activeBranchId = useWorkflowUiStore((state) => state.activeBranchId);
+  const setSelectedNodeId = useWorkflowUiStore((state) => state.setSelectedNodeId);
   const sessionId = useWorkflowStore((state) => {
-    const activeBranch = state.branches.find((branch) => branch.id === state.activeBranchId);
+    const activeBranch = state.branches.find((branch) => branch.id === activeBranchId);
     return activeBranch?.sessionId ?? null;
   });
   const queryClient = useQueryClient();
@@ -217,7 +220,7 @@ export function DatasetPool() {
               type="button"
               className="workflow-dataset-card"
               draggable
-              onClick={() => addDatasetNode(dataset.id)}
+              onClick={() => setSelectedNodeId(addDatasetNode(activeBranchId, dataset.id))}
               onDragStart={(event) => {
                 event.dataTransfer.setData("application/gokaatru-dataset", dataset.id);
                 event.dataTransfer.effectAllowed = "move";

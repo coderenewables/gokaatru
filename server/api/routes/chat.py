@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-import threading
 from typing import Annotated, Any
 
 import httpx
@@ -15,13 +14,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, JsonValue
 
 from server.api.deps import get_session_state
-from server.state.session import SessionState
+from server.state.session import SessionState, bind_session
 
 router = APIRouter(prefix="/sessions/{session_id}", tags=["chat"])
 
 # Maximum consecutive LLM ↔ tool-call round-trips to prevent runaway loops.
 _MAX_TOOL_ROUNDS = 12
-_SESSION_LOCK = threading.Lock()
 
 # Provider base URLs keyed by short name.
 _PROVIDER_URLS: dict[str, str] = {
@@ -141,7 +139,7 @@ def _build_registries() -> tuple[list[dict[str, Any]], dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# Tool execution — swap the global session, call the function, swap back
+# Tool execution — bind the managed session for the current tool call
 # ---------------------------------------------------------------------------
 
 
@@ -152,17 +150,11 @@ def _execute_tool(name: str, arguments: dict[str, Any], state: SessionState) -> 
     if fn is None:
         return {"error": f"Unknown tool: {name}"}
 
-    import server.state.session as session_mod
-
-    with _SESSION_LOCK:
-        original = session_mod.session
-        session_mod.session = state
+    with bind_session(state):
         try:
             return fn(**arguments)
         except Exception as exc:
             return {"error": f"{type(exc).__name__}: {exc}"}
-        finally:
-            session_mod.session = original
 
 
 # ---------------------------------------------------------------------------

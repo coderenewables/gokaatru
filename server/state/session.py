@@ -4,6 +4,8 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar, Token
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -205,4 +207,44 @@ class SessionState:
         return str(data_dir)
 
 
-session = SessionState()
+_default_session = SessionState()
+_bound_session: ContextVar[SessionState | None] = ContextVar("gokaatru_bound_session", default=None)
+
+
+def get_active_session() -> SessionState:
+    """Return the request-bound SessionState when available, else the legacy singleton."""
+    state = _bound_session.get()
+    return _default_session if state is None else state
+
+
+@contextmanager
+def bind_session(state: SessionState):
+    """Bind a managed SessionState to the current execution context for MCP tool calls."""
+    token: Token[SessionState | None] = _bound_session.set(state)
+    try:
+        yield state
+    finally:
+        _bound_session.reset(token)
+
+
+class SessionProxy:
+    """Proxy the exported `session` object to a request-bound SessionState when present."""
+
+    def __getattr__(self, name: str):
+        return getattr(get_active_session(), name)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        setattr(get_active_session(), name, value)
+
+    def __delattr__(self, name: str) -> None:
+        delattr(get_active_session(), name)
+
+    def __dir__(self) -> list[str]:
+        return sorted(set(dir(type(self)) + dir(get_active_session())))
+
+    def __repr__(self) -> str:
+        state = get_active_session()
+        return f"SessionProxy(session_id={state.session_id!r}, workspace_dir={state.workspace_dir!r})"
+
+
+session = SessionProxy()

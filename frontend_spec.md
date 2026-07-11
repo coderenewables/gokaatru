@@ -1,5 +1,3 @@
----
-
 # Project Specification: Config-Driven Wind Data Analysis Frontend with AI Agent Layer
 
 ## 1. Project Overview

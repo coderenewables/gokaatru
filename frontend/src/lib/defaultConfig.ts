@@ -1,5 +1,5 @@
-import type { WindAnalysisConfig } from "../types/analysis";
-import { windAnalysisConfigSchema } from "../types/analysis";
+// Default central config object (spec §8 / §3.2).
+import { windAnalysisConfigSchema, type WindAnalysisConfig } from "../types/analysis";
 
 export function createDefaultWindAnalysisConfig(): WindAnalysisConfig {
   return windAnalysisConfigSchema.parse({
@@ -50,17 +50,6 @@ export function createDefaultWindAnalysisConfig(): WindAnalysisConfig {
         },
       ],
     },
-    standardization: {
-      timestampColumn: "Timestamp",
-      timestampFormat: "iso8601",
-      timezone: "UTC",
-      missingValues: ["", "NA", "NaN", "null"],
-      canonicalWindSpeedUnit: "m/s",
-      canonicalDirectionUnit: "deg",
-      tabularFormat: "records",
-      windkitDatasetFormat: "xarray-dataset",
-      geometryFormat: "geojson",
-    },
     inputs: {
       sharedDatasetId: "",
       timeseriesFileName: "",
@@ -77,7 +66,7 @@ export function createDefaultWindAnalysisConfig(): WindAnalysisConfig {
       directionSensor: "",
       aggregation: "mean",
       targetHubHeightM: 120,
-      useWindKit: true,
+      useWindKit: false,
     },
     reanalysis: {
       preferredProvider: "era5",
@@ -88,7 +77,7 @@ export function createDefaultWindAnalysisConfig(): WindAnalysisConfig {
       nodes: [],
     },
     ltc: {
-      algorithms: ["speedsort", "ensemble"],
+      algorithms: ["speedsort"],
       shortColumn: "",
       longColumn: "",
       shortDirectionColumn: "",
@@ -101,6 +90,7 @@ export function createDefaultWindAnalysisConfig(): WindAnalysisConfig {
         shearMethod: "power_law",
         mcpRSquared: 0.92,
         concurrentHours: 8760,
+        algorithm: "speedsort",
         iavPct: 6,
         shearStd: 0,
         isInterpolation: false,
@@ -108,13 +98,7 @@ export function createDefaultWindAnalysisConfig(): WindAnalysisConfig {
     },
     workflow: {
       mode: "auto",
-      preferredTemplates: [],
       snapshotName: "baseline",
-    },
-    windkit: {
-      enabledCategories: ["wind", "climate", "climate-stats", "ltc", "topography", "windfarm", "spatial"],
-      preferredDatasetAssetId: "",
-      preferNormalizedAssets: true,
     },
     compare: {
       branchSessionIds: [],

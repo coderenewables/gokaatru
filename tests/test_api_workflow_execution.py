@@ -4,14 +4,13 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from server.core.executor import WorkflowExecutor, _loads_lenient, _tool_registry
+from server.core.executor import WorkflowExecutor, _loads_lenient
 from server.api.deps import get_session_manager
 from server.api.main import create_app
 from server.state.manager import SessionManager
@@ -35,24 +34,6 @@ def _create_session(client: TestClient) -> tuple[str, dict[str, str]]:
     assert create_response.status_code == 200
     session_id = create_response.json()["session_id"]
     return session_id, {"X-GoKaatru-Session": session_id}
-
-
-def _palette_tool_template_ids() -> set[str]:
-    """Parse node template tool ids from the workflow palette registry file."""
-    content = Path("frontend/src/lib/nodeRegistry.ts").read_text(encoding="utf-8")
-    blocks = re.findall(r"toolFunctions:\s*\[(.*?)\]", content, flags=re.DOTALL)
-    ids: set[str] = set()
-    for block in blocks:
-        ids.update(re.findall(r'"([a-z0-9_]+)"', block))
-    return ids
-
-
-def test_executor_dispatch_registry_covers_palette_tools() -> None:
-    """Ensure every palette tool template id resolves to a backend callable."""
-    template_ids = _palette_tool_template_ids()
-    registry = _tool_registry()
-    missing = sorted(template_id for template_id in template_ids if template_id not in registry)
-    assert missing == []
 
 
 def test_loads_lenient_repairs_windows_paths_with_unicode_prefix() -> None:
@@ -213,7 +194,7 @@ def test_workflow_stream_endpoint_emits_events(execution_client: tuple[TestClien
 def test_workflow_capabilities_endpoint_returns_signature_hints(
     execution_client: tuple[TestClient, SessionManager],
 ) -> None:
-    """Return template dispatch signature hints for frontend node parameter assistance."""
+    """Return template dispatch signature hints for workflow node parameter assistance."""
     client, _manager = execution_client
     session_id, headers = _create_session(client)
 

@@ -25,12 +25,6 @@ services:
     volumes:
       - ./data:/app/data
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
-    restart: unless-stopped
-
   caddy:
     image: caddy:2.8-alpine
     restart: unless-stopped
@@ -38,7 +32,6 @@ services:
       - "80:80"
       - "443:443"
     depends_on:
-      - frontend
       - api
       - mcp
     env_file:

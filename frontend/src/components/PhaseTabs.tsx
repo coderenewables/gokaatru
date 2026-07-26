@@ -1,27 +1,31 @@
+// Primary navigation (spec §3.1): Stepper / Canvas / WindKit / Copilot / Compare.
 import clsx from "clsx";
 
-const tabs = [
-  { id: "setup", label: "Setup" },
-  { id: "workflow", label: "Workflow" },
+import { useWorkspaceStore } from "../store/useWorkspaceStore";
+
+type TabId = "setup" | "workflow" | "windkit" | "copilot" | "compare";
+
+const TABS: Array<{ id: TabId; label: string }> = [
+  { id: "setup", label: "Stepper" },
+  { id: "workflow", label: "Canvas" },
   { id: "windkit", label: "WindKit" },
   { id: "copilot", label: "Copilot" },
   { id: "compare", label: "Compare" },
-] as const;
+];
 
-interface PhaseTabsProps {
-  activeTab: string;
-  onChange: (tab: "setup" | "workflow" | "windkit" | "copilot" | "compare") => void;
-}
+export function PhaseTabs() {
+  const activeTab = useWorkspaceStore((state) => state.activeTab);
+  const setActiveTab = useWorkspaceStore((state) => state.setActiveTab);
 
-export function PhaseTabs({ activeTab, onChange }: PhaseTabsProps) {
   return (
-    <nav className="phase-tabs" aria-label="Workspace phases">
-      {tabs.map((tab) => (
+    <nav className="phase-tabs" aria-label="Primary view">
+      {TABS.map((tab) => (
         <button
-          className={clsx("phase-tab", activeTab === tab.id && "phase-tab-active")}
           key={tab.id}
-          onClick={() => onChange(tab.id)}
           type="button"
+          className={clsx("phase-tab", { active: activeTab === tab.id })}
+          aria-current={activeTab === tab.id ? "page" : undefined}
+          onClick={() => setActiveTab(tab.id)}
         >
           {tab.label}
         </button>

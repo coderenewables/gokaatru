@@ -1426,7 +1426,6 @@ These rules are non-negotiable for the UI phase:
 Target runtime topology:
 
 ```text
-Browser UI (React/Vite)
         |
         v
 FastAPI Web API (/api)
@@ -1720,204 +1719,13 @@ The route `POST /api/sessions/{session_id}/plots/{plot_name}` should support the
 
 ---
 
-### Step 6.6: Frontend scaffold
-
-Create a dedicated frontend workspace.
-
-**Create files:**
-
-```text
-frontend/package.json
-frontend/tsconfig.json
-frontend/vite.config.ts
-frontend/index.html
-frontend/src/main.tsx
-frontend/src/App.tsx
-frontend/src/router.tsx
-frontend/src/styles.css
-frontend/src/lib/api.ts
-frontend/src/lib/types.ts
-frontend/src/lib/queryClient.ts
-frontend/src/stores/workspaceStore.ts
-```
-
-**Recommended dependencies**
-
-Runtime:
-- `react`
-- `react-dom`
-- `react-router-dom`
-- `@tanstack/react-query`
-- `zustand`
-- `react-hook-form`
-- `zod`
-- `react-plotly.js`
-- `plotly.js-dist-min`
-- `react-leaflet`
-- `leaflet`
-- `clsx`
-
-Dev:
-- `typescript`
-- `vite`
-- `@vitejs/plugin-react`
-- `vitest`
-- `jsdom`
-- `@testing-library/react`
-
-**File: `frontend/vite.config.ts`**
-
-Requirements:
-- Proxy `/api` to `http://127.0.0.1:8000`
-- Optionally proxy `/sse` to `http://127.0.0.1:8080` for debugging only
-
-Do **not** make the browser depend on MCP transport for core functionality.
-
-**Styling rule**
-
-Keep styling simple:
-- Use one CSS variables file in `styles.css`
-- Avoid large UI frameworks in Phase 6
-- Build a small in-repo component library instead of pulling in a full design system
-
----
-
-### Step 6.7: Frontend shell and routing
-
-**Create files:**
-
-```text
-frontend/src/components/layout/AppShell.tsx
-frontend/src/components/layout/StepNav.tsx
-frontend/src/components/common/PageHeader.tsx
-frontend/src/components/common/MetricCard.tsx
-frontend/src/components/common/StatusBadge.tsx
-frontend/src/components/common/ErrorBanner.tsx
-frontend/src/components/common/EmptyState.tsx
-frontend/src/components/common/FileDropzone.tsx
-frontend/src/components/common/DataTable.tsx
-frontend/src/components/common/PlotlyFigure.tsx
-frontend/src/components/common/GeoJsonMap.tsx
-frontend/src/components/common/LoadingState.tsx
-frontend/src/pages/OverviewPage.tsx
-frontend/src/pages/DataPage.tsx
-frontend/src/pages/SitePage.tsx
-frontend/src/pages/ReanalysisPage.tsx
-frontend/src/pages/LtcPage.tsx
-frontend/src/pages/ResultsPage.tsx
-```
-
-Route tree:
-
-```text
-/
-  /overview
-  /data
-  /site
-  /reanalysis
-  /ltc
-  /results
-```
-
-Shell requirements:
-- Left sidebar with workflow steps and completion state
-- Header with project name, session id, reset action, API health state
-- Main content panel for forms, charts, and tables
-- Right-side inspector for summary cards, warnings, and current runconfig snapshot
-
-Persist `session_id` in local storage using `workspaceStore`.
-
----
-
-### Step 6.8: Page-by-page UI contract
-
-Do **not** build a generic chat screen. Build workflow pages with explicit actions.
-
-**OverviewPage**
-- Show API health
-- Show current project summary from `/summary`
-- Show completed workflow steps
-- Provide buttons to jump to the next missing step
-
-**DataPage**
-- Upload timeseries file
-- Upload data model file
-- Show detected sensors and coverage table
-- Provide cleaning rule form and cleaning log table
-
-**SitePage**
-- Edit project metadata: project name, measurement type, coordinates, hub height
-- Trigger shear and roughness calculations
-- Render month-hour heatmaps from shear/roughness tables
-- Trigger hub-height extrapolation and show method counts
-
-**ReanalysisPage**
-- Find ERA5 nodes from current site coordinates
-- Show mast and node markers on a map
-- Trigger ERA5 extraction for the selected date range
-- Trigger site interpolation and show row counts and variables
-
-**LtcPage**
-- Run deterministic LTC algorithms and XGBoost
-- Show metrics comparison table
-- Run ensemble
-- Run clipping analysis and homogeneity analysis
-- Run uncertainty calculation from an explicit form
-
-**ResultsPage**
-- Render Plotly figures from plot endpoints
-- Render the site overview map
-- Show annual means, LTC comparison, and uncertainty outputs
-- Show raw runconfig export and generated result file paths
-
-Each page should have:
-- one primary action area
-- one metrics summary row
-- one results region
-- one visible error banner when the latest request fails
-
----
-
-### Step 6.9: Frontend data flow rules
-
-Use state libraries deliberately:
-
-**TanStack Query** for:
-- session summary
-- sensors and coverage
-- cleaning log
-- ERA5 node list
-- LTC results
-- plot payloads
-
-**Zustand** for:
-- `sessionId`
-- selected sensors
-- currently selected LTC source
-- active date ranges
-- unsaved form drafts
-
-**API client rules**
-
-In `frontend/src/lib/api.ts`:
-- Centralize all fetch logic
-- Always send `X-GoKaatru-Session`
-- Throw typed errors on non-2xx responses
-- Keep one helper per route group: `sessionsApi`, `uploadsApi`, `configApi`, `analysisApi`, `resultsApi`
-
-Do not scatter `fetch()` calls directly inside page components.
-
----
-
-### Step 6.10: API and UI tests
+### Step 6.10: API tests
 
 **Create files:**
 
 ```text
 tests/test_api_sessions.py
 tests/test_api_workflow.py
-frontend/src/components/layout/AppShell.test.tsx
-frontend/src/pages/DataPage.test.tsx
 ```
 
 **`tests/test_api_sessions.py`**
@@ -1942,42 +1750,6 @@ Using `sample_timeseries_df`, cover this browser-oriented flow:
 8. run at least one LTC algorithm on seeded or mocked reference data
 9. request one plot endpoint and validate `plotly_json`
 
-**Frontend tests**
-
-Minimal but useful:
-- `AppShell` renders step navigation and outlet region
-- `DataPage` shows uploader and reacts to a mocked sensor response
-
----
-
-### Step 6.11: Local development commands
-
-Backend API:
-
-```bash
-python -m uvicorn server.api.main:app --reload --port 8000
-```
-
-MCP server for debug/AI clients:
-
-```bash
-python -m server.main --transport sse --host 0.0.0.0 --port 8080
-```
-
-Frontend:
-
-```bash
-npm --prefix frontend install
-npm --prefix frontend run dev
-npm --prefix frontend run test -- --run
-```
-
-Production frontend build:
-
-```bash
-npm --prefix frontend run build
-```
-
 ---
 
 ### Step 6.12: Phase 6 validation checklist
@@ -1987,10 +1759,7 @@ Before declaring Phase 6 complete, verify:
 - [ ] `python -m pytest tests/test_api_sessions.py tests/test_api_workflow.py -v` passes
 - [ ] `python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000` starts cleanly
 - [ ] `python -m server.main --transport sse --host 0.0.0.0 --port 8080` still starts cleanly
-- [ ] `npm --prefix frontend run build` passes
-- [ ] `npm --prefix frontend run test -- --run` passes
 - [ ] Browser workflow works for: upload → shear → extrapolation → result plot
-- [ ] Frontend never calls MCP directly for core workflow actions
 - [ ] No duplicated analytics logic between `server/api/` and `server/tools/`
 
 ---
@@ -2004,7 +1773,6 @@ Before declaring Phase 6 complete, verify:
 | 3 | server/tools/era5.py, server/tools/ltc.py, server/tools/ltc_ml.py, server/tools/air_density.py, tests/test_phase3.py | 11 tools |
 | 4 | server/tools/ensemble.py, server/tools/clipping.py, server/tools/homogeneity.py, server/tools/uncertainty.py, server/tools/visualization.py, server/tools/map.py, tests/test_phase4.py | 19 tools |
 | 5 | tests/test_e2e.py, Dockerfile, docker-compose.yml, .env.example, README.md | — |
-| 6 | server/api/*, server/state/manager.py, frontend/*, tests/test_api_sessions.py, tests/test_api_workflow.py | — |
 | **Current built total through Phase 6** | **37 files** | **59 tools** |
 
 ---
@@ -2020,7 +1788,7 @@ Before declaring Phase 6 complete, verify:
 ### Phase 7 Design Principles
 
 1. **Charts live where decisions are made.** Do not banish visualization to the Results page. Every page that takes analytical action must show the output inline.
-2. **Backend returns Plotly JSON; frontend renders it.** Reuse `PlotlyFigure` and the existing `_plot_result()` pipeline. New backend helpers follow the same `_plot_*()` / `_plot_result()` convention.
+2. **Backend returns Plotly JSON; a frontend renders it.** Reuse `PlotlyFigure` and the existing `_plot_result()` pipeline. New backend helpers follow the same `_plot_*()` / `_plot_result()` convention.
 3. **No new UI frameworks.** Extend the existing CSS design system (`.content-card`, `.metric-grid`, `.plot-card`, `.panel-grid` classes).
 4. **Responsive drill-down.** Every table row should be clickable to show the underlying data in a chart or detail panel.
 
@@ -2168,358 +1936,8 @@ class SensorStatisticsResponse(BaseModel):
 
 ---
 
-### Step 7.4: DataPage redesign — Inline charts after upload
-
-**Update file: `frontend/src/pages/DataPage.tsx`**
-
-Restructure the page layout into 3 vertical sections:
-
-**Section 1: Upload + Metrics (existing, keep as-is)**
-Keep the existing `FileDropzone`, `MetricCard` grid, and `ErrorBanner`.
-
-**Section 2: Data Preview (new)**
-After successful upload, add a new section below the metrics:
-
-```tsx
-{sensorsQuery.data?.length ? (
-  <div className="panel-grid panel-grid-two">
-    <PlotlyFigure
-      plot={previewPlotQuery.data}
-      emptyTitle="Upload data to preview"
-      emptyDetail="The first 7 days of wind speed sensors will appear here."
-    />
-    <PlotlyFigure
-      plot={coveragePlotQuery.data}
-      emptyTitle="Coverage unavailable"
-      emptyDetail="Upload both timeseries and datamodel to see the availability timeline."
-    />
-  </div>
-) : null}
-```
-
-Add React Query hooks:
-```tsx
-const previewPlotQuery = useQuery({
-  queryKey: ["timeseries-preview", sessionId],
-  queryFn: () => resultsApi.getPlot(sessionId ?? "", "timeseries_preview", {}),
-  enabled: sessionId !== null && (sensorsQuery.data?.length ?? 0) > 0,
-  staleTime: 15_000,
-});
-
-const coveragePlotQuery = useQuery({
-  queryKey: ["coverage-timeline", sessionId],
-  queryFn: () => resultsApi.getPlot(sessionId ?? "", "coverage_timeline", {}),
-  enabled: sessionId !== null && (sensorsQuery.data?.length ?? 0) > 0,
-  staleTime: 15_000,
-});
-```
-
-Add import for `PlotlyFigure` from `../components/common/PlotlyFigure` and `resultsApi` from `../lib/api`.
-
-**Section 3: Cleaning + Coverage (existing, restructure)**
-
-After applying a cleaning rule, replace the static cleaning log table with:
-```tsx
-<div className="panel-grid panel-grid-two">
-  <article className="content-card stack-gap">
-    {/* existing cleaning rule form — but redesigned per Step 7.5 */}
-  </article>
-  <PlotlyFigure
-    plot={cleaningOverlayQuery.data}
-    emptyTitle="Apply a cleaning rule to compare"
-    emptyDetail="The overlay shows raw vs cleaned data for the selected sensor."
-  />
-</div>
-```
-
-Add:
-```tsx
-const cleaningOverlayQuery = useQuery({
-  queryKey: ["cleaning-overlay", sessionId, sensorName, cleaningLogQuery.data?.entries.length],
-  queryFn: () => resultsApi.getPlot(sessionId ?? "", "cleaning_overlay", { sensor_name: sensorName }),
-  enabled: sessionId !== null && (cleaningLogQuery.data?.entries.length ?? 0) > 0 && sensorName !== "",
-  staleTime: 10_000,
-});
-```
-
-**Section 4: Sensor detail panel (new)**
-
-Add a clickable coverage table — clicking a row shows per-sensor stats in a slide-out:
-```tsx
-const [selectedSensor, setSelectedSensor] = useState<string | null>(null);
-
-const sensorStatsQuery = useQuery({
-  queryKey: ["sensor-stats", sessionId, selectedSensor],
-  queryFn: () => analysisApi.getSensorStatistics(sessionId ?? "", selectedSensor ?? ""),
-  enabled: sessionId !== null && selectedSensor !== null,
-  staleTime: 15_000,
-});
-```
-
-When `selectedSensor` is set, render a detail card below the table:
-```tsx
-{selectedSensor && sensorStatsQuery.data ? (
-  <article className="content-card stack-gap sensor-detail-card">
-    <span className="eyebrow">Sensor detail — {selectedSensor}</span>
-    <div className="metric-grid">
-      <MetricCard label="Mean" value={sensorStatsQuery.data.mean.toFixed(2)} />
-      <MetricCard label="Weibull k" value={sensorStatsQuery.data.weibull_k.toFixed(2)} />
-      <MetricCard label="Weibull A" value={sensorStatsQuery.data.weibull_A.toFixed(2)} />
-      <MetricCard label="Coverage" value={`${sensorStatsQuery.data.coverage_pct.toFixed(1)}%`} tone="accent" />
-    </div>
-  </article>
-) : null}
-```
-
----
-
-### Step 7.5: Cleaning rule form redesign — No more raw JSON
-
-**Update file: `frontend/src/pages/DataPage.tsx`**
-
-Replace the single `<textarea>` for `paramsText` with rule-specific field groups. Remove the `cleaningRuleHelp` object.
-
-Implement a `CleaningRuleParams` component (inline or extract to `frontend/src/components/common/CleaningRuleParams.tsx`):
-
-```tsx
-type CleaningRuleParamsProps = {
-  ruleType: string;
-  params: Record<string, JsonValue>;
-  onParamsChange: (params: Record<string, JsonValue>) => void;
-  sensors: SensorRecord[];
-};
-
-function CleaningRuleParams({ ruleType, params, onParamsChange, sensors }: CleaningRuleParamsProps) {
-  switch (ruleType) {
-    case "range_check":
-      return (
-        <div className="form-grid two-col">
-          <label className="form-field">
-            <span>Minimum (m/s)</span>
-            <input type="number" step="0.1" value={params.min ?? 0} onChange={...} />
-          </label>
-          <label className="form-field">
-            <span>Maximum (m/s)</span>
-            <input type="number" step="0.1" value={params.max ?? 50} onChange={...} />
-          </label>
-        </div>
-      );
-    case "icing_filter":
-      return (
-        <label className="form-field">
-          <span>Temperature threshold (°C)</span>
-          <input type="number" step="0.5" value={params.temp_threshold_c ?? 2} onChange={...} />
-          <small className="field-help">Records with SD=0 AND temperature below this threshold will be flagged as icing.</small>
-        </label>
-      );
-    case "stuck_sensor":
-      return (
-        <label className="form-field">
-          <span>Consecutive identical readings</span>
-          <input type="number" min="2" step="1" value={params.consecutive_count ?? 6} onChange={...} />
-        </label>
-      );
-    case "tower_shadow":
-      return (
-        <div className="form-grid two-col">
-          <label className="form-field">
-            <span>Exclude from (°)</span>
-            <input type="number" min="0" max="360" value={(params.exclude_sectors as number[])?.[0] ?? 170} onChange={...} />
-          </label>
-          <label className="form-field">
-            <span>Exclude to (°)</span>
-            <input type="number" min="0" max="360" value={(params.exclude_sectors as number[])?.[1] ?? 190} onChange={...} />
-          </label>
-          <small className="field-help full-width">Wind direction sector to exclude due to mast wake (boom orientation ± shadow angle).</small>
-        </div>
-      );
-    case "spike_filter":
-      return (
-        <div className="form-grid two-col">
-          <label className="form-field">
-            <span>Window size (records)</span>
-            <input type="number" min="2" value={params.window_size ?? 6} onChange={...} />
-          </label>
-          <label className="form-field">
-            <span>Sigma threshold</span>
-            <input type="number" step="0.5" value={params.sigma_threshold ?? 4} onChange={...} />
-          </label>
-        </div>
-      );
-    case "timestamp_gap_fill":
-      return <p className="muted-text">No parameters required. Missing timestamps will be filled with NaN rows.</p>;
-    case "custom_period_exclude":
-      return <p className="muted-text">Use the Start date and End date fields above to define the exclusion period.</p>;
-  }
-}
-```
-
-Replace the params `<textarea>` with:
-```tsx
-<CleaningRuleParams
-  ruleType={ruleType}
-  params={cleaningParams}
-  onParamsChange={setCleaningParams}
-  sensors={sensorsQuery.data ?? []}
-/>
-```
-
-Store `cleaningParams` as `Record<string, JsonValue>` in state instead of a text string. Convert to JSON only when calling the API:
-```tsx
-const applyCleaningMutation = useMutation({
-  mutationFn: () =>
-    analysisApi.applyCleaning(sessionId ?? "", {
-      rule_type: ruleType,
-      sensor: sensorName,
-      params: cleaningParams,
-      start_date: startDate,
-      end_date: endDate,
-    }),
-  // ... onSuccess: also invalidate ["cleaning-overlay", sessionId, ...] and ["timeseries-preview", sessionId]
-});
-```
-
----
-
-### Step 7.6: SitePage inline charts
-
-**Update file: `frontend/src/pages/SitePage.tsx`**
-
-The Site page already shows shear/roughness heatmaps via `PlotlyFigure` — this is good. Add:
-
-**1. Extrapolation result chart (new)**
-
-After `extrapolate_to_hub_height` succeeds, show a comparison of measured heights and the extrapolated hub-height column:
-
-Add a new query:
-```tsx
-const extrapolationPlotQuery = useQuery({
-  queryKey: ["extrapolation-preview", sessionId],
-  queryFn: () => {
-    const hubHeight = Number(hubHeight);
-    const sensorList = selectedSensors.concat([`Spd_${hubHeight}m_hub`]).join(",");
-    return resultsApi.getPlot(sessionId ?? "", "timeseries", { sensor_names: sensorList });
-  },
-  enabled: sessionId !== null && latestExtrapolation !== null,
-  staleTime: 15_000,
-});
-```
-
-Add below the existing shear/roughness heatmaps:
-```tsx
-{latestExtrapolation ? (
-  <article className="content-card stack-gap">
-    <span className="eyebrow">Hub-height extrapolation result</span>
-    <div className="metric-grid">
-      <MetricCard label="Column" value={latestExtrapolation.column_name} />
-      <MetricCard label="Extrapolated" value={String(latestExtrapolation.method_counts.extrapolated)} />
-      <MetricCard label="Interpolated" value={String(latestExtrapolation.method_counts.interpolated)} />
-      <MetricCard label="Direct" value={String(latestExtrapolation.method_counts.direct)} />
-    </div>
-    <PlotlyFigure plot={extrapolationPlotQuery.data} emptyTitle="Loading" emptyDetail="" />
-  </article>
-) : null}
-```
-
-**2. Shear profile plot (new backend helper)**
-
-**Update file: `server/tools/visualization.py`**
-
-Add helper:
-```python
-def _plot_shear_profile(state: SessionState) -> dict:
-    """Plot the average wind speed profile across measurement heights.
-
-    X-axis: mean wind speed (m/s)
-    Y-axis: height (m)
-    Shows measured mean speeds at each height as markers, connected by a fitted power-law curve.
-    Annotates with the fitted shear exponent α.
-    """
-```
-- For each height in `state.sensor_mapping`, compute mean speed.
-- Fit power law: log-linear regression on ln(speed) vs ln(height).
-- Plot measured points as markers, fitted curve as a smooth line from min to max height.
-- Annotate: `α = {fitted_shear:.3f}`.
-
-Add to `plot_dispatch`:
-```python
-"shear_profile": lambda: _plot_shear_profile(state),
-```
-
-Render on the Site page alongside the heatmaps:
-```tsx
-const shearProfileQuery = useQuery({
-  queryKey: ["shear-profile", sessionId],
-  queryFn: () => resultsApi.getPlot(sessionId ?? "", "shear_profile", {}),
-  enabled: sessionId !== null && summaryQuery.data?.shear_table_ready === true,
-  staleTime: 15_000,
-});
-```
-
----
-
-### Step 7.7: Contextual help tooltips
-
-**Create file: `frontend/src/components/common/HelpTooltip.tsx`**
-
-```tsx
-type HelpTooltipProps = {
-  text: string;
-};
-
-export function HelpTooltip({ text }: HelpTooltipProps) {
-  return (
-    <span className="help-tooltip" title={text}>
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-        <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" />
-        <text x="8" y="12" textAnchor="middle" fontSize="10" fill="currentColor">?</text>
-      </svg>
-    </span>
-  );
-}
-```
-
-**Update: `frontend/src/styles.css`**
-
-Add:
-```css
-.help-tooltip {
-  cursor: help;
-  color: var(--text-muted);
-  margin-left: 6px;
-  vertical-align: middle;
-}
-
-.help-tooltip:hover {
-  color: var(--accent);
-}
-
-.field-help {
-  display: block;
-  margin-top: 4px;
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
-.full-width {
-  grid-column: 1 / -1;
-}
-```
-
-Add tooltips to critical form fields across all pages. Key placements:
-
-- **DataPage** cleaning rule dropdown: `"Select a data quality rule. Each rule targets a specific data issue — range violations, sensor icing, stuck values, tower wake, or statistical spikes."`
-- **SitePage** shear aggregation: `"MoMM (Mean of Monthly Means) accounts for seasonal and diurnal data gaps. Use 'mean' for well-covered datasets, 'momm' for partial years."`
-- **SitePage** hub height: `"The target turbine hub height for extrapolation. Values between measured heights use interpolation; values above use power-law or log-law extrapolation."`
-- **LtcPage** algorithm selector: Add help text per algorithm (see Step 9.4 for full text).
-- **LtcPage** uncertainty R²: `"R-squared from the MCP concurrent regression. Higher R² reduces the MCP uncertainty component."`
-
----
-
 ### Step 7.8: `analysisApi` extension for sensor statistics
 
-**Update file: `frontend/src/lib/api.ts`**
 
 Add to `analysisApi`:
 ```typescript
@@ -2531,7 +1949,6 @@ getSensorStatistics: (sessionId: string, sensorName: string) =>
   ),
 ```
 
-**Update file: `frontend/src/lib/types.ts`**
 
 Add:
 ```typescript
@@ -2565,7 +1982,6 @@ export interface SensorStatisticsResponse {
 5. `test_plot_shear_profile_annotation` — Verify returned figure JSON contains α annotation.
 6. `test_sensor_statistics_endpoint` — API test: upload data, GET `/statistics/{sensor}`, verify all fields present.
 
-**Update file: `frontend/src/pages/DataPage.test.tsx`**
 
 1. `test_shows_preview_plots_after_upload` — Mock sensors response, verify `PlotlyFigure` components mount.
 2. `test_cleaning_form_shows_typed_inputs` — Select "range_check", verify numeric inputs render (not textarea).
@@ -2576,14 +1992,6 @@ export interface SensorStatisticsResponse {
 ### Step 7.10: Phase 7 validation checklist
 
 - [ ] `python -m pytest tests/ -v` — all tests pass including new Phase 7 tests
-- [ ] `npm --prefix frontend run build` — passes
-- [ ] DataPage: upload CSV → see timeseries preview chart + coverage timeline within 2 seconds
-- [ ] DataPage: apply range_check → see red removed-points overlay
-- [ ] DataPage: click sensor row → see Weibull k/A, mean, coverage in detail card
-- [ ] DataPage: cleaning form shows typed inputs, not JSON textarea
-- [ ] SitePage: shear profile plot visible after shear calculation
-- [ ] SitePage: hub-height extrapolation shows timeseries overlay
-- [ ] All HelpTooltip placements render on hover
 - [ ] No new `Any` types in Python code
 - [ ] `ruff check server/ --select E,F,I,W` — zero warnings
 
@@ -2716,254 +2124,8 @@ class PlotRequest(BaseModel):
     algorithm: str = ""
 ```
 
-**Update file: `frontend/src/lib/types.ts`**
 
 The `PlotResult` type already supports this — no change needed. The `analysisApi.getPlot` call already passes arbitrary body params.
-
----
-
-### Step 8.2: LtcPage redesign — Analysis workbench layout
-
-**Update file: `frontend/src/pages/LtcPage.tsx`**
-
-Restructure into 5 major sections:
-
-**Section 1: Metrics bar + Algorithm controls (existing, refined)**
-Keep the metric cards and the LTC run form. Improvements:
-- Change the "Long reference column" `<input>` to a `<select>` dropdown. Populate from ERA5 interpolated columns:
-
-```tsx
-const era5ColumnsQuery = useQuery({
-  queryKey: ["era5-columns", sessionId],
-  queryFn: async () => {
-    const ensemble = await resultsApi.getEnsembleResults(sessionId ?? "");
-    return ensemble.columns ?? ["Spd_100m", "Dir_100m", "sp", "t2m", "d2m"];
-  },
-  enabled: sessionId !== null,
-  staleTime: 30_000,
-});
-```
-
-Replace `<input value={longCol}>` with:
-```tsx
-<select value={longCol} onChange={(event) => setLongCol(event.target.value)}>
-  {(era5ColumnsQuery.data ?? ["Spd_100m"]).filter(col => col.startsWith("Spd_")).map((col) => (
-    <option key={col} value={col}>{col}</option>
-  ))}
-</select>
-```
-
-Same for `longDirCol` — filter to columns starting with `Dir_`.
-
-**Section 2: Live diagnostic panel (new)**
-
-After running any LTC algorithm, immediately show its diagnostic plots:
-
-```tsx
-const latestAlgorithm = ltcResultsQuery.data?.results[ltcResultsQuery.data.results.length - 1]?.algorithm;
-
-const ltcScatterQuery = useQuery({
-  queryKey: ["ltc-scatter", sessionId, latestAlgorithm],
-  queryFn: () => resultsApi.getPlot(sessionId ?? "", "ltc_scatter", { algorithm: latestAlgorithm }),
-  enabled: sessionId !== null && latestAlgorithm !== undefined,
-  staleTime: 10_000,
-});
-
-const ltcResidualsQuery = useQuery({
-  queryKey: ["ltc-residuals", sessionId, latestAlgorithm],
-  queryFn: () => resultsApi.getPlot(sessionId ?? "", "ltc_residuals", { algorithm: latestAlgorithm }),
-  enabled: sessionId !== null && latestAlgorithm !== undefined,
-  staleTime: 10_000,
-});
-```
-
-Layout:
-```tsx
-{latestAlgorithm ? (
-  <>
-    <span className="eyebrow">Latest run — {latestAlgorithm}</span>
-    <div className="panel-grid panel-grid-two">
-      <PlotlyFigure plot={ltcScatterQuery.data} emptyTitle="Scatter loading" emptyDetail="" />
-      <PlotlyFigure plot={ltcResidualsQuery.data} emptyTitle="Residuals loading" emptyDetail="" />
-    </div>
-  </>
-) : null}
-```
-
-**Section 3: Comparison panel (new)**
-
-After ≥2 algorithms are run:
-
-```tsx
-const ltcMonthlyQuery = useQuery({
-  queryKey: ["ltc-monthly", sessionId, ltcResultsQuery.data?.results.length],
-  queryFn: () => resultsApi.getPlot(sessionId ?? "", "ltc_monthly", {}),
-  enabled: sessionId !== null && (ltcResultsQuery.data?.results.length ?? 0) >= 1,
-  staleTime: 10_000,
-});
-
-const ltcConvergenceQuery = useQuery({
-  queryKey: ["ltc-convergence", sessionId, ltcResultsQuery.data?.results.length],
-  queryFn: () => resultsApi.getPlot(sessionId ?? "", "ltc_convergence", {}),
-  enabled: sessionId !== null && (ltcResultsQuery.data?.results.length ?? 0) >= 1,
-  staleTime: 10_000,
-});
-```
-
-Layout:
-```tsx
-<div className="panel-grid panel-grid-two">
-  <PlotlyFigure plot={ltcMonthlyQuery.data} emptyTitle="Monthly comparison" emptyDetail="Run at least 1 algorithm." />
-  <PlotlyFigure plot={ltcConvergenceQuery.data} emptyTitle="Convergence" emptyDetail="Run at least 1 algorithm." />
-</div>
-```
-
-**Section 4: LTC Metrics Table (existing, enhanced)**
-
-Keep the existing `DataTable` but add a column with a "View Scatter" button per algorithm:
-
-```tsx
-{
-  key: "scatter",
-  header: "Diagnostics",
-  cell: (row) => (
-    <button className="ghost-button table-action" type="button" onClick={() => setFocusedAlgorithm(row.algorithm)}>
-      View
-    </button>
-  ),
-}
-```
-
-When `focusedAlgorithm` is set, the diagnostic panel (Section 2) updates to show that algorithm's scatter and residuals instead of the latest.
-
-**Section 5: Uncertainty tornado (replaces the definition list)**
-
-After running `calculateUncertainty`:
-
-```tsx
-const uncertaintyTornadoQuery = useQuery({
-  queryKey: ["uncertainty-tornado", sessionId, latestUncertainty?.total_uncertainty_pct],
-  queryFn: () => resultsApi.getPlot(sessionId ?? "", "uncertainty_tornado", {
-    total_pct: latestUncertainty?.total_uncertainty_pct ?? 0,
-    measurement_pct: latestUncertainty?.components.measurement ?? 0,
-    vertical_pct: latestUncertainty?.components.vertical_extrapolation ?? 0,
-    mcp_pct: latestUncertainty?.components.mcp ?? 0,
-    future_pct: latestUncertainty?.components.future_variability ?? 0,
-  }),
-  enabled: sessionId !== null && latestUncertainty !== null,
-  staleTime: 10_000,
-});
-```
-
-Alongside the uncertainty form, replace the `definition-list` output with:
-
-```tsx
-<div className="panel-grid panel-grid-two">
-  <article className="content-card stack-gap">
-    {/* ... existing uncertainty form fields ... */}
-  </article>
-  <article className="content-card stack-gap">
-    <PlotlyFigure plot={uncertaintyTornadoQuery.data} emptyTitle="Run uncertainty first" emptyDetail="" />
-    {latestUncertainty ? (
-      <div className="metric-grid">
-        <MetricCard label="Total" value={`${latestUncertainty.total_uncertainty_pct.toFixed(2)}%`} tone="accent" />
-        <MetricCard label="P75" value={latestUncertainty.p_factors.p75.toFixed(4)} />
-        <MetricCard label="P90" value={latestUncertainty.p_factors.p90.toFixed(4)} />
-        <MetricCard label="P99" value={latestUncertainty.p_factors.p99.toFixed(4)} />
-      </div>
-    ) : null}
-  </article>
-</div>
-```
-
----
-
-### Step 8.3: Uncertainty form UX improvements
-
-In the existing uncertainty form on `LtcPage.tsx`:
-
-1. **Replace `shear_method` text input** with a `<select>`:
-```tsx
-<select value={uncShearMethod} onChange={(event) => setUncShearMethod(event.target.value)}>
-  <option value="simple_power_law">Simple Power Law</option>
-  <option value="log_law">Log Law</option>
-  <option value="momm_power_law">MoMM Power Law</option>
-</select>
-```
-
-2. **Auto-populate from session state** where possible:
-- `uncMeasurementHeight`: default from the tallest speed sensor height
-- `uncHubHeight`: default from `configQuery.data?.hub_height_m`
-- `uncRsq`: auto-fill from the latest LTC result's metrics `r_squared` if available
-- `uncHours`: auto-fill from concurrent data point count in latest LTC result
-
-Add a `useEffect` that populates these when LTC results change:
-
-```tsx
-useEffect(() => {
-  const latest = ltcResultsQuery.data?.results[ltcResultsQuery.data.results.length - 1];
-  if (latest?.metrics) {
-    const r2 = latest.metrics.r_squared ?? latest.metrics.r2;
-    if (typeof r2 === "number") setUncRsq(String(r2.toFixed(4)));
-    const concurrent = latest.metrics.concurrent_points ?? latest.metrics.n_concurrent;
-    if (typeof concurrent === "number") setUncHours(String(concurrent));
-  }
-}, [ltcResultsQuery.data]);
-```
-
-3. **Show which algorithm's metrics are being used** as a hint:
-```tsx
-<small className="field-help">
-  Auto-populated from {latestAlgorithm ?? "latest"} LTC result. Override to customize.
-</small>
-```
-
----
-
-### Step 8.4: Algorithm help panel
-
-Add inline help descriptions for each algorithm. Create a constant map:
-
-**Create or update file: `frontend/src/lib/algorithmHelp.ts`**
-
-```typescript
-export const algorithmHelp: Record<string, { label: string; description: string; recommended: string }> = {
-  linear_least_squares: {
-    label: "Linear Least Squares (Robust Huber)",
-    description: "Iteratively reweighted least squares using Huber loss. Down-weights outlier residuals while preserving the linear relationship. Preferred when the measurement period contains anomalous readings.",
-    recommended: "General purpose. Good when R² > 0.85.",
-  },
-  total_least_squares: {
-    label: "Total Least Squares (Orthogonal)",
-    description: "Fits the line minimizing perpendicular distance to all points, accounting for measurement error in both the measured and reference datasets.",
-    recommended: "Use when both measured and reference data have comparable noise levels.",
-  },
-  speedsort: {
-    label: "SpeedSort",
-    description: "Piecewise linear: TLS fit above a threshold, dog-leg fit below. Industry standard for its stability at low wind speeds where regression bias is highest.",
-    recommended: "Industry standard. Recommended for bankable WRA.",
-  },
-  variance_ratio: {
-    label: "Variance Ratio",
-    description: "Distribution-matching method. Adjusts the reference data by matching the measured and reference standard deviations. Preserves the measured wind speed distribution shape.",
-    recommended: "Use when maintaining distribution shape matters more than point prediction accuracy.",
-  },
-  xgboost: {
-    label: "XGBoost (Machine Learning)",
-    description: "Gradient boosted decision trees with temporal and directional features. Captures non-linear patterns and interactions. Uses time-ordered cross-validation to prevent temporal leakage.",
-    recommended: "Use as a secondary check or when non-linear patterns exist. Not IEC-standard for standalone use.",
-  },
-};
-```
-
-Show below the algorithm dropdown on the LTC page:
-```tsx
-<small className="field-help">
-  {algorithmHelp[selectedLtcAlgorithm]?.description}
-  <br />
-  <strong>When to use:</strong> {algorithmHelp[selectedLtcAlgorithm]?.recommended}
-</small>
-```
 
 ---
 
@@ -2978,7 +2140,6 @@ Show below the algorithm dropdown on the LTC page:
 5. `test_plot_uncertainty_tornado_sorted` — Verify bars are sorted by magnitude.
 6. `test_plot_dispatch_new_names` — Verify `ltc_scatter`, `ltc_residuals`, `ltc_monthly`, `ltc_convergence`, `uncertainty_tornado` are all valid plot names via the API.
 
-**Update file: `frontend/src/pages/LtcPage.test.tsx`**
 
 1. `test_shows_diagnostic_panel_after_run` — Mock LTC results, verify scatter/residual containers mount.
 2. `test_algorithm_help_text_updates` — Change algorithm dropdown, verify help text changes.
@@ -2989,14 +2150,6 @@ Show below the algorithm dropdown on the LTC page:
 ### Step 8.6: Phase 8 validation checklist
 
 - [ ] `python -m pytest tests/ -v` — all tests pass
-- [ ] `npm --prefix frontend run build` — passes
-- [ ] LtcPage: run linear_least_squares → scatter & residual plots appear inline within 3s
-- [ ] LtcPage: run 2 algorithms → monthly comparison & convergence charts appear
-- [ ] LtcPage: click "View" on metrics table row → diagnostic panel switches to that algorithm
-- [ ] LtcPage: run uncertainty → tornado chart renders sorted by magnitude with RSS annotation
-- [ ] LtcPage: algorithm dropdown shows help text per algorithm
-- [ ] LtcPage: long_col and long_dir_col are dropdown selects, not free-text inputs
-- [ ] LtcPage: uncertainty form auto-fills R² and concurrent hours from latest LTC result
 - [ ] No loose `<input>` where a `<select>` would be more appropriate
 
 ---
@@ -3006,140 +2159,6 @@ Show below the algorithm dropdown on the LTC page:
 **Goal**: Professional-grade map with distance rings and terrain context; data export capabilities (CSV, runconfig JSON); improved Reanalysis page with ERA5 comparison charts.
 
 **Prerequisite**: Phase 8 complete and tests passing.
-
----
-
-### Step 9.1: Enhanced Leaflet map
-
-**Update file: `frontend/src/components/common/GeoJsonMapRuntime.tsx`**
-
-Enhance the map with:
-
-**1. Distance rings from mast**
-
-After the `FitBounds` component, add a `DistanceRings` component:
-
-```tsx
-import { Circle } from "react-leaflet";
-
-function DistanceRings({ center }: { center: [number, number] }) {
-  const rings = [10, 25, 50]; // km
-  return (
-    <>
-      {rings.map((radiusKm) => (
-        <Circle
-          key={radiusKm}
-          center={center}
-          radius={radiusKm * 1000}
-          pathOptions={{
-            color: "var(--accent)",
-            weight: 1,
-            opacity: 0.35,
-            dashArray: "6 4",
-            fill: false,
-          }}
-        />
-      ))}
-    </>
-  );
-}
-```
-
-Detect the mast feature and extract its coordinates:
-```tsx
-const mastFeature = featureCollection.features.find(
-  (f) => f.properties.type === "mast"
-);
-const mastCenter: [number, number] | null = mastFeature
-  ? [mastFeature.geometry.coordinates[1] as number, mastFeature.geometry.coordinates[0] as number]
-  : null;
-```
-
-Render inside `MapContainer`:
-```tsx
-{mastCenter ? <DistanceRings center={mastCenter} /> : null}
-```
-
-**2. Terrain/topographic tile layer option**
-
-Add a layer toggle using React Leaflet's `LayersControl`:
-
-```tsx
-import { LayersControl, TileLayer } from "react-leaflet";
-
-<LayersControl position="topright">
-  <LayersControl.BaseLayer checked name="Street">
-    <TileLayer
-      attribution='...'
-      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-    />
-  </LayersControl.BaseLayer>
-  <LayersControl.BaseLayer name="Terrain">
-    <TileLayer
-      attribution='Map data © OpenStreetMap, Tiles © Stamen'
-      url="https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png"
-    />
-  </LayersControl.BaseLayer>
-  <LayersControl.BaseLayer name="Satellite">
-    <TileLayer
-      attribution='© Esri'
-      url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-    />
-  </LayersControl.BaseLayer>
-</LayersControl>
-```
-
-**3. Always-visible labels for ERA5 nodes**
-
-Replace plain popups with `Tooltip` that shows by default:
-
-```tsx
-import { Tooltip } from "react-leaflet";
-
-// Inside the GeoJSON onEachFeature callback:
-onEachFeature={(feature, layer) => {
-  const props = feature.properties as Record<string, unknown>;
-  const type = props.type;
-  if (type === "era5_node") {
-    layer.bindTooltip(
-      `${props.distance_km} km ${props.bearing}`,
-      { permanent: true, direction: "top", className: "map-node-label" }
-    );
-  }
-  layer.bindPopup(/* existing popup code */);
-}}
-```
-
-**4. Differentiated markers**
-
-Use different colors for mast vs ERA5 nodes:
-```tsx
-pointToLayer={(feature, latlng) => {
-  const isMast = (feature.properties as Record<string, unknown>).type === "mast";
-  return circleMarker(latlng, {
-    radius: isMast ? 10 : 6,
-    color: isMast ? "#c86a2a" : "#0b7a6f",
-    weight: isMast ? 3 : 2,
-    fillColor: isMast ? "#fffaf0" : "#f3efe3",
-    fillOpacity: 0.95,
-  });
-}}
-```
-
-**Add CSS for map labels:**
-
-**Update: `frontend/src/styles.css`**
-```css
-.map-node-label {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  padding: 2px 6px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-}
-```
 
 ---
 
@@ -3205,26 +2224,6 @@ app.include_router(exports_router, prefix="/api")
 
 ---
 
-### Step 9.3: Frontend export buttons
-
-**Update file: `frontend/src/lib/api.ts`**
-
-Add `exportsApi`:
-```typescript
-export const exportsApi = {
-  downloadTimeseries: (sessionId: string) =>
-    `${API_BASE}/sessions/${sessionId}/exports/timeseries`,
-  downloadLtc: (sessionId: string, algorithm: string) =>
-    `${API_BASE}/sessions/${sessionId}/exports/ltc/${algorithm}`,
-  downloadEnsemble: (sessionId: string) =>
-    `${API_BASE}/sessions/${sessionId}/exports/ensemble`,
-  downloadRunconfig: (sessionId: string) =>
-    `${API_BASE}/sessions/${sessionId}/exports/runconfig`,
-};
-```
-
----
-
 ### Step 9.4: Reanalysis page — ERA5 comparison charts
 
 **Update file: `server/tools/visualization.py`**
@@ -3269,7 +2268,6 @@ Add to `plot_dispatch`:
 "era5_measured_overlay": lambda: _plot_era5_measured_overlay(state),
 ```
 
-**Update file: `frontend/src/pages/ReanalysisPage.tsx`**
 
 After ERA5 extraction + interpolation completes, add:
 
@@ -3319,8 +2317,6 @@ Layout below the map:
 4. `test_plot_era5_comparison_traces` — Load 4 ERA5 nodes, call helper, verify 5 traces (4 nodes + interpolated).
 5. `test_plot_era5_measured_overlay` — Verify 2 traces and R² annotation.
 
-**Frontend tests:**
-
 1. `test_export_buttons_have_correct_urls` — Verify export button href contains correct session id and path.
 2. `test_map_renders_distance_rings` — Mock GeoJSON with mast feature, verify `Circle` components mount (3 rings at 10/25/50 km).
 
@@ -3329,15 +2325,9 @@ Layout below the map:
 ### Step 9.6: Phase 9 validation checklist
 
 - [ ] `python -m pytest tests/ -v` — all tests pass
-- [ ] `npm --prefix frontend run build` — passes
 - [ ] Map: mast shows orange marker, ERA5 nodes show teal markers with permanent distance labels
 - [ ] Map: 3 distance rings visible (10, 25, 50 km dashed circles)
 - [ ] Map: layer switcher offers Street/Terrain/Satellite tiles
-- [ ] DataPage: "Export Cleaned CSV" downloads a valid CSV file
-- [ ] LtcPage: per-algorithm CSV export buttons work
-- [ ] LtcPage: ensemble CSV export works
-- [ ] ResultsPage: download runconfig JSON works
-- [ ] ReanalysisPage: ERA5 comparison and measured overlay charts appear after interpolation
 - [ ] All downloads include proper Content-Disposition headers
 
 ---
@@ -3478,276 +2468,6 @@ Add to `plot_dispatch`:
 
 ---
 
-### Step 10.4: Frontend — Scenario management
-
-**Update file: `frontend/src/lib/api.ts`**
-
-Add to `analysisApi`:
-```typescript
-saveScenario: (sessionId: string, name: string) =>
-  requestJson<ApiStatusResponse>(
-    `/sessions/${sessionId}/scenarios`,
-    { method: "POST", body: JSON.stringify({ name }) },
-    sessionId,
-  ),
-listScenarios: (sessionId: string) =>
-  requestJson<ScenarioListResponse>(`/sessions/${sessionId}/scenarios`, {}, sessionId),
-deleteScenario: (sessionId: string, index: number) =>
-  requestJson<ApiStatusResponse>(
-    `/sessions/${sessionId}/scenarios/${index}`,
-    { method: "DELETE" },
-    sessionId,
-  ),
-```
-
-**Update file: `frontend/src/lib/types.ts`**
-
-Add:
-```typescript
-export interface ScenarioConfig {
-  shear_method: string;
-  shear_aggregation: string;
-  hub_height_m: number;
-  sensors_used: string[];
-  ltc_algorithm: string;
-  ltc_source: string;
-  cutoff_year: number | null;
-}
-
-export interface ScenarioResults {
-  long_term_mean_speed: number;
-  ensemble_mean_speed: number | null;
-  total_uncertainty_pct: number;
-  p50: number;
-  p75: number;
-  p90: number;
-  p99: number;
-  measurement_uncertainty_pct: number;
-  vertical_uncertainty_pct: number;
-  mcp_uncertainty_pct: number;
-  future_uncertainty_pct: number;
-}
-
-export interface Scenario {
-  name: string;
-  created_at: string;
-  config: ScenarioConfig;
-  results: ScenarioResults;
-}
-
-export interface ScenarioListResponse {
-  scenarios: Scenario[];
-}
-```
-
----
-
-### Step 10.5: ResultsPage redesign — Full dashboard
-
-**Update file: `frontend/src/pages/ResultsPage.tsx`**
-
-Restructure into a comprehensive results dashboard:
-
-**Section 1: Key metrics bar**
-```tsx
-<div className="metric-grid">
-  <MetricCard label="LT Mean Speed" value={bestLtMean ? `${bestLtMean.toFixed(2)} m/s` : "—"} tone="accent" />
-  <MetricCard label="Total Uncertainty" value={latestUncertainty ? `${latestUncertainty.total_uncertainty_pct.toFixed(2)}%` : "—"} />
-  <MetricCard label="P90 Factor" value={latestUncertainty ? latestUncertainty.p_factors.p90.toFixed(4) : "—"} />
-  <MetricCard label="Scenarios" value={String(scenariosQuery.data?.scenarios.length ?? 0)} />
-</div>
-```
-
-**Section 2: Scenario management (new)**
-```tsx
-<article className="content-card stack-gap">
-  <div className="split-header-row">
-    <span className="eyebrow">Scenario comparison</span>
-    <div className="button-row">
-      <input
-        type="text"
-        className="scenario-name-input"
-        placeholder="Scenario name"
-        value={scenarioName}
-        onChange={(e) => setScenarioName(e.target.value)}
-      />
-      <button
-        className="primary-button"
-        type="button"
-        disabled={!scenarioName.trim() || !latestUncertainty}
-        onClick={() => saveScenarioMutation.mutate(scenarioName)}
-      >
-        Save Current as Scenario
-      </button>
-    </div>
-  </div>
-
-  {scenariosQuery.data?.scenarios.length ? (
-    <>
-      <PlotlyFigure
-        plot={scenarioComparisonQuery.data}
-        emptyTitle="Scenarios saved"
-        emptyDetail="Save at least 2 scenarios to see the comparison chart."
-      />
-      <DataTable
-        columns={[
-          { key: "name", header: "Scenario", cell: (row) => row.name },
-          { key: "lt_mean", header: "LT Mean (m/s)", cell: (row) => row.results.long_term_mean_speed.toFixed(2) },
-          { key: "unc", header: "Uncertainty %", cell: (row) => row.results.total_uncertainty_pct.toFixed(2) },
-          { key: "p75", header: "P75", cell: (row) => row.results.p75.toFixed(4) },
-          { key: "p90", header: "P90", cell: (row) => row.results.p90.toFixed(4) },
-          { key: "shear", header: "Shear Method", cell: (row) => row.config.shear_method },
-          { key: "ltc", header: "LTC Algorithm", cell: (row) => row.config.ltc_algorithm },
-          { key: "hub", header: "Hub Height", cell: (row) => `${row.config.hub_height_m} m` },
-          {
-            key: "delete",
-            header: "",
-            cell: (row, index) => (
-              <button className="ghost-button table-action" onClick={() => deleteScenarioMutation.mutate(index)}>
-                Remove
-              </button>
-            ),
-          },
-        ]}
-        rows={scenariosQuery.data.scenarios}
-        getRowKey={(row, index) => `${row.name}-${index}`}
-        emptyTitle="No scenarios saved"
-        emptyDetail=""
-      />
-    </>
-  ) : (
-    <EmptyState
-      title="No scenarios yet"
-      detail="Complete the LTC workflow with uncertainty, then save the current result as a named scenario. Save multiple scenarios to compare shear methods, algorithms, or hub heights."
-    />
-  )}
-</article>
-```
-
-**Section 3: Analysis charts (existing, kept)**
-Keep the existing annual means, LTC comparison, uncertainty, and site map panels.
-
-**Section 4: Custom plots + Exports (existing, kept)**
-Keep the existing custom plot requestor and runconfig export.
-
-**Add the scenario queries and mutations:**
-```tsx
-const scenariosQuery = useQuery({
-  queryKey: ["scenarios", sessionId],
-  queryFn: () => analysisApi.listScenarios(sessionId ?? ""),
-  enabled: sessionId !== null,
-  staleTime: 10_000,
-});
-
-const scenarioComparisonQuery = useQuery({
-  queryKey: ["scenario-comparison", sessionId, scenariosQuery.data?.scenarios.length],
-  queryFn: () => resultsApi.getPlot(sessionId ?? "", "scenario_comparison", {}),
-  enabled: sessionId !== null && (scenariosQuery.data?.scenarios.length ?? 0) >= 2,
-  staleTime: 10_000,
-});
-
-const saveScenarioMutation = useMutation({
-  mutationFn: (name: string) => analysisApi.saveScenario(sessionId ?? "", name),
-  onSuccess: () => {
-    setScenarioName("");
-    void queryClient.invalidateQueries({ queryKey: ["scenarios", sessionId] });
-  },
-});
-
-const deleteScenarioMutation = useMutation({
-  mutationFn: (index: number) => analysisApi.deleteScenario(sessionId ?? "", index),
-  onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["scenarios", sessionId] }),
-});
-```
-
----
-
-### Step 10.6: OverviewPage — Project scorecard (enhanced)
-
-**Update file: `frontend/src/pages/OverviewPage.tsx`**
-
-Add a "Data Quality Scorecard" section if timeseries is loaded:
-
-```tsx
-{projectSummary?.timeseries_loaded ? (
-  <article className="content-card stack-gap">
-    <span className="eyebrow">Data quality scorecard</span>
-    <div className="metric-grid">
-      <MetricCard
-        label="Sensors"
-        value={String(projectSummary?.sensor_count ?? 0)}
-      />
-      <MetricCard
-        label="Average coverage"
-        value={projectSummary?.avg_coverage_pct ? `${Number(projectSummary.avg_coverage_pct).toFixed(1)}%` : "—"}
-        tone={Number(projectSummary?.avg_coverage_pct ?? 0) > 90 ? "accent" : "warn"}
-      />
-      <MetricCard
-        label="Cleaning rules"
-        value={String(projectSummary?.cleaning_rules_applied ?? 0)}
-      />
-      <MetricCard
-        label="LTC algorithms"
-        value={String(projectSummary?.ltc_algorithms_run?.length ?? 0)}
-      />
-    </div>
-  </article>
-) : null}
-```
-
-This requires the `/summary` endpoint to return a few more fields.
-
-**Update file: `server/api/routes/config.py`** (the `get_summary` handler)
-
-Add to the summary response:
-```python
-"sensor_count": len(state.sensor_mapping) if state.sensor_mapping else 0,
-"avg_coverage_pct": _avg_coverage(state),
-"ltc_algorithms_run": list(state.ltc_results.keys()),
-"scenario_count": len(state.scenarios),
-```
-
-Where `_avg_coverage` computes the mean non-null fraction across all mapped speed sensors.
-
----
-
-### Step 10.7: CSS additions for new components
-
-**Update file: `frontend/src/styles.css`**
-
-Add:
-```css
-.scenario-name-input {
-  padding: 0.6rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface-strong);
-  font-family: var(--display);
-  min-width: 200px;
-}
-
-.scenario-name-input:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.sensor-detail-card {
-  border-left: 3px solid var(--accent);
-}
-
-.split-header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-```
-
-Note: if `.split-header-row` already exists in the CSS (it is used on ResultsPage), skip that addition.
-
----
-
 ### Step 10.8: Tests for Phase 10
 
 **Create file: `tests/test_phase10.py`**
@@ -3759,8 +2479,6 @@ Note: if `.split-header-row` already exists in the CSS (it is used on ResultsPag
 5. `test_scenario_without_uncertainty_fails` — Attempt to save scenario without running uncertainty first → expect 400 error.
 6. `test_summary_includes_scenario_count` — Save scenario, GET `/summary`, verify `scenario_count` = 1.
 
-**Frontend tests:**
-
 1. `test_save_scenario_button_disabled_without_name` — Verify button is disabled when scenario name is empty.
 2. `test_scenario_table_renders_rows` — Mock 2 scenarios, verify table shows 2 rows.
 
@@ -3769,12 +2487,6 @@ Note: if `.split-header-row` already exists in the CSS (it is used on ResultsPag
 ### Step 10.9: Phase 10 validation checklist
 
 - [ ] `python -m pytest tests/ -v` — all tests pass
-- [ ] `npm --prefix frontend run build` — passes
-- [ ] ResultsPage: type scenario name → click "Save Current" → scenario appears in table
-- [ ] ResultsPage: save 2+ scenarios → comparison bar chart renders with P-factor lines
-- [ ] ResultsPage: delete scenario → table updates, chart re-renders if ≥2 remain
-- [ ] ResultsPage: scenario table shows all config columns (shear method, algorithm, hub height)
-- [ ] OverviewPage: scorecard shows sensor count, coverage, cleaning rules, LTC count
 - [ ] Full workflow: upload → clean → shear → ERA5 → LTC → uncertainty → save scenario → change shear → re-run → save second scenario → compare both
 - [ ] No scenarios have null/undefined fields in the results section
 
@@ -3790,7 +2502,7 @@ Note: if `.split-header-row` already exists in the CSS (it is used on ResultsPag
 
 ### Phase 11 Design Principles
 
-- The import-and-run pipeline is a single synchronous API call — no multi-step orchestration from the frontend.
+- The import-and-run pipeline is a single synchronous API call — no multi-step orchestration from a frontend client.
 - The pipeline reuses existing shared helpers (`_run_ltc_*`, `_run_ensemble`, `_calculate_uncertainty`, `_build_scenario_snapshot`) rather than reimplementing any logic.
 - Runconfig overrides are **merged** into the current session state, not replaced. This allows partial configs (e.g., only changing `hub_height_m`).
 - The pipeline auto-resolves LTC column names from the current sensor mapping and ERA5 interpolation state.
@@ -3872,73 +2584,6 @@ Add two new routes:
 
 ---
 
-### Step 11.4: Frontend — Types and API client
-
-**File: `frontend/src/lib/types.ts`**
-
-Add:
-```typescript
-export interface RunScenarioUncertaintyParams {
-  measurement_uncertainty_pct: number;
-  measurement_height_m: number;
-  hub_height_m: number;
-  shear_method: string;
-  mcp_r_squared: number;
-  concurrent_hours: number;
-  algorithm?: string;
-  iav_pct?: number;
-  shear_std?: number;
-  is_interpolation?: boolean;
-}
-
-export interface RunScenarioRequest {
-  name: string;
-  runconfig?: Record<string, JsonValue>;
-  ltc_algorithms?: string[];
-  uncertainty?: RunScenarioUncertaintyParams | null;
-}
-
-export interface RunScenarioResponse {
-  status: string;
-  scenario_index: number;
-  name: string;
-  steps_completed: string[];
-  scenario: Scenario;
-}
-```
-
-**File: `frontend/src/lib/api.ts`**
-
-Add to `analysisApi`:
-```typescript
-importRunconfig: (sessionId, runconfig) => requestJson(...)
-runScenario: (sessionId, body: RunScenarioRequest) => requestJson(...)
-```
-
----
-
-### Step 11.5: Frontend — Import & Run Scenario UI
-
-**File: `frontend/src/pages/ResultsPage.tsx`**
-
-Add a new `<article>` section between the scenario comparison card and the plots grid:
-
-- **File input** (`<input type="file" accept=".json">`) for uploading a runconfig JSON file.
-- **Scenario name input** — auto-populated from `project_name` in the uploaded JSON, or fallback to the filename.
-- **JSON preview** — collapsible `<details>` showing the parsed config with key count.
-- **"Run Scenario from Config" button** — disabled when no file is uploaded or name is empty; shows "Running pipeline…" during execution.
-- **Success message** — shows the scenario name and step count after successful execution.
-- On success: invalidates scenario, LTC results, and runconfig queries.
-
-State variables:
-- `importedRunconfig: Record<string, JsonValue> | null`
-- `importScenarioName: string`
-- `fileInputRef: RefObject<HTMLInputElement>`
-
-The `handleRunconfigFile` callback reads the file via `FileReader`, validates it is a JSON object, and auto-fills the scenario name.
-
----
-
 ### Step 11.6: Tests
 
 **Backend tests** (added to `tests/test_phase10.py`):
@@ -3949,8 +2594,6 @@ The `handleRunconfigFile` callback reads the file via `FileReader`, validates it
 4. `test_run_scenario_multiple_algorithms` — POST with `["speedsort", "variance_ratio"]`, verify ensemble step appears.
 5. `test_run_scenario_without_timeseries_fails` — POST without loading data, expect 400.
 
-**Frontend tests** (added to `frontend/src/pages/ResultsPage.test.tsx`):
-
 1. `test_import_run_section_disabled_by_default` — Verify run button is disabled when no file is loaded.
 2. `test_upload_json_enables_run_button` — Upload a mock JSON file, verify button enables and `runScenario` is called on click.
 
@@ -3959,12 +2602,6 @@ The `handleRunconfigFile` callback reads the file via `FileReader`, validates it
 ### Step 11.7: Phase 11 validation checklist
 
 - [ ] `python -m pytest tests/ -v` — all tests pass (81 total)
-- [ ] `npm --prefix frontend run test -- --run` — all tests pass (36 total)
-- [ ] `npm --prefix frontend run build` — TypeScript compiles, production build succeeds
-- [ ] ResultsPage: upload runconfig.json → name auto-fills → click "Run Scenario from Config" → scenario appears in table
-- [ ] ResultsPage: upload partial config (only `hub_height_m`) → pipeline runs with existing session data
-- [ ] ResultsPage: upload config without timeseries loaded → 400 error displayed
-- [ ] ResultsPage: run 2+ imported scenarios → comparison chart updates
 - [ ] API: `POST /scenarios/run` with explicit uncertainty params → result reflects custom values
 - [ ] API: `POST /scenarios/run` with multiple LTC algorithms → ensemble step executed
 
@@ -3979,17 +2616,16 @@ The `handleRunconfigFile` callback reads the file via `FileReader`, validates it
 | 3 | server/tools/era5.py, server/tools/ltc.py, server/tools/ltc_ml.py, server/tools/air_density.py, tests/test_phase3.py | 11 tools |
 | 4 | server/tools/ensemble.py, server/tools/clipping.py, server/tools/homogeneity.py, server/tools/uncertainty.py, server/tools/visualization.py, server/tools/map.py, tests/test_phase4.py | 19 tools |
 | 5 | tests/test_e2e.py, Dockerfile, docker-compose.yml, .env.example, README.md | — |
-| 6 | server/api/*, server/state/manager.py, frontend/*, tests/test_api_sessions.py, tests/test_api_workflow.py | — |
-| 7 | Update: visualization.py (+5 helpers), results.py (+3 dispatches), analysis.py (+1 endpoint), schemas.py (+1 model), DataPage.tsx (redesign), SitePage.tsx (inline charts), HelpTooltip.tsx, styles.css, api.ts, types.ts, tests/test_phase7.py | — |
-| 8 | Update: visualization.py (+5 helpers), results.py (+5 dispatches), schemas.py (+1 field), LtcPage.tsx (workbench redesign), algorithmHelp.ts, tests/test_phase8.py | — |
-| 9 | New: server/api/routes/exports.py. Update: GeoJsonMapRuntime.tsx (rings, terrain, labels), ReanalysisPage.tsx (charts), visualization.py (+2 helpers), api.ts (exportsApi), DataPage/LtcPage/ResultsPage (export buttons), styles.css, tests/test_phase9.py | — |
-| 10 | Update: session.py (+scenarios), analysis.py (+3 endpoints), schemas.py (+1 model), visualization.py (+1 helper), ResultsPage.tsx (dashboard + scenarios), OverviewPage.tsx (scorecard), config.py (summary fields), api.ts, types.ts, styles.css, tests/test_phase10.py | — |
-| 11 | Update: schemas.py (+2 models), analysis.py (+2 endpoints, +3 helpers), config.py (re-export _sync_state_from_runconfig), api.ts (+2 methods), types.ts (+3 interfaces), ResultsPage.tsx (import & run UI), ResultsPage.test.tsx (+2 tests), test_phase10.py (+5 tests) | — |
+| 7 | Update: visualization.py (+5 helpers), results.py (+3 dispatches), analysis.py (+1 endpoint), schemas.py (+1 model), tests/test_phase7.py | — |
+| 8 | Update: visualization.py (+5 helpers), results.py (+5 dispatches), schemas.py (+1 field), tests/test_phase8.py | — |
+| 9 | New: server/api/routes/exports.py. Update: visualization.py (+2 helpers), tests/test_phase9.py | — |
+| 10 | Update: session.py (+scenarios), analysis.py (+3 endpoints), schemas.py (+1 model), visualization.py (+1 helper), config.py (summary fields), tests/test_phase10.py | — |
+| 11 | Update: schemas.py (+2 models), analysis.py (+2 endpoints, +3 helpers), config.py (re-export _sync_state_from_runconfig), test_phase10.py (+5 tests) | — |
 | **Total through Phase 11** | **~50 files modified/created** | **59 MCP tools + 20 plot helpers + 10 API endpoints** |
 
 ---
 
-## PHASE 12 — BrightHub Integration (MCP + Web API + Frontend)
+## PHASE 12 — BrightHub Integration (MCP + Web API)
 
 **Goal**: Authenticate with BrightHub, browse measurement locations, import timeseries + data model, and download ERA5/MERRA-2 reanalysis data — all accessible as MCP tools for AI assistants AND as REST API endpoints for the workflow web app.
 
@@ -4147,101 +2783,6 @@ app.include_router(brighthub_router, prefix="/api")
 
 ---
 
-### Step 12.4: Frontend BrightHub page
-
-**File: `frontend/src/pages/BrightHubPage.tsx`**
-
-Full page with:
-- Login form (client ID + client secret)
-- Measurement locations table (click to import)
-- Import options dialog (5 boolean checkboxes: cleaning log, cleaning rules, calibration, deadband offset, orientation offset)
-- Selected location detail (import progress, data model viewer)
-- Reanalysis node discovery + download
-- ERA5 source toggle (EarthDataHub / BrightHub radio buttons)
-- MERRA-2 always via BrightHub
-
-**Frontend types** (`frontend/src/lib/types.ts`):
-- `BrightHubLoginRequest`, `BrightHubLoginResponse`, `BrightHubStatusResponse`
-- `BrightHubMeasurementLocation`, `BrightHubLocationsResponse`
-- `BrightHubDataModelResponse`
-- `BrightHubReanalysisNode`, `BrightHubReanalysisNodesResponse`
-- `BrightHubReanalysisDownloadResponse` (with `source` field)
-- `BrightHubImportLocationRequest` (with 5 boolean option fields)
-- `BrightHubImportLocationResponse`
-
-**Frontend API** (`frontend/src/lib/api.ts`):
-- `brighthubApi.login()`, `.logout()`, `.status()`, `.getLocations()`, `.getDataModel()`
-- `.getReanalysisNodes()`, `.downloadReanalysis(sessionId, dataset, nodes, source)`
-- `.importLocation(sessionId, req)`
-
-**Router** (`frontend/src/router.tsx`): Add `/brighthub` route with lazy-loaded `BrightHubPage`.
-
-**Workflow nav** (`frontend/src/lib/workflow.ts`): Add "BrightHub" step.
-```
-
-These return URL strings for direct browser download (no fetch needed — use `<a href>` or `window.open`).
-
-**Update file: `frontend/src/pages/DataPage.tsx`**
-
-Add export button in the metrics bar area:
-```tsx
-<button
-  className="secondary-button"
-  type="button"
-  disabled={!sensorsQuery.data?.length}
-  onClick={() => window.open(exportsApi.downloadTimeseries(sessionId ?? ""), "_blank")}
->
-  Export Cleaned CSV
-</button>
-```
-
-**Update file: `frontend/src/pages/LtcPage.tsx`**
-
-Add export buttons per algorithm in the metrics table:
-```tsx
-{
-  key: "export",
-  header: "Export",
-  cell: (row) => (
-    <button
-      className="ghost-button table-action"
-      type="button"
-      onClick={() => window.open(exportsApi.downloadLtc(sessionId ?? "", row.algorithm), "_blank")}
-    >
-      CSV
-    </button>
-  ),
-}
-```
-
-Add ensemble export button:
-```tsx
-{ensembleQuery.data?.available ? (
-  <button
-    className="secondary-button"
-    type="button"
-    onClick={() => window.open(exportsApi.downloadEnsemble(sessionId ?? ""), "_blank")}
-  >
-    Export Ensemble CSV
-  </button>
-) : null}
-```
-
-**Update file: `frontend/src/pages/ResultsPage.tsx`**
-
-Add runconfig JSON download alongside the existing "Export Runconfig" button:
-```tsx
-<button
-  className="secondary-button"
-  type="button"
-  onClick={() => window.open(exportsApi.downloadRunconfig(sessionId ?? ""), "_blank")}
->
-  Download Runconfig JSON
-</button>
-```
-
----
-
 ## PHASE 13 — WindKit Integration
 
 **Goal**: Integrate the DTU WindKit library (v2.0+) exposing all available functions as MCP tools and REST API endpoints.
@@ -4362,10 +2903,6 @@ Create the windkit tool package under `server/tools/windkit/`:
 - Add `"windkit"` to workspace subdirectories in `SessionManager`
 - Register all 9 tool module imports in `server/main.py`
 - Register WindKit router in `server/api/main.py`
-
-### Step 13.13: Frontend API client
-
-**File: `frontend/src/lib/windkitApi.ts`** — TypeScript API client with typed methods for all WindKit endpoints.
 
 ### Step 13.14: Tests
 

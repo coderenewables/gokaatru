@@ -22,7 +22,7 @@ if [[ -z "${DOMAIN:-}" || -z "${LETSENCRYPT_EMAIL:-}" ]]; then
   exit 1
 fi
 
-echo "[1/7] Preparing Python virtual environment"
+echo "[1/6] Preparing Python virtual environment"
 if [[ ! -d .venv ]]; then
   python3 -m venv .venv
 fi
@@ -30,13 +30,7 @@ fi
 ./.venv/bin/python -m pip install --upgrade pip setuptools wheel
 ./.venv/bin/pip install -e ".[ml]"
 
-echo "[2/7] Building frontend assets"
-cd frontend
-npm ci
-npm run build
-cd "${APP_DIR}"
-
-echo "[3/7] Installing systemd service for API"
+echo "[2/6] Installing systemd service for API"
 sudo tee /etc/systemd/system/gokaatru-api.service >/dev/null <<EOF
 [Unit]
 Description=GoKaatru FastAPI Service
@@ -55,7 +49,7 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-echo "[4/7] Installing systemd service for MCP SSE"
+echo "[3/6] Installing systemd service for MCP SSE"
 sudo tee /etc/systemd/system/gokaatru-mcp.service >/dev/null <<EOF
 [Unit]
 Description=GoKaatru MCP SSE Service
@@ -74,7 +68,7 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-echo "[5/7] Writing Caddy reverse-proxy config"
+echo "[4/6] Writing Caddy reverse-proxy config"
 sudo tee /etc/caddy/Caddyfile >/dev/null <<EOF
 ${DOMAIN} {
   encode zstd gzip
@@ -85,19 +79,15 @@ ${DOMAIN} {
 
   @mcp path /sse /sse/*
   reverse_proxy @mcp 127.0.0.1:8080
-
-  root * ${APP_DIR}/frontend/dist
-  try_files {path} /index.html
-  file_server
 }
 EOF
 
-echo "[6/7] Reloading and starting services"
+echo "[5/6] Reloading and starting services"
 sudo systemctl daemon-reload
 sudo systemctl enable gokaatru-api gokaatru-mcp caddy
 sudo systemctl restart gokaatru-api gokaatru-mcp caddy
 
-echo "[7/7] Deployment status"
+echo "[6/6] Deployment status"
 sudo systemctl --no-pager --full status gokaatru-api | sed -n '1,12p'
 sudo systemctl --no-pager --full status gokaatru-mcp | sed -n '1,12p'
 sudo systemctl --no-pager --full status caddy | sed -n '1,12p'

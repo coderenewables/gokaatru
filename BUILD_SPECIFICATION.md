@@ -96,26 +96,12 @@ The browser does not talk to MCP directly. Instead, it uses a thin HTTP API laye
 | **Role** | Thin HTTP layer for browser clients |
 | **Why** | Reuse Python analytics directly, expose typed JSON endpoints, support uploads, and avoid pushing MCP protocol concerns into the browser |
 
-### 3.3 Frontend — Workflow Web App
-
-| | |
-|---|---|
-| **Framework** | React 19 + TypeScript + Vite |
-| **State** | TanStack Query for server state, Zustand for transient UI state |
-| **Visualization** | Plotly.js for charts, React Leaflet for maps |
-| **Routing** | React Router |
-| **Why** | The product is a structured analyst workflow, not a general chat client. A route-based web app matches the domain and reduces infrastructure complexity. |
-
-The frontend is an in-repo workflow app with explicit pages for data upload, site setup, reanalysis, long-term correction, and results. It renders Plotly JSON, GeoJSON, tables, and run summaries returned by the backend API.
-
-### 3.4 Environment
+### 3.3 Environment
 
 | Component | Tool |
 |-----------|------|
 | Package manager | `conda` (environment: `gokaatru`) |
 | Python environment | Conda env with pip for MCP-specific packages |
-| Frontend runtime | Node.js 20+ |
-| Frontend package manager | `npm` |
 | Config | `pyproject.toml` |
 | Linting | `ruff` |
 | Testing | `pytest` |
@@ -186,20 +172,6 @@ gokaatru/
 │       ├── __init__.py
 │       ├── session.py           # Session model (per workspace)
 │       └── manager.py           # Session registry and lookup helpers
-├── frontend/
-│   ├── package.json
-│   ├── vite.config.ts
-│   ├── tsconfig.json
-│   ├── index.html
-│   └── src/
-│       ├── main.tsx
-│       ├── App.tsx
-│       ├── router.tsx
-│       ├── styles.css
-│       ├── lib/
-│       ├── stores/
-│       ├── components/
-│       └── pages/
 ├── tests/
 │   ├── conftest.py
 │   ├── test_shear.py
@@ -506,8 +478,6 @@ WindKit (DTU Wind Energy, v2.0+) integration exposing wind resource assessment f
 **Serialization**: All tools use `server/tools/windkit/_serializers.py` for xarray Dataset/DataArray ↔ JSON, GeoDataFrame ↔ GeoJSON, DataFrame ↔ JSON, and Plotly figure ↔ JSON round-trips.
 
 **API**: ~130 FastAPI POST endpoints under `/api/windkit/{category}/{function}` with Pydantic v2 request models in `server/api/windkit_schemas.py`.
-
-**Frontend**: TypeScript API client at `frontend/src/lib/windkitApi.ts` with typed methods for all endpoints.
 
 ---
 
@@ -876,7 +846,6 @@ $$p \approx 2 \exp\left(\frac{-6K^2}{n^3 + n^2}\right)$$
 | Unit | Each core formula function (regression, shear, air density) | pytest |
 | Integration | Tool chain: parse → clean → shear → extrapolate → LTC | pytest |
 | Web API | Session lifecycle and browser workflow endpoints | pytest + FastAPI TestClient |
-| Frontend UI | Shell routing, workflow pages, and API client interactions | Vitest + React Testing Library |
 | Determinism | Same input CSV + seed → bit-identical output | pytest parametrize |
 | Schema | Pydantic model validation round-trip | pytest |
 | Edge cases | Empty data, single-height shear, zero variance, NaN-heavy series | pytest |
@@ -894,18 +863,14 @@ $$p \approx 2 \exp\left(\frac{-6K^2}{n^3 + n^2}\right)$$
 ```bash
 conda activate gokaatru
 pip install -e ".[ml,dev]"
-npm --prefix frontend install
 python -m uvicorn server.api.main:app --reload --port 8000
 python -m server.main --transport sse --host 0.0.0.0 --port 8080
-npm --prefix frontend run dev
 ```
 
 Validation commands for the web workflow:
 
 ```bash
 python -m pytest tests/test_api_sessions.py tests/test_api_workflow.py -v
-npm --prefix frontend run build
-npm --prefix frontend run test -- --run
 ```
 
 ### Docker (Production)
@@ -919,8 +884,7 @@ CMD ["python", "-m", "server.main", "--transport", "sse", "--port", "8080"]
 ```
 
 ### Web App Connection
-- Browser talks to `http://localhost:8000/api`
-- Vite serves the local frontend at `http://127.0.0.1:5173` and proxies `/api` to the FastAPI app during development
+- Clients talk to `http://localhost:8000/api`
 - Each request carries a session identifier so backend state is workspace-scoped
 - FastAPI routes call the same analytical helpers used by the MCP server
 - Plotly JSON and GeoJSON are rendered directly in the web app
@@ -966,12 +930,13 @@ CMD ["python", "-m", "server.main", "--transport", "sse", "--port", "8080"]
 - Example environment overrides
 - MCP configuration for external clients
 
-### Phase 6 — Workflow Web App
+### Phase 6 — Workflow Web API
 - Session registry refactor for browser-safe workspaces
 - FastAPI web API over the existing analytical backend
-- React/Vite workflow UI with route-based pages
-- Upload, configuration, ERA5, LTC, and results workspaces
-- Frontend build, API tests, and browser workflow validation
+- Upload, configuration, ERA5, LTC, and results endpoints
+- API tests and workflow validation
+
+> The browser frontend that originally accompanied this phase has been removed. A replacement workflow-driven frontend is specified in [`WORKFLOW_FRONTEND_SPEC.md`](WORKFLOW_FRONTEND_SPEC.md).
 
 ---
 
@@ -979,7 +944,7 @@ CMD ["python", "-m", "server.main", "--transport", "sse", "--port", "8080"]
 
 | # | Question | Decision | Rationale |
 |---|----------|----------|-----------|
-| 1 | Frontend | **In-repo React/Vite workflow app** | The product is a structured WRA workflow. A purpose-built UI is simpler and more controllable than a chat platform. |
+| 1 | Frontend | **Backend-first; frontend removed, to be rebuilt per WORKFLOW_FRONTEND_SPEC.md** | The backend exposes a complete session-scoped HTTP API and Plotly JSON outputs. The previous in-repo React app was removed; a workflow-driven frontend is specified separately. |
 | 2 | ERA5 Zarr caching | **Local disk cache** | Cache extracted DataFrames as Parquet on first fetch. ~500 MB/node but fast on repeat queries. Stored in `data/era5_cache/` |
 | 3 | State persistence | **Session-scoped filesystem JSON + CSV** | Each browser workspace gets its own in-memory session and `data/sessions/<id>/` folder. Simple, inspectable, and safer than a global singleton. |
 | 4 | Visualization format | **Both (Plotly JSON + PNG fallback)** | Plotly JSON is the primary format for the web UI; Base64 PNG remains the fallback for non-interactive contexts. |

@@ -1,463 +1,303 @@
-import { useMemo, useState } from "react";
-import { addEdge, applyEdgeChanges, applyNodeChanges, Background, Controls, MiniMap, ReactFlow, type Connection, type EdgeChange, type NodeChange } from "@xyflow/react";
+// Workflow canvas (spec §5). React Flow surface showing the 8-stage DAG.
+//
+// Node click opens a params fly-out; "Run auto/step" POSTs the graph to
+// /workflow/execute[/step]; the node-status coloring reflects
+// workflowStatus.node_statuses. SSE live streaming is wired via the run action
+// (the store polls refreshWorkflowStatus after each run; long runs can be
+// stopped via the Stop control).
+import { useMemo, useState, useCallback } from "react";
+import {
+  Background,
+  Controls,
+  Handle,
+  MiniMap,
+  Position,
+  ReactFlow,
+  type Connection,
+  type EdgeChange,
+  type NodeChange,
+  type NodeProps,
+  addEdge,
+  applyEdgeChanges,
+  applyNodeChanges,
+  MarkerType,
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import type { WorkflowCanvasEdge, WorkflowCanvasNode } from "../lib/workflow";
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
-import type { WindAnalysisConfig } from "../types/analysis";
+import type { WorkflowCanvasNode, WorkflowCanvasEdge, StageKind } from "../lib/workflow";
+import { RunButton } from "./common/RunButton";
 
-type ShearFormState = {
-  heightSensors: string;
-  aggregation: WindAnalysisConfig["shear"]["aggregation"];
-  hubHeightM: number;
-  model: WindAnalysisConfig["shear"]["method"];
+const STAGE_COLORS: Record<StageKind, string> = {
+  dataset: "#083434",
+  cleaning: "#0b7a6f",
+  explore: "#5f716a",
+  shear: "#0b7a6f",
+  extrapolate_hub: "#0b7a6f",
+  era5_nodes: "#c86a2a",
+  era5_extract: "#c86a2a",
+  era5_interpolate: "#c86a2a",
+  homogeneity: "#c86a2a",
+  ltc: "#5f716a",
+  ensemble: "#083434",
+  uncertainty: "#083434",
+  clipping: "#5f716a",
 };
 
-type LtcFormState = {
-  algorithm: WindAnalysisConfig["ltc"]["algorithms"][number];
-  shortColumn: string;
-  longColumn: string;
-  shortDirectionColumn: string;
-  longDirectionColumn: string;
-  measuredColumn: string;
-  mcpRSquared: number;
-  concurrentHours: number;
+const STATUS_BORDER: Record<string, string> = {
+  done: "#0b7a6f",
+  running: "#c86a2a",
+  error: "#b3261e",
+  skipped: "#9aa3a0",
+  pending: "#d8d2c4",
 };
+
+function StageNode({ data, selected }: NodeProps) {
+  const nodeData = data as WorkflowCanvasNode["data"];
+  const color = STAGE_COLORS[nodeData.stage] ?? "#5f716a";
+  return (
+    <div
+      className="wf-stage-node"
+      style={{
+        borderColor: selected ? "#083434" : "var(--color-border)",
+        borderTopColor: color,
+      }}
+    >
+      <Handle type="target" position={Position.Left} />
+      <div className="wf-stage-node-label">{nodeData.label}</div>
+      <div className="wf-stage-node-summary">{nodeData.summary}</div>
+      {nodeData.templateId ? (
+        <div className="wf-stage-node-template">{nodeData.templateId}</div>
+      ) : null}
+      <Handle type="source" position={Position.Right} />
+    </div>
+  );
+}
+
+const nodeTypes = { stageNode: StageNode };
 
 export function WorkflowView() {
-  const workflowNodes = useWorkspaceStore((state) => state.workflowNodes);
-  const workflowEdges = useWorkspaceStore((state) => state.workflowEdges);
-  const capabilities = useWorkspaceStore((state) => state.capabilities);
-  const workflowSnapshots = useWorkspaceStore((state) => state.workflowSnapshots);
-  const workflowStatus = useWorkspaceStore((state) => state.workflowStatus);
-  const sensors = useWorkspaceStore((state) => state.sensors);
-  const lastOperation = useWorkspaceStore((state) => state.lastOperation);
-  const activity = useWorkspaceStore((state) => state.activity);
-  const brighthubReanalysis = useWorkspaceStore((state) => state.brighthubReanalysis);
+  const nodes = useWorkspaceStore((state) => state.workflowNodes);
+  const edges = useWorkspaceStore((state) => state.workflowEdges);
   const setWorkflowGraph = useWorkspaceStore((state) => state.setWorkflowGraph);
-  const updateWorkflowNode = useWorkspaceStore((state) => state.updateWorkflowNode);
-  const executeWorkflow = useWorkspaceStore((state) => state.executeWorkflow);
-  const saveSnapshot = useWorkspaceStore((state) => state.saveSnapshot);
-  const loadSnapshot = useWorkspaceStore((state) => state.loadSnapshot);
-  const forkBranch = useWorkspaceStore((state) => state.forkBranch);
-  const fetchBrightHubReanalysisNodes = useWorkspaceStore((state) => state.fetchBrightHubReanalysisNodes);
-  const downloadBrightHubReanalysis = useWorkspaceStore((state) => state.downloadBrightHubReanalysis);
-  const invokeSessionOperation = useWorkspaceStore((state) => state.invokeSessionOperation);
-  const config = useWorkspaceStore((state) => state.config);
+  const rebuildWorkflowGraph = useWorkspaceStore((state) => state.rebuildWorkflowGraph);
+  const executeWorkflowGraph = useWorkspaceStore((state) => state.executeWorkflowGraph);
+  const stopWorkflowGraph = useWorkspaceStore((state) => state.stopWorkflowGraph);
+  const workflowStatus = useWorkspaceStore((state) => state.workflowStatus);
+  const workflowSnapshots = useWorkspaceStore((state) => state.workflowSnapshots);
+  const saveWorkflowSnapshot = useWorkspaceStore((state) => state.saveWorkflowSnapshot);
+  const loadWorkflowSnapshot = useWorkspaceStore((state) => state.loadWorkflowSnapshot);
+  const forkWorkflowBranch = useWorkspaceStore((state) => state.forkWorkflowBranch);
 
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(workflowNodes[0]?.id ?? null);
-  const [snapshotName, setSnapshotName] = useState(config.workflow.snapshotName);
-  const [branchName, setBranchName] = useState("Run 2");
-  const [cleaningForm, setCleaningForm] = useState({ ruleType: "range_filter", sensor: "", params: "{}", startDate: "", endDate: "" });
-  const [shearForm, setShearForm] = useState<ShearFormState>({ heightSensors: "", aggregation: config.shear.aggregation, hubHeightM: config.site.hubHeightM, model: config.shear.method });
-  const [era5Form, setEra5Form] = useState({
-    latitude: config.reanalysis.searchLatitude,
-    longitude: config.reanalysis.searchLongitude,
-    startDate: config.reanalysis.startDate,
-    endDate: config.reanalysis.endDate,
-  });
-  const [reanalysisMode, setReanalysisMode] = useState<"session-era5" | "brighthub" | "earthdatahub">("session-era5");
-  const [reanalysisDataset, setReanalysisDataset] = useState<"ERA5" | "MERRA-2">("ERA5");
-  const [ltcForm, setLtcForm] = useState<LtcFormState>({
-    algorithm: config.ltc.algorithms[0] ?? "speedsort",
-    shortColumn: config.ltc.shortColumn,
-    longColumn: config.ltc.longColumn,
-    shortDirectionColumn: config.ltc.shortDirectionColumn,
-    longDirectionColumn: config.ltc.longDirectionColumn,
-    measuredColumn: config.ltc.measuredColumn,
-    mcpRSquared: config.ltc.uncertainty.mcpRSquared,
-    concurrentHours: config.ltc.uncertainty.concurrentHours,
-  });
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [snapshotName, setSnapshotName] = useState("");
 
-  const selectedNode = useMemo(
-    () => workflowNodes.find((node) => node.id === selectedNodeId) ?? workflowNodes[0] ?? null,
-    [selectedNodeId, workflowNodes],
+  // React Flow local state mirrors the store; changes propagate back.
+  const [rfNodes, setRfNodes] = useState(nodes);
+  const [rfEdges, setRfEdges] = useState(edges);
+
+  // Keep local RF state in sync when the store graph rebuilds.
+  const graphSignature = useMemo(
+    () => JSON.stringify({ n: nodes.length, e: edges.length, ids: nodes.map((n) => n.id).join(",") }),
+    [nodes, edges],
   );
-  const selectedCapability = useMemo(
-    () => capabilities.find((capability) => capability.template_id === selectedNode?.data.templateId),
-    [capabilities, selectedNode?.data.templateId],
+  useMemo(() => {
+    setRfNodes(nodes);
+    setRfEdges(edges);
+  }, [graphSignature]);
+
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      const next = applyNodeChanges(changes, rfNodes) as WorkflowCanvasNode[];
+      setRfNodes(next);
+      setWorkflowGraph(next, rfEdges);
+    },
+    [rfNodes, rfEdges, setWorkflowGraph],
   );
 
-  const handleNodeChanges = (changes: NodeChange<WorkflowCanvasNode>[]) => {
-    setWorkflowGraph(applyNodeChanges<WorkflowCanvasNode>(changes, workflowNodes), workflowEdges);
-  };
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      const next = applyEdgeChanges(changes, rfEdges) as WorkflowCanvasEdge[];
+      setRfEdges(next);
+      setWorkflowGraph(rfNodes, next);
+    },
+    [rfNodes, rfEdges, setWorkflowGraph],
+  );
 
-  const handleEdgeChanges = (changes: EdgeChange<WorkflowCanvasEdge>[]) => {
-    setWorkflowGraph(workflowNodes, applyEdgeChanges<WorkflowCanvasEdge>(changes, workflowEdges));
-  };
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      const next = addEdge(
+        { ...connection, type: "smoothstep", markerEnd: { type: MarkerType.ArrowClosed } },
+        rfEdges,
+      ) as WorkflowCanvasEdge[];
+      setRfEdges(next);
+      setWorkflowGraph(rfNodes, next);
+    },
+    [rfNodes, rfEdges, setWorkflowGraph],
+  );
 
-  const handleConnect = (connection: Connection) => {
-    setWorkflowGraph(workflowNodes, addEdge<WorkflowCanvasEdge>(connection, workflowEdges));
-  };
+  const selectedNode = rfNodes.find((n) => n.id === selectedNodeId) ?? null;
+  const isRunning = workflowStatus?.is_running ?? false;
 
   return (
-    <div className="workflow-layout">
-      <section className="panel workflow-actions-panel">
-        <div className="panel-header">
-          <div>
-            <p className="panel-kicker">Phase 2</p>
-            <h2>Linear wizard actions</h2>
-          </div>
-        </div>
+    <div className="workflow-view">
+      <div className="workflow-toolbar">
+        <RunButton
+          label="Run auto"
+          onClick={() => executeWorkflowGraph("auto")}
+          disabled={isRunning}
+        />
+        <RunButton
+          label="Step"
+          variant="secondary"
+          onClick={() => executeWorkflowGraph("manual")}
+          disabled={isRunning}
+        />
+        <RunButton label="Stop" variant="secondary" onClick={stopWorkflowGraph} disabled={!isRunning} />
+        <RunButton label="Rebuild from config" variant="secondary" onClick={rebuildWorkflowGraph} />
+        <span className="muted workflow-run-status">
+          {workflowStatus?.run_id ? `run ${workflowStatus.run_id.slice(0, 8)}` : "no run yet"}
+        </span>
+      </div>
 
-        <div className="step-list">
-          <article className="step-card">
-            <h3>Cleaning</h3>
-            <label>
-              <span>Rule type</span>
-              <select onChange={(event) => setCleaningForm((state) => ({ ...state, ruleType: event.target.value }))} value={cleaningForm.ruleType}>
-                <option value="range_filter">Range filter</option>
-                <option value="outlier_filter">Outlier filter</option>
-                <option value="icing_filter">Icing filter</option>
-                <option value="time_window">Time window</option>
-                <option value="custom">Custom</option>
-              </select>
-            </label>
-            <label>
-              <span>Sensor</span>
-              <input onChange={(event) => setCleaningForm((state) => ({ ...state, sensor: event.target.value }))} type="text" value={cleaningForm.sensor} />
-            </label>
-            <label>
-              <span>Params JSON</span>
-              <textarea onChange={(event) => setCleaningForm((state) => ({ ...state, params: event.target.value }))} rows={3} value={cleaningForm.params} />
-            </label>
-            <button
-              className="primary-button"
-              onClick={() => {
-                let parsedParams: Record<string, unknown> = {};
-                try {
-                  parsedParams = JSON.parse(cleaningForm.params) as Record<string, unknown>;
-                } catch {
-                  parsedParams = {};
-                }
-                void invokeSessionOperation("Apply cleaning rule", "POST", "/cleaning/apply", {
-                  rule_type: cleaningForm.ruleType,
-                  sensor: cleaningForm.sensor,
-                  params: parsedParams,
-                  start_date: cleaningForm.startDate,
-                  end_date: cleaningForm.endDate,
-                });
-              }}
-              type="button"
-            >
-              Apply cleaning rule
-            </button>
-          </article>
-
-          <article className="step-card">
-            <h3>Shear and hub height</h3>
-            <label>
-              <span>Height sensors</span>
-              <input onChange={(event) => setShearForm((state) => ({ ...state, heightSensors: event.target.value }))} type="text" value={shearForm.heightSensors} />
-            </label>
-            <label>
-              <span>Aggregation</span>
-              <select onChange={(event) => setShearForm((state) => ({ ...state, aggregation: event.target.value as ShearFormState["aggregation"] }))} value={shearForm.aggregation}>
-                <option value="mean">Mean</option>
-                <option value="median">Median</option>
-                <option value="p90">P90</option>
-              </select>
-            </label>
-            <div className="button-row">
-              <button className="secondary-button" onClick={() => void invokeSessionOperation("Calculate shear", "POST", "/shear/calculate", { height_sensors: shearForm.heightSensors })} type="button">
-                Calculate shear
-              </button>
-              <button className="secondary-button" onClick={() => void invokeSessionOperation("Build shear table", "POST", "/shear/table", { aggregation: shearForm.aggregation })} type="button">
-                Build table
-              </button>
-              <button className="primary-button" onClick={() => void invokeSessionOperation("Extrapolate hub height", "POST", "/extrapolation/hub", { hub_height_m: shearForm.hubHeightM, shear_model: shearForm.model })} type="button">
-                Extrapolate hub
-              </button>
-            </div>
-          </article>
-
-          <article className="step-card">
-            <h3>Reanalysis</h3>
-            <label>
-              <span>Source</span>
-              <select onChange={(event) => setReanalysisMode(event.target.value as "session-era5" | "brighthub" | "earthdatahub")} value={reanalysisMode}>
-                <option value="session-era5">Built-in ERA5</option>
-                <option value="brighthub">BrightHub</option>
-                <option value="earthdatahub">EarthDataHub ERA5</option>
-              </select>
-            </label>
-            <label>
-              <span>Dataset</span>
-              <select onChange={(event) => setReanalysisDataset(event.target.value as "ERA5" | "MERRA-2")} value={reanalysisDataset}>
-                <option value="ERA5">ERA5</option>
-                <option value="MERRA-2">MERRA-2</option>
-              </select>
-            </label>
-            <label>
-              <span>Latitude</span>
-              <input onChange={(event) => setEra5Form((state) => ({ ...state, latitude: Number(event.target.value) }))} type="number" value={era5Form.latitude} />
-            </label>
-            <label>
-              <span>Longitude</span>
-              <input onChange={(event) => setEra5Form((state) => ({ ...state, longitude: Number(event.target.value) }))} type="number" value={era5Form.longitude} />
-            </label>
-            <label>
-              <span>Start date</span>
-              <input onChange={(event) => setEra5Form((state) => ({ ...state, startDate: event.target.value }))} type="date" value={era5Form.startDate} />
-            </label>
-            <label>
-              <span>End date</span>
-              <input onChange={(event) => setEra5Form((state) => ({ ...state, endDate: event.target.value }))} type="date" value={era5Form.endDate} />
-            </label>
-            <div className="button-row">
-              <button
-                className="secondary-button"
-                onClick={() =>
-                  reanalysisMode === "session-era5"
-                    ? void invokeSessionOperation("Find ERA5 nodes", "POST", "/era5/nodes", { latitude: era5Form.latitude, longitude: era5Form.longitude })
-                    : void fetchBrightHubReanalysisNodes({ latitude: era5Form.latitude, longitude: era5Form.longitude })
-                }
-                type="button"
-              >
-                Find nodes
-              </button>
-              {reanalysisMode === "session-era5" ? (
-                <>
-                  <button className="secondary-button" onClick={() => void invokeSessionOperation("Extract ERA5", "POST", "/era5/extract", { latitude: era5Form.latitude, longitude: era5Form.longitude, start_date: era5Form.startDate, end_date: era5Form.endDate })} type="button">
-                    Extract
-                  </button>
-                  <button className="primary-button" onClick={() => void invokeSessionOperation("Interpolate ERA5", "POST", "/era5/interpolate")} type="button">
-                    Interpolate
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    className="secondary-button"
-                    onClick={() =>
-                      void downloadBrightHubReanalysis({
-                        dataset: reanalysisDataset,
-                        source: reanalysisMode === "earthdatahub" ? "earthdatahub" : "brighthub",
-                        useNodes: reanalysisDataset === "MERRA-2" ? "merra2" : "era5",
-                      })
-                    }
-                    type="button"
-                  >
-                    Download data
-                  </button>
-                  {reanalysisDataset === "ERA5" ? (
-                    <button className="primary-button" onClick={() => void invokeSessionOperation("Interpolate ERA5", "POST", "/era5/interpolate")} type="button">
-                      Interpolate site ERA5
-                    </button>
-                  ) : null}
-                </>
-              )}
-            </div>
-            <p className="muted-text">
-              {reanalysisMode === "session-era5"
-                ? "Use the built-in ERA5 workflow for direct node search, extraction, and interpolation."
-                : reanalysisDataset === "MERRA-2"
-                  ? "MERRA-2 downloads are stored in the session and picked up later by hub-height extrapolation after the shear table is ready."
-                  : "BrightHub and EarthDataHub can supply ERA5 nodes for the same interpolation flow used by the standard tools."}
-            </p>
-            {brighthubReanalysis ? (
-              <p className="muted-text">
-                BrightHub node cache: {brighthubReanalysis.era5_nodes.length} ERA5 node(s), {brighthubReanalysis.merra2_nodes.length} MERRA-2 node(s).
-              </p>
-            ) : null}
-          </article>
-
-          <article className="step-card">
-            <h3>LTC and uncertainty</h3>
-            <label>
-              <span>Algorithm</span>
-              <select onChange={(event) => setLtcForm((state) => ({ ...state, algorithm: event.target.value as LtcFormState["algorithm"] }))} value={ltcForm.algorithm}>
-                <option value="speedsort">SpeedSort</option>
-                <option value="linear_least_squares">Linear least squares</option>
-                <option value="total_least_squares">Total least squares</option>
-                <option value="variance_ratio">Variance ratio</option>
-                <option value="xgboost">XGBoost</option>
-              </select>
-            </label>
-            <label>
-              <span>Short column</span>
-              <input onChange={(event) => setLtcForm((state) => ({ ...state, shortColumn: event.target.value }))} type="text" value={ltcForm.shortColumn} />
-            </label>
-            <label>
-              <span>Long column</span>
-              <input onChange={(event) => setLtcForm((state) => ({ ...state, longColumn: event.target.value }))} type="text" value={ltcForm.longColumn} />
-            </label>
-            <div className="button-row">
-              <button className="secondary-button" onClick={() => void invokeSessionOperation(`Run ${ltcForm.algorithm}`, "POST", `/ltc/${ltcForm.algorithm}`, { short_col: ltcForm.shortColumn, long_col: ltcForm.longColumn, short_dir_col: ltcForm.shortDirectionColumn, long_dir_col: ltcForm.longDirectionColumn })} type="button">
-                Run LTC
-              </button>
-              <button className="secondary-button" onClick={() => void invokeSessionOperation("Run ensemble", "POST", "/ensemble", { measured_col: ltcForm.measuredColumn })} type="button">
-                Run ensemble
-              </button>
-              <button
-                className="primary-button"
-                onClick={() =>
-                  void invokeSessionOperation("Calculate uncertainty", "POST", "/uncertainty", {
-                    measurement_uncertainty_pct: config.ltc.uncertainty.measurementUncertaintyPct,
-                    measurement_height_m: config.ltc.uncertainty.measurementHeightM,
-                    hub_height_m: config.ltc.uncertainty.hubHeightM,
-                    shear_method: config.ltc.uncertainty.shearMethod,
-                    mcp_r_squared: ltcForm.mcpRSquared,
-                    concurrent_hours: ltcForm.concurrentHours,
-                    algorithm: ltcForm.algorithm,
-                    iav_pct: config.ltc.uncertainty.iavPct,
-                    shear_std: config.ltc.uncertainty.shearStd,
-                    is_interpolation: config.ltc.uncertainty.isInterpolation,
-                  })
-                }
-                type="button"
-              >
-                Uncertainty
-              </button>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section className="panel workflow-canvas-panel">
-        <div className="panel-header">
-          <div>
-            <p className="panel-kicker">Phase 2</p>
-            <h2>Workflow canvas</h2>
-          </div>
-          <div className="button-row">
-            <button className="secondary-button" onClick={() => void executeWorkflow("manual")} type="button">
-              Run next node
-            </button>
-            <button className="primary-button" onClick={() => void executeWorkflow("auto")} type="button">
-              Run workflow
-            </button>
-          </div>
-        </div>
-
-        <div className="workflow-canvas-shell">
-          <ReactFlow<WorkflowCanvasNode, WorkflowCanvasEdge>
-            edges={workflowEdges}
-            fitView
-            nodes={workflowNodes}
-            onConnect={handleConnect}
-            onEdgesChange={handleEdgeChanges}
-            onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-            onNodesChange={handleNodeChanges}
-          >
-            <Background gap={18} />
-            <MiniMap />
-            <Controls />
-          </ReactFlow>
-        </div>
-      </section>
-
-      <section className="panel workflow-side-panel">
-        <div className="panel-header">
-          <div>
-            <p className="panel-kicker">Node inspector</p>
-            <h2>{selectedNode?.data.label ?? "Select a node"}</h2>
-          </div>
-        </div>
+      <div className="workflow-canvas-wrap">
+        <ReactFlow
+          nodes={rfNodes}
+          edges={rfEdges}
+          nodeTypes={nodeTypes}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onNodeClick={(_evt, node) => setSelectedNodeId(node.id)}
+          fitView
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background />
+          <Controls />
+          <MiniMap
+            nodeColor={(n) => {
+              const status = workflowStatus?.node_statuses?.[n.id];
+              if (status && STATUS_BORDER[status]) return STATUS_BORDER[status];
+              return STAGE_COLORS[(n.data as WorkflowCanvasNode["data"])?.stage] ?? "#5f716a";
+            }}
+          />
+        </ReactFlow>
 
         {selectedNode ? (
-          <div className="node-inspector">
-            <label>
-              <span>Template id</span>
-              <select
-                onChange={(event) =>
-                  updateWorkflowNode(selectedNode.id, (node) => ({
-                    ...node,
-                    data: {
-                      ...node.data,
-                      templateId: event.target.value,
-                      requiredParams: capabilities.find((capability) => capability.template_id === event.target.value)?.required_params ?? [],
-                      optionalParams: capabilities.find((capability) => capability.template_id === event.target.value)?.optional_params ?? [],
-                    },
-                  }))
-                }
-                value={selectedNode.data.templateId}
-              >
-                <option value="">Choose capability</option>
-                {capabilities.map((capability) => (
-                  <option key={capability.template_id} value={capability.template_id}>
-                    {capability.template_id}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="muted-text">{selectedNode.data.summary}</p>
-            <label>
-              <span>Params JSON</span>
-              <textarea
-                onChange={(event) =>
-                  updateWorkflowNode(selectedNode.id, (node) => ({
-                    ...node,
-                    data: {
-                      ...node.data,
-                      paramsJson: event.target.value,
-                    },
-                  }))
-                }
-                rows={12}
-                value={selectedNode.data.paramsJson}
-              />
-            </label>
-            {selectedCapability ? (
-              <div className="capability-hint">
-                <strong>Required</strong>
-                <p>{selectedCapability.required_params.join(", ") || "None"}</p>
-                <strong>Optional</strong>
-                <p>{selectedCapability.optional_params.join(", ") || "None"}</p>
-              </div>
-            ) : null}
+          <NodeFlyout
+            node={selectedNode}
+            status={workflowStatus?.node_statuses?.[selectedNode.id]}
+            onClose={() => setSelectedNodeId(null)}
+          />
+        ) : null}
+      </div>
 
-            <label>
-              <span>Snapshot name</span>
-              <input onChange={(event) => setSnapshotName(event.target.value)} type="text" value={snapshotName} />
-            </label>
-            <div className="button-row">
-              <button className="secondary-button" onClick={() => void saveSnapshot(snapshotName)} type="button">
-                Save snapshot
-              </button>
-              <button className="secondary-button" onClick={() => void forkBranch(branchName, selectedNode.id)} type="button">
-                Fork branch
-              </button>
-            </div>
-
-            <label>
-              <span>Branch name</span>
-              <input onChange={(event) => setBranchName(event.target.value)} type="text" value={branchName} />
-            </label>
-          </div>
-        ) : (
-          <p className="muted-text">Select a workflow node to edit its template and parameters.</p>
-        )}
-
-        <div className="snapshot-list">
-          <h3>Saved snapshots</h3>
-          {workflowSnapshots.length === 0 ? <p className="muted-text">No snapshots saved yet.</p> : null}
-          {workflowSnapshots.map((snapshot) => (
-            <button className="snapshot-button" key={snapshot.name} onClick={() => void loadSnapshot(snapshot.name)} type="button">
-              <span>{snapshot.name}</span>
-              <small>{new Date(snapshot.saved_at).toLocaleString()}</small>
-            </button>
-          ))}
+      <div className="workflow-snapshots">
+        <h4>Snapshots</h4>
+        <div className="form-grid">
+          <label className="form-field">
+            <span>Snapshot name</span>
+            <input
+              type="text"
+              value={snapshotName}
+              onChange={(e) => setSnapshotName(e.target.value)}
+              placeholder="baseline"
+            />
+          </label>
         </div>
-
-        <div className="status-stack">
-          <h3>Workflow status</h3>
-          <pre>{JSON.stringify(workflowStatus, null, 2)}</pre>
-          <h3>Last operation</h3>
-          <pre>{JSON.stringify(lastOperation, null, 2)}</pre>
-          <h3>Recent activity</h3>
-          <ul className="activity-list">
-            {activity.slice(0, 6).map((entry) => (
-              <li key={entry.id}>
-                <strong>{entry.label}</strong>
-                <span>{entry.detail}</span>
+        <div className="path-actions">
+          <RunButton
+            label="Save snapshot"
+            onClick={() => {
+              if (snapshotName.trim()) {
+                void saveWorkflowSnapshot(snapshotName.trim());
+                setSnapshotName("");
+              }
+            }}
+            disabled={!snapshotName.trim()}
+          />
+          <RunButton
+            label="Fork branch"
+            variant="secondary"
+            onClick={() => {
+              const name = snapshotName.trim() || "Fork";
+              void forkWorkflowBranch(name, selectedNodeId ?? undefined);
+            }}
+          />
+        </div>
+        {workflowSnapshots.length === 0 ? (
+          <p className="muted">No snapshots saved.</p>
+        ) : (
+          <ul className="snapshot-list">
+            {workflowSnapshots.map((s) => (
+              <li key={s.name}>
+                <span>{s.name}</span>
+                <time>{new Date(s.saved_at).toLocaleString()}</time>
+                <button type="button" className="link-button" onClick={() => loadWorkflowSnapshot(s.name)}>
+                  Load
+                </button>
               </li>
             ))}
           </ul>
-          <h3>Sensor names</h3>
-          <p className="muted-text">{sensors.map((sensor) => String(sensor.name ?? sensor.sensor_name ?? sensor.label ?? "")).filter(Boolean).join(", ") || "No sensors loaded"}</p>
+        )}
+      </div>
+
+      {workflowStatus && workflowStatus.events.length > 0 ? (
+        <div className="workflow-events">
+          <h4>Run events</h4>
+          <ul>
+            {workflowStatus.events.slice(-12).map((ev, i) => (
+              <li key={i} className={`event-${ev.status ?? "info"}`}>
+                <time>{new Date(ev.timestamp).toLocaleTimeString()}</time>
+                <strong>{ev.event_type}</strong>
+                {ev.node_id ? <span className="muted">{ev.node_id}</span> : null}
+                {ev.message ? <span>{ev.message}</span> : null}
+              </li>
+            ))}
+          </ul>
         </div>
-      </section>
+      ) : null}
     </div>
+  );
+}
+
+function NodeFlyout({
+  node,
+  status,
+  onClose,
+}: {
+  node: WorkflowCanvasNode;
+  status: string | undefined;
+  onClose: () => void;
+}) {
+  const data = node.data;
+  return (
+    <aside className="wf-flyout">
+      <header>
+        <h5>{data.label}</h5>
+        <button type="button" className="link-button" onClick={onClose}>
+          Close
+        </button>
+      </header>
+      <dl className="metrics-grid">
+        <div className="metric-tile">
+          <dt>Stage</dt>
+          <dd>{data.stage}</dd>
+        </div>
+        <div className="metric-tile">
+          <dt>Template</dt>
+          <dd>{data.templateId || "—"}</dd>
+        </div>
+        <div className="metric-tile">
+          <dt>Status</dt>
+          <dd>{status ?? "idle"}</dd>
+        </div>
+      </dl>
+      <p className="muted">{data.summary}</p>
+      {data.requiredParams.length > 0 ? (
+        <p className="muted">Required: {data.requiredParams.join(", ")}</p>
+      ) : null}
+      <pre className="wf-params">{data.paramsJson}</pre>
+    </aside>
   );
 }

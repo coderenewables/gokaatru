@@ -1,35 +1,47 @@
-import type { AnalysisSummary, SessionSummary } from "../lib/api";
+// Workspace header (spec §3.1): project name, hub height, coordinate,
+// refresh action, busy indicator, session id.
+import { useWorkspaceStore } from "../store/useWorkspaceStore";
 
-interface AppHeaderProps {
-  session: SessionSummary;
-  summary: AnalysisSummary | null;
-  busyLabel: string | null;
-  onRefresh: () => void;
-}
+export function AppHeader() {
+  const session = useWorkspaceStore((state) => state.session);
+  const summary = useWorkspaceStore((state) => state.summary);
+  const busyLabel = useWorkspaceStore((state) => state.busyLabel);
+  const refreshWorkspace = useWorkspaceStore((state) => state.refreshWorkspace);
 
-function metricLabel(value: unknown, fallback = "Not ready") {
-  if (value === null || value === undefined || value === "") {
-    return fallback;
-  }
-  return String(value);
-}
+  const projectName = summary?.project_name ?? "Untitled project";
+  const hubHeight = summary?.hub_height_m;
+  const coordinate = summary?.coordinate;
+  const coordinateLabel = coordinate
+    ? `${coordinate.latitude.toFixed(3)}, ${coordinate.longitude.toFixed(3)}`
+    : null;
 
-export function AppHeader({ session, summary, busyLabel, onRefresh }: AppHeaderProps) {
   return (
-    <header className="workspace-header">
-      <div>
-        <p className="eyebrow">Config-driven wind analysis workspace</p>
-        <h1>{metricLabel(summary?.project_name ?? session.project_name, "Untitled project")}</h1>
-        <p className="workspace-subtitle">
-          Session {session.session_id} · Hub {metricLabel(summary?.hub_height_m ?? session.hub_height_m)} m ·
-          Completed {(summary?.completed_steps ?? session.completed_steps ?? []).length} step(s)
+    <header className="app-header">
+      <div className="app-header-titles">
+        <h1>GoKaatru</h1>
+        <p className="app-header-subtitle">
+          {projectName}
+          {hubHeight ? ` · hub ${hubHeight}m` : ""}
+          {coordinateLabel ? ` · ${coordinateLabel}` : ""}
         </p>
       </div>
-
-      <div className="header-actions">
-        {busyLabel ? <span className="status-pill status-pill-busy">{busyLabel}</span> : null}
-        <button className="secondary-button" onClick={onRefresh} type="button">
-          Refresh workspace
+      <div className="app-header-status">
+        {busyLabel ? (
+          <span className="busy-pill" role="status">
+            <span className="busy-dot" aria-hidden="true" /> {busyLabel}
+          </span>
+        ) : (
+          session && <span className="session-id">session {session.session_id.slice(0, 8)}</span>
+        )}
+        <button
+          type="button"
+          className="icon-button"
+          onClick={() => void refreshWorkspace()}
+          disabled={Boolean(busyLabel)}
+          title="Refresh workspace"
+          aria-label="Refresh workspace"
+        >
+          ↻
         </button>
       </div>
     </header>

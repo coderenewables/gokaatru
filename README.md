@@ -2,7 +2,7 @@
 
 GoKaatru is a Wind Resource Assessment MCP server for ingesting wind measurement data, cleaning and extrapolating it, correlating it against ERA5 reanalysis, and producing long-term correction, uncertainty, visualization, and mapping outputs. The server exposes 209 MCP tools grouped across data I/O, statistics, shear, ERA5, LTC, post-processing, visualization, configuration, BrightHub workflows, and WindKit integration (142 tools covering wind functions, climate analysis, spatial operations, Weibull distributions, topography, wind farms, and plotting), with `runconfig` as the source of truth for site metadata such as location and hub height.
 
-The workflow web app supports scenario management: save the current analysis state as a named scenario, or upload a `runconfig.json` file to import configuration overrides and automatically execute the LTC → ensemble → uncertainty pipeline, saving the result as a new scenario for comparison.
+The server supports scenario management: save the current analysis state as a named scenario, or upload a `runconfig.json` file to import configuration overrides and automatically execute the LTC → ensemble → uncertainty pipeline, saving the result as a new scenario for comparison.
 
 ## Quick Start (Local)
 
@@ -18,40 +18,6 @@ For a local SSE server that any network client can reach:
 python -m server.main --transport sse --host 0.0.0.0 --port 8080
 ```
 
-## Workflow Web App (Local Development)
-
-Run the analyst-facing workflow stack as three processes:
-
-```bash
-conda activate gokaatru
-pip install -e ".[ml,dev]"
-npm --prefix frontend install
-python -m uvicorn server.api.main:app --reload --port 8000
-python -m server.main --transport sse --host 0.0.0.0 --port 8080
-npm --prefix frontend run dev
-```
-
-Default local endpoints:
-
-- Workflow UI: `http://127.0.0.1:5173`
-- FastAPI web API: `http://127.0.0.1:8000/api`
-- MCP SSE endpoint: `http://127.0.0.1:8080/sse`
-
-The Vite dev server proxies `/api` to the FastAPI app, so the browser workflow never talks to MCP directly for core analysis actions.
-
-On Windows, you can launch the local non-Docker stack with one command:
-
-```powershell
-.\startup.ps1
-```
-
-Useful options:
-
-```powershell
-.\startup.ps1 -OpenBrowser
-.\startup.ps1 -IncludeMcp -OpenBrowser
-```
-
 ## Quick Start (Docker)
 
 ```bash
@@ -64,7 +30,7 @@ The Compose stack starts one service:
 
 ## Validation
 
-The repository has been validated with 209 registered MCP tools (67 core + 142 WindKit), ~200 web API routes, and full backend + frontend test coverage.
+The repository has been validated with 209 registered MCP tools (67 core + 142 WindKit), ~200 web API routes, and full backend test coverage.
 
 ```bash
 python -m ruff check server/ tests/
@@ -74,8 +40,6 @@ python -m pytest tests/test_api_sessions.py tests/test_api_workflow.py -v
 python -m server.main --help
 python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000
 python -c "import asyncio, json; from server.main import mcp; print(json.dumps([tool.name for tool in asyncio.run(mcp.list_tools())], indent=2))"
-npm --prefix frontend run build
-npm --prefix frontend run test -- --run
 docker build -t gokaatru .
 docker compose config
 docker compose up -d

@@ -1,7 +1,7 @@
 # Gokaatru Code Review & Remediation Log
 
 Date: 2026-04-27
-Scope: full-repo security and correctness review of the Gokaatru FastAPI/React codebase
+Scope: full-repo security and correctness review of the GoKaatru FastAPI backend
 located at `d:\gokaatru`.
 Verification: `python -m pytest tests/ -q` — 169 passed, 1 skipped, 0 failures, 0
 deprecation warnings introduced by app code.
@@ -201,13 +201,11 @@ gone from `pytest`'s output.
 | 1 | CORS in `server/api/main.py` | `allow_origins` is already pinned to the local Vite dev server; `allow_credentials=True` is therefore safe. |
 | 2 | Snapshot save/load (`workflow_execution.py`) | Names are validated against `^[a-zA-Z0-9_-]{1,64}$` before being interpolated into `Path`. Already safe. |
 | 3 | Session `X-GoKaatru-Session` header check (`deps.py`) | Header must equal the path `session_id`; sessions live only in-memory and creation requires no auth, which is acceptable for the local desktop deployment model. |
-| 4 | Pickle/eval/exec/yaml.load/subprocess(shell=True) | grep-confirmed: zero occurrences anywhere in `server/` or `frontend/`. |
-| 5 | `dangerouslySetInnerHTML` in React | grep-confirmed: zero occurrences. |
-| 6 | Plotly figure passthrough in chat route | Output goes to React, which renders it via `react-plotly.js`, not `dangerouslySetInnerHTML`. No XSS sink. |
-| 7 | `requests.*` in `server/core/brighthub.py` | All non-presigned calls already pass an explicit `timeout`. |
-| 8 | Mutable defaults in `SessionState.__init__` | Inspected: every collection is rebuilt in `reset()`, and `reset()` is called from `__init__`. No cross-session leakage. |
-| 9 | Race in `SessionManager.create_session` | UUID4 collision is cryptographically negligible and `mkdir(exist_ok=True)` makes the create idempotent; not worth retry logic. |
-| 10 | Bare `except Exception` in BrightHub routes | Re-raised as 502 with the original message — these are intentional translation points and the message is sourced from a trusted upstream client, not user input. |
+| 4 | Pickle/eval/exec/yaml.load/subprocess(shell=True) | grep-confirmed: zero occurrences anywhere in `server/`. |
+| 5 | `requests.*` in `server/core/brighthub.py` | All non-presigned calls already pass an explicit `timeout`. |
+| 6 | Mutable defaults in `SessionState.__init__` | Inspected: every collection is rebuilt in `reset()`, and `reset()` is called from `__init__`. No cross-session leakage. |
+| 7 | Race in `SessionManager.create_session` | UUID4 collision is cryptographically negligible and `mkdir(exist_ok=True)` makes the create idempotent; not worth retry logic. |
+| 8 | Bare `except Exception` in BrightHub routes | Re-raised as 502 with the original message — these are intentional translation points and the message is sourced from a trusted upstream client, not user input. |
 
 ---
 

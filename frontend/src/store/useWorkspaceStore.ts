@@ -1,228 +1,292 @@
+// Global workspace store (spec §3.2). Single Zustand store = entire app state.
+//
+// Phase A includes the full state shape + the session bootstrap / refresh /
+// config / plot primitives. Stage-specific orchestrators (runStage per stage)
+// are layered on top of `invokeSessionOperation` in Phases D–E.
 import { create } from "zustand";
 
 import {
+  type AnalysisSummary,
+  type ActivityEntry,
+  type DatasetPreview,
+  type EraNode,
+  type HttpMethod,
+  type HomogeneityDataset,
+  type LtcResultSummary,
+  type ClippingReport,
+  type CoverageDetail,
+  type PlotName,
+  type PlotRequest,
+  type PlotResult,
+  type SensorStatistics,
+  type ScenarioSnapshot,
+  type SensorRow,
+  type SessionSummary,
+  type SharedDatasetSummary,
+  type StageId,
+  type StageStatus,
+  type UncertaintyResult,
+  type WindAnalysisConfig,
+  type WorkflowDispatchCapability,
+  type WorkflowExecutionStatusResponse,
+} from "../types/analysis";
+import {
+  buildConfigAsset,
+  buildDatasetPreviewAsset,
+  buildOperationResultAsset,
+  buildSensorInventoryAsset,
+  buildSummaryAsset,
+  type NormalizedAsset,
+  upsertAssets,
+} from "../lib/normalization";
+import {
   callSessionRoute,
-  compareWorkflowBranches,
   createSession,
-  deleteScenario as apiDeleteScenario,
+  deleteSession,
   downloadBrightHubReanalysis,
-  executeWorkflow,
-  executeWorkflowStep,
-  fetchOpenApiSpec,
   fetchBrightHubReanalysisNodes,
-  forkWorkflowBranch,
+  fetchPlot,
   getAnalysisSummary,
+  getApiHealth,
   getBrightHubStatus,
+  getCoverage,
   getDatasetPreview,
-  getDefaultApiBaseUrl,
-  getSensors,
+  getEnsembleResult,
+  getLtcResults,
+  getSiteMap,
+  getStatistics,
   getSessionConfig,
   getSessionSummary,
+  getSensors,
   getWorkflowCapabilities,
-  getWorkflowStatus,
   importBrightHubLocation,
-  invokeWindKitRoute,
   listBrightHubLocations,
   listDatasets,
   listScenarios,
-  listWorkflowSnapshots,
-  loginBrightHub,
   loadDatasetIntoSession,
-  loadWorkflowSnapshot,
+  loginBrightHub,
   logoutBrightHub,
-  saveScenario as apiSaveScenario,
-  saveWorkflowSnapshot,
-  updateSessionConfig,
+  runClipping,
+  runEnsemble,
+  runLtc,
+  runUncertainty,
+  saveScenario,
+  deleteScenario,
+  getClippingColumns,
+  executeWorkflow as apiExecuteWorkflow,
+  executeWorkflowStep as apiExecuteWorkflowStep,
+  getWorkflowStatus as apiGetWorkflowStatus,
+  stopWorkflow as apiStopWorkflow,
+  listWorkflowSnapshots as apiListSnapshots,
+  saveWorkflowSnapshot as apiSaveSnapshot,
+  loadWorkflowSnapshot as apiLoadSnapshot,
+  forkWorkflowBranch as apiForkBranch,
+  fetchOpenApiSpec,
+  compareWorkflowBranches,
+  invokeWindKitRoute as apiInvokeWindKitRoute,
   uploadSessionFile as apiUploadSessionFile,
-  uploadSharedDataset as apiUploadSharedDataset,
-  type AnalysisSummary,
-  type BrightHubImportLocationPayload,
   type BrightHubLocation,
-  type BrightHubReanalysisDownloadResponse,
-  type BrightHubReanalysisNodesResponse,
   type BrightHubStatusResponse,
-  type DatasetPreview,
-  type HttpMethod,
-  type ScenarioSnapshot,
-  type SessionSummary,
-  type SharedDatasetSummary,
-  type WorkflowCompareResponse,
-  type WorkflowDispatchCapability,
-  type WorkflowExecutionResponse,
-  type WorkflowExecutionStatusResponse,
-  type WorkflowForkBranchResponse,
-  type WorkflowSnapshotSummary,
+  type EnsembleResultResponse,
+  type LtcResultListResponse,
+  resetSession,
+  updateSessionConfig,
 } from "../lib/api";
-import { buildRunconfigUpdates, hydrateConfigFromRunconfig, serializeConfigToRunconfig, setConfigValue } from "../lib/configSync";
-import { streamCopilotReply, type CopilotToolEvent } from "../lib/copilotAgent";
+import {
+  buildRunconfigUpdates,
+  hydrateConfigFromRunconfig,
+  serializeConfigToRunconfig,
+  setConfigValue,
+} from "../lib/configSync";
 import { createDefaultWindAnalysisConfig } from "../lib/defaultConfig";
-import { buildConfigAsset, buildDatasetPreviewAsset, buildOperationResultAsset, buildSensorInventoryAsset, buildSummaryAsset, buildWindKitResultAsset, type NormalizedAsset, upsertAssets } from "../lib/normalization";
-import { extractWindKitTools, type WindKitToolDefinition } from "../lib/openapi";
-import { createWorkflowGraph, toExecutionRequest, type WorkflowCanvasEdge, type WorkflowCanvasNode } from "../lib/workflow";
-import type { WindAnalysisConfig } from "../types/analysis";
+import { computeStageStatuses } from "../lib/stages";
+import {
+  createWorkflowGraph,
+  toExecutionRequest,
+  type WorkflowCanvasNode,
+  type WorkflowCanvasEdge,
+} from "../lib/workflow";
+import {
+  readChatSettings,
+  writeChatSettings,
+  streamCopilotReply,
+  type CopilotMessage,
+  type CopilotSettings,
+  type CopilotToolEvent,
+} from "../lib/copilotAgent";
+import { extractWindKitTools } from "../lib/openapi";
 
-type PhaseTab = "setup" | "workflow" | "windkit" | "copilot" | "compare";
-type ScenarioCompareSlot = "baseline" | "run2" | "run3";
 const ACTIVE_SESSION_STORAGE_KEY = "gokaatru-active-session-id";
 
-interface ActivityEntry {
-  id: string;
-  label: string;
-  timestamp: string;
-  status: "ok" | "error";
-  detail: string;
-}
+type TabId = "setup" | "workflow" | "windkit" | "copilot" | "compare";
 
-interface ChatSettings {
-  provider: string;
-  model: string;
-  apiKey: string;
+interface ActivePlot {
+  plotName: PlotName;
+  params: PlotRequest;
+  result: PlotResult;
 }
-
-interface CopilotMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  status: "streaming" | "complete" | "error";
-  reasoning: string;
-  toolCalls: CopilotToolEvent[];
-}
-
-type ScenarioCompareSlots = Record<ScenarioCompareSlot, string | null>;
 
 interface WorkspaceStore {
-  activeTab: PhaseTab;
+  // session + bootstrap
   apiBaseUrl: string;
+  apiReachable: boolean | null;
   session: SessionSummary | null;
   sessionStatus: "idle" | "loading" | "ready" | "error";
   sessionError: string | null;
   busyLabel: string | null;
+  activeTab: TabId;
+  selectedStage: StageId;
+
+  // config + summary
   config: WindAnalysisConfig;
   serverRunconfig: Record<string, unknown>;
   summary: AnalysisSummary | null;
+
+  // shared data
+  sensors: SensorRow[];
+  capabilities: WorkflowDispatchCapability[];
+  scenarios: ScenarioSnapshot[];
+
+  // stage-derived state
+  stageStatuses: Record<StageId, StageStatus>;
   datasets: SharedDatasetSummary[];
   datasetPreview: DatasetPreview | null;
-  sensors: Array<Record<string, unknown>>;
-  assets: NormalizedAsset[];
-  scenarios: ScenarioSnapshot[];
-  scenarioCompareSlots: ScenarioCompareSlots;
+  era5Nodes: EraNode[];
+  merraNodes: EraNode[];
+  ltcResults: LtcResultSummary[];
+  ensembleSummary: EnsembleResultResponse | null;
+  homogeneityReport: HomogeneityDataset[] | null;
+  clippingReport: ClippingReport | null;
+  clippingColumns: string[];
+  uncertaintyResult: UncertaintyResult | null;
   brighthubStatus: BrightHubStatusResponse | null;
-  brighthubLocations: BrightHubLocation[];
-  brighthubReanalysis: BrightHubReanalysisNodesResponse | null;
-  capabilities: WorkflowDispatchCapability[];
+  brighthubLocations: import("../lib/api").BrightHubLocation[];
+  brighthubReanalysis: import("../lib/api").BrightHubReanalysisNodesResponse | null;
+  siteMap: Record<string, unknown> | null;
+  sensorStatistics: SensorStatistics | null;
+  coverageDetail: CoverageDetail | null;
+  activePlot: ActivePlot | null;
+  assets: NormalizedAsset[];
+  activity: ActivityEntry[];
+
+  // workflow canvas (Phase F)
   workflowNodes: WorkflowCanvasNode[];
   workflowEdges: WorkflowCanvasEdge[];
   workflowStatus: WorkflowExecutionStatusResponse | null;
-  workflowSnapshots: WorkflowSnapshotSummary[];
-  workflowBranches: WorkflowForkBranchResponse[];
-  windkitTools: WindKitToolDefinition[];
-  windkitResponse: unknown;
-  chatSettings: ChatSettings;
+  workflowSnapshots: import("../lib/api").WorkflowSnapshotSummary[];
+
+  // copilot + compare + windkit (Phase G)
+  chatSettings: CopilotSettings;
   chatMessages: CopilotMessage[];
-  compareResult: WorkflowCompareResponse | null;
-  lastOperation: unknown;
-  activity: ActivityEntry[];
-  setActiveTab: (tab: PhaseTab) => void;
+  compareResult: import("../lib/api").WorkflowCompareResponse | null;
+  compareSlotNames: (string | null)[];
+  windkitTools: import("../lib/openapi").WindKitToolDefinition[];
+  windkitResponse: unknown;
+
+  // actions
+  setActiveTab: (tab: TabId) => void;
+  setSelectedStage: (stage: StageId) => void;
+  setApiBaseUrl: (url: string) => void;
+  pingApi: () => Promise<void>;
   updateConfigValue: (path: string, value: unknown) => void;
   resetConfig: () => void;
-  restoreSession: () => Promise<void>;
   bootstrapSession: () => Promise<void>;
+  restoreSession: () => Promise<void>;
   refreshWorkspace: () => Promise<void>;
+  resetCurrentSession: () => Promise<void>;
+  deleteCurrentSession: () => Promise<void>;
   saveConfig: () => Promise<void>;
+  fetchPlot: (plotName: PlotName, params: PlotRequest) => Promise<PlotResult>;
+  refreshResults: () => Promise<void>;
+  invokeSessionOperation: <T>(
+    label: string,
+    method: HttpMethod,
+    path: string,
+    body?: unknown,
+  ) => Promise<T>;
+
+  // Stage 1 — data loading
+  uploadSessionFile: (kind: "timeseries" | "datamodel", file: File) => Promise<void>;
+  refreshDatasets: () => Promise<void>;
   previewDataset: (datasetId: string) => Promise<void>;
   loadDataset: (datasetId: string) => Promise<void>;
-  uploadSharedDataset: (payload: { name?: string; timeseriesFile: File; datamodelFile: File }) => Promise<void>;
-  uploadSessionFile: (kind: "timeseries" | "datamodel", file: File) => Promise<void>;
   refreshBrightHub: () => Promise<void>;
   loginBrightHub: (credentials: { clientId: string; clientSecret: string }) => Promise<void>;
   logoutBrightHub: () => Promise<void>;
-  importBrightHubLocation: (payload: BrightHubImportLocationPayload) => Promise<void>;
+  importBrightHubLocation: (payload: import("../lib/api").BrightHubImportLocationPayload) => Promise<void>;
+
+  // Stage 2 — reanalysis
   fetchBrightHubReanalysisNodes: (payload: { latitude: number; longitude: number }) => Promise<void>;
-  downloadBrightHubReanalysis: (payload: { dataset: "ERA5" | "MERRA-2"; source?: "brighthub" | "earthdatahub"; useNodes: "era5" | "merra2" }) => Promise<void>;
-  saveScenario: (name: string) => Promise<void>;
-  deleteScenario: (scenarioIndex: number) => Promise<void>;
-  setScenarioCompareSlot: (slot: ScenarioCompareSlot, scenarioName: string | null) => void;
-  invokeSessionOperation: <T>(label: string, method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown) => Promise<T>;
+  downloadBrightHubReanalysis: (payload: {
+    dataset: "ERA5" | "MERRA-2";
+    source?: "brighthub" | "earthdatahub";
+    useNodes: "era5" | "merra2";
+  }) => Promise<void>;
+  loadSiteMap: () => Promise<void>;
+
+  // Stage 3 — exploration
+  loadSensorStatistics: (sensorName: string) => Promise<import("../types/analysis").SensorStatistics>;
+  loadCoverage: (sensorName: string) => Promise<import("../types/analysis").CoverageDetail>;
+
+  // Stage 6 — LTC
+  runLtcAlgorithms: (payload: {
+    algorithms: import("../types/analysis").LtcAlgorithm[];
+    shortCol: string;
+    longCol: string;
+    shortDirCol?: string;
+    longDirCol?: string;
+  }) => Promise<void>;
+
+  // Stage 7 — clipping
+  loadClippingColumns: (source: string) => Promise<string[]>;
+  runClippingAnalysis: (payload: { speed_col: string; source: string }) => Promise<void>;
+
+  // Stage 8 — ensemble & uncertainty
+  runEnsembleAnalysis: (measuredCol: string) => Promise<void>;
+  runUncertaintyAnalysis: (payload: Record<string, unknown>) => Promise<void>;
+  saveScenarioSnapshot: (name: string) => Promise<void>;
+  deleteScenarioSnapshot: (scenarioIndex: number) => Promise<void>;
+
+  // Phase F — workflow canvas
   setWorkflowGraph: (nodes: WorkflowCanvasNode[], edges: WorkflowCanvasEdge[]) => void;
-  updateWorkflowNode: (nodeId: string, updater: (node: WorkflowCanvasNode) => WorkflowCanvasNode) => void;
-  executeWorkflow: (mode: "auto" | "manual") => Promise<void>;
+  rebuildWorkflowGraph: () => void;
+  executeWorkflowGraph: (mode: "auto" | "manual") => Promise<void>;
+  stopWorkflowGraph: () => Promise<void>;
   refreshWorkflowStatus: () => Promise<void>;
-  saveSnapshot: (name: string) => Promise<void>;
-  loadSnapshot: (name: string) => Promise<void>;
-  forkBranch: (name: string, fromNodeId?: string) => Promise<void>;
-  compareBranches: (branchSessionIds: string[]) => Promise<void>;
-  setChatSettings: (settings: ChatSettings) => void;
+  refreshWorkflowSnapshots: () => Promise<void>;
+  saveWorkflowSnapshot: (name: string) => Promise<void>;
+  loadWorkflowSnapshot: (name: string) => Promise<void>;
+  forkWorkflowBranch: (name: string, fromNodeId?: string) => Promise<void>;
+
+  // Phase G — copilot / compare / windkit
+  setChatSettings: (settings: CopilotSettings) => void;
   sendChatMessage: (content: string) => Promise<void>;
-  invokeWindKitTool: (toolPath: string, payload: unknown) => Promise<void>;
+  setCompareSlot: (slotIndex: number, scenarioName: string | null) => void;
+  runCompare: () => Promise<void>;
+  refreshWindKitTools: () => Promise<void>;
+  invokeWindKitRoute: (routePath: string, payload: unknown) => Promise<void>;
 }
 
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
+
 function createId(prefix: string): string {
-  const suffix = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const suffix =
+    globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   return `${prefix}-${suffix}`;
 }
 
-function safeStorageRead(): ChatSettings {
-  if (typeof window === "undefined") {
-    return { provider: "openai", model: "gpt-4o", apiKey: "" };
-  }
-  try {
-    const raw = window.localStorage.getItem("gokaatru-chat-settings");
-    if (!raw) {
-      return { provider: "openai", model: "gpt-4o", apiKey: "" };
-    }
-    const parsed = JSON.parse(raw) as Partial<ChatSettings>;
-    return {
-      provider: typeof parsed.provider === "string" ? parsed.provider : "openai",
-      model: typeof parsed.model === "string" ? parsed.model : "gpt-4o",
-      apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
-    };
-  } catch {
-    return { provider: "openai", model: "gpt-4o", apiKey: "" };
-  }
-}
-
-function safeStorageWrite(settings: ChatSettings) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem("gokaatru-chat-settings", JSON.stringify(settings));
-}
-
-function readStoredSessionId(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  try {
-    const raw = window.localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
-    if (!raw) {
-      return null;
-    }
-    const normalized = raw.trim();
-    return normalized.length > 0 ? normalized : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredSessionId(sessionId: string | null) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  if (!sessionId) {
-    window.localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
-    return;
-  }
-  window.localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, sessionId);
-}
-
 function asErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
+  return error instanceof Error ? error.message : String(error);
 }
 
-function appendActivity(activity: ActivityEntry[], label: string, status: ActivityEntry["status"], detail: string): ActivityEntry[] {
+function appendActivity(
+  activity: ActivityEntry[],
+  label: string,
+  status: ActivityEntry["status"],
+  detail: string,
+): ActivityEntry[] {
   const entry: ActivityEntry = {
     id: createId("activity"),
     label,
@@ -230,132 +294,129 @@ function appendActivity(activity: ActivityEntry[], label: string, status: Activi
     detail,
     timestamp: new Date().toISOString(),
   };
-  return [entry, ...activity].slice(0, 18);
+  return [entry, ...activity].slice(0, 50);
 }
 
-function createDefaultScenarioCompareSlots(): ScenarioCompareSlots {
-  return {
-    baseline: null,
-    run2: null,
-    run3: null,
-  };
-}
-
-function normalizeScenarioSlots(current: ScenarioCompareSlots, scenarios: ScenarioSnapshot[]): ScenarioCompareSlots {
-  const available = new Set(scenarios.map((scenario) => scenario.name));
-  const sanitized: ScenarioCompareSlots = {
-    baseline: current.baseline && available.has(current.baseline) ? current.baseline : null,
-    run2: current.run2 && available.has(current.run2) ? current.run2 : null,
-    run3: current.run3 && available.has(current.run3) ? current.run3 : null,
-  };
-  const ordered = [...scenarios].sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const slotOrder: ScenarioCompareSlot[] = ["baseline", "run2", "run3"];
-  const used = new Set(Object.values(sanitized).filter((value): value is string => Boolean(value)));
-
-  for (const slot of slotOrder) {
-    if (sanitized[slot] !== null) {
-      continue;
-    }
-    const nextScenario = ordered.find((scenario) => !used.has(scenario.name));
-    sanitized[slot] = nextScenario?.name ?? null;
-    if (nextScenario) {
-      used.add(nextScenario.name);
-    }
+function readStoredSessionId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+    return raw && raw.trim().length > 0 ? raw : null;
+  } catch {
+    return null;
   }
-
-  return sanitized;
 }
 
-function upsertCopilotToolCall(toolCalls: CopilotToolEvent[], nextEvent: CopilotToolEvent): CopilotToolEvent[] {
-  const existingIndex = toolCalls.findIndex((toolCall) => toolCall.id === nextEvent.id);
-  if (existingIndex === -1) {
-    return [...toolCalls, nextEvent];
+function writeStoredSessionId(sessionId: string | null): void {
+  if (typeof window === "undefined") return;
+  if (!sessionId) {
+    window.localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    return;
   }
-
-  return toolCalls.map((toolCall, index) => (index === existingIndex ? { ...toolCall, ...nextEvent } : toolCall));
+  window.localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, sessionId);
 }
+
+function emptyStageStatuses(): Record<StageId, StageStatus> {
+  return computeStageStatuses([]);
+}
+
+function toLtcResultSummaries(payload: LtcResultListResponse): LtcResultSummary[] {
+  return payload.results.map((item) => ({
+    algorithm: item.algorithm,
+    metrics: { algorithm: item.algorithm, ...(item.metrics as Record<string, unknown>) },
+    result_file: item.result_file,
+    rows: item.rows,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// store
+// ---------------------------------------------------------------------------
 
 export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
-  activeTab: "setup",
-  apiBaseUrl: getDefaultApiBaseUrl(),
+  apiBaseUrl: deriveApiBaseUrl(),
+  apiReachable: null,
   session: null,
   sessionStatus: "idle",
   sessionError: null,
   busyLabel: null,
+  activeTab: "setup",
+  selectedStage: "data",
+
   config: createDefaultWindAnalysisConfig(),
   serverRunconfig: {},
   summary: null,
+
+  sensors: [],
+  capabilities: [],
+  scenarios: [],
+
+  stageStatuses: emptyStageStatuses(),
   datasets: [],
   datasetPreview: null,
-  sensors: [],
-  assets: [buildConfigAsset(createDefaultWindAnalysisConfig())],
-  scenarios: [],
-  scenarioCompareSlots: createDefaultScenarioCompareSlots(),
+  era5Nodes: [],
+  merraNodes: [],
+  ltcResults: [],
+  ensembleSummary: null,
+  homogeneityReport: null,
+  clippingReport: null,
+  clippingColumns: [],
+  uncertaintyResult: null,
   brighthubStatus: null,
   brighthubLocations: [],
   brighthubReanalysis: null,
-  capabilities: [],
+  siteMap: null,
+  sensorStatistics: null,
+  coverageDetail: null,
+  activePlot: null,
+  assets: [buildConfigAsset(createDefaultWindAnalysisConfig())],
+  activity: [],
+
   workflowNodes: [],
   workflowEdges: [],
   workflowStatus: null,
   workflowSnapshots: [],
-  workflowBranches: [],
-  windkitTools: [],
-  windkitResponse: null,
-  chatSettings: safeStorageRead(),
+
+  chatSettings: readChatSettings(),
   chatMessages: [],
   compareResult: null,
-  lastOperation: null,
-  activity: [],
+  compareSlotNames: ["baseline", null, null],
+  windkitTools: [],
+  windkitResponse: null,
 
   setActiveTab: (tab) => set({ activeTab: tab }),
+  setSelectedStage: (stage) => set({ selectedStage: stage }),
+
+  setApiBaseUrl: (url) => set({ apiBaseUrl: url, apiReachable: null }),
+
+  pingApi: async () => {
+    try {
+      await getApiHealth(get().apiBaseUrl);
+      set({ apiReachable: true });
+    } catch (error) {
+      set({
+        apiReachable: false,
+        activity: appendActivity(get().activity, "API unreachable", "error", asErrorMessage(error)),
+      });
+    }
+  },
 
   updateConfigValue: (path, value) => {
     const nextConfig = setConfigValue(get().config, path, value);
-    const graph = createWorkflowGraph(nextConfig, get().capabilities);
-    const nextAssets = upsertAssets(get().assets, [buildConfigAsset(nextConfig)]);
-    set({ config: nextConfig, workflowNodes: graph.nodes, workflowEdges: graph.edges, assets: nextAssets });
+    set({
+      config: nextConfig,
+      assets: upsertAssets(get().assets, [buildConfigAsset(nextConfig)]),
+    });
   },
 
-  resetConfig: () => {
-    const nextConfig = createDefaultWindAnalysisConfig();
-    const graph = createWorkflowGraph(nextConfig, get().capabilities);
-    set({ config: nextConfig, workflowNodes: graph.nodes, workflowEdges: graph.edges, assets: [buildConfigAsset(nextConfig)] });
-  },
-
-  restoreSession: async () => {
-    if (get().session !== null || get().sessionStatus === "loading") {
-      return;
-    }
-
-    const storedSessionId = readStoredSessionId();
-    if (!storedSessionId) {
-      return;
-    }
-
-    set({ sessionStatus: "loading", sessionError: null, busyLabel: "Restoring workspace" });
-    try {
-      const session = await getSessionSummary(get().apiBaseUrl, storedSessionId);
-      writeStoredSessionId(session.session_id);
-      set({ session, sessionStatus: "ready", busyLabel: null });
-      await get().refreshWorkspace();
-      set((state) => ({ activity: appendActivity(state.activity, "Restored workspace session", "ok", session.session_id) }));
-    } catch (error) {
-      writeStoredSessionId(null);
-      set((state) => ({
-        session: null,
-        sessionStatus: "idle",
-        sessionError: null,
-        busyLabel: null,
-        activity: appendActivity(state.activity, "Saved workspace session unavailable", "error", asErrorMessage(error)),
-      }));
-    }
-  },
+  resetConfig: () =>
+    set({
+      config: createDefaultWindAnalysisConfig(),
+      assets: upsertAssets(get().assets, [buildConfigAsset(createDefaultWindAnalysisConfig())]),
+    }),
 
   bootstrapSession: async () => {
-    if (get().sessionStatus === "loading") {
-      return;
-    }
+    if (get().sessionStatus === "loading") return;
     set({ sessionStatus: "loading", sessionError: null, busyLabel: "Creating session" });
     try {
       const created = await createSession(get().apiBaseUrl);
@@ -363,110 +424,264 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       writeStoredSessionId(session.session_id);
       set({ session, sessionStatus: "ready", busyLabel: null });
       await get().refreshWorkspace();
-      set((state) => ({ activity: appendActivity(state.activity, "Created workspace session", "ok", session.session_id) }));
+      set({
+        activity: appendActivity(get().activity, "Created session", "ok", session.session_id),
+      });
     } catch (error) {
-      set((state) => ({
+      set({
         sessionStatus: "error",
         sessionError: asErrorMessage(error),
         busyLabel: null,
-        activity: appendActivity(state.activity, "Failed to create workspace session", "error", asErrorMessage(error)),
-      }));
+        activity: appendActivity(get().activity, "Failed to create session", "error", asErrorMessage(error)),
+      });
+    }
+  },
+
+  restoreSession: async () => {
+    if (get().session !== null || get().sessionStatus === "loading") return;
+    const storedSessionId = readStoredSessionId();
+    if (!storedSessionId) return;
+
+    set({ sessionStatus: "loading", sessionError: null, busyLabel: "Restoring workspace" });
+    try {
+      const session = await getSessionSummary(get().apiBaseUrl, storedSessionId);
+      writeStoredSessionId(session.session_id);
+      set({ session, sessionStatus: "ready", busyLabel: null });
+      await get().refreshWorkspace();
+      set({
+        activity: appendActivity(get().activity, "Restored session", "ok", session.session_id),
+      });
+    } catch (error) {
+      writeStoredSessionId(null);
+      set({
+        session: null,
+        sessionStatus: "idle",
+        sessionError: null,
+        busyLabel: null,
+        activity: appendActivity(get().activity, "Saved session unavailable", "error", asErrorMessage(error)),
+      });
     }
   },
 
   refreshWorkspace: async () => {
     const session = get().session;
-    if (!session) {
-      return;
-    }
-
+    if (!session) return;
     set({ busyLabel: "Refreshing workspace" });
     try {
-      const [summary, runconfig, datasetsPayload, sensorsPayload, capabilitiesPayload, workflowStatus, snapshotsPayload, openApiSpec, scenariosPayload, brighthubStatus] =
-        await Promise.all([
-          getAnalysisSummary(get().apiBaseUrl, session.session_id),
-          getSessionConfig(get().apiBaseUrl, session.session_id),
-          listDatasets(get().apiBaseUrl),
-          getSensors(get().apiBaseUrl, session.session_id).catch(() => ({ sensors: [] })),
-          getWorkflowCapabilities(get().apiBaseUrl, session.session_id),
-          getWorkflowStatus(get().apiBaseUrl, session.session_id),
-          listWorkflowSnapshots(get().apiBaseUrl, session.session_id),
-          fetchOpenApiSpec(get().apiBaseUrl).catch(() => ({ paths: {}, components: { schemas: {} } })),
-          listScenarios(get().apiBaseUrl, session.session_id).catch(() => ({ scenarios: [] })),
-          getBrightHubStatus(get().apiBaseUrl, session.session_id).catch(() => ({ authenticated: false, has_token: false })),
-        ]);
+      const [summary, runconfig, sensorsPayload, capabilitiesPayload, scenariosPayload] = await Promise.all([
+        getAnalysisSummary(get().apiBaseUrl, session.session_id),
+        getSessionConfig(get().apiBaseUrl, session.session_id),
+        getSensors(get().apiBaseUrl, session.session_id).catch(() => ({ sensors: [] })),
+        getWorkflowCapabilities(get().apiBaseUrl, session.session_id),
+        listScenarios(get().apiBaseUrl, session.session_id).catch(() => ({ scenarios: [] })),
+      ]);
 
       const nextConfig = hydrateConfigFromRunconfig(runconfig);
-      const graph = createWorkflowGraph(nextConfig, capabilitiesPayload.capabilities);
-      const windkitTools = extractWindKitTools(openApiSpec as never);
+      const completedSteps = summary.completed_steps ?? [];
+      const stageStatuses = computeStageStatuses(completedSteps);
       const scenarios = scenariosPayload.scenarios ?? [];
-      const brighthubLocations = brighthubStatus.authenticated
-        ? (await listBrightHubLocations(get().apiBaseUrl, session.session_id).catch(() => ({ locations: [] }))).locations
-        : [];
       const nextAssets = upsertAssets(get().assets, [
         buildConfigAsset(nextConfig),
         buildSummaryAsset(summary),
         buildSensorInventoryAsset(sensorsPayload.sensors ?? []),
       ]);
+      const workflowGraph = createWorkflowGraph(nextConfig, capabilitiesPayload.capabilities);
 
       set({
-        config: nextConfig,
-        serverRunconfig: runconfig,
         summary,
-        datasets: datasetsPayload.datasets,
+        serverRunconfig: runconfig,
+        config: nextConfig,
         sensors: sensorsPayload.sensors ?? [],
-        scenarios,
-        scenarioCompareSlots: normalizeScenarioSlots(get().scenarioCompareSlots, scenarios),
-        brighthubStatus,
-        brighthubLocations,
         capabilities: capabilitiesPayload.capabilities,
-        workflowNodes: graph.nodes,
-        workflowEdges: graph.edges,
-        workflowStatus,
-        workflowSnapshots: snapshotsPayload.snapshots,
-        windkitTools,
+        scenarios,
+        stageStatuses,
         assets: nextAssets,
+        workflowNodes: workflowGraph.nodes,
+        workflowEdges: workflowGraph.edges,
         busyLabel: null,
       });
+      // Best-effort workflow status + snapshots (non-fatal).
+      void get().refreshWorkflowStatus();
+      void get().refreshWorkflowSnapshots();
+      void get().refreshWindKitTools();
     } catch (error) {
-      set((state) => ({
+      set({
         busyLabel: null,
-        activity: appendActivity(state.activity, "Workspace refresh failed", "error", asErrorMessage(error)),
-      }));
+        activity: appendActivity(get().activity, "Workspace refresh failed", "error", asErrorMessage(error)),
+      });
+    }
+  },
+
+  resetCurrentSession: async () => {
+    const session = get().session;
+    if (!session) return;
+    set({ busyLabel: "Resetting session" });
+    try {
+      const reset = await resetSession(get().apiBaseUrl, session.session_id);
+      set({ session: reset, busyLabel: null });
+      await get().refreshWorkspace();
+      set({
+        activity: appendActivity(get().activity, "Reset session", "ok", reset.session_id),
+      });
+    } catch (error) {
+      set({
+        busyLabel: null,
+        activity: appendActivity(get().activity, "Session reset failed", "error", asErrorMessage(error)),
+      });
+    }
+  },
+
+  deleteCurrentSession: async () => {
+    const session = get().session;
+    if (!session) return;
+    set({ busyLabel: "Deleting session" });
+    try {
+      await deleteSession(get().apiBaseUrl, session.session_id);
+      writeStoredSessionId(null);
+      set({
+        session: null,
+        sessionStatus: "idle",
+        summary: null,
+        sensors: [],
+        scenarios: [],
+        ltcResults: [],
+        ensembleSummary: null,
+        stageStatuses: emptyStageStatuses(),
+        busyLabel: null,
+        activeTab: "setup",
+        selectedStage: "data",
+        activity: appendActivity(get().activity, "Deleted session", "ok", session.session_id),
+      });
+    } catch (error) {
+      set({
+        busyLabel: null,
+        activity: appendActivity(get().activity, "Session delete failed", "error", asErrorMessage(error)),
+      });
     }
   },
 
   saveConfig: async () => {
     const session = get().session;
-    if (!session) {
-      return;
-    }
+    if (!session) return;
     const nextRunconfig = serializeConfigToRunconfig(get().config);
     const updates = buildRunconfigUpdates(get().serverRunconfig, nextRunconfig);
-    if (updates.length === 0) {
-      return;
-    }
+    if (updates.length === 0) return;
 
     set({ busyLabel: "Saving config" });
     try {
       const response = await updateSessionConfig(get().apiBaseUrl, session.session_id, updates);
       const nextConfig = hydrateConfigFromRunconfig(response.runconfig);
-      const graph = createWorkflowGraph(nextConfig, get().capabilities);
       set((state) => ({
         config: nextConfig,
         serverRunconfig: response.runconfig,
-        workflowNodes: graph.nodes,
-        workflowEdges: graph.edges,
         assets: upsertAssets(state.assets, [buildConfigAsset(nextConfig)]),
         busyLabel: null,
-        activity: appendActivity(state.activity, "Saved central config", "ok", `${updates.length} runconfig update(s)`),
+        activity: appendActivity(
+          state.activity,
+          "Saved config",
+          "ok",
+          `${updates.length} update(s)`,
+        ),
+      }));
+      await get().refreshWorkspace();
+    } catch (error) {
+      set({
+        busyLabel: null,
+        activity: appendActivity(get().activity, "Config save failed", "error", asErrorMessage(error)),
+      });
+    }
+  },
+
+  fetchPlot: async (plotName, params) => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    set({ busyLabel: `Rendering ${plotName}` });
+    try {
+      const result = await fetchPlot(get().apiBaseUrl, session.session_id, plotName, params);
+      set((state) => ({
+        activePlot: { plotName, params, result },
+        assets: upsertAssets(state.assets, [buildOperationResultAsset(`plot:${plotName}`, result)]),
+        busyLabel: null,
+      }));
+      return result;
+    } catch (error) {
+      set({
+        busyLabel: null,
+        activity: appendActivity(get().activity, `Plot ${plotName} failed`, "error", asErrorMessage(error)),
+      });
+      throw error;
+    }
+  },
+
+  refreshResults: async () => {
+    const session = get().session;
+    if (!session) return;
+    try {
+      const [ltc, ensemble] = await Promise.all([
+        getLtcResults(get().apiBaseUrl, session.session_id).catch(() => null),
+        getEnsembleResult(get().apiBaseUrl, session.session_id).catch(() => null),
+      ]);
+      set({
+        ltcResults: ltc ? toLtcResultSummaries(ltc) : [],
+        ensembleSummary: ensemble,
+      });
+    } catch (error) {
+      set({
+        activity: appendActivity(get().activity, "Results refresh failed", "error", asErrorMessage(error)),
+      });
+    }
+  },
+
+  invokeSessionOperation: async <T,>(label: string, method: HttpMethod, path: string, body?: unknown) => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    set({ busyLabel: label });
+    try {
+      const response = await callSessionRoute<T>(get().apiBaseUrl, session.session_id, method, path, body);
+      set((state) => ({
+        busyLabel: null,
+        assets: upsertAssets(state.assets, [buildOperationResultAsset(label, response)]),
+        activity: appendActivity(state.activity, label, "ok", "Operation completed"),
+      }));
+      await get().refreshWorkspace();
+      return response;
+    } catch (error) {
+      set({
+        busyLabel: null,
+        activity: appendActivity(get().activity, label, "error", asErrorMessage(error)),
+      });
+      throw error;
+    }
+  },
+
+  // ---- Stage 1: data loading ---------------------------------------------
+
+  uploadSessionFile: async (kind, file) => {
+    const session = get().session;
+    if (!session) return;
+    set({ busyLabel: `Uploading ${kind}` });
+    try {
+      const response = await apiUploadSessionFile(get().apiBaseUrl, session.session_id, kind, file);
+      set((state) => ({
+        busyLabel: null,
+        assets: upsertAssets(state.assets, [buildOperationResultAsset(`upload-${kind}`, response)]),
+        activity: appendActivity(state.activity, `Uploaded ${kind}`, "ok", file.name),
       }));
       await get().refreshWorkspace();
     } catch (error) {
       set((state) => ({
         busyLabel: null,
-        activity: appendActivity(state.activity, "Failed to save config", "error", asErrorMessage(error)),
+        activity: appendActivity(state.activity, `Failed to upload ${kind}`, "error", asErrorMessage(error)),
       }));
+    }
+  },
+
+  refreshDatasets: async () => {
+    try {
+      const payload = await listDatasets(get().apiBaseUrl);
+      set({ datasets: payload.datasets });
+    } catch {
+      /* non-fatal */
     }
   },
 
@@ -489,9 +704,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   loadDataset: async (datasetId) => {
     const session = get().session;
-    if (!session) {
-      return;
-    }
+    if (!session) return;
     set({ busyLabel: "Loading dataset into session" });
     try {
       await loadDatasetIntoSession(get().apiBaseUrl, session.session_id, datasetId);
@@ -504,82 +717,28 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     } catch (error) {
       set((state) => ({
         busyLabel: null,
-        activity: appendActivity(state.activity, "Failed to load shared dataset", "error", asErrorMessage(error)),
-      }));
-    }
-  },
-
-  uploadSharedDataset: async (payload) => {
-    set({ busyLabel: "Uploading shared dataset" });
-    try {
-      const response = await apiUploadSharedDataset(get().apiBaseUrl, payload);
-      set((state) => ({
-        busyLabel: null,
-        activity: appendActivity(
-          state.activity,
-          "Uploaded shared dataset",
-          "ok",
-          String(response.dataset_id ?? response.id ?? payload.name ?? payload.timeseriesFile.name),
-        ),
-      }));
-      await get().refreshWorkspace();
-    } catch (error) {
-      set((state) => ({
-        busyLabel: null,
-        activity: appendActivity(state.activity, "Shared dataset upload failed", "error", asErrorMessage(error)),
-      }));
-    }
-  },
-
-  uploadSessionFile: async (kind, file) => {
-    const session = get().session;
-    if (!session) {
-      return;
-    }
-    set({ busyLabel: `Uploading ${kind}` });
-    try {
-      const response = await apiUploadSessionFile(get().apiBaseUrl, session.session_id, kind, file);
-      set((state) => ({
-        busyLabel: null,
-        lastOperation: response,
-        assets: upsertAssets(state.assets, [buildOperationResultAsset(`upload-${kind}`, response)]),
-        activity: appendActivity(state.activity, `Uploaded ${kind}`, "ok", file.name),
-      }));
-      await get().refreshWorkspace();
-    } catch (error) {
-      set((state) => ({
-        busyLabel: null,
-        activity: appendActivity(state.activity, `Failed to upload ${kind}`, "error", asErrorMessage(error)),
+        activity: appendActivity(state.activity, "Failed to load dataset", "error", asErrorMessage(error)),
       }));
     }
   },
 
   refreshBrightHub: async () => {
     const session = get().session;
-    if (!session) {
-      return;
-    }
-
+    if (!session) return;
     try {
       const status = await getBrightHubStatus(get().apiBaseUrl, session.session_id);
-      const locations = status.authenticated
+      const locations: BrightHubLocation[] = status.authenticated
         ? (await listBrightHubLocations(get().apiBaseUrl, session.session_id).catch(() => ({ locations: [] }))).locations
         : [];
       set({ brighthubStatus: status, brighthubLocations: locations });
-    } catch (error) {
-      set((state) => ({
-        brighthubStatus: { authenticated: false, has_token: false },
-        brighthubLocations: [],
-        activity: appendActivity(state.activity, "BrightHub refresh failed", "error", asErrorMessage(error)),
-      }));
+    } catch {
+      set({ brighthubStatus: { authenticated: false, has_token: false }, brighthubLocations: [] });
     }
   },
 
   loginBrightHub: async ({ clientId, clientSecret }) => {
     const session = get().session;
-    if (!session) {
-      return;
-    }
+    if (!session) return;
     set({ busyLabel: "Connecting to BrightHub" });
     try {
       await loginBrightHub(get().apiBaseUrl, session.session_id, {
@@ -601,9 +760,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   logoutBrightHub: async () => {
     const session = get().session;
-    if (!session) {
-      return;
-    }
+    if (!session) return;
     set({ busyLabel: "Disconnecting BrightHub" });
     try {
       await logoutBrightHub(get().apiBaseUrl, session.session_id);
@@ -623,15 +780,12 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   importBrightHubLocation: async (payload) => {
     const session = get().session;
-    if (!session) {
-      return;
-    }
+    if (!session) return;
     set({ busyLabel: "Importing BrightHub location" });
     try {
       const response = await importBrightHubLocation(get().apiBaseUrl, session.session_id, payload);
       set((state) => ({
         busyLabel: null,
-        lastOperation: response,
         assets: upsertAssets(state.assets, [buildOperationResultAsset("brighthub-import", response)]),
         activity: appendActivity(state.activity, "Imported BrightHub location", "ok", response.uuid),
       }));
@@ -645,25 +799,42 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
   },
 
+  // ---- Stage 2: reanalysis -----------------------------------------------
+
   fetchBrightHubReanalysisNodes: async (payload) => {
     const session = get().session;
-    if (!session) {
-      return;
-    }
-    set({ busyLabel: "Finding BrightHub reanalysis nodes" });
+    if (!session) return;
+    set({ busyLabel: "Finding reanalysis nodes" });
     try {
       const response = await fetchBrightHubReanalysisNodes(get().apiBaseUrl, session.session_id, payload);
       set((state) => ({
         brighthubReanalysis: response,
+        era5Nodes: response.era5_nodes.map((n) => ({
+          latitude: n.latitude_ddeg,
+          longitude: n.longitude_ddeg,
+          distance_km: typeof n.distance_km === "number" ? n.distance_km : undefined,
+          bearing: n.bearing,
+        })),
+        merraNodes: response.merra2_nodes.map((n) => ({
+          latitude: n.latitude_ddeg,
+          longitude: n.longitude_ddeg,
+          distance_km: typeof n.distance_km === "number" ? n.distance_km : undefined,
+          bearing: n.bearing,
+        })),
         busyLabel: null,
-        lastOperation: response,
-        assets: upsertAssets(state.assets, [buildOperationResultAsset("brighthub-reanalysis-nodes", response)]),
-        activity: appendActivity(state.activity, "Fetched BrightHub nodes", "ok", `${response.era5_nodes.length} ERA5 / ${response.merra2_nodes.length} MERRA-2`),
+        assets: upsertAssets(state.assets, [buildOperationResultAsset("reanalysis-nodes", response)]),
+        activity: appendActivity(
+          state.activity,
+          "Fetched reanalysis nodes",
+          "ok",
+          `${response.era5_nodes.length} ERA5 / ${response.merra2_nodes.length} MERRA-2`,
+        ),
       }));
+      await get().loadSiteMap();
     } catch (error) {
       set((state) => ({
         busyLabel: null,
-        activity: appendActivity(state.activity, "BrightHub node lookup failed", "error", asErrorMessage(error)),
+        activity: appendActivity(state.activity, "Reanalysis node lookup failed", "error", asErrorMessage(error)),
       }));
     }
   },
@@ -671,27 +842,20 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   downloadBrightHubReanalysis: async ({ dataset, source, useNodes }) => {
     const session = get().session;
     const nodesPayload = get().brighthubReanalysis;
-    if (!session || !nodesPayload) {
-      return;
-    }
-
+    if (!session || !nodesPayload) return;
     const nodes = useNodes === "merra2" ? nodesPayload.merra2_nodes : nodesPayload.era5_nodes;
-    if (nodes.length === 0) {
-      return;
-    }
-
-    set({ busyLabel: `Downloading ${dataset} reanalysis` });
+    if (nodes.length === 0) return;
+    set({ busyLabel: `Downloading ${dataset}` });
     try {
-      const response: BrightHubReanalysisDownloadResponse = await downloadBrightHubReanalysis(
-        get().apiBaseUrl,
-        session.session_id,
-        { dataset, source, nodes },
-      );
+      const response = await downloadBrightHubReanalysis(get().apiBaseUrl, session.session_id, {
+        dataset,
+        source,
+        nodes,
+      });
       set((state) => ({
         busyLabel: null,
-        lastOperation: response,
-        assets: upsertAssets(state.assets, [buildOperationResultAsset(`brighthub-${dataset.toLowerCase()}-download`, response)]),
-        activity: appendActivity(state.activity, `Downloaded ${dataset} reanalysis`, "ok", `${response.items.length} node(s)`),
+        assets: upsertAssets(state.assets, [buildOperationResultAsset(`${dataset}-download`, response)]),
+        activity: appendActivity(state.activity, `Downloaded ${dataset}`, "ok", `${response.items.length} node(s)`),
       }));
       await get().refreshWorkspace();
     } catch (error) {
@@ -702,17 +866,189 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
   },
 
-  saveScenario: async (name) => {
+  loadSiteMap: async () => {
     const session = get().session;
-    if (!session || name.trim().length === 0) {
-      return;
-    }
-    set({ busyLabel: "Saving scenario" });
+    if (!session) return;
     try {
-      const response = await apiSaveScenario(get().apiBaseUrl, session.session_id, name.trim());
+      const geojson = await getSiteMap(get().apiBaseUrl, session.session_id);
+      set({ siteMap: geojson });
+    } catch {
+      /* non-fatal */
+    }
+  },
+
+  // ---- Stage 3: exploration ----------------------------------------------
+
+  loadSensorStatistics: async (sensorName) => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    set({ busyLabel: `Statistics for ${sensorName}` });
+    try {
+      const stats = await getStatistics(get().apiBaseUrl, session.session_id, sensorName);
+      set({ sensorStatistics: stats, busyLabel: null });
+      return stats;
+    } catch (error) {
       set((state) => ({
         busyLabel: null,
-        activity: appendActivity(state.activity, "Saved scenario", "ok", response.name),
+        activity: appendActivity(state.activity, "Statistics failed", "error", asErrorMessage(error)),
+      }));
+      throw error;
+    }
+  },
+
+  loadCoverage: async (sensorName) => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    set({ busyLabel: `Coverage for ${sensorName}` });
+    try {
+      const coverage = await getCoverage(get().apiBaseUrl, session.session_id, sensorName);
+      set({ coverageDetail: coverage, busyLabel: null });
+      return coverage;
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Coverage failed", "error", asErrorMessage(error)),
+      }));
+      throw error;
+    }
+  },
+
+  // ---- Stage 6: LTC ------------------------------------------------------
+
+  runLtcAlgorithms: async (payload) => {
+    const session = get().session;
+    if (!session) return;
+    for (const algorithm of payload.algorithms) {
+      set({ busyLabel: `Running LTC · ${algorithm}` });
+      try {
+        const result = await runLtc(get().apiBaseUrl, session.session_id, algorithm, {
+          short_col: payload.shortCol,
+          long_col: payload.longCol,
+          short_dir_col: payload.shortDirCol,
+          long_dir_col: payload.longDirCol,
+        });
+        set((state) => ({
+          assets: upsertAssets(state.assets, [buildOperationResultAsset(`ltc:${algorithm}`, result)]),
+          activity: appendActivity(state.activity, `LTC · ${algorithm}`, "ok", "Completed"),
+        }));
+      } catch (error) {
+        set((state) => ({
+          activity: appendActivity(state.activity, `LTC · ${algorithm} failed`, "error", asErrorMessage(error)),
+        }));
+      }
+    }
+    set({ busyLabel: null });
+    await get().refreshResults();
+    await get().refreshWorkspace();
+  },
+
+  // ---- Stage 7: clipping -------------------------------------------------
+
+  loadClippingColumns: async (source) => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    try {
+      const payload = await getClippingColumns(get().apiBaseUrl, session.session_id, source);
+      set({ clippingColumns: payload.columns });
+      return payload.columns;
+    } catch (error) {
+      set((state) => ({
+        activity: appendActivity(state.activity, "Clipping columns failed", "error", asErrorMessage(error)),
+      }));
+      return [];
+    }
+  },
+
+  runClippingAnalysis: async (payload) => {
+    const session = get().session;
+    if (!session) return;
+    set({ busyLabel: "Clipping analysis" });
+    try {
+      const result = (await runClipping(
+        get().apiBaseUrl,
+        session.session_id,
+        payload,
+      )) as unknown as ClippingReport;
+      set((state) => ({
+        clippingReport: result,
+        busyLabel: null,
+        assets: upsertAssets(state.assets, [buildOperationResultAsset("clipping", result)]),
+        activity: appendActivity(
+          state.activity,
+          "Clipping analysis",
+          "ok",
+          `optimal start ${result.optimal_start_year}`,
+        ),
+      }));
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Clipping failed", "error", asErrorMessage(error)),
+      }));
+    }
+  },
+
+  // ---- Stage 8: ensemble & uncertainty -----------------------------------
+
+  runEnsembleAnalysis: async (measuredCol) => {
+    const session = get().session;
+    if (!session) return;
+    set({ busyLabel: "Running ensemble" });
+    try {
+      const result = await runEnsemble(get().apiBaseUrl, session.session_id, { measured_col: measuredCol });
+      set((state) => ({
+        busyLabel: null,
+        assets: upsertAssets(state.assets, [buildOperationResultAsset("ensemble", result)]),
+        activity: appendActivity(state.activity, "Ensemble", "ok", "Blended"),
+      }));
+      await get().refreshResults();
+      await get().refreshWorkspace();
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Ensemble failed", "error", asErrorMessage(error)),
+      }));
+    }
+  },
+
+  runUncertaintyAnalysis: async (payload) => {
+    const session = get().session;
+    if (!session) return;
+    set({ busyLabel: "Calculating uncertainty" });
+    try {
+      const result = (await runUncertainty(
+        get().apiBaseUrl,
+        session.session_id,
+        payload,
+      )) as unknown as UncertaintyResult;
+      set((state) => ({
+        uncertaintyResult: result,
+        busyLabel: null,
+        assets: upsertAssets(state.assets, [buildOperationResultAsset("uncertainty", result)]),
+        activity: appendActivity(
+          state.activity,
+          "Uncertainty",
+          "ok",
+          `${result.total_uncertainty_pct}% total`,
+        ),
+      }));
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Uncertainty failed", "error", asErrorMessage(error)),
+      }));
+    }
+  },
+
+  saveScenarioSnapshot: async (name) => {
+    const session = get().session;
+    if (!session || name.trim().length === 0) return;
+    set({ busyLabel: "Saving scenario" });
+    try {
+      await saveScenario(get().apiBaseUrl, session.session_id, name.trim());
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Saved scenario", "ok", name.trim()),
       }));
       await get().refreshWorkspace();
     } catch (error) {
@@ -723,20 +1059,15 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
   },
 
-  deleteScenario: async (scenarioIndex) => {
+  deleteScenarioSnapshot: async (scenarioIndex) => {
     const session = get().session;
-    if (!session) {
-      return;
-    }
+    if (!session) return;
     set({ busyLabel: "Deleting scenario" });
     try {
-      const response = await apiDeleteScenario(get().apiBaseUrl, session.session_id, scenarioIndex);
+      const result = await deleteScenario(get().apiBaseUrl, session.session_id, scenarioIndex);
       set((state) => ({
         busyLabel: null,
-        scenarioCompareSlots: Object.fromEntries(
-          Object.entries(state.scenarioCompareSlots).map(([slot, value]) => [slot, value === response.name ? null : value]),
-        ) as ScenarioCompareSlots,
-        activity: appendActivity(state.activity, "Deleted scenario", "ok", response.name),
+        activity: appendActivity(state.activity, "Deleted scenario", "ok", result.name),
       }));
       await get().refreshWorkspace();
     } catch (error) {
@@ -747,61 +1078,25 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
   },
 
-  setScenarioCompareSlot: (slot, scenarioName) => {
-    set((state) => ({
-      scenarioCompareSlots: {
-        ...state.scenarioCompareSlots,
-        [slot]: scenarioName,
-      },
-    }));
-  },
-
-  invokeSessionOperation: async <T,>(label: string, method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown) => {
-    const session = get().session;
-    if (!session) {
-      throw new Error("Session is not initialized");
-    }
-    set({ busyLabel: label });
-    try {
-      const response = await callSessionRoute<T>(get().apiBaseUrl, session.session_id, method, path, body);
-      set((state) => ({
-        busyLabel: null,
-        lastOperation: response,
-        assets: upsertAssets(state.assets, [buildOperationResultAsset(label, response)]),
-        activity: appendActivity(state.activity, label, "ok", "Operation completed"),
-      }));
-      await get().refreshWorkspace();
-      return response;
-    } catch (error) {
-      set((state) => ({
-        busyLabel: null,
-        activity: appendActivity(state.activity, label, "error", asErrorMessage(error)),
-      }));
-      throw error;
-    }
-  },
+  // ---- Phase F: workflow canvas ------------------------------------------
 
   setWorkflowGraph: (nodes, edges) => set({ workflowNodes: nodes, workflowEdges: edges }),
 
-  updateWorkflowNode: (nodeId, updater) => {
-    set((state) => ({
-      workflowNodes: state.workflowNodes.map((node) => (node.id === nodeId ? updater(node) : node)),
-    }));
+  rebuildWorkflowGraph: () => {
+    const graph = createWorkflowGraph(get().config, get().capabilities);
+    set({ workflowNodes: graph.nodes, workflowEdges: graph.edges });
   },
 
-  executeWorkflow: async (mode) => {
+  executeWorkflowGraph: async (mode) => {
     const session = get().session;
-    if (!session) {
-      return;
-    }
+    if (!session) return;
     const payload = toExecutionRequest(get().workflowNodes, get().workflowEdges, mode);
-    set({ busyLabel: mode === "auto" ? "Executing workflow" : "Executing workflow step" });
+    set({ busyLabel: mode === "auto" ? "Executing workflow" : "Executing step" });
     try {
-      const response: WorkflowExecutionResponse =
+      const response =
         mode === "auto"
-          ? await executeWorkflow(get().apiBaseUrl, session.session_id, payload)
-          : await executeWorkflowStep(get().apiBaseUrl, session.session_id, payload);
-
+          ? await apiExecuteWorkflow(get().apiBaseUrl, session.session_id, payload)
+          : await apiExecuteWorkflowStep(get().apiBaseUrl, session.session_id, payload);
       set((state) => ({
         workflowStatus: {
           run_id: response.run_id,
@@ -810,7 +1105,6 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
           node_statuses: response.node_statuses,
           events: response.events,
         },
-        lastOperation: response,
         assets: upsertAssets(state.assets, [buildOperationResultAsset(`workflow-${mode}`, response)]),
         busyLabel: null,
         activity: appendActivity(state.activity, `Workflow ${mode}`, "ok", response.status),
@@ -824,265 +1118,259 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
   },
 
-  refreshWorkflowStatus: async () => {
+  stopWorkflowGraph: async () => {
     const session = get().session;
-    if (!session) {
-      return;
+    if (!session) return;
+    try {
+      await apiStopWorkflow(get().apiBaseUrl, session.session_id);
+      set((state) => ({
+        activity: appendActivity(state.activity, "Workflow stop requested", "ok", ""),
+      }));
+    } catch (error) {
+      set((state) => ({
+        activity: appendActivity(state.activity, "Workflow stop failed", "error", asErrorMessage(error)),
+      }));
     }
-    const workflowStatus = await getWorkflowStatus(get().apiBaseUrl, session.session_id);
-    set({ workflowStatus });
   },
 
-  saveSnapshot: async (name) => {
+  refreshWorkflowStatus: async () => {
     const session = get().session;
-    if (!session) {
-      return;
-    }
-    set({ busyLabel: "Saving workflow snapshot" });
+    if (!session) return;
     try {
-      await saveWorkflowSnapshot(get().apiBaseUrl, session.session_id, name, {
+      const status = await apiGetWorkflowStatus(get().apiBaseUrl, session.session_id);
+      set({ workflowStatus: status });
+    } catch {
+      /* non-fatal */
+    }
+  },
+
+  refreshWorkflowSnapshots: async () => {
+    const session = get().session;
+    if (!session) return;
+    try {
+      const payload = await apiListSnapshots(get().apiBaseUrl, session.session_id);
+      set({ workflowSnapshots: payload.snapshots });
+    } catch {
+      /* non-fatal */
+    }
+  },
+
+  saveWorkflowSnapshot: async (name) => {
+    const session = get().session;
+    if (!session || !name.trim()) return;
+    set({ busyLabel: "Saving snapshot" });
+    try {
+      await apiSaveSnapshot(get().apiBaseUrl, session.session_id, name.trim(), {
         nodes: get().workflowNodes,
         edges: get().workflowEdges,
       });
       set((state) => ({
         busyLabel: null,
-        activity: appendActivity(state.activity, "Saved workflow snapshot", "ok", name),
+        activity: appendActivity(state.activity, "Saved snapshot", "ok", name.trim()),
       }));
-      await get().refreshWorkspace();
+      await get().refreshWorkflowSnapshots();
     } catch (error) {
       set((state) => ({
         busyLabel: null,
-        activity: appendActivity(state.activity, "Failed to save workflow snapshot", "error", asErrorMessage(error)),
+        activity: appendActivity(state.activity, "Snapshot save failed", "error", asErrorMessage(error)),
       }));
     }
   },
 
-  loadSnapshot: async (name) => {
+  loadWorkflowSnapshot: async (name) => {
     const session = get().session;
-    if (!session) {
-      return;
-    }
-    set({ busyLabel: "Loading workflow snapshot" });
+    if (!session) return;
+    set({ busyLabel: "Loading snapshot" });
     try {
-      const response = await loadWorkflowSnapshot(get().apiBaseUrl, session.session_id, name);
-      const snapshot = response.snapshot as { nodes?: WorkflowCanvasNode[]; edges?: WorkflowCanvasEdge[] };
+      const response = await apiLoadSnapshot(get().apiBaseUrl, session.session_id, name);
+      const snapshot = response.snapshot as
+        | { nodes?: WorkflowCanvasNode[]; edges?: WorkflowCanvasEdge[] }
+        | undefined;
       set((state) => ({
-        workflowNodes: snapshot.nodes ?? state.workflowNodes,
-        workflowEdges: snapshot.edges ?? state.workflowEdges,
+        workflowNodes: snapshot?.nodes ?? state.workflowNodes,
+        workflowEdges: snapshot?.edges ?? state.workflowEdges,
         busyLabel: null,
-        activity: appendActivity(state.activity, "Loaded workflow snapshot", "ok", name),
+        activity: appendActivity(state.activity, "Loaded snapshot", "ok", name),
       }));
     } catch (error) {
       set((state) => ({
         busyLabel: null,
-        activity: appendActivity(state.activity, "Failed to load workflow snapshot", "error", asErrorMessage(error)),
+        activity: appendActivity(state.activity, "Snapshot load failed", "error", asErrorMessage(error)),
       }));
     }
   },
 
-  forkBranch: async (name, fromNodeId) => {
+  forkWorkflowBranch: async (name, fromNodeId) => {
     const session = get().session;
-    if (!session) {
-      return;
-    }
-    set({ busyLabel: "Forking workflow branch" });
+    if (!session) return;
+    set({ busyLabel: "Forking branch" });
     try {
-      const response = await forkWorkflowBranch(get().apiBaseUrl, session.session_id, { name, from_node_id: fromNodeId });
+      const response = await apiForkBranch(get().apiBaseUrl, session.session_id, {
+        name,
+        from_node_id: fromNodeId,
+      });
       set((state) => ({
-        workflowBranches: [response, ...state.workflowBranches],
         busyLabel: null,
-        activity: appendActivity(state.activity, "Forked workflow branch", "ok", response.branch_session_id),
+        activity: appendActivity(state.activity, "Forked branch", "ok", response.branch_session_id),
       }));
     } catch (error) {
       set((state) => ({
         busyLabel: null,
-        activity: appendActivity(state.activity, "Failed to fork workflow branch", "error", asErrorMessage(error)),
+        activity: appendActivity(state.activity, "Branch fork failed", "error", asErrorMessage(error)),
       }));
     }
   },
 
-  compareBranches: async (branchSessionIds) => {
-    const session = get().session;
-    if (!session) {
-      return;
-    }
-    set({ busyLabel: "Comparing branches" });
-    try {
-      const response = await compareWorkflowBranches(get().apiBaseUrl, session.session_id, branchSessionIds);
-      set((state) => ({
-        compareResult: response,
-        busyLabel: null,
-        activity: appendActivity(state.activity, "Compared workflow branches", "ok", response.session_ids.join(", ")),
-      }));
-    } catch (error) {
-      set((state) => ({
-        busyLabel: null,
-        activity: appendActivity(state.activity, "Branch comparison failed", "error", asErrorMessage(error)),
-      }));
-    }
-  },
+  // ---- Phase G: copilot / compare / windkit ------------------------------
 
   setChatSettings: (settings) => {
-    safeStorageWrite(settings);
+    writeChatSettings(settings);
     set({ chatSettings: settings });
   },
 
   sendChatMessage: async (content) => {
     const session = get().session;
-    if (!session || content.trim().length === 0) {
+    if (!session || content.trim().length === 0) return;
+    const settings = get().chatSettings;
+    if (!settings.apiKey) {
+      set((state) => ({
+        activity: appendActivity(state.activity, "Copilot needs an API key", "error", "Set one in the settings drawer."),
+      }));
       return;
     }
 
-    const userMessage: CopilotMessage = {
-      id: createId("chat-user"),
+    const userMsg: CopilotMessage = {
+      id: `cu-${Date.now()}`,
       role: "user",
       content,
       status: "complete",
-      reasoning: "",
       toolCalls: [],
     };
-    const assistantId = createId("chat-assistant");
-    const assistantMessage: CopilotMessage = {
+    const assistantId = `ca-${Date.now()}`;
+    const assistantMsg: CopilotMessage = {
       id: assistantId,
       role: "assistant",
       content: "",
       status: "streaming",
-      reasoning: "",
       toolCalls: [],
     };
-
-    const patchAssistant = (updater: (message: CopilotMessage) => CopilotMessage) => {
-      set((state) => ({
-        chatMessages: state.chatMessages.map((message) => (message.id === assistantId ? updater(message) : message)),
-      }));
-    };
-
     set((state) => ({
-      chatMessages: [...state.chatMessages, userMessage, assistantMessage],
+      chatMessages: [...state.chatMessages, userMsg, assistantMsg],
       busyLabel: "Streaming copilot reply",
     }));
 
+    const patchAssistant = (updater: (m: CopilotMessage) => CopilotMessage) => {
+      set((state) => ({
+        chatMessages: state.chatMessages.map((m) => (m.id === assistantId ? updater(m) : m)),
+      }));
+    };
+
+    const upsertToolCall = (evt: CopilotToolEvent) => {
+      patchAssistant((m) => {
+        const idx = m.toolCalls.findIndex((t) => t.id === evt.id);
+        if (idx === -1) return { ...m, toolCalls: [...m.toolCalls, evt] };
+        const next = [...m.toolCalls];
+        next[idx] = { ...next[idx], ...evt };
+        return { ...m, toolCalls: next };
+      });
+    };
+
     try {
+      const history = get()
+        .chatMessages.filter((m) => m.id !== assistantId && m.id !== userMsg.id)
+        .map((m) => ({ role: m.role, content: m.content }));
       const response = await streamCopilotReply({
         prompt: content,
-        settings: get().chatSettings,
+        settings,
+        sessionId: session.session_id,
+        apiBaseUrl: get().apiBaseUrl,
         context: {
           summary: get().summary,
           config: get().config,
           sensors: get().sensors,
-          assets: get().assets,
           scenarios: get().scenarios,
-          windkitTools: get().windkitTools,
         },
         handlers: {
-          getWorkspaceContext: async () => ({
-            summary: get().summary,
-            config: get().config,
-            sensors: get().sensors,
-            assets: get().assets,
-            scenarios: get().scenarios,
-            windkitTools: get().windkitTools.map((tool) => ({ path: tool.path, category: tool.category, summary: tool.summary })),
-          }),
-          updateRunconfigField: async ({ key, value }) => {
-            const updateResponse = await updateSessionConfig(get().apiBaseUrl, session.session_id, [{ key, value }]);
-            const nextConfig = hydrateConfigFromRunconfig(updateResponse.runconfig);
-            const graph = createWorkflowGraph(nextConfig, get().capabilities);
-            set((state) => ({
-              config: nextConfig,
-              serverRunconfig: updateResponse.runconfig,
-              workflowNodes: graph.nodes,
-              workflowEdges: graph.edges,
-              assets: upsertAssets(state.assets, [buildConfigAsset(nextConfig)]),
-            }));
+          onUpdateRunconfigField: async ({ key, value }) => {
+            const res = await updateSessionConfig(get().apiBaseUrl, session.session_id, [{ key, value }]);
             await get().refreshWorkspace();
-            return updateResponse;
+            return res;
           },
-          callSessionRoute: async ({ label, method, path, body }) => {
-            const routeResponse = await callSessionRoute(
-              get().apiBaseUrl,
-              session.session_id,
-              method as HttpMethod,
-              path,
-              body,
-            );
-            set((state) => ({
-              lastOperation: routeResponse,
-              assets: upsertAssets(state.assets, [buildOperationResultAsset(label, routeResponse)]),
-            }));
-            await get().refreshWorkspace();
-            return routeResponse;
-          },
-          callWindKitRoute: async ({ routePath, payload }) => {
-            const windkitResponse = await invokeWindKitRoute(get().apiBaseUrl, routePath, payload);
-            set((state) => ({
-              windkitResponse,
-              lastOperation: windkitResponse,
-              assets: upsertAssets(state.assets, [buildWindKitResultAsset(routePath, windkitResponse.result)]),
-            }));
-            return windkitResponse;
-          },
-          listScenarios: async () => {
-            const scenariosResponse = await listScenarios(get().apiBaseUrl, session.session_id);
-            set((state) => ({
-              scenarios: scenariosResponse.scenarios,
-              scenarioCompareSlots: normalizeScenarioSlots(state.scenarioCompareSlots, scenariosResponse.scenarios),
-            }));
-            return scenariosResponse;
+          onCallSessionRoute: async ({ label, method, path, body }) => {
+            return get().invokeSessionOperation(label, method as HttpMethod, path, body);
           },
         },
         callbacks: {
-          onTextDelta: (delta) => {
-            patchAssistant((message) => ({
-              ...message,
-              content: message.content + delta,
-            }));
-          },
-          onReasoningDelta: (delta) => {
-            patchAssistant((message) => ({
-              ...message,
-              reasoning: message.reasoning + delta,
-            }));
-          },
-          onToolEvent: (event) => {
-            patchAssistant((message) => ({
-              ...message,
-              toolCalls: upsertCopilotToolCall(message.toolCalls, event),
-            }));
-          },
+          onTextDelta: (delta) => patchAssistant((m) => ({ ...m, content: delta })),
+          onToolEvent: upsertToolCall,
         },
+        history,
       });
-
-      patchAssistant((message) => ({
-        ...message,
-        content: response.text || message.content,
-        reasoning: response.reasoning || message.reasoning,
+      patchAssistant((m) => ({
+        ...m,
+        content: response.text || m.content,
         status: "complete",
       }));
       set({ busyLabel: null });
     } catch (error) {
       const detail = asErrorMessage(error);
-      patchAssistant((message) => ({
-        ...message,
-        status: "error",
-        content: message.content || detail,
-      }));
+      patchAssistant((m) => ({ ...m, status: "error", content: m.content || detail }));
       set((state) => ({
         busyLabel: null,
-        activity: appendActivity(state.activity, "Copilot request failed", "error", detail),
+        activity: appendActivity(state.activity, "Copilot failed", "error", detail),
       }));
     }
   },
 
-  invokeWindKitTool: async (toolPath, payload) => {
+  setCompareSlot: (slotIndex, scenarioName) => {
+    set((state) => {
+      const next = [...state.compareSlotNames];
+      next[slotIndex] = scenarioName;
+      return { compareSlotNames: next };
+    });
+  },
+
+  runCompare: async () => {
+    const session = get().session;
+    if (!session) return;
+    set({ busyLabel: "Comparing scenarios" });
+    try {
+      // Compare requires branch session ids; for an in-session comparison we
+      // fork the named scenarios' configs into branches first. For now we pass
+      // the active session as the baseline and rely on saved-scenario runconfigs
+      // being available server-side via the workflow compare endpoint.
+      const response = await compareWorkflowBranches(get().apiBaseUrl, session.session_id, []);
+      set((state) => ({
+        compareResult: response,
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Compared", "ok", response.session_ids.join(", ")),
+      }));
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Compare failed", "error", asErrorMessage(error)),
+      }));
+    }
+  },
+
+  refreshWindKitTools: async () => {
+    try {
+      const spec = await fetchOpenApiSpec(get().apiBaseUrl);
+      set({ windkitTools: extractWindKitTools(spec) });
+    } catch {
+      /* non-fatal; WindKit optional */
+    }
+  },
+
+  invokeWindKitRoute: async (routePath, payload) => {
     set({ busyLabel: "Running WindKit tool" });
     try {
-      const response = await invokeWindKitRoute(get().apiBaseUrl, toolPath, payload);
+      const response = await apiInvokeWindKitRoute(get().apiBaseUrl, routePath, payload);
       set((state) => ({
-        windkitResponse: response,
-        lastOperation: response,
-        assets: upsertAssets(state.assets, [buildWindKitResultAsset(toolPath, response.result)]),
+        windkitResponse: response.result,
         busyLabel: null,
-        activity: appendActivity(state.activity, "Ran WindKit tool", "ok", toolPath),
+        assets: upsertAssets(state.assets, [buildOperationResultAsset(routePath, response.result)]),
+        activity: appendActivity(state.activity, "WindKit tool", "ok", routePath),
       }));
     } catch (error) {
       set((state) => ({
@@ -1092,3 +1380,12 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
   },
 }));
+
+function deriveApiBaseUrl(): string {
+  const env = import.meta.env.VITE_API_BASE_URL;
+  if (typeof env === "string" && env.length > 0) return env;
+  if (typeof window !== "undefined" && window.location.origin.length > 0) {
+    return window.location.origin;
+  }
+  return "http://127.0.0.1:8000";
+}

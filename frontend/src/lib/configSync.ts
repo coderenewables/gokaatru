@@ -1,162 +1,163 @@
+// Bidirectional sync between the typed `WindAnalysisConfig` and the flat backend
+// `runconfig` dict (spec §1.3).
+//
+// Backend runconfig keys of interest (verified):
+//   project_name, location {latitude, longitude, elevation_m}, measurement_type,
+//   hub_height_m, sensor_mapping, cleaning_log, brighthub_uuid.
 import { createDefaultWindAnalysisConfig } from "./defaultConfig";
 import type { WindAnalysisConfig } from "../types/analysis";
-import { measurementTypeSchema, windAnalysisConfigSchema } from "../types/analysis";
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+type AnyRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is AnyRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function cloneValue<T>(value: T): T {
-  if (typeof structuredClone === "function") {
-    return structuredClone(value);
+function asNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
   }
-  return JSON.parse(JSON.stringify(value)) as T;
+  return undefined;
 }
 
-function mergeDeep(target: Record<string, unknown>, source: Record<string, unknown>) {
-  for (const [key, value] of Object.entries(source)) {
-    if (Array.isArray(value)) {
-      target[key] = [...value];
-      continue;
-    }
-    if (isRecord(value)) {
-      const existing = isRecord(target[key]) ? (target[key] as Record<string, unknown>) : {};
-      target[key] = mergeDeep({ ...existing }, value);
-      continue;
-    }
-    target[key] = value;
-  }
-  return target;
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function flattenConfig(value: unknown, prefix = "", output: Record<string, unknown> = {}): Record<string, unknown> {
-  if (Array.isArray(value) || !isRecord(value)) {
-    output[prefix] = value;
-    return output;
-  }
+// ---------------------------------------------------------------------------
+// Hydrate: flat runconfig -> typed config (merge over defaults)
+// ---------------------------------------------------------------------------
 
-  for (const [key, child] of Object.entries(value)) {
-    const nextPrefix = prefix ? `${prefix}.${key}` : key;
-    if (Array.isArray(child) || !isRecord(child)) {
-      output[nextPrefix] = child;
-      continue;
-    }
-    flattenConfig(child, nextPrefix, output);
-  }
-  return output;
-}
+export function hydrateConfigFromRunconfig(runconfig: unknown): WindAnalysisConfig {
+  const base = createDefaultWindAnalysisConfig();
+  if (!isRecord(runconfig)) return base;
 
-export function hydrateConfigFromRunconfig(runconfig: Record<string, unknown>): WindAnalysisConfig {
-  const next = cloneValue(createDefaultWindAnalysisConfig()) as Record<string, unknown>;
+  const next: WindAnalysisConfig = structuredClone(base);
 
-  const projectName = runconfig.project_name;
-  if (typeof projectName === "string" && projectName.length > 0) {
-    (next.project as Record<string, unknown>).name = projectName;
-  }
+  const projectName = asString(runconfig.project_name);
+  if (projectName) next.project.name = projectName;
 
-  const measurementType = runconfig.measurement_type;
-  if (typeof measurementType === "string") {
-    const parsed = measurementTypeSchema.safeParse(measurementType);
-    if (parsed.success) {
-      (next.project as Record<string, unknown>).measurementType = parsed.data;
-    }
-  }
-
-  const hubHeight = runconfig.hub_height_m;
-  if (typeof hubHeight === "number") {
-    (next.site as Record<string, unknown>).hubHeightM = hubHeight;
-    ((next.ltc as Record<string, unknown>).uncertainty as Record<string, unknown>).hubHeightM = hubHeight;
-    (next.shear as Record<string, unknown>).targetHubHeightM = hubHeight;
+  const measurementType = asString(runconfig.measurement_type);
+  if (
+    measurementType &&
+    ["mast", "lidar", "sodar", "floating-lidar", "hybrid"].includes(measurementType)
+  ) {
+    next.project.measurementType = measurementType as WindAnalysisConfig["project"]["measurementType"];
   }
 
   const location = runconfig.location;
   if (isRecord(location)) {
-    if (typeof location.latitude === "number") {
-      (next.site as Record<string, unknown>).latitude = location.latitude;
-      (next.reanalysis as Record<string, unknown>).searchLatitude = location.latitude;
-      const primaryMast = (((next.mast as Record<string, unknown>).masts as unknown[])?.[0] ?? {}) as Record<string, unknown>;
-      primaryMast.latitude = location.latitude;
-    }
-    if (typeof location.longitude === "number") {
-      (next.site as Record<string, unknown>).longitude = location.longitude;
-      (next.reanalysis as Record<string, unknown>).searchLongitude = location.longitude;
-      const primaryMast = (((next.mast as Record<string, unknown>).masts as unknown[])?.[0] ?? {}) as Record<string, unknown>;
-      primaryMast.longitude = location.longitude;
-    }
-    if (typeof location.elevation_m === "number") {
-      (next.site as Record<string, unknown>).elevationM = location.elevation_m;
-    }
+    const lat = asNumber(location.latitude);
+    const lon = asNumber(location.longitude);
+    const elev = asNumber(location.elevation_m);
+    if (lat !== undefined) next.site.latitude = lat;
+    if (lon !== undefined) next.site.longitude = lon;
+    if (elev !== undefined) next.site.elevationM = elev;
   }
 
-  for (const sectionName of ["project", "site", "mast", "standardization", "inputs", "cleaning", "shear", "reanalysis", "ltc", "workflow", "windkit", "compare"]) {
-    const section = runconfig[sectionName];
-    if (isRecord(section) && isRecord(next[sectionName])) {
-      next[sectionName] = mergeDeep(next[sectionName] as Record<string, unknown>, section);
-    }
+  const hubHeight = asNumber(runconfig.hub_height_m);
+  if (hubHeight !== undefined && hubHeight > 0) {
+    next.site.hubHeightM = hubHeight;
+    next.shear.targetHubHeightM = hubHeight;
+    next.ltc.uncertainty.hubHeightM = hubHeight;
   }
 
-  return windAnalysisConfigSchema.parse(next);
+  return next;
 }
 
-export function serializeConfigToRunconfig(config: WindAnalysisConfig): Record<string, unknown> {
+// ---------------------------------------------------------------------------
+// Serialize: typed config -> flat runconfig (only keys the backend understands)
+// ---------------------------------------------------------------------------
+
+export function serializeConfigToRunconfig(config: WindAnalysisConfig): AnyRecord {
   return {
     project_name: config.project.name,
     measurement_type: config.project.measurementType,
-    hub_height_m: config.site.hubHeightM,
     location: {
       latitude: config.site.latitude,
       longitude: config.site.longitude,
       elevation_m: config.site.elevationM,
     },
-    project: config.project,
-    site: config.site,
-    mast: config.mast,
-    standardization: config.standardization,
-    inputs: config.inputs,
-    cleaning: config.cleaning,
-    shear: config.shear,
-    reanalysis: config.reanalysis,
-    ltc: config.ltc,
-    workflow: config.workflow,
-    windkit: config.windkit,
-    compare: config.compare,
+    hub_height_m: config.site.hubHeightM,
   };
 }
 
-export function buildRunconfigUpdates(
-  previousRunconfig: Record<string, unknown>,
-  nextRunconfig: Record<string, unknown>,
-): Array<{ key: string; value: unknown }> {
-  const previousFlat = flattenConfig(previousRunconfig);
-  const nextFlat = flattenConfig(nextRunconfig);
-  const keys = new Set([...Object.keys(previousFlat), ...Object.keys(nextFlat)]);
-  const updates: Array<{ key: string; value: unknown }> = [];
+// ---------------------------------------------------------------------------
+// setConfigValue: dotted-path immutable update
+// ---------------------------------------------------------------------------
 
-  for (const key of Array.from(keys).sort()) {
-    if (JSON.stringify(previousFlat[key]) === JSON.stringify(nextFlat[key])) {
-      continue;
+function setOnPath(target: AnyRecord, pathParts: string[], value: unknown): void {
+  let cursor: unknown = target;
+  for (let i = 0; i < pathParts.length - 1; i += 1) {
+    const key = pathParts[i];
+    if (!isRecord(cursor)) return;
+    if (!isRecord(cursor[key])) {
+      (cursor[key] as unknown) = {};
     }
-    updates.push({ key, value: nextFlat[key] ?? null });
+    cursor = cursor[key];
   }
-
-  return updates;
+  if (isRecord(cursor)) {
+    cursor[pathParts[pathParts.length - 1]] = value;
+  }
 }
 
 export function setConfigValue(config: WindAnalysisConfig, path: string, value: unknown): WindAnalysisConfig {
-  const next = cloneValue(config) as Record<string, unknown>;
-  const parts = path.split(".");
-  let cursor: Record<string, unknown> = next;
+  const pathParts = path.split(".").filter((part) => part.length > 0);
+  if (pathParts.length === 0) return config;
+  const next = structuredClone(config) as unknown as AnyRecord;
+  setOnPath(next, pathParts, value);
+  return next as WindAnalysisConfig;
+}
 
-  for (const part of parts.slice(0, -1)) {
-    const child = cursor[part];
-    if (isRecord(child)) {
-      cursor = child;
-      continue;
+// ---------------------------------------------------------------------------
+// buildRunconfigUpdates: diff server runconfig vs next config -> dotted updates
+// ---------------------------------------------------------------------------
+
+export interface RunconfigUpdate {
+  key: string;
+  value: unknown;
+}
+
+function flatten(prefix: string, value: unknown, out: RunconfigUpdate[]): void {
+  if (isRecord(value)) {
+    for (const [k, v] of Object.entries(value)) {
+      flatten(prefix ? `${prefix}.${k}` : k, v, out);
     }
-    cursor[part] = {};
-    cursor = cursor[part] as Record<string, unknown>;
+  } else {
+    out.push({ key: prefix, value });
   }
+}
 
-  cursor[parts[parts.length - 1]] = value;
-  return windAnalysisConfigSchema.parse(next);
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return false;
+  if (isRecord(a) && isRecord(b)) {
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    if (aKeys.length !== bKeys.length) return false;
+    return aKeys.every((k) => deepEqual(a[k], b[k]));
+  }
+  return false;
+}
+
+export function buildRunconfigUpdates(
+  serverRunconfig: AnyRecord,
+  nextRunconfig: AnyRecord,
+): RunconfigUpdate[] {
+  const flatNext: RunconfigUpdate[] = [];
+  flatten("", nextRunconfig, flatNext);
+
+  const flatServer: RunconfigUpdate[] = [];
+  flatten("", serverRunconfig, flatServer);
+  const serverMap = new Map(flatServer.map((u) => [u.key, u.value]));
+
+  const updates: RunconfigUpdate[] = [];
+  for (const entry of flatNext) {
+    if (!deepEqual(serverMap.get(entry.key), entry.value)) {
+      updates.push(entry);
+    }
+  }
+  return updates;
 }

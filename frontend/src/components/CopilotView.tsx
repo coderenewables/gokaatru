@@ -1,211 +1,186 @@
-import { useEffect, useState } from "react";
+// BYOK copilot chat (spec §6). Streaming chat with inline tool-call chips.
+//
+// API keys live only in localStorage (writeChatSettings). The backend
+// /sessions/{id}/chat proxy executes MCP tools server-side; the local
+// copilotAgent handles simple config mutations client-side and defers the rest.
+import { useEffect, useRef, useState } from "react";
 
-import { loadMcpCatalog, type McpCatalog } from "../lib/mcpClient";
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
-
-const promptSuggestions = [
-  "Summarize the current analysis readiness and missing workflow steps.",
-  "Which sensors should I use for a first-pass shear calculation at 120m?",
-  "Suggest a clean LTC run order using the current config and available reanalysis data.",
-] as const;
+import { defaultModelForProvider, type CopilotToolEvent } from "../lib/copilotAgent";
 
 export function CopilotView() {
-  const chatSettings = useWorkspaceStore((state) => state.chatSettings);
-  const setChatSettings = useWorkspaceStore((state) => state.setChatSettings);
   const chatMessages = useWorkspaceStore((state) => state.chatMessages);
+  const chatSettings = useWorkspaceStore((state) => state.chatSettings);
   const sendChatMessage = useWorkspaceStore((state) => state.sendChatMessage);
+  const setChatSettings = useWorkspaceStore((state) => state.setChatSettings);
   const summary = useWorkspaceStore((state) => state.summary);
-  const assets = useWorkspaceStore((state) => state.assets);
 
-  const [provider, setProvider] = useState(chatSettings.provider);
-  const [model, setModel] = useState(chatSettings.model);
-  const [apiKey, setApiKey] = useState(chatSettings.apiKey);
   const [draft, setDraft] = useState("");
-  const [mcpCatalog, setMcpCatalog] = useState<McpCatalog | null>(null);
-  const [mcpStatus, setMcpStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [mcpError, setMcpError] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(!chatSettings.apiKey);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let active = true;
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [chatMessages]);
 
-    setMcpStatus("loading");
-    void loadMcpCatalog()
-      .then((catalog) => {
-        if (!active) {
-          return;
-        }
-        setMcpCatalog(catalog);
-        setMcpStatus("ready");
-        setMcpError("");
-      })
-      .catch((error) => {
-        if (!active) {
-          return;
-        }
-        setMcpCatalog(null);
-        setMcpStatus("error");
-        setMcpError(error instanceof Error ? error.message : String(error));
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  const send = () => {
+    const text = draft.trim();
+    if (!text) return;
+    setDraft("");
+    void sendChatMessage(text);
+  };
 
   return (
-    <div className="copilot-layout">
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="panel-kicker">Phase 3</p>
-            <h2>BYOK settings</h2>
-          </div>
-        </div>
-        <div className="form-grid">
-          <label>
-            <span>Provider</span>
-            <input onChange={(event) => setProvider(event.target.value)} placeholder="openai, anthropic, openrouter, groq, together, or https://..." type="text" value={provider} />
-          </label>
-          <label>
-            <span>Model</span>
-            <input onChange={(event) => setModel(event.target.value)} type="text" value={model} />
-          </label>
-          <label className="field-span-2">
-            <span>API key</span>
-            <input onChange={(event) => setApiKey(event.target.value)} type="password" value={apiKey} />
-          </label>
-        </div>
-        <button className="primary-button" onClick={() => setChatSettings({ provider, model, apiKey })} type="button">
-          Save local settings
+    <div className="copilot-view">
+      <header className="copilot-header">
+        <h3>Copilot</h3>
+        <button type="button" className="link-button" onClick={() => setSettingsOpen((v) => !v)}>
+          {chatSettings.apiKey ? "Settings" : "Add API key"}
         </button>
-        <p className="muted-text">
-          Keys are stored in browser local storage only and sent directly from the browser to the selected LLM provider during streaming copilot runs.
-        </p>
-      </section>
+      </header>
 
-      <section className="panel copilot-thread-panel">
-        <div className="panel-header">
-          <div>
-            <p className="panel-kicker">Chat</p>
-            <h2>Config-aware analysis assistant</h2>
-          </div>
-        </div>
-        <div className="chat-thread">
-          {chatMessages.length === 0 ? <p className="muted-text">Ask the copilot to inspect the runconfig, execute tools, or explain analysis deltas.</p> : null}
-          {chatMessages.map((message) => (
-            <article className={`chat-bubble chat-bubble-${message.role}`} key={message.id}>
-              <div className="button-row">
-                <strong>{message.role === "user" ? "You" : "GoKaatru"}</strong>
-                {message.role === "assistant" ? (
-                  <span className={`status-pill ${message.status === "streaming" ? "status-pill-busy" : ""}`}>
-                    {message.status === "streaming" ? "Streaming" : message.status === "error" ? "Error" : "Complete"}
-                  </span>
-                ) : null}
-              </div>
-              <p>{message.content || (message.status === "streaming" ? "Working through the next tool step..." : "")}</p>
-              {message.toolCalls.length > 0 ? (
-                <div className="selection-list">
-                  {message.toolCalls.map((toolCall) => (
-                    <article className="asset-card" key={toolCall.id}>
-                      <div className="asset-card-header">
-                        <h3>{toolCall.name}</h3>
-                        <span className={`status-pill ${toolCall.status === "requested" ? "status-pill-busy" : ""}`}>
-                          {toolCall.status === "requested" ? "Running" : toolCall.status === "error" ? "Error" : "Done"}
-                        </span>
-                      </div>
-                      <pre>{JSON.stringify({ input: toolCall.input, output: toolCall.output ?? null }, null, 2)}</pre>
-                    </article>
-                  ))}
-                </div>
-              ) : null}
-              {message.reasoning ? (
-                <details>
-                  <summary>Reasoning trace</summary>
-                  <pre>{message.reasoning}</pre>
-                </details>
-              ) : null}
-            </article>
-          ))}
-        </div>
-        <div className="suggestion-row">
-          {promptSuggestions.map((prompt) => (
-            <button className="secondary-button" key={prompt} onClick={() => setDraft(prompt)} type="button">
-              {prompt}
-            </button>
-          ))}
-        </div>
-        <label>
-          <span>Prompt</span>
-          <textarea onChange={(event) => setDraft(event.target.value)} rows={5} value={draft} />
-        </label>
-        <button
-          className="primary-button"
-          disabled={draft.trim().length === 0 || apiKey.trim().length === 0}
-          onClick={() => {
-            void sendChatMessage(draft.trim());
-            setDraft("");
+      {settingsOpen ? (
+        <SettingsDrawer
+          settings={chatSettings}
+          onSave={(s) => {
+            setChatSettings(s);
+            setSettingsOpen(false);
           }}
-          type="button"
-        >
-          Stream to copilot
-        </button>
-      </section>
+        />
+      ) : null}
 
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="panel-kicker">Context</p>
-            <h2>Agent resources</h2>
+      <div className="copilot-thread" ref={scrollRef}>
+        {chatMessages.length === 0 ? (
+          <div className="copilot-empty">
+            <p className="muted">
+              Ask the copilot to inspect data, run operations, or explain results. Example:
+              <em> “Set hub height to 140, then summarise sensor coverage.”</em>
+            </p>
           </div>
+        ) : (
+          chatMessages.map((msg) => <Message key={msg.id} message={msg} />)
+        )}
+      </div>
+
+      <form
+        className="copilot-input"
+        onSubmit={(e) => {
+          e.preventDefault();
+          send();
+        }}
+      >
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder={
+            summary
+              ? "Ask the copilot…"
+              : "Create a session and load data to begin…"
+          }
+          disabled={!summary}
+        />
+        <button type="submit" className="primary-button" disabled={!draft.trim() || !summary}>
+          Send
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function SettingsDrawer({
+  settings,
+  onSave,
+}: {
+  settings: import("../lib/copilotAgent").CopilotSettings;
+  onSave: (s: import("../lib/copilotAgent").CopilotSettings) => void;
+}) {
+  const [provider, setProvider] = useState(settings.provider);
+  const [model, setModel] = useState(settings.model);
+  const [apiKey, setApiKey] = useState(settings.apiKey);
+
+  return (
+    <div className="settings-drawer">
+      <h4>BYOK settings</h4>
+      <p className="muted">Keys are stored only in this browser's localStorage.</p>
+      <div className="form-grid">
+        <label className="form-field">
+          <span>Provider</span>
+          <select
+            value={provider}
+            onChange={(e) => {
+              setProvider(e.target.value);
+              setModel(defaultModelForProvider(e.target.value));
+            }}
+          >
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="groq">Groq</option>
+            <option value="together">Together</option>
+          </select>
+        </label>
+        <label className="form-field">
+          <span>Model</span>
+          <input type="text" value={model} onChange={(e) => setModel(e.target.value)} />
+        </label>
+        <label className="form-field">
+          <span>API key</span>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="sk-…"
+          />
+        </label>
+      </div>
+      <button
+        type="button"
+        className="primary-button"
+        onClick={() => onSave({ provider, model, apiKey })}
+        disabled={!apiKey}
+      >
+        Save
+      </button>
+    </div>
+  );
+}
+
+function Message({ message }: { message: import("../lib/copilotAgent").CopilotMessage }) {
+  const isUser = message.role === "user";
+  return (
+    <article className={`copilot-message ${message.role} status-${message.status}`}>
+      <header>
+        <strong>{isUser ? "You" : "Copilot"}</strong>
+        {message.status === "streaming" ? <span className="muted">· typing…</span> : null}
+        {message.status === "error" ? <span className="error-text">· error</span> : null}
+      </header>
+      <div className="copilot-message-body">{message.content || (message.status === "streaming" ? "…" : "")}</div>
+      {message.toolCalls.length > 0 ? (
+        <div className="tool-chips">
+          {message.toolCalls.map((tc) => (
+            <ToolChip key={tc.id} tool={tc} />
+          ))}
         </div>
-        <div className="summary-grid">
-          <article className="metric-card">
-            <span>Project</span>
-            <strong>{summary?.project_name ?? "Untitled"}</strong>
-          </article>
-          <article className="metric-card">
-            <span>Normalized assets</span>
-            <strong>{assets.length}</strong>
-          </article>
-          <article className="metric-card">
-            <span>Sensor count</span>
-            <strong>{summary?.sensor_count ?? 0}</strong>
-          </article>
-          <article className="metric-card">
-            <span>Scenarios</span>
-            <strong>{summary?.scenario_count ?? 0}</strong>
-          </article>
-        </div>
-        <div className="sensor-summary">
-          <p className="panel-kicker">MCP catalog</p>
-          <p>
-            {mcpStatus === "loading"
-              ? "Connecting to the MCP server catalog..."
-              : mcpStatus === "error"
-                ? `MCP catalog unavailable: ${mcpError}`
-                : `${mcpCatalog?.serverName ?? "GoKaatru MCP"} v${mcpCatalog?.serverVersion ?? "unknown"}`}
-          </p>
-          {mcpCatalog ? (
-            <>
-              <p className="muted-text">{mcpCatalog.tools.length} tool(s), {mcpCatalog.resources.length} resource(s)</p>
-              <div className="selection-list">
-                {mcpCatalog.tools.slice(0, 6).map((tool) => (
-                  <article className="asset-card" key={tool.name}>
-                    <div className="asset-card-header">
-                      <h3>{tool.name}</h3>
-                      <span className="status-pill">MCP</span>
-                    </div>
-                    <p>{tool.description || "No description provided."}</p>
-                  </article>
-                ))}
-              </div>
-              <p className="muted-text">
-                The frontend now loads the MCP catalog through the web API by default so browser transport and CORS issues do not block discovery. Session-bound workflow mutations still use the active workspace APIs so they operate on your current browser session.
-              </p>
-            </>
-          ) : null}
-        </div>
-      </section>
+      ) : null}
+    </article>
+  );
+}
+
+function ToolChip({ tool }: { tool: CopilotToolEvent }) {
+  const [expanded, setExpanded] = useState(false);
+  const cls = `tool-chip tool-${tool.status}`;
+  return (
+    <div className={cls}>
+      <button type="button" className="tool-chip-head" onClick={() => setExpanded((v) => !v)}>
+        <span className="tool-chip-name">🔧 {tool.toolName}</span>
+        <span className="tool-chip-status">{tool.status}</span>
+      </button>
+      {expanded ? (
+        <pre className="tool-chip-detail">
+          {JSON.stringify({ arguments: tool.arguments, result: tool.result, error: tool.error }, null, 2)}
+        </pre>
+      ) : null}
     </div>
   );
 }

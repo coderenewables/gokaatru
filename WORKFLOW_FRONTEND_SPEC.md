@@ -1,8 +1,10 @@
 # GoKaatru — Workflow-Driven Frontend Specification
 
-> **Scope.** This document specifies a **workflow-driven frontend** for the GoKaatru wind-resource-assessment app, built on top of the existing Python backend in [`server/`](./server/) and the existing React frontend in [`frontend/`](./frontend/). It is an implementation-grade spec: each section names the exact backend endpoints, request/response shapes, state, and UI components required.
+> **Scope.** This document is the complete build contract for a **new, workflow-driven frontend** for the GoKaatru wind-resource-assessment app. It targets the Python backend in [`server/`](./server/) (FastAPI + FastMCP). The `frontend/` directory does not currently exist — this spec covers scaffolding from an empty directory through to the full 8-stage app.
 >
-> **Author audience.** A frontend engineer who will implement (or refactor) the UI against the backend as it exists today.
+> **Status of this document.** Implementation-grade and self-contained: every section names the exact backend endpoints, request/response shapes, TypeScript types, store fields, and UI components required. An engineer should be able to build the entire frontend from this document plus the backend source, with no other context.
+>
+> **Author audience.** A frontend engineer building the UI from scratch against the backend as it exists today.
 
 ---
 
@@ -21,7 +23,7 @@ The frontend must guide a wind-data analyst through an **8-stage analytical pipe
 | **7. Clipping analysis** | Decide the representative historical window | `clipping`, `homogeneity/apply` |
 | **8. Ensemble** | Blend multiple LTC outputs into one authoritative long-term series | `ensemble`, `uncertainty`, `scenarios` |
 
-The app already has a session-based backend (`X-GoKaatru-Session` header), a Zustand store, a React-Flow canvas, a BYOK copilot, and a compare view. **This spec reshapes the linear "Setup" view into an explicit 8-stage wizard/stepper** that drives these endpoints in the correct dependency order, while reusing the canvas, copilot, and compare pillars.
+The backend exposes a **session-based HTTP API** (session id in the `X-GoKaatru-Session` header). The frontend is a single-page React app that: creates a session on first launch, persists its id in `localStorage`, drives the 8 stages in the backend's required dependency order, and offers an expert **React Flow canvas**, a **BYOK AI copilot**, and a **scenario compare** view alongside the stepper.
 
 ---
 
@@ -34,7 +36,7 @@ Every analysis lives in a **session** (`server/state/session.py`). A session has
 - an in-memory `SessionState` holding all intermediate artifacts (parsed frames, shear tables, ERA5 nodes, LTC results, ensemble, etc.);
 - a `runconfig` dict that is the **single source of truth** for user decisions and is persisted to `runconfig.json`.
 
-**Frontend implication:** the app is single-session-per-tab. Create one on "Start", persist its id in `localStorage` (`gokaatru-active-session-id`, already implemented), and send `X-GoKaatru-Session: <id>` on every `/api/sessions/{id}/...` call. The API client in `frontend/src/lib/api.ts` already injects this header automatically from the path — keep that.
+**Frontend implication:** the app is single-session-per-tab. Create one on "Start", persist its id in `localStorage` under key `gokaatru-active-session-id`, and send `X-GoKaatru-Session: <id>` on every `/api/sessions/{id}/...` call. **The API client must inject this header automatically** by extracting the session id from the request path (see §2.4).
 
 ### 1.2 Order dependencies (the contract the UI must enforce)
 
@@ -59,14 +61,14 @@ parse_timeseries + parse_datamodel      (Stage 1)
                                  └──► calculate_uncertainty
 ```
 
-The `completed_steps` array (returned by `/summary` and `/sessions/{id}`) is the canonical progress indicator:
+The `completed_steps` array (returned by `/summary` and `/sessions/{id}`) is the canonical progress indicator. The backend emits exactly these step tokens (see `server/api/deps.py::completed_steps`):
 `timeseries, datamodel, config, cleaning, shear_timeseries, shear_table, roughness_timeseries, roughness_table, era5_nodes, era5_extract, era5_interpolate, ltc, ensemble, windkit`.
 
 **Frontend implication:** the stepper must disable/lock downstream stages until upstream `completed_steps` are present, and must offer to auto-run prerequisites.
 
 ### 1.3 The `runconfig` ↔ `WindAnalysisConfig` mapping
 
-The frontend keeps a richer typed config (`WindAnalysisConfig` in `frontend/src/types/analysis.ts`) and syncs it bidirectionally with the flat backend `runconfig` via `configSync.ts` (`hydrateConfigFromRunconfig` / `serializeConfigToRunconfig`). Key backend runconfig keys observed: `project_name`, `location` `{latitude, longitude, elevation_m}`, `measurement_type`, `hub_height_m`, `sensor_mapping`, `cleaning_log`, `brighthub_uuid`, plus `shear_table_shape`/`roughness_table_shape`. **The frontend config is the editing surface; the backend runconfig is the persisted truth.** Always `saveConfig()` (PUT `/config`) before running an operation that depends on a config value (e.g. hub height).
+The frontend keeps a richer typed config (`WindAnalysisConfig` in `frontend/src/types/analysis.ts`, a zod schema) and syncs it bidirectionally with the flat backend `runconfig` via `configSync.ts` (`hydrateConfigFromRunconfig` / `serializeConfigToRunconfig`). Backend runconfig keys of interest: `project_name`, `location` `{latitude, longitude, elevation_m}`, `measurement_type`, `hub_height_m`, `sensor_mapping`, `cleaning_log`, `brighthub_uuid`, plus `shear_table_shape`/`roughness_table_shape`. **The frontend config is the editing surface; the backend runconfig is the persisted truth.** Always `saveConfig()` (PUT `/config`) before running an operation that depends on a config value (e.g. hub height).
 
 ### 1.4 Plot protocol
 
@@ -76,32 +78,123 @@ All visuals use one envelope (`server/schemas/common.py::PlotResult`):
 ```
 - `plotly_json` is a JSON-stringified Plotly figure → `JSON.parse` then `Plotly.react` (or `react-plotly.js` `<Plot data={fig.data} layout={fig.layout} />`).
 - `png_base64` is a graceful fallback when Kaleido is present.
-- Plots are fetched via **`POST /api/sessions/{id}/plots/{plot_name}`** with a `PlotRequest` body (sensor names, algorithm, uncertainty %s). Supported `plot_name` values (27): `windrose, weibull, diurnal, scatter, timeseries, timeseries_preview, cleaning_overlay, coverage_timeline, data_coverage, scenario_comparison, era5_comparison, era5_measured_overlay, shear_table, shear_profile, monthly_means, turbulence_intensity, ltc_comparison, ltc_scatter, ltc_residuals, ltc_monthly, ltc_convergence, annual_means, uncertainty_breakdown, uncertainty_tornado`.
+- Plots are fetched via **`POST /api/sessions/{id}/plots/{plot_name}`** with a `PlotRequest` body (sensor names, algorithm, uncertainty %s). Supported `plot_name` values (24): `windrose, weibull, diurnal, scatter, timeseries, timeseries_preview, cleaning_overlay, coverage_timeline, data_coverage, scenario_comparison, era5_comparison, era5_measured_overlay, shear_table, shear_profile, monthly_means, turbulence_intensity, ltc_comparison, ltc_scatter, ltc_residuals, ltc_monthly, ltc_convergence, annual_means, uncertainty_breakdown, uncertainty_tornado`.
+
+### 1.5 Verified response shapes (build the types from these)
+
+These field names were confirmed by reading the backend routes — the TS interfaces in §8 must match exactly.
+
+- **GET `/api/health`** → `{ status: string, service: string }`.
+- **GET `/api/sessions/{id}`** (`SessionSummary`) → `session_id, workspace_dir, created_at, updated_at, project_name, measurement_type, hub_height_m, timeseries_loaded, datamodel_loaded, era5_nodes_loaded, era5_interpolated_loaded, ltc_algorithms: string[], completed_steps: string[]`.
+- **GET `/api/sessions/{id}/summary`** (`AnalysisSummary`) → `project_name, hub_height_m, timeseries_loaded, sensor_mapping_loaded, sensor_count, avg_coverage_pct, cleaning_rules_applied, shear_table_ready, roughness_table_ready, era5_nodes_loaded, era5_data_sets_loaded, era5_interpolated_ready, ltc_algorithms_run: string[], ensemble_ready, scenario_count, coordinate: {latitude, longitude, elevation_m} | null, completed_steps: string[]`.
+- **GET `/api/sessions/{id}/sensors`** → `{ sensors: SensorRow[] }` where each row = `{ name, height_m, sensor_type: "wind_speed"|"wind_direction"|"temperature"|"pressure", data_coverage_pct, record_count }`.
+- **GET `/api/sessions/{id}/coverage/{sensor}`** → `{ sensor, total_records, valid_records, coverage_pct, largest_gap_minutes, gaps_over_1_hour }`.
+- **GET `/api/sessions/{id}/statistics/{sensor}`** → `{ sensor_name, mean, median, std, min_value, max_value, count, coverage_pct, weibull_k, weibull_A, monthly_means: number[12], diurnal_means: number[24], percentiles: Record<string,number> }`.
+- **GET `/api/sessions/{id}/results/ltc`** → `{ results: [{ algorithm, metrics, result_file: string|null, rows }] }`.
+- **GET `/api/sessions/{id}/results/ensemble`** → `{ available: boolean, reference_columns: string[] }` and, when `available`, also `{ rows: number, columns: string[] }`.
+- **POST `/api/sessions/{id}/clipping`** → `{ optimal_start_year, min_uncertainty, iav, analysis_data: [{ start_year, n_years, mean_speed, iav, lta_ratio, historic_uncertainty, climate_uncertainty, combined_uncertainty }] }`.
+- **POST `/api/sessions/{id}/uncertainty`** → `{ total_uncertainty_pct, components: { measurement, vertical_extrapolation, mcp, future_variability }, p_factors: { p50, p75, p90, p99 }, inputs: {…} }`.
+- **GET `/api/sessions/{id}/map/site`** → GeoJSON `FeatureCollection`; features are `mast` (properties `{name:"Measurement Mast", type:"mast", "marker-color":"#083434"}`) then `era5_node` (properties `{name:"ERA5 Node n", type:"era5_node", distance_km, bearing}`), geometry `Point [longitude, latitude]`.
+- **LTC algorithm path values** (for `/ltc/{algorithm}`): exactly `linear_least_squares | total_least_squares | speedsort | variance_ratio | xgboost`.
+- **Errors:** domain `ValueError` → HTTP 400 with `{detail: string}`; upstream failures → HTTP 502; unknown session → 404; missing/mismatched `X-GoKaatru-Session` header → 400.
 
 ---
 
-## 2. Existing frontend — what to keep, what to change
+## 2. Project scaffold (build from empty `frontend/`)
 
-### 2.1 Stack (keep)
-- **React 19 + Vite 6 + TypeScript**, Zustand store (`useWorkspaceStore`), `@xyflow/react` (React Flow) canvas, `plotly.js-dist-min` + `react-plotly.js`, `zod` config schema, Vercel **`ai`** SDK + `@modelcontextprotocol/sdk` for the BYOK copilot.
-- API client (`lib/api.ts`) is complete and correct — **reuse, do not rewrite**.
-- Brand palette already used by backend plots: orange `#c86a2a`, teal `#0b7a6f`/`#083434`, neutral `#5f716a`/`#f3efe6`. Mirror in frontend CSS.
+### 2.1 Target directory layout
 
-### 2.2 Current tab structure (`App.tsx` + `PhaseTabs`)
-`setup | workflow | windkit | copilot | compare`
+```
+frontend/
+├── index.html
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+├── public/
+└── src/
+    ├── main.tsx                  # React 19 root mount
+    ├── App.tsx                   # shell: session bootstrap + primary nav
+    ├── styles.css                # brand styles (see §2.5)
+    ├── vite-env.d.ts             # VITE_API_BASE_URL typing
+    ├── types/
+    │   └── analysis.ts           # zod config schema + §8 interfaces
+    ├── lib/
+    │   ├── api.ts                # HTTP client (all endpoints)
+    │   ├── defaultConfig.ts      # createDefaultWindAnalysisConfig()
+    │   ├── configSync.ts         # runconfig <-> WindAnalysisConfig
+    │   ├── stages.ts             # STAGE_ORDER, STAGE_META, computeStageStatuses
+    │   ├── workflow.ts           # React Flow graph builder (Phase F)
+    │   ├── normalization.ts      # asset normalization (Phase B)
+    │   ├── openapi.ts            # OpenAPI spec extraction for WindKit (Phase G)
+    │   ├── scenarioCompare.ts    # compare helpers (Phase G)
+    │   ├── mcpClient.ts          # MCP SDK client (Phase G)
+    │   └── copilotAgent.ts       # BYOK AI agent (Phase G)
+    ├── store/
+    │   └── useWorkspaceStore.ts  # Zustand global store
+    ├── components/
+    │   ├── AppHeader.tsx
+    │   ├── PhaseTabs.tsx         # primary nav (Stepper/Canvas/WindKit/Copilot/Compare)
+    │   ├── HomeView.tsx          # pre-session landing
+    │   ├── common/               # PlotFrame, StageHeader, SensorPicker, NodeTable, MiniMap, MetricsCard, RunButton (Phase B)
+    │   ├── stages/               # the 8 stage views (Phases D–E)
+    │   ├── WorkflowView.tsx      # React Flow canvas (Phase F)
+    │   ├── CopilotView.tsx       # BYOK chat (Phase G)
+    │   ├── CompareView.tsx       # scenario compare (Phase G)
+    │   └── WindKitExplorerView.tsx # advanced tool surface (Phase G)
+    └── test/
+        └── *.test.ts(x)          # vitest specs
+```
 
-### 2.3 Required changes
-1. **Replace the single `SetupView` with an 8-stage Stepper** (`DataLoadView` → `ReanalysisView` → `ExploreView` → `ShearExtrapolationView` → `ReanalysisExtrapolationView` → `LtcView` → `ClippingView` → `EnsembleView`). This is the core deliverable. The Stepper must read `completed_steps` to mark stages done/locked.
-2. Keep **`WorkflowView`** (React Flow canvas) as the "expert/bird's-eye" surface that mirrors the stepper state into nodes — but extend `createWorkflowGraph` (in `lib/workflow.ts`) from 6 nodes to the **full 8-stage graph** with the homogeneity/clipping/ensemble nodes currently missing.
-3. Keep **`CopilotView`** and **`CompareView`** as-is (they already target the right endpoints), but ensure the copilot's workspace context includes the new stage statuses.
-4. Keep **`WindKitExplorerView`** as an advanced/optional tool surface.
+### 2.2 Stack & dependencies (`package.json`)
 
-### 2.4 New shared components to build
-- `<PlotFrame plotName params />` — fetches a PlotResult and renders Plotly (with loading/error/png fallback). Centralizes all chart rendering.
+Runtime: `react@^19`, `react-dom@^19`, `zustand`, `@xyflow/react` (React Flow canvas), `plotly.js-dist-min` + `react-plotly.js`, `zod` (config schema + runtime validation), `clsx`, `@modelcontextprotocol/sdk` + `ai` + `@ai-sdk/openai` + `@ai-sdk/anthropic` (BYOK copilot).
+Dev: `vite@^6`, `@vitejs/plugin-react`, `typescript@^5`, `vitest@^3`, `@testing-library/react`, `@testing-library/jest-dom`, `jsdom`, `@types/react`, `@types/react-dom`, `@types/plotly.js`.
+
+```jsonc
+{
+  "name": "gokaatru-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  }
+  /* dependencies + devDependencies per the lists above */
+}
+```
+
+### 2.3 Build configs
+
+**`vite.config.ts`** — React plugin; `@` path alias → `src`; vitest `environment: "jsdom"`; dev server proxy `/api` → `http://127.0.0.1:8000` (so the browser talks same-origin in dev, matching the backend CORS allow-list).
+**`tsconfig.json`** — `strict: true`, `verbatimModuleSyntax`, `moduleResolution: "bundler"`, `jsx: "react-jsx"`, paths `@/* → src/*`, `types: ["vitest/globals"]`.
+**`vite-env.d.ts`** — declare `interface ImportMetaEnv { VITE_API_BASE_URL?: string }`.
+
+### 2.4 API client contract (`src/lib/api.ts`) — build in full
+
+A single `requestJson<T>(baseUrl, path, init)` core that:
+- sets `Accept: application/json`;
+- sets `Content-Type: application/json` for non-FormData bodies;
+- **auto-injects `X-GoKaatru-Session: <id>`** by regex-matching `/api/sessions/([^/]+)/` in the path (so callers never set it manually);
+- parses errors from `{detail: string}` (HTTP 4xx/5xx) into thrown `Error`s;
+- returns `undefined` for HTTP 204.
+
+Export typed wrappers for every endpoint in §9, including: `getDefaultApiBaseUrl()` (`VITE_API_BASE_URL` → `window.location.origin` → `http://127.0.0.1:8000`), `createSession`, `getSessionSummary`, `getAnalysisSummary`, `getSessionConfig`, `updateSessionConfig(id, updates[])`, `getSensors`, `getCoverage`, `getStatistics`, `fetchPlot` (POST `/plots/{name}`), `getSiteMap`, `runLtc(id, algorithm, body)`, `runEnsemble`, `runClipping`, `getClippingColumns`, `runUncertainty`, `listScenarios`/`saveScenario`/`deleteScenario`/`runScenario`, the full `workflow/*` set (`executeWorkflow`, `executeWorkflowStep`, `getWorkflowStatus`, `stopWorkflow`, `getWorkflowCapabilities`, snapshot CRUD, `forkWorkflowBranch`, `compareWorkflowBranches`), BrightHub (`login`/`logout`/`status`/`listLocations`/`getDataModel`/`importLocation`/`fetchReanalysisNodes`/`downloadReanalysis`), ERA5 (`findEra5Nodes`/`extractEra5`/`interpolateEra5`), shear/roughness/extrapolation, homogeneity, results, exports, datasets, uploads, and `chatSession`.
+
+### 2.5 Brand palette (mirror in `src/styles.css`)
+
+Backend plots already use: orange accent `#c86a2a`, teal `#0b7a6f` / dark teal `#083434`, neutral `#5f716a` / cream `#f3efe6`. The frontend uses these for primary actions, headers, locked/done stage states, and chart theming.
+
+### 2.6 Shared components (built in Phase B, referenced throughout)
+
+- `<PlotFrame plotName params />` — fetches a `PlotResult` via `fetchPlot` and renders Plotly (with loading/error/png fallback). Centralizes all chart rendering.
 - `<StageHeader stage status />` — title, description, completion badge, lock state.
 - `<SensorPicker kind filter />` — select speed/dir sensors from `sensors[]` in store.
 - `<NodeTable nodes provider />` — render ERA5/MERRA-2 node list with distance/bearing + a mini map.
-- `<MiniMap geojson />` — Leaflet-free lightweight map (or reuse `GET /map/site` GeoJSON on a simple SVG/React-Flow minimap; add Leaflet only if needed).
+- `<MiniMap geojson />` — lightweight SVG/React-Flow minimap fed by `GET /map/site` GeoJSON (add Leaflet only if interactive maps are later required).
 - `<MetricsCard metrics />` — render LTC/uncertainty metric dicts as labeled stat tiles.
 - `<RunButton label busy onClick />` — standard CTA bound to `busyLabel`.
 
@@ -119,31 +212,84 @@ All visuals use one envelope (`server/schemas/common.py::PlotResult`):
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 - The **Stepper** is a horizontal progress bar of 8 clickable chips. Clicking a completed stage navigates to it; a locked stage shows a tooltip "Complete *X* first".
-- The **Assets drawer** shows `assets[]` (already normalized in store) grouped by stage: datasets, sensor inventory, operation results, plots. Each asset is expandable.
+- The **Assets drawer** shows normalized assets grouped by stage: datasets, sensor inventory, operation results, plots. Each asset is expandable.
 
-### 3.2 Store additions (`useWorkspaceStore`)
-Add to the existing store (keep all current fields/actions):
+### 3.2 The global store (`src/store/useWorkspaceStore.ts`) — build in full
+
+A single Zustand store is the entire app state. Build it with the complete field set up front (stages populate slices of it; nothing is "added later"):
+
 ```ts
-// new state
-stageStatuses: Record<StageId, "locked"|"available"|"in_progress"|"done"|"error">;
-era5Nodes: EraNode[];                 // from find_era5_nodes / brighthub reanalysis nodes
-merraNodes: EraNode[];
-era5InterpolatedSummary: { rows: number; method: string; columns: string[] } | null;
-ltcResults: LtcResultSummary[];       // from GET /results/ltc
-ensembleSummary: { available: boolean; rows?: number; columns?: string[] };
-homogeneityReport: HomogeneityDataset[] | null;
-clippingReport: ClippingReport | null;
-uncertaintyResult: UncertaintyResult | null;
-activePlot: { plotName: string; params: PlotRequest } | null;
+type StageStatus = "locked" | "available" | "in_progress" | "done" | "error";
+type StageId = "data" | "reanalysis" | "explore" | "shear" | "reanalysis_extrapolation" | "ltc" | "clipping" | "ensemble";
 
-// new actions
-runStage(stage: StageId): Promise<void>;       // orchestrates a whole stage end-to-end
-fetchPlot(plotName: string, params: PlotRequest): Promise<PlotResult>;
-refreshResults(): Promise<void>;               // calls results/ltc, results/ensemble, clipping columns, etc.
+interface WorkspaceStore {
+  // session + bootstrap
+  apiBaseUrl: string;
+  session: SessionSummary | null;
+  sessionStatus: "idle" | "loading" | "ready" | "error";
+  sessionError: string | null;
+  busyLabel: string | null;
+  activeTab: "setup" | "workflow" | "windkit" | "copilot" | "compare";
+
+  // config + summary
+  config: WindAnalysisConfig;
+  serverRunconfig: Record<string, unknown>;
+  summary: AnalysisSummary | null;
+
+  // shared data
+  sensors: SensorRow[];
+  capabilities: WorkflowDispatchCapability[];
+  scenarios: ScenarioSnapshot[];
+
+  // stage-derived state
+  stageStatuses: Record<StageId, StageStatus>;
+  datasets: SharedDatasetSummary[];
+  datasetPreview: DatasetPreview | null;
+  era5Nodes: EraNode[];
+  merraNodes: EraNode[];
+  era5InterpolatedSummary: { rows: number; method: string; columns: string[] } | null;
+  ltcResults: LtcResultSummary[];
+  ensembleSummary: { available: boolean; rows?: number; columns?: string[] };
+  homogeneityReport: HomogeneityDataset[] | null;
+  clippingReport: ClippingReport | null;
+  uncertaintyResult: UncertaintyResult | null;
+  activePlot: { plotName: string; params: PlotRequest; result: PlotResult } | null;
+  activity: ActivityEntry[];
+
+  // actions
+  setActiveTab(tab): void;
+  updateConfigValue(path: string, value: unknown): void;
+  resetConfig(): void;
+  bootstrapSession(): Promise<void>;      // POST /sessions, persist id, refreshWorkspace
+  restoreSession(): Promise<void>;        // read localStorage id, GET /sessions/{id}, refreshWorkspace
+  refreshWorkspace(): Promise<void>;      // summary+config+sensors+capabilities+scenarios, then computeStageStatuses
+  saveConfig(): Promise<void>;            // diff vs serverRunconfig, PUT /config
+  fetchPlot(plotName: string, params: PlotRequest): Promise<PlotResult>;
+  refreshResults(): Promise<void>;        // GET results/ltc + results/ensemble
+  invokeSessionOperation<T>(label, method, path, body?): Promise<T>;  // generic session-route caller = the runStage primitive
+  setScenarioCompareSlot / saveScenario / deleteScenario / ...;
+}
 ```
-`refreshWorkspace()` already pulls summary/config/sensors/capabilities; extend it to also compute `stageStatuses` from `summary.completed_steps`.
 
-`StageId = "data" | "reanalysis" | "explore" | "shear" | "reanalysis_extrapolation" | "ltc" | "clipping" | "ensemble"`.
+`refreshWorkspace()` fetches summary + runconfig + sensors + capabilities + scenarios in parallel, hydrates `config` from runconfig, then calls `computeStageStatuses(summary.completed_steps)` (see `lib/stages.ts`) to populate `stageStatuses`. All async actions set `busyLabel`, append to `activity[]` on success/error, and re-`refreshWorkspace()` after mutating calls. Persist the active session id in `localStorage` key `gokaatru-active-session-id`; `restoreSession()` reads it on app load.
+
+### 3.3 Stage-status logic (`src/lib/stages.ts`) — build in Phase A
+
+```ts
+export const STAGE_ORDER: StageId[] = ["data","reanalysis","explore","shear","reanalysis_extrapolation","ltc","clipping","ensemble"];
+export const STAGE_META: Record<StageId, { title: string; requiredSteps: string[] }> = {
+  data:                    { title: "Data loading",             requiredSteps: ["timeseries","datamodel","config"] },
+  reanalysis:              { title: "Reanalysis acquisition",   requiredSteps: ["era5_nodes","era5_extract","era5_interpolate"] },
+  explore:                 { title: "Measured-data exploration",requiredSteps: ["timeseries","datamodel"] },
+  shear:                   { title: "Shear → hub (measured)",   requiredSteps: ["shear_table"] },          // or roughness_table
+  reanalysis_extrapolation:{ title: "Reanalysis → hub",         requiredSteps: ["era5_interpolate"] },
+  ltc:                     { title: "Long-Term Correction",     requiredSteps: ["ltc"] },
+  clipping:                { title: "Clipping analysis",        requiredSteps: ["ltc"] },                  // advisory
+  ensemble:                { title: "Ensemble & uncertainty",   requiredSteps: ["ensemble"] },
+};
+export function computeStageStatuses(completedSteps: string[]): Record<StageId, StageStatus>;
+// rule: "done" if all requiredSteps present; "locked" if any prerequisite STAGE is not done; else "available".
+```
 
 ---
 
@@ -484,9 +630,9 @@ Each stage below specifies: **Goal · Prerequisites · UI · Endpoint calls · S
 
 ---
 
-## 5. Canvas view (`WorkflowView`) — extend to 8 stages
+## 5. Canvas view (`WorkflowView`)
 
-Update `lib/workflow.ts::createWorkflowGraph` to emit the full pipeline as a DAG so the expert user can see and re-run any node. Proposed nodes (left→right, top→bottom):
+Build `lib/workflow.ts::createWorkflowGraph` to emit the full pipeline as a DAG so the expert user can see and re-run any node. Proposed nodes (left→right, top→bottom):
 
 ```
 dataset ─► cleaning ─► explore(stats) ─► shear ─► extrapolate_hub ─► ltc ─► ensemble ─► uncertainty
@@ -497,7 +643,7 @@ dataset ─► cleaning ─► explore(stats) ─► shear ─► extrapolate_hu
                                                                  clipping ◄── ensemble
 ```
 
-Each node's `templateId` must match a backend capability (from `GET /workflow/capabilities`) or `"select-dataset"`. Each node's `paramsJson` is built from the corresponding config slice. The existing `executeWorkflow(mode)` / `executeWorkflowStep()` actions already POST the graph to `/workflow/execute[/step]` and stream events — keep this. For long runs, prefer the **SSE stream** endpoint `POST /workflow/execute/stream` (currently unused by the frontend) for live node-status updates on the canvas.
+Each node's `templateId` must match a backend capability (from `GET /workflow/capabilities`) or `"select-dataset"`. Each node's `paramsJson` is built from the corresponding config slice. Wire the canvas to the store's `executeWorkflow(mode)` / `executeWorkflowStep()` actions, which POST the graph to `/workflow/execute[/step]`. For long runs, use the **SSE stream** endpoint `POST /workflow/execute/stream` for live node-status updates on the canvas.
 
 **Capability → template_id reference** (resolved at runtime; the executor binds the session and dispatches by function name):
 `select-dataset`, `parse_timeseries`, `parse_datamodel`, `list_sensors`, `apply_cleaning_rule`, `undo_cleaning_rule`, `calculate_shear_timeseries`, `build_shear_table`, `calculate_roughness_timeseries`, `build_roughness_table`, `extrapolate_to_hub_height`, `extrapolate_reanalysis_to_hub`, `find_era5_nodes`, `extract_era5_data`, `compute_era5_wind_speed`, `interpolate_era5_to_site`, `analyze_homogeneity`, `apply_homogeneity_cutoff`, `run_ltc_linear_least_squares`, `run_ltc_total_least_squares`, `run_ltc_speedsort`, `run_ltc_variance_ratio`, `run_ltc_xgboost`, `run_ensemble`, `run_clipping_analysis`, `calculate_uncertainty`, `brighthub_*`, `windkit_*`, plus all `plot_*`/visualization helpers.
@@ -508,21 +654,21 @@ Each node's `templateId` must match a backend capability (from `GET /workflow/ca
 
 ## 6. Copilot integration (`CopilotView`)
 
-Already functional via `POST /api/sessions/{id}/chat` (BYOK, OpenAI-compatible, server-side tool execution against the same MCP tool registry, up to 12 tool rounds). **No structural change needed**, but:
-- Enrich the workspace context handed to the agent with `stageStatuses`, `ltcResults`, `clippingReport`, `uncertaintyResult` so it can answer "which stages are done?" and "what's my P90?".
-- Surface the streamed `tool_calls_executed` as inline chips ("Running speedsort…") — already supported by `CopilotToolEvent`.
+The backend `POST /api/sessions/{id}/chat` endpoint is BYOK, OpenAI-compatible, and runs server-side tool execution against the same MCP tool registry (up to 12 tool rounds). Build the copilot to drive it, and:
+- Feed the workspace context (`stageStatuses`, `ltcResults`, `clippingReport`, `uncertaintyResult`) to the agent so it can answer "which stages are done?" and "what's my P90?".
+- Surface the streamed `tool_calls_executed` as inline chips ("Running speedsort…").
 
 ---
 
 ## 7. Compare view (`CompareView`)
 
-Already targets `POST /api/sessions/{id}/workflow/compare` and `POST /workflow/branches/fork`. Keep. Ensure the **scenario slots** (`baseline/run2/run3`) map to saved scenarios (Stage 8) so analysts can diff two LTC/ensemble strategies. The compare response includes metrics (LT mean, P50/75/90/99, uncertainties), config diffs, and Plotly figures (weibull, windrose[], ltc_scatter, uncertainty_tornado) — render via `<PlotFrame>`.
+Target `POST /api/sessions/{id}/workflow/compare` and `POST /workflow/branches/fork`. Ensure the **scenario slots** (`baseline/run2/run3`) map to saved scenarios (Stage 8) so analysts can diff two LTC/ensemble strategies. The compare response includes metrics (LT mean, P50/75/90/99, uncertainties), config diffs, and Plotly figures (weibull, windrose[], ltc_scatter, uncertainty_tornado) — render via `<PlotFrame>`.
 
 ---
 
 ## 8. Data model additions (`types/analysis.ts`)
 
-Add these TypeScript interfaces to mirror backend responses (keep the existing `WindAnalysisConfig` schema):
+Define the `WindAnalysisConfig` zod schema (the typed editing surface) plus these interfaces mirroring backend responses (field names from §1.5):
 
 ```ts
 export type StageId = "data"|"reanalysis"|"explore"|"shear"|"reanalysis_extrapolation"|"ltc"|"clipping"|"ensemble";
@@ -606,15 +752,71 @@ All session-scoped routes require header `X-GoKaatru-Session: <session_id>` matc
 
 ---
 
-## 10. Implementation phases (suggested)
+## 10. Implementation phases (file-level build plan)
 
-1. **Phase A — Types & store.** Add the §8 interfaces; extend `useWorkspaceStore` with `stageStatuses`, result summaries, `runStage`, `fetchPlot`. Extend `refreshWorkspace` to compute stage statuses from `completed_steps`.
-2. **Phase B — Shared components.** `<PlotFrame>`, `<StageHeader>`, `<SensorPicker>`, `<NodeTable>`, `<MiniMap>`, `<MetricsCard>`.
-3. **Phase C — Stepper shell.** Replace `SetupView` with the 8-stage router; wire stage lock/unlock to `stageStatuses`.
-4. **Phase D — Stages 1–5** (data, reanalysis, explore, shear, reanalysis-extrapolation). These are the data-acquisition backbone.
-5. **Phase E — Stages 6–8** (LTC, clipping, ensemble/uncertainty/scenarios). The analytical payoff.
-6. **Phase F — Canvas upgrade.** Extend `createWorkflowGraph` to the full 8-stage DAG; wire SSE streaming for live execution.
-7. **Phase G — Copilot context & Compare polish.**
+Each phase lists the files to create, a one-line scope per file, and a verification gate. Phases are cumulative; later phases import from earlier ones.
+
+### Phase A — Runnable foundation (types, API client, store)
+- `package.json`, `vite.config.ts`, `tsconfig.json`, `index.html`, `src/vite-env.d.ts`, `src/main.tsx` — scaffold a bootable Vite+React 19+TS app (§2.2–2.3).
+- `src/types/analysis.ts` — the `WindAnalysisConfig` zod schema **+ all §8 interfaces** (`StageId`, `SensorRow`, `CoverageDetail`, `SensorStatistics`, `EraNode`, `HomogeneityDataset`, `LtcMetrics`, `LtcResultSummary`, `ClippingRow`, `ClippingReport`, `UncertaintyResult`, `PlotResult`, `PlotName`, `PlotRequest`). Field names from §1.5.
+- `src/lib/api.ts` — full HTTP client per §2.4: `requestJson` core with auto `X-GoKaatru-Session` header injection, `getDefaultApiBaseUrl`, and a typed wrapper for every endpoint in §9.
+- `src/lib/defaultConfig.ts` — `createDefaultWindAnalysisConfig()` (zod-parsed defaults; mirror §8's config schema).
+- `src/lib/configSync.ts` — `hydrateConfigFromRunconfig`, `serializeConfigToRunconfig`, `setConfigValue` (dotted-path), `buildRunconfigUpdates` (diff against server runconfig).
+- `src/lib/stages.ts` — `STAGE_ORDER`, `STAGE_META`, `computeStageStatuses` (per §3.3).
+- `src/store/useWorkspaceStore.ts` — the complete Zustand store (§3.2): all state fields + actions (`bootstrapSession`, `restoreSession`, `refreshWorkspace`, `saveConfig`, `fetchPlot`, `refreshResults`, `invokeSessionOperation`, scenario/workflow actions, `localStorage` persistence of session id).
+- `src/App.tsx` — minimal bootable shell: if no session → "Start workspace" button (`bootstrapSession`); else header (project name, hub height, completed steps) + activity log. **No stage views yet.**
+- `src/styles.css` — base layout + brand palette (§2.5).
+- `src/test/stages.test.ts` — vitest: `computeStageStatuses` correctness (locked/available/done transitions across the dependency chain) + default-config validation.
+- **Gate:** `npm install` ✓ · `npm run test` green ✓ · `npm run build` (`tsc --noEmit && vite build`) green ✓ · `npm run dev` against a running backend creates a session and renders summary/completed_steps (manual smoke).
+
+### Phase B — Shared components
+- `src/components/common/PlotFrame.tsx` — fetches `PlotResult` via `store.fetchPlot`, renders Plotly (`react-plotly.js`), loading/error/png fallback.
+- `src/components/common/StageHeader.tsx`, `SensorPicker.tsx`, `NodeTable.tsx`, `MiniMap.tsx`, `MetricsCard.tsx`, `RunButton.tsx` — per §2.6.
+- `src/lib/normalization.ts` — `NormalizedAsset` type + `upsertAssets` + builders (`buildConfigAsset`, `buildSummaryAsset`, `buildSensorInventoryAsset`, `buildOperationResultAsset`, `buildDatasetPreviewAsset`) for the Assets drawer.
+- `src/components/AssetsDrawer.tsx` — collapsible right drawer grouping assets by stage.
+- **Gate:** `npm run build` ✓ · a `PlotFrame` unit test rendering a stub Plotly figure ✓.
+
+### Phase C — Stepper shell
+- `src/components/PhaseTabs.tsx` — primary nav (Stepper / Canvas / WindKit / Copilot / Compare); Stepper renders 8 chips from `STAGE_META`, colored by `stageStatuses`, locked chips show a tooltip.
+- `src/components/AppHeader.tsx` — project name, hub height, coordinate, refresh button, `busyLabel` spinner.
+- `src/components/HomeView.tsx` — pre-session landing (Start button, error display).
+- `src/components/stages/StageShell.tsx` — shared layout each stage view uses (header + action area + results area); route-like switching on `activeTab`/selected stage.
+- Update `src/App.tsx` — wire `HomeView` vs shell, lazy-load tab surfaces.
+- **Gate:** `npm run build` ✓ · stepper locks/unlocks correctly when `completed_steps` changes (unit test) ✓.
+
+### Phase D — Stages 1–5 (data-acquisition backbone)
+- `src/components/stages/DataLoadView.tsx` — Stage 1 (uploads + BrightHub import + shared datasets + site/hub config).
+- `src/components/stages/ReanalysisView.tsx` — Stage 2 (BrightHub + direct ERA5 paths, node table, mini map, homogeneity).
+- `src/components/stages/ExploreView.tsx` — Stage 3 (sensor statistics, coverage, wind rose, Weibull, diurnal/monthly, shear profile, TI — all via `PlotFrame`).
+- `src/components/stages/ShearExtrapolationView.tsx` — Stage 4 (shear/roughness calc + table + extrapolate-to-hub, `method_counts` display).
+- `src/components/stages/ReanalysisExtrapolationView.tsx` — Stage 5 (reanalysis hub confirmation + re-extrapolate + overlay plots).
+- Each view calls `store.invokeSessionOperation` / dedicated store actions and reads `stageStatuses`.
+- **Gate:** `npm run build` ✓ · each stage runs against the backend for a sample dataset (manual smoke per stage) ✓.
+
+### Phase E — Stages 6–8 (analytical payoff)
+- `src/components/stages/LtcView.tsx` — Stage 6 (algorithm multi-select, LTC runs, metrics cards, `ltc_*` plots).
+- `src/components/stages/ClippingView.tsx` — Stage 7 (source/col picker, U-curve chart from `analysis_data`, representative-year capture).
+- `src/components/stages/EnsembleView.tsx` — Stage 8 (ensemble run + weights viz, uncertainty calculator, P-factors tornado, scenario save/run, exports).
+- **Gate:** `npm run build` ✓ · end-to-end: load → reanalysis → shear → LTC → ensemble → save scenario (manual smoke) ✓.
+
+### Phase F — Canvas (React Flow)
+- `src/lib/workflow.ts` — `createWorkflowGraph(config, capabilities)` emitting the full 8-stage DAG (§5); `toExecutionRequest` node/edge serializer; canvas node/edge types.
+- `src/components/WorkflowView.tsx` — React Flow surface; node click opens a params fly-out; "Run auto/step" wired to `executeWorkflow`/`executeWorkflowStep`; live status via the `/workflow/execute/stream` SSE endpoint; snapshot save/load UI.
+- **Gate:** `npm run build` ✓ · canvas executes a 3-node graph against `/workflow/execute` and streams status ✓.
+
+### Phase G — Copilot, Compare, WindKit
+- `src/lib/copilotAgent.ts` — BYOK streaming agent (Vercel `ai` SDK) with `updateRunconfigField` / `callSessionRoute` / `callWindKitRoute` / `listScenarios` handlers; workspace context includes `stageStatuses`, `ltcResults`, `clippingReport`, `uncertaintyResult`.
+- `src/lib/mcpClient.ts`, `src/lib/openapi.ts` (WindKit tool extraction from `/openapi.json`), `src/lib/scenarioCompare.ts`.
+- `src/components/CopilotView.tsx` — chat UI with streamed `tool_calls_executed` chips; BYOK settings drawer (provider/model/apiKey in `localStorage`).
+- `src/components/CompareView.tsx` — scenario-slot picker (`baseline/run2/run3`) → `POST /workflow/compare`; render metrics table, config diff, and `PlotFrame`-backed comparison plots (weibull, windrose[], ltc_scatter, uncertainty_tornado).
+- `src/components/WindKitExplorerView.tsx` — advanced tool surface over `/api/windkit/*` (categories from `openapi.ts`).
+- **Gate:** `npm run build` ✓ · copilot executes one tool call end-to-end ✓ · compare renders for two saved scenarios ✓.
+
+### Cross-phase conventions (apply throughout)
+- All async UI state flows through `store.busyLabel` + `store.activity`; never ad-hoc `useState` loading flags for global operations.
+- Every mutating store action calls `refreshWorkspace()` (or `refreshResults()` for LTC/ensemble) afterwards so `stageStatuses` and summaries stay correct.
+- Serialize complex params the way the backend expects (e.g. `height_sensors` and cleaning `params` as JSON strings — see §5 parameter-coercion caveat).
+- Render every plot through `<PlotFrame>`; never call `POST /plots/{name}` directly from a view.
 
 ---
 

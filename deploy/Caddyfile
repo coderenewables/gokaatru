@@ -5,5 +5,4 @@
 
   reverse_proxy /api/* api:8000
   reverse_proxy /sse* mcp:8080
-  reverse_proxy frontend:80
 }

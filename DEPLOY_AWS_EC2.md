@@ -3,7 +3,6 @@
 This guide deploys the app on EC2 using:
 
 - `systemd` services for API + MCP
-- built frontend static files
 - `Caddy` for HTTPS and reverse proxy
 
 Deployment target:
@@ -67,7 +66,6 @@ The deploy script does all of this:
 
 - creates/updates `.venv`
 - installs backend dependencies
-- builds frontend production assets
 - writes systemd service units
 - writes Caddy config
 - restarts services
@@ -105,4 +103,3 @@ bash deploy/aws/ec2/update.sh
 - `gokaatru-api` on `127.0.0.1:8000`
 - `gokaatru-mcp` on `127.0.0.1:8080`
 - `caddy` on `:80` and `:443`
-- frontend served as static files from `frontend/dist`

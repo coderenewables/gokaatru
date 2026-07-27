@@ -1,9 +1,12 @@
-// Lightweight SVG minimap (spec §2.6) fed by the GET /map/site GeoJSON.
+// Site overview map (spec §2.6) using Leaflet + OpenStreetMap tiles.
 //
-// Renders the mast marker plus ERA5 node markers on a normalized lat/lon grid.
-// No Leaflet dependency — purely for site-overview context. Distances/bearings
-// are labelled from the GeoJSON properties.
-import { useMemo } from "react";
+// Renders the mast, ERA5 nodes, and MERRA-2 nodes from the GET /map/site
+// GeoJSON FeatureCollection. Tile layer provides the base map; markers are
+// color-coded by feature type.
+import { useEffect, useMemo } from "react";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 interface GeoJsonFeature {
   type: "Feature";
@@ -17,12 +20,12 @@ interface SiteGeoJson {
 
 interface MiniMapProps {
   geojson: unknown;
-  width?: number;
   height?: number;
 }
 
 const MAST_COLOR = "#083434";
-const NODE_COLOR = "#c86a2a";
+const ERA5_COLOR = "#c86a2a";
+const MERRA2_COLOR = "#5f716a";
 
 function asGeoJson(value: unknown): SiteGeoJson | null {
   if (typeof value !== "object" || value === null) return null;
@@ -31,75 +34,106 @@ function asGeoJson(value: unknown): SiteGeoJson | null {
   return obj as unknown as SiteGeoJson;
 }
 
-export function MiniMap({ geojson, width = 320, height = 220 }: MiniMapProps) {
+// Leaflet needs explicit icon URLs; build colored circle divIcons so we don't
+// depend on the asset-bundled default marker images.
+function makeIcon(color: string, shape: "circle" | "square" = "circle"): L.DivIcon {
+  const radius = 9;
+  const inner =
+    shape === "circle"
+      ? `border-radius:50%`
+      : `border-radius:2px;transform:rotate(45deg)`;
+  return L.divIcon({
+    className: "",
+    html: `<span style="display:block;width:${radius * 2}px;height:${radius * 2}px;background:${color};border:2px solid #fff;box-shadow:0 0 3px rgba(0,0,0,0.6);${inner}"></span>`,
+    iconSize: [radius * 2, radius * 2],
+    iconAnchor: [radius, radius],
+  });
+}
+
+const MAST_ICON = makeIcon(MAST_COLOR, "square");
+const ERA5_ICON = makeIcon(ERA5_COLOR);
+const MERRA2_ICON = makeIcon(MERRA2_COLOR);
+
+interface PointFeature {
+  kind: "mast" | "era5_node" | "merra2_node";
+  lat: number;
+  lon: number;
+  name: string;
+  distanceKm?: number;
+  bearing?: string;
+}
+
+function toPoints(gj: SiteGeoJson): PointFeature[] {
+  return gj.features
+    .filter((f) => f.geometry?.type === "Point" && Array.isArray(f.geometry.coordinates))
+    .map((f) => {
+      const [lon, lat] = f.geometry.coordinates as [number, number];
+      const kind =
+        f.properties?.type === "mast"
+          ? "mast"
+          : f.properties?.type === "merra2_node"
+            ? "merra2_node"
+            : "era5_node";
+      return {
+        kind,
+        lat,
+        lon,
+        name: typeof f.properties?.name === "string" ? f.properties.name : kind,
+        distanceKm: typeof f.properties?.distance_km === "number" ? f.properties.distance_km : undefined,
+        bearing: typeof f.properties?.bearing === "string" ? f.properties.bearing : undefined,
+      };
+    });
+}
+
+// Fit the map bounds whenever the points change.
+function FitBounds({ points }: { points: PointFeature[] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (points.length === 0) return;
+    const latlngs = points.map((p) => [p.lat, p.lon] as [number, number]);
+    const bounds = L.latLngBounds(latlngs).pad(0.3);
+    map.fitBounds(bounds, { animate: false });
+  }, [map, points]);
+  return null;
+}
+
+export function MiniMap({ geojson, height = 320 }: MiniMapProps) {
   const points = useMemo(() => {
     const gj = asGeoJson(geojson);
-    if (!gj) return [];
-    return gj.features
-      .filter((f) => f.geometry?.type === "Point" && Array.isArray(f.geometry.coordinates))
-      .map((f) => {
-        const [lon, lat] = f.geometry.coordinates as [number, number];
-        const kind = f.properties?.type === "mast" ? "mast" : "node";
-        return {
-          kind,
-          lon,
-          lat,
-          name: typeof f.properties?.name === "string" ? f.properties.name : kind,
-          distanceKm: typeof f.properties?.distance_km === "number" ? f.properties.distance_km : undefined,
-          bearing: typeof f.properties?.bearing === "string" ? f.properties.bearing : undefined,
-        };
-      });
+    return gj ? toPoints(gj) : [];
   }, [geojson]);
 
   if (points.length === 0) {
     return <p className="muted">No site map available.</p>;
   }
 
-  const lons = points.map((p) => p.lon);
-  const lats = points.map((p) => p.lat);
-  const minLon = Math.min(...lons);
-  const maxLon = Math.max(...lons);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  // Degenerate bounds (single point) → center.
-  const spanLon = maxLon - minLon || 0.01;
-  const spanLat = maxLat - minLat || 0.01;
-  // Pad by 15%.
-  const padX = spanLon * 0.15;
-  const padY = spanLat * 0.15;
-  const x0 = minLon - padX;
-  const x1 = maxLon + padX;
-  const y0 = minLat - padY;
-  const y1 = maxLat + padY;
-
-  const padding = 24;
-  const project = (lon: number, lat: number): [number, number] => {
-    const x = padding + ((lon - x0) / (x1 - x0)) * (width - 2 * padding);
-    // SVG y grows downward; invert lat.
-    const y = padding + ((y1 - lat) / (y1 - y0)) * (height - 2 * padding);
-    return [x, y];
-  };
+  // Center on the mast if present, else the first point.
+  const center: [number, number] =
+    points.find((p) => p.kind === "mast") != null
+      ? [points.find((p) => p.kind === "mast")!.lat, points.find((p) => p.kind === "mast")!.lon]
+      : [points[0].lat, points[0].lon];
 
   return (
-    <svg className="mini-map" viewBox={`0 0 ${width} ${height}`} width={width} height={height} role="img" aria-label="Site overview map">
-      <rect x="0" y="0" width={width} height={height} className="mini-map-bg" />
-      {points.map((p, i) => {
-        const [cx, cy] = project(p.lon, p.lat);
-        const color = p.kind === "mast" ? MAST_COLOR : NODE_COLOR;
-        return (
-          <g key={`${p.name}-${i}`}>
-            {p.kind === "mast" ? (
-              <rect x={cx - 5} y={cy - 5} width={10} height={10} fill={color} />
-            ) : (
-              <circle cx={cx} cy={cy} r={5} fill={color} />
-            )}
-            <text x={cx + 8} y={cy + 3} className="mini-map-label">
-              {p.name}
-              {p.distanceKm != null ? ` (${p.distanceKm.toFixed(1)} km)` : ""}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+    <div className="mini-map-wrap" style={{ height }}>
+      <MapContainer center={center} zoom={10} style={{ height: "100%", width: "100%" }} scrollWheelZoom={false}>
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <FitBounds points={points} />
+        {points.map((p, i) => {
+          const icon = p.kind === "mast" ? MAST_ICON : p.kind === "merra2_node" ? MERRA2_ICON : ERA5_ICON;
+          return (
+            <Marker key={`${p.kind}-${i}`} position={[p.lat, p.lon]} icon={icon}>
+              <Popup>
+                <strong>{p.name}</strong>
+                {p.distanceKm != null ? <div>{p.distanceKm.toFixed(1)} km</div> : null}
+                {p.bearing ? <div>bearing {p.bearing}</div> : null}
+              </Popup>
+            </Marker>
+          );
+        })}
+      </MapContainer>
+    </div>
   );
 }

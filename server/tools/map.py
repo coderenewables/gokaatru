@@ -45,10 +45,36 @@ def _get_era5_node_markers(state: SessionState) -> dict:
     return {"type": "FeatureCollection", "features": features}
 
 
+def _get_merra2_node_markers(state: SessionState) -> dict:
+    """Return all surrounding MERRA-2 nodes as a GeoJSON FeatureCollection (best-effort, may be empty)."""
+    merra_nodes = getattr(state, "merra_nodes", None) or []
+    features = [
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [float(node["longitude"]), float(node["latitude"])],
+            },
+            "properties": {
+                "name": f"MERRA-2 Node {index + 1}",
+                "type": "merra2_node",
+                "distance_km": float(node.get("distance_km", 0.0) or 0.0),
+                "bearing": str(node.get("bearing", "")),
+            },
+        }
+        for index, node in enumerate(merra_nodes)
+    ]
+    return {"type": "FeatureCollection", "features": features}
+
+
 def _get_site_overview_map(state: SessionState) -> dict:
-    """Return a combined GeoJSON FeatureCollection of the mast and ERA5 support nodes."""
-    nodes = _get_era5_node_markers(state)
-    return {"type": "FeatureCollection", "features": [_mast_feature(state), *nodes["features"]]}
+    """Return a combined GeoJSON FeatureCollection of the mast, ERA5, and MERRA-2 nodes."""
+    era5 = _get_era5_node_markers(state)
+    merra2 = _get_merra2_node_markers(state)
+    return {
+        "type": "FeatureCollection",
+        "features": [_mast_feature(state), *era5["features"], *merra2["features"]],
+    }
 
 
 @mcp.tool()

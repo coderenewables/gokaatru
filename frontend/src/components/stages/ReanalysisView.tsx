@@ -23,6 +23,9 @@ export function ReanalysisView() {
   );
   const invokeSessionOperation = useWorkspaceStore((state) => state.invokeSessionOperation);
   const summary = useWorkspaceStore((state) => state.summary);
+  const runHomogeneity = useWorkspaceStore((state) => state.runHomogeneity);
+  const applyHomogeneityCutoff = useWorkspaceStore((state) => state.applyHomogeneityCutoff);
+  const homogeneityReport = useWorkspaceStore((state) => state.homogeneityReport);
 
   const [source, setSource] = useState<Source>("brighthub");
   const [startDate, setStartDate] = useState(config.reanalysis.startDate);
@@ -168,24 +171,61 @@ export function ReanalysisView() {
         <div className="path-actions">
           <RunButton
             label="Run annual test"
-            onClick={() => invokeSessionOperation("Homogeneity (annual)", "POST", "/homogeneity/analyze", { method: "annual" })}
+            onClick={() => runHomogeneity("annual")}
+          />
+          <RunButton
+            label="Run monthly test"
+            variant="secondary"
+            onClick={() => runHomogeneity("monthly")}
           />
           <RunButton
             label="Apply cutoff year"
             variant="secondary"
             onClick={() => {
-              const yearStr = window.prompt("Cutoff start year (e.g. 2003):", "2003");
+              const fallback = homogeneityReport?.[0]?.recommended_start_year ?? 2003;
+              const yearStr = window.prompt("Cutoff start year (e.g. 2003):", String(fallback));
               if (yearStr) {
                 const year = Number(yearStr);
                 if (Number.isFinite(year)) {
-                  void invokeSessionOperation("Apply homogeneity cutoff", "POST", "/homogeneity/apply", {
-                    cutoff_year: year,
-                  });
+                  void applyHomogeneityCutoff(year);
                 }
               }
             }}
           />
         </div>
+
+        {homogeneityReport && homogeneityReport.length > 0 ? (
+          <table className="data-table homogeneity-table">
+            <thead>
+              <tr>
+                <th>Dataset</th>
+                <th>Recommended start year</th>
+                <th>Pettitt p-value</th>
+                <th>Trend / year</th>
+              </tr>
+            </thead>
+            <tbody>
+              {homogeneityReport.map((d) => {
+                const significant = d.pettitt_p_value < 0.05;
+                return (
+                  <tr key={d.name}>
+                    <td>{d.name}</td>
+                    <td>
+                      <strong>{d.recommended_start_year}</strong>
+                    </td>
+                    <td className={significant ? "status-warn" : "status-ok"}>
+                      {d.pettitt_p_value.toFixed(4)}
+                      {significant ? " ⚠ change-point" : ""}
+                    </td>
+                    <td>{d.trend_per_year.toFixed(4)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <p className="muted">No homogeneity report yet. Run the test to see per-dataset recommendations.</p>
+        )}
       </section>
 
       {siteMap ? (

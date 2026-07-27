@@ -54,6 +54,8 @@ import {
   getEnsembleResult,
   getLtcResults,
   getSiteMap,
+  analyzeHomogeneity,
+  applyHomogeneityCutoff as applyHomogeneityCutoffApi,
   getStatistics,
   getSessionConfig,
   getSessionSummary,
@@ -223,6 +225,8 @@ interface WorkspaceStore {
     useNodes: "era5" | "merra2";
   }) => Promise<void>;
   loadSiteMap: () => Promise<void>;
+  runHomogeneity: (method: "annual" | "monthly") => Promise<void>;
+  applyHomogeneityCutoff: (cutoffYear: number) => Promise<void>;
 
   // Stage 3 — exploration
   loadSensorStatistics: (sensorName: string) => Promise<import("../types/analysis").SensorStatistics>;
@@ -874,6 +878,57 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       set({ siteMap: geojson });
     } catch {
       /* non-fatal */
+    }
+  },
+
+  runHomogeneity: async (method) => {
+    const session = get().session;
+    if (!session) return;
+    set({ busyLabel: `Homogeneity (${method})` });
+    try {
+      const response = (await analyzeHomogeneity(get().apiBaseUrl, session.session_id, { method })) as {
+        datasets?: HomogeneityDataset[];
+      };
+      const datasets = response.datasets ?? [];
+      set((state) => ({
+        homogeneityReport: datasets,
+        busyLabel: null,
+        assets: upsertAssets(state.assets, [buildOperationResultAsset("homogeneity", response)]),
+        activity: appendActivity(
+          state.activity,
+          `Homogeneity (${method})`,
+          "ok",
+          `${datasets.length} dataset(s)`,
+        ),
+      }));
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        homogeneityReport: null,
+        activity: appendActivity(state.activity, "Homogeneity failed", "error", asErrorMessage(error)),
+      }));
+    }
+  },
+
+  applyHomogeneityCutoff: async (cutoffYear) => {
+    const session = get().session;
+    if (!session) return;
+    set({ busyLabel: "Applying homogeneity cutoff" });
+    try {
+      const response = await applyHomogeneityCutoffApi(get().apiBaseUrl, session.session_id, {
+        cutoff_year: cutoffYear,
+      });
+      set((state) => ({
+        busyLabel: null,
+        assets: upsertAssets(state.assets, [buildOperationResultAsset("homogeneity-cutoff", response)]),
+        activity: appendActivity(state.activity, "Applied homogeneity cutoff", "ok", `year ${cutoffYear}`),
+      }));
+      await get().refreshWorkspace();
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Homogeneity cutoff failed", "error", asErrorMessage(error)),
+      }));
     }
   },
 

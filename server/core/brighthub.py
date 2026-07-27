@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import requests
 
+from server.core.spatial import bearing_compass, haversine_km
+
 BRIGHTHUB_BASE_URL = "https://api.brighthub.io"
 BRIGHTHUB_AUTH_URL = f"{BRIGHTHUB_BASE_URL}/auth/token"
 
@@ -173,12 +175,20 @@ def fetch_reanalysis_nodes(token: str, lat: float, lon: float) -> dict[str, list
     merra2_nodes: list[dict] = merra2_resp.json()
 
     for node in era5_nodes:
-        node["distance_sq"] = (node["latitude_ddeg"] - lat) ** 2 + (node["longitude_ddeg"] - lon) ** 2
+        node_lat = float(node["latitude_ddeg"])
+        node_lon = float(node["longitude_ddeg"])
+        node["distance_sq"] = (node_lat - lat) ** 2 + (node_lon - lon) ** 2
+        node["distance_km"] = haversine_km(lat, lon, node_lat, node_lon)
+        node["bearing"] = bearing_compass(lat, lon, node_lat, node_lon)
     for node in merra2_nodes:
-        node["distance_sq"] = (node["latitude_ddeg"] - lat) ** 2 + (node["longitude_ddeg"] - lon) ** 2
+        node_lat = float(node["latitude_ddeg"])
+        node_lon = float(node["longitude_ddeg"])
+        node["distance_sq"] = (node_lat - lat) ** 2 + (node_lon - lon) ** 2
+        node["distance_km"] = haversine_km(lat, lon, node_lat, node_lon)
+        node["bearing"] = bearing_compass(lat, lon, node_lat, node_lon)
 
-    era5_nodes.sort(key=lambda n: n["distance_sq"])
-    merra2_nodes.sort(key=lambda n: n["distance_sq"])
+    era5_nodes.sort(key=lambda n: float(n["distance_km"]))
+    merra2_nodes.sort(key=lambda n: float(n["distance_km"]))
 
     return {"era5_nodes": era5_nodes[:4], "merra2_nodes": merra2_nodes[:1]}
 

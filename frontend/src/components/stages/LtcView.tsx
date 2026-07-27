@@ -9,6 +9,7 @@ import { useWorkspaceStore } from "../../store/useWorkspaceStore";
 import { MetricsCard } from "../common/MetricsCard";
 import { PlotFrame } from "../common/PlotFrame";
 import { RunButton } from "../common/RunButton";
+import { SensorPicker } from "../common/SensorPicker";
 import { LTC_ALGORITHMS, type LtcAlgorithm } from "../../types/analysis";
 
 const ALGORITHM_HELP: Record<LtcAlgorithm, string> = {
@@ -24,6 +25,7 @@ export function LtcView() {
   const updateConfigValue = useWorkspaceStore((state) => state.updateConfigValue);
   const ltcResults = useWorkspaceStore((state) => state.ltcResults);
   const runLtcAlgorithms = useWorkspaceStore((state) => state.runLtcAlgorithms);
+  const sensors = useWorkspaceStore((state) => state.sensors);
 
   const [algorithms, setAlgorithms] = useState<LtcAlgorithm[]>(
     (config.ltc.algorithms.filter((a) => a !== "ensemble") as LtcAlgorithm[]).length > 0
@@ -62,22 +64,50 @@ export function LtcView() {
     <div className="stage-view">
       <section className="path-panel">
         <h3>Columns</h3>
+        <p className="muted">
+          Short = measured hub-height speed; long = reanalysis hub-height speed. Direction columns are
+          used only by the xgboost algorithm.
+        </p>
         <div className="form-grid">
           <label className="form-field">
             <span>Short column (measured hub)</span>
-            <input type="text" value={shortCol} onChange={(e) => setShortCol(e.target.value)} placeholder="Spd_120m_hub" />
+            <SensorPicker
+              sensors={sensors}
+              kind="speed"
+              value={shortCol}
+              onChange={(v) => setShortCol(v as string)}
+              placeholder="Select measured speed…"
+            />
           </label>
           <label className="form-field">
             <span>Long column (reanalysis hub)</span>
-            <input type="text" value={longCol} onChange={(e) => setLongCol(e.target.value)} placeholder="Spd_120m_hub" />
+            <SensorPicker
+              sensors={sensors}
+              kind="speed"
+              value={longCol}
+              onChange={(v) => setLongCol(v as string)}
+              placeholder="Select reanalysis speed…"
+            />
           </label>
           <label className="form-field">
             <span>Short direction col (xgboost)</span>
-            <input type="text" value={shortDirCol} onChange={(e) => setShortDirCol(e.target.value)} placeholder="Dir_120m" />
+            <SensorPicker
+              sensors={sensors}
+              kind="direction"
+              value={shortDirCol}
+              onChange={(v) => setShortDirCol(v as string)}
+              placeholder="Select measured direction…"
+            />
           </label>
           <label className="form-field">
             <span>Long direction col (xgboost)</span>
-            <input type="text" value={longDirCol} onChange={(e) => setLongDirCol(e.target.value)} placeholder="Dir_120m_hub" />
+            <SensorPicker
+              sensors={sensors}
+              kind="direction"
+              value={longDirCol}
+              onChange={(v) => setLongDirCol(v as string)}
+              placeholder="Select reanalysis direction…"
+            />
           </label>
         </div>
       </section>

@@ -89,6 +89,8 @@ class ReanalysisNode(BaseModel):
     latitude_ddeg: float
     longitude_ddeg: float
     distance_sq: float | None = None
+    distance_km: float | None = None
+    bearing: str | None = None
 
     model_config = {"extra": "allow"}
 
@@ -246,8 +248,24 @@ def brighthub_reanalysis_nodes(
     state.touch()
 
     return ReanalysisNodesResponse(
-        era5_nodes=[ReanalysisNode(**n) for n in nodes.get("era5_nodes", [])],
-        merra2_nodes=[ReanalysisNode(**n) for n in nodes.get("merra2_nodes", [])],
+        era5_nodes=[
+            ReanalysisNode(
+                latitude_ddeg=nd["latitude"],
+                longitude_ddeg=nd["longitude"],
+                distance_km=nd["distance_km"],
+                bearing=nd["bearing"],
+            )
+            for nd in state.era5_nodes
+        ],
+        merra2_nodes=[
+            ReanalysisNode(
+                latitude_ddeg=nd["latitude"],
+                longitude_ddeg=nd["longitude"],
+                distance_km=nd["distance_km"],
+                bearing=nd["bearing"],
+            )
+            for nd in state.merra_nodes
+        ],
     )
 
 

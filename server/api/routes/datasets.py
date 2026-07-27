@@ -109,6 +109,9 @@ def load_dataset_into_session(
     except ValueError as exc:
         raise to_bad_request(exc) from exc
 
+    # Record the loaded dataset in runconfig so the frontend canvas can
+    # rebuild node params (e.g. dataset intake) from the saved config.
+    state.runconfig["dataset_id"] = dataset_id
     state.touch()
     return {
         "status": "ok",

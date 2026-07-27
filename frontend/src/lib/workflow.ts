@@ -91,9 +91,19 @@ function buildNode(
   };
 }
 
+export interface WorkflowGraphContext {
+  /** Wind-speed sensor names in the session (from the sensor inventory). */
+  speedSensors?: string[];
+  /** Wind-direction sensor names in the session. */
+  directionSensors?: string[];
+  /** LTC algorithms already run in the session. */
+  ltcAlgorithms?: string[];
+}
+
 export function createWorkflowGraph(
   config: WindAnalysisConfig,
   capabilities: WorkflowDispatchCapability[],
+  context: WorkflowGraphContext = {},
 ): { nodes: WorkflowCanvasNode[]; edges: WorkflowCanvasEdge[] } {
   const datasetCap = matchCapability(capabilities, "select-dataset", ["dataset"]);
   const cleaningCap = matchCapability(capabilities, "apply_cleaning_rule", ["cleaning"]);
@@ -110,10 +120,27 @@ export function createWorkflowGraph(
   const uncertaintyCap = matchCapability(capabilities, "calculate_uncertainty", ["uncertainty"]);
   const clippingCap = matchCapability(capabilities, "run_clipping_analysis", ["clipping"]);
 
-  const heightSensors =
-    config.shear.speedSensorPair.length > 0
-      ? JSON.stringify(config.shear.speedSensorPair)
-      : "";
+  // Resolve node params, falling back to live session facts (sensor inventory,
+  // completed LTC runs) when the saved config leaves a field empty — so a
+  // "rebuild from config" on a finished session produces runnable params.
+  const speedSensors = context.speedSensors ?? [];
+  const dirSensors = context.directionSensors ?? [];
+  const fallbackShort = speedSensors[speedSensors.length - 1] ?? "";
+  const fallbackLong = "ERA5_site";
+
+  const datasetId = config.inputs.sharedDatasetId;
+  const shearPair =
+    config.shear.speedSensorPair.length > 0 ? config.shear.speedSensorPair : speedSensors;
+  const heightSensors = shearPair.length > 0 ? JSON.stringify(shearPair) : "";
+  const ltcShortCol = config.ltc.shortColumn || fallbackShort;
+  const ltcLongCol = config.ltc.longColumn || fallbackLong;
+  const ltcShortDirCol = config.ltc.shortDirectionColumn || dirSensors[dirSensors.length - 1] || "";
+  const ltcLongDirCol = config.ltc.longDirectionColumn || (ltcShortDirCol ? "ERA5_Direction" : "");
+  const measuredCol = config.ltc.measuredColumn || ltcShortCol;
+  const algorithmsRun = context.ltcAlgorithms ?? [];
+  const clippingSource = algorithmsRun.length > 0 ? algorithmsRun[0] : "ensemble";
+  const clippingSpeedCol =
+    algorithmsRun.length > 0 ? `${algorithmsRun[0]}_Speed` : "Ensemble_Speed";
 
   const nodes: WorkflowCanvasNode[] = [
     buildNode(
@@ -121,9 +148,9 @@ export function createWorkflowGraph(
       { x: 0, y: 40 },
       "dataset",
       "Dataset intake",
-      config.inputs.sharedDatasetId || "Upload/import data",
+      datasetId || "Upload/import data",
       datasetCap,
-      { dataset_id: config.inputs.sharedDatasetId },
+      { dataset_id: datasetId },
     ),
     buildNode(
       "cleaning",
@@ -222,10 +249,10 @@ export function createWorkflowGraph(
       `${config.ltc.algorithms.join(", ") || "no algorithms"}`,
       ltcCap,
       {
-        short_col: config.ltc.shortColumn,
-        long_col: config.ltc.longColumn,
-        short_dir_col: config.ltc.shortDirectionColumn,
-        long_dir_col: config.ltc.longDirectionColumn,
+        short_col: ltcShortCol,
+        long_col: ltcLongCol,
+        short_dir_col: ltcShortDirCol,
+        long_dir_col: ltcLongDirCol,
       },
     ),
     buildNode(
@@ -235,7 +262,7 @@ export function createWorkflowGraph(
       "Ensemble",
       "Inverse-RMSE blend",
       ensembleCap,
-      { measured_col: config.ltc.measuredColumn || config.ltc.shortColumn },
+      { measured_col: measuredCol },
     ),
     buildNode(
       "uncertainty",
@@ -264,7 +291,7 @@ export function createWorkflowGraph(
       "Clipping",
       "Representative period",
       clippingCap,
-      { speed_col: "Ensemble_Speed", source: "ensemble" },
+      { speed_col: clippingSpeedCol, source: clippingSource },
     ),
   ];
 

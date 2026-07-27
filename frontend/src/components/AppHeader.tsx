@@ -7,6 +7,16 @@ export function AppHeader() {
   const summary = useWorkspaceStore((state) => state.summary);
   const busyLabel = useWorkspaceStore((state) => state.busyLabel);
   const refreshWorkspace = useWorkspaceStore((state) => state.refreshWorkspace);
+  const newSession = useWorkspaceStore((state) => state.newSession);
+  const deleteCurrentSession = useWorkspaceStore((state) => state.deleteCurrentSession);
+
+  const confirmDelete = () => {
+    if (!session) return;
+    const ok = window.confirm(
+      "Delete this session? All uploaded files and results on the server will be permanently removed.",
+    );
+    if (ok) void deleteCurrentSession();
+  };
 
   const projectName = summary?.project_name ?? "Untitled project";
   const hubHeight = summary?.hub_height_m;
@@ -18,6 +28,7 @@ export function AppHeader() {
   return (
     <header className="app-header">
       <div className="app-header-titles">
+        <img src="/gokaatru-logo.png" alt="GoKaatru logo" className="app-logo" />
         <h1>GoKaatru</h1>
         <p className="app-header-subtitle">
           {projectName}
@@ -42,6 +53,24 @@ export function AppHeader() {
           aria-label="Refresh workspace"
         >
           ↻
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={() => void newSession()}
+          disabled={Boolean(busyLabel)}
+          title="Start a new session (replaces the current one)"
+        >
+          New session
+        </button>
+        <button
+          type="button"
+          className="ghost-button danger"
+          onClick={confirmDelete}
+          disabled={Boolean(busyLabel) || !session}
+          title="Delete this session and its server-side files"
+        >
+          Delete session
         </button>
       </div>
     </header>

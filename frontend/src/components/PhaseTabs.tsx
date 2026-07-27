@@ -3,7 +3,7 @@ import clsx from "clsx";
 
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
 
-type TabId = "setup" | "workflow" | "windkit" | "copilot" | "compare";
+type TabId = "setup" | "workflow" | "windkit" | "copilot" | "compare" | "howto";
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "setup", label: "Stepper" },
@@ -11,6 +11,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: "windkit", label: "WindKit" },
   { id: "copilot", label: "Copilot" },
   { id: "compare", label: "Compare" },
+  { id: "howto", label: "How To" },
 ];
 
 export function PhaseTabs() {

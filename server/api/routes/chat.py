@@ -144,17 +144,28 @@ def _build_registries() -> tuple[list[dict[str, Any]], dict[str, Any]]:
 
 
 def _execute_tool(name: str, arguments: dict[str, Any], state: SessionState) -> Any:
-    """Execute an MCP tool by name, routing it through the correct SessionState."""
+    """Execute an MCP tool by name, routing it through the correct SessionState.
+
+    Tool failures are re-raised as HTTPException so they honor the documented
+    ValueError→400 / RuntimeError→502 contract instead of being swallowed into
+    a 200 body. A tool failure mid-loop aborts the whole chat request.
+    """
     _, callables = _build_registries()
     fn = callables.get(name)
     if fn is None:
-        return {"error": f"Unknown tool: {name}"}
+        raise HTTPException(status_code=400, detail=f"Unknown tool: {name}")
 
     with bind_session(state):
         try:
             return fn(**arguments)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Tool '{name}' failed: {exc}") from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=f"Tool '{name}' failed: {exc}") from exc
         except Exception as exc:
-            return {"error": f"{type(exc).__name__}: {exc}"}
+            raise HTTPException(
+                status_code=500, detail=f"Tool '{name}' raised {type(exc).__name__}: {exc}"
+            ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -228,10 +239,14 @@ def _call_llm(
         resp = client.post(url, json=payload, headers=headers)
 
     if resp.status_code != 200:
-        # Avoid echoing upstream provider response bodies (which may contain
-        # rate-limit secrets, request ids, or partial keys) back to the client.
+        # Normalize ALL upstream failures to 502 Bad Gateway. We deliberately do
+        # NOT forward the upstream status (401/429/500/…) verbatim: that leaks
+        # provider detail and breaks the documented error contract (only the
+        # GoKaatru layer's own 4xx domain errors are 4xx; upstream is always 502).
+        # We also never echo the upstream body, which may contain rate-limit
+        # secrets, request ids, or partial keys.
         raise HTTPException(
-            status_code=resp.status_code if 400 <= resp.status_code < 600 else 502,
+            status_code=502,
             detail=f"Upstream LLM provider returned status {resp.status_code}",
         )
 
@@ -280,12 +295,13 @@ def chat(
                     arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else dict(raw_arguments)
                     if not isinstance(arguments, dict):
                         raise ValueError("tool arguments must decode to a JSON object")
+                    # Tool failures raise HTTPException (ValueError→400, RuntimeError→502)
+                    # and propagate out of the chat loop, honoring the error contract.
                     result: Any = _execute_tool(tool_name, arguments, state)
                 except (json.JSONDecodeError, ValueError, TypeError) as exc:
+                    # Argument-shape errors are fed back to the LLM as a tool result.
                     arguments = {}
                     result = {"error": f"Invalid tool arguments for '{tool_name}': {exc}"}
-                else:
-                    pass
 
                 try:
                     result_str = json.dumps(result, default=str)

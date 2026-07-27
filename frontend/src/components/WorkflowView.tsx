@@ -138,6 +138,7 @@ export function WorkflowView() {
 
   const selectedNode = rfNodes.find((n) => n.id === selectedNodeId) ?? null;
   const isRunning = workflowStatus?.is_running ?? false;
+  const canvasEmpty = rfNodes.length === 0;
 
   return (
     <div className="workflow-view">
@@ -182,6 +183,20 @@ export function WorkflowView() {
             }}
           />
         </ReactFlow>
+
+        {canvasEmpty ? (
+          <div className="workflow-empty-hint">
+            <p>
+              The canvas is empty. Complete all 8 stages in the <strong>Stepper</strong> and the
+              pipeline graph will be built here from your finalized configuration — ready to run
+              and snapshot.
+            </p>
+            <p className="muted">
+              Or use <strong>Rebuild from config</strong> to load the pipeline now with the current
+              configuration.
+            </p>
+          </div>
+        ) : null}
 
         {selectedNode ? (
           <NodeFlyout

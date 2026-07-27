@@ -120,7 +120,7 @@ import { extractWindKitTools } from "../lib/openapi";
 
 const ACTIVE_SESSION_STORAGE_KEY = "gokaatru-active-session-id";
 
-type TabId = "setup" | "workflow" | "windkit" | "copilot" | "compare";
+type TabId = "setup" | "workflow" | "windkit" | "copilot" | "compare" | "howto";
 
 interface ActivePlot {
   plotName: PlotName;
@@ -193,6 +193,7 @@ interface WorkspaceStore {
   updateConfigValue: (path: string, value: unknown) => void;
   resetConfig: () => void;
   bootstrapSession: () => Promise<void>;
+  newSession: () => Promise<void>;
   restoreSession: () => Promise<void>;
   refreshWorkspace: () => Promise<void>;
   resetCurrentSession: () => Promise<void>;
@@ -253,7 +254,7 @@ interface WorkspaceStore {
 
   // Phase F — workflow canvas
   setWorkflowGraph: (nodes: WorkflowCanvasNode[], edges: WorkflowCanvasEdge[]) => void;
-  rebuildWorkflowGraph: () => void;
+  rebuildWorkflowGraph: () => Promise<void>;
   executeWorkflowGraph: (mode: "auto" | "manual") => Promise<void>;
   stopWorkflowGraph: () => Promise<void>;
   refreshWorkflowStatus: () => Promise<void>;
@@ -331,6 +332,24 @@ function toLtcResultSummaries(payload: LtcResultListResponse): LtcResultSummary[
     result_file: item.result_file,
     rows: item.rows,
   }));
+}
+
+/** Session facts used to fill canvas node params that the config leaves blank. */
+function graphContextFromState(state: {
+  sensors: SensorRow[];
+  ltcResults: LtcResultSummary[];
+}): { speedSensors: string[]; directionSensors: string[]; ltcAlgorithms: string[] } {
+  return {
+    speedSensors: state.sensors
+      .filter((s) => s.sensor_type === "wind_speed")
+      .sort((a, b) => a.height_m - b.height_m)
+      .map((s) => s.name),
+    directionSensors: state.sensors
+      .filter((s) => s.sensor_type === "wind_direction")
+      .sort((a, b) => a.height_m - b.height_m)
+      .map((s) => s.name),
+    ltcAlgorithms: state.ltcResults.map((r) => r.algorithm),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -441,6 +460,29 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
   },
 
+  newSession: async () => {
+    // Start a fresh session: delete the current one (backend removes its
+    // workspace directory) and clear all local state before bootstrapping.
+    const existing = get().session;
+    if (existing) {
+      await get().deleteCurrentSession();
+      // Bail out if the delete failed and the session is still active.
+      if (get().session !== null) return;
+    }
+    writeStoredSessionId(null);
+    set({
+      config: createDefaultWindAnalysisConfig(),
+      serverRunconfig: {},
+      assets: [buildConfigAsset(createDefaultWindAnalysisConfig())],
+      chatMessages: [],
+      compareResult: null,
+      compareSlotNames: ["baseline", null, null],
+      activeTab: "setup",
+      selectedStage: "data",
+    });
+    await get().bootstrapSession();
+  },
+
   restoreSession: async () => {
     if (get().session !== null || get().sessionStatus === "loading") return;
     const storedSessionId = readStoredSessionId();
@@ -483,13 +525,20 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       const nextConfig = hydrateConfigFromRunconfig(runconfig);
       const completedSteps = summary.completed_steps ?? [];
       const stageStatuses = computeStageStatuses(completedSteps);
+      const allStagesDone = Object.values(stageStatuses).every((status) => status === "done");
       const scenarios = scenariosPayload.scenarios ?? [];
       const nextAssets = upsertAssets(get().assets, [
         buildConfigAsset(nextConfig),
         buildSummaryAsset(summary),
         buildSensorInventoryAsset(sensorsPayload.sensors ?? []),
       ]);
-      const workflowGraph = createWorkflowGraph(nextConfig, capabilitiesPayload.capabilities);
+      // The canvas stays empty until every Stepper stage is complete; then the
+      // pipeline graph is built once from the finalized runconfig, ready to run
+      // and snapshot. ("Rebuild from config" remains available as a manual
+      // escape hatch.)
+      const workflowGraph = allStagesDone
+        ? createWorkflowGraph(nextConfig, capabilitiesPayload.capabilities, graphContextFromState(get()))
+        : null;
 
       set({
         summary,
@@ -500,8 +549,9 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         scenarios,
         stageStatuses,
         assets: nextAssets,
-        workflowNodes: workflowGraph.nodes,
-        workflowEdges: workflowGraph.edges,
+        ...(workflowGraph
+          ? { workflowNodes: workflowGraph.nodes, workflowEdges: workflowGraph.edges }
+          : {}),
         busyLabel: null,
       });
       // Best-effort workflow status + snapshots (non-fatal).
@@ -546,10 +596,25 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         session: null,
         sessionStatus: "idle",
         summary: null,
+        config: createDefaultWindAnalysisConfig(),
+        serverRunconfig: {},
         sensors: [],
         scenarios: [],
+        datasets: [],
+        datasetPreview: null,
+        era5Nodes: [],
+        merraNodes: [],
         ltcResults: [],
         ensembleSummary: null,
+        homogeneityReport: null,
+        clippingReport: null,
+        clippingColumns: [],
+        uncertaintyResult: null,
+        siteMap: null,
+        sensorStatistics: null,
+        coverageDetail: null,
+        activePlot: null,
+        workflowStatus: null,
         stageStatuses: emptyStageStatuses(),
         busyLabel: null,
         activeTab: "setup",
@@ -1137,9 +1202,45 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   setWorkflowGraph: (nodes, edges) => set({ workflowNodes: nodes, workflowEdges: edges }),
 
-  rebuildWorkflowGraph: () => {
-    const graph = createWorkflowGraph(get().config, get().capabilities);
-    set({ workflowNodes: graph.nodes, workflowEdges: graph.edges });
+  rebuildWorkflowGraph: async () => {
+    // Rebuild the canvas from the authoritative runconfig: pull the latest
+    // config from the backend, hydrate it into the store, then emit the graph.
+    const session = get().session;
+    set({ busyLabel: "Rebuilding canvas" });
+    try {
+      let nextConfig = get().config;
+      if (session) {
+        // Pull the authoritative runconfig plus the session facts (sensor
+        // inventory, completed LTC runs) used to fill node params.
+        const [runconfig, sensorsPayload, ltcPayload] = await Promise.all([
+          getSessionConfig(get().apiBaseUrl, session.session_id),
+          getSensors(get().apiBaseUrl, session.session_id).catch(() => ({ sensors: [] })),
+          getLtcResults(get().apiBaseUrl, session.session_id).catch(() => null),
+        ]);
+        nextConfig = hydrateConfigFromRunconfig(runconfig);
+        const sensors = (sensorsPayload as { sensors?: SensorRow[] }).sensors ?? [];
+        const ltcResults = ltcPayload ? toLtcResultSummaries(ltcPayload) : get().ltcResults;
+        set((state) => ({
+          config: nextConfig,
+          serverRunconfig: runconfig,
+          sensors,
+          ltcResults,
+          assets: upsertAssets(state.assets, [buildConfigAsset(nextConfig)]),
+        }));
+      }
+      const graph = createWorkflowGraph(nextConfig, get().capabilities, graphContextFromState(get()));
+      set((state) => ({
+        workflowNodes: graph.nodes,
+        workflowEdges: graph.edges,
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Rebuilt canvas from config", "ok", `${graph.nodes.length} nodes`),
+      }));
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Canvas rebuild failed", "error", asErrorMessage(error)),
+      }));
+    }
   },
 
   executeWorkflowGraph: async (mode) => {

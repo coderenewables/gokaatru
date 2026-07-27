@@ -65,8 +65,10 @@ h3 {
 .home-shell {
   min-height: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1.5rem;
   padding: 2rem;
 }
 
@@ -80,9 +82,60 @@ h3 {
   text-align: center;
 }
 
+.home-howto {
+  max-width: 640px;
+  text-align: left;
+}
+
+.home-howto h2 {
+  margin: 0 0 0.5rem;
+}
+
+.home-howto .howto-pipeline {
+  margin-top: 1rem;
+}
+
+.ghost-button {
+  background: transparent;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.ghost-button:hover:not(:disabled) {
+  background: var(--color-surface-hover, rgba(0, 0, 0, 0.04));
+  border-color: var(--color-teal);
+}
+
+.ghost-button.danger:hover:not(:disabled) {
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.ghost-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .home-tagline {
   color: var(--color-teal);
   margin: 0.5rem 0 1rem;
+}
+
+.home-logo {
+  width: 96px;
+  height: auto;
+  margin-bottom: 0.5rem;
+}
+
+.app-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .primary-button {
@@ -122,6 +175,12 @@ h3 {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.app-header-titles {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 .app-header-titles h1 {
@@ -1194,6 +1253,26 @@ h3 {
   font-family: inherit;
 }
 
+.workflow-empty-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-align: center;
+  padding: 2rem;
+  background: color-mix(in srgb, var(--color-bg) 82%, transparent);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.workflow-empty-hint p {
+  max-width: 480px;
+  margin: 0;
+}
+
 .wf-stage-node {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -1590,4 +1669,149 @@ h3 {
 .homogeneity-table .status-warn {
   color: var(--color-error);
   font-weight: 600;
+}
+
+/* ---------- How To ---------- */
+
+.howto-shell {
+  flex: 1;
+  overflow: auto;
+  padding: 2rem 1.5rem;
+  display: flex;
+  justify-content: center;
+}
+
+.howto-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 2rem 2.5rem;
+  max-width: 760px;
+  width: 100%;
+}
+
+.howto-card-head h1 {
+  color: var(--color-teal-dark);
+  margin-bottom: 0.5rem;
+}
+
+.howto-section {
+  margin-top: 1.75rem;
+  border-top: 1px solid var(--color-border);
+  padding-top: 1.25rem;
+}
+
+.howto-section h2 {
+  color: var(--color-teal);
+}
+
+.howto-section p,
+.howto-section li {
+  color: var(--color-text);
+}
+
+.howto-legend {
+  list-style: none;
+  margin: 0.75rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.howto-dot {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+
+.howto-dot.status-done {
+  background: var(--color-done);
+}
+
+.howto-dot.status-ready {
+  background: var(--color-ready);
+}
+
+.howto-dot.status-locked {
+  background: var(--color-locked);
+}
+
+.howto-pipeline {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.howto-pipeline li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.howto-pipeline-n {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--color-teal);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.howto-pipeline-text {
+  flex: 1;
+  padding-top: 0.1rem;
+}
+
+.howto-tabs {
+  margin: 0.75rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.howto-tab-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.howto-tab-row dt {
+  flex: none;
+  width: 5.5rem;
+  font-weight: 600;
+  color: var(--color-teal-dark);
+}
+
+.howto-tab-row dd {
+  margin: 0;
+  flex: 1;
+}
+
+.howto-tips {
+  margin: 0.5rem 0 0;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.howto-card-foot {
+  margin-top: 2rem;
+  border-top: 1px solid var(--color-border);
+  padding-top: 1.25rem;
+  display: flex;
+  justify-content: flex-end;
 }

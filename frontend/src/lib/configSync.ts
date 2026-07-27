@@ -64,15 +64,59 @@ export function hydrateConfigFromRunconfig(runconfig: unknown): WindAnalysisConf
     next.ltc.uncertainty.hubHeightM = hubHeight;
   }
 
+  // Dataset the session loaded (written by the backend on dataset load); used
+  // to repopulate the canvas "Dataset intake" node params on rebuild.
+  const datasetId = asString(runconfig.dataset_id);
+  if (datasetId) next.inputs.sharedDatasetId = datasetId;
+
+  // --- full-surface blocks (round-tripped by serializeConfigToRunconfig) ---
+  // Deep-merge each present block over the defaults so partial runconfigs
+  // (e.g. minimal server-side JSON) still hydrate cleanly.
+  if (isRecord(runconfig.project)) next.project = deepMerge(next.project, runconfig.project);
+  if (isRecord(runconfig.site)) next.site = deepMerge(next.site, runconfig.site);
+  if (isRecord(runconfig.mast)) next.mast = deepMerge(next.mast, runconfig.mast);
+  if (isRecord(runconfig.inputs)) next.inputs = deepMerge(next.inputs, runconfig.inputs);
+  if (isRecord(runconfig.cleaning)) next.cleaning = deepMerge(next.cleaning, runconfig.cleaning);
+  if (isRecord(runconfig.shear)) next.shear = deepMerge(next.shear, runconfig.shear);
+  if (isRecord(runconfig.reanalysis)) next.reanalysis = deepMerge(next.reanalysis, runconfig.reanalysis);
+  if (isRecord(runconfig.ltc)) next.ltc = deepMerge(next.ltc, runconfig.ltc);
+  if (isRecord(runconfig.workflow)) next.workflow = deepMerge(next.workflow, runconfig.workflow);
+  if (isRecord(runconfig.compare)) next.compare = deepMerge(next.compare, runconfig.compare);
+
   return next;
 }
 
+/** Recursively merge `incoming` over `base`, returning a new object. */
+function deepMerge<T>(base: T, incoming: Record<string, unknown>): T {
+  if (!isRecord(base)) {
+    return (isRecord(incoming) ? structuredClone(incoming) : base) as T;
+  }
+  const out: Record<string, unknown> = structuredClone(base as Record<string, unknown>);
+  for (const [key, value] of Object.entries(incoming)) {
+    if (value === undefined) continue;
+    const currentValue = out[key];
+    if (isRecord(value) && isRecord(currentValue)) {
+      out[key] = deepMerge(currentValue, value);
+    } else {
+      out[key] = structuredClone(value);
+    }
+  }
+  return out as T;
+}
+
 // ---------------------------------------------------------------------------
-// Serialize: typed config -> flat runconfig (only keys the backend understands)
+// Serialize: typed config -> flat runconfig (persist the full editing surface)
 // ---------------------------------------------------------------------------
+//
+// The backend runconfig is a free-form JSON dict persisted to runconfig.json;
+// it tolerates extra keys. We persist every editable field so that save→load
+// round-trips losslessly and runconfig remains the single source of truth.
+// The backend-recognized keys (project_name, location, hub_height_m, …) are
+// preserved with their canonical names so server-side tools keep working.
 
 export function serializeConfigToRunconfig(config: WindAnalysisConfig): AnyRecord {
   return {
+    // --- backend-canonical keys (recognized by server-side tools) ---
     project_name: config.project.name,
     measurement_type: config.project.measurementType,
     location: {
@@ -81,6 +125,31 @@ export function serializeConfigToRunconfig(config: WindAnalysisConfig): AnyRecor
       elevation_m: config.site.elevationM,
     },
     hub_height_m: config.site.hubHeightM,
+
+    // --- full frontend editing surface (round-tripped) ---
+    project: {
+      name: config.project.name,
+      client: config.project.client,
+      measurementType: config.project.measurementType,
+      notes: config.project.notes,
+    },
+    site: {
+      latitude: config.site.latitude,
+      longitude: config.site.longitude,
+      elevationM: config.site.elevationM,
+      region: config.site.region,
+      timeZone: config.site.timeZone,
+      hubHeightM: config.site.hubHeightM,
+      rotorDiameterM: config.site.rotorDiameterM,
+    },
+    mast: config.mast,
+    inputs: config.inputs,
+    cleaning: config.cleaning,
+    shear: config.shear,
+    reanalysis: config.reanalysis,
+    ltc: config.ltc,
+    workflow: config.workflow,
+    compare: config.compare,
   };
 }
 

@@ -827,3 +827,118 @@ export async function invokeWindKitRoute(
     body: JSON.stringify(payload),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Exports (Phase G / spec §9) — file downloads, not JSON
+// ---------------------------------------------------------------------------
+
+/** Internal helper: fetch a session-scoped file download as a Blob. */
+async function downloadSessionFile(
+  baseUrl: string,
+  sessionId: string,
+  relativePath: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const path = `/api/sessions/${sessionId}${relativePath}`;
+  const headers = new Headers({ Accept: "*/*", SESSION_HEADER_NAME: sessionId });
+  const response = await fetch(joinUrl(baseUrl, path), { headers });
+  if (!response.ok) {
+    let detail = response.statusText;
+    try {
+      const payload = (await response.json()) as unknown;
+      if (isRecord(payload) && typeof payload.detail === "string") detail = payload.detail;
+    } catch {
+      detail = response.statusText || `HTTP ${response.status}`;
+    }
+    throw new Error(detail);
+  }
+  // Try to read the filename from Content-Disposition; fall back to a generic name.
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  const filename = match?.[1] ?? "download";
+  return { blob: await response.blob(), filename };
+}
+
+/** Trigger a browser download for a session-scoped file endpoint. */
+export async function exportSessionFile(
+  baseUrl: string,
+  sessionId: string,
+  relativePath: string,
+  fallbackFilename: string,
+): Promise<void> {
+  const { blob, filename } = await downloadSessionFile(baseUrl, sessionId, relativePath);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename || fallbackFilename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+export function exportTimeseries(baseUrl: string, sessionId: string): Promise<void> {
+  return exportSessionFile(baseUrl, sessionId, "/exports/timeseries", "timeseries_cleaned.csv");
+}
+
+export function exportLtc(baseUrl: string, sessionId: string, algorithm: string): Promise<void> {
+  return exportSessionFile(baseUrl, sessionId, `/exports/ltc/${algorithm}`, `ltc_${algorithm}.csv`);
+}
+
+export function exportEnsemble(baseUrl: string, sessionId: string): Promise<void> {
+  return exportSessionFile(baseUrl, sessionId, "/exports/ensemble", "ensemble_results.csv");
+}
+
+export function exportRunconfig(baseUrl: string, sessionId: string): Promise<void> {
+  return exportSessionFile(baseUrl, sessionId, "/exports/runconfig", "runconfig.json");
+}
+
+// ---------------------------------------------------------------------------
+// Cleaning (spec §4 Stage 1/3) — apply / undo / log
+// ---------------------------------------------------------------------------
+
+export interface CleaningRuleRequest {
+  rule_type: string;
+  sensor: string;
+  params: Record<string, unknown>;
+  start_date?: string;
+  end_date?: string;
+}
+
+export interface CleaningLogEntry {
+  rule_type: string;
+  sensor: string;
+  records_affected: number;
+  applied_at: string;
+  params: Record<string, unknown>;
+  start_date?: string;
+  end_date?: string;
+}
+
+export async function applyCleaningRule(
+  baseUrl: string,
+  sessionId: string,
+  payload: CleaningRuleRequest,
+): Promise<Record<string, unknown>> {
+  return requestJson(baseUrl, `/api/sessions/${sessionId}/cleaning/apply`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function undoCleaningRule(
+  baseUrl: string,
+  sessionId: string,
+  entryIndex: number,
+): Promise<Record<string, unknown>> {
+  return requestJson(baseUrl, `/api/sessions/${sessionId}/cleaning/undo`, {
+    method: "POST",
+    body: JSON.stringify({ entry_index: entryIndex }),
+  });
+}
+
+export async function getCleaningLog(
+  baseUrl: string,
+  sessionId: string,
+): Promise<{ entries: CleaningLogEntry[] }> {
+  return requestJson(baseUrl, `/api/sessions/${sessionId}/cleaning/log`);
+}

@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { computeStageStatuses, STAGE_META, STAGE_ORDER } from "../lib/stages";
 import { createDefaultWindAnalysisConfig } from "../lib/defaultConfig";
-import { buildRunconfigUpdates, hydrateConfigFromRunconfig, setConfigValue } from "../lib/configSync";
+import {
+  buildRunconfigUpdates,
+  hydrateConfigFromRunconfig,
+  serializeConfigToRunconfig,
+  setConfigValue,
+} from "../lib/configSync";
 import { LTC_ALGORITHMS, PLOT_NAMES } from "../types/analysis";
 
 describe("STAGE_ORDER + STAGE_META", () => {
@@ -144,6 +149,64 @@ describe("configSync", () => {
     const keys = updates.map((u) => u.key);
     expect(keys).toContain("project_name");
     expect(keys).not.toContain("hub_height_m");
+  });
+
+  it("serializeConfigToRunconfig persists the full editing surface (not just 4 keys)", () => {
+    const base = createDefaultWindAnalysisConfig();
+    // Mutate fields across every editable section (each returns a fresh config).
+    let config = base;
+    config = setConfigValue(config, "project.client", "Acme Energy");
+    config = setConfigValue(config, "project.notes", "Bankable EYA");
+    config = setConfigValue(config, "site.rotorDiameterM", 162);
+    config = setConfigValue(config, "shear.speedSensorPair", ["Spd_80m", "Spd_120m"]);
+    config = setConfigValue(config, "shear.aggregation", "momm");
+    config = setConfigValue(config, "cleaning.rules", [
+      { id: "r1", ruleType: "range_check", sensor: "Spd_80m", params: { min: 0, max: 50 }, startDate: "", endDate: "" },
+    ]);
+    config = setConfigValue(config, "ltc.algorithms", ["speedsort", "xgboost"]);
+    config = setConfigValue(config, "ltc.shortColumn", "Spd_120m_hub");
+    config = setConfigValue(config, "ltc.uncertainty.iavPct", 5.4);
+    config = setConfigValue(config, "reanalysis.startDate", "2003-01-01");
+    config = setConfigValue(config, "compare.baselineLabel", "P90 case");
+
+    const runconfig = serializeConfigToRunconfig(config);
+    // Backend-canonical keys still present.
+    expect(runconfig.project_name).toBe(config.project.name);
+    expect(runconfig.hub_height_m).toBe(config.site.hubHeightM);
+    // Full-surface blocks persisted.
+    expect((runconfig.project as Record<string, unknown>).client).toBe("Acme Energy");
+    expect((runconfig.site as Record<string, unknown>).rotorDiameterM).toBe(162);
+    expect((runconfig.shear as Record<string, unknown>).aggregation).toBe("momm");
+    expect((runconfig.cleaning as { rules: unknown[] }).rules).toHaveLength(1);
+    expect((runconfig.ltc as { algorithms: string[] }).algorithms).toEqual(["speedsort", "xgboost"]);
+    expect((runconfig.reanalysis as Record<string, unknown>).startDate).toBe("2003-01-01");
+    expect((runconfig.compare as Record<string, unknown>).baselineLabel).toBe("P90 case");
+  });
+
+  it("serialize → hydrate round-trips the full config losslessly", () => {
+    let config = createDefaultWindAnalysisConfig();
+    config = setConfigValue(config, "project.client", "Round-Trip Co");
+    config = setConfigValue(config, "shear.speedSensorPair", ["Spd_80m", "Spd_120m"]);
+    config = setConfigValue(config, "ltc.uncertainty.iavPct", 7.1);
+
+    const serialized = serializeConfigToRunconfig(config);
+    const rehydrated = hydrateConfigFromRunconfig(serialized);
+
+    expect(rehydrated.project.client).toBe("Round-Trip Co");
+    expect(rehydrated.shear.speedSensorPair).toEqual(["Spd_80m", "Spd_120m"]);
+    expect(rehydrated.ltc.uncertainty.iavPct).toBe(7.1);
+    // Canonical fields still drive the derived setters.
+    expect(rehydrated.site.hubHeightM).toBe(config.site.hubHeightM);
+    expect(rehydrated.shear.targetHubHeightM).toBe(config.site.hubHeightM);
+  });
+
+  it("hydrate tolerates a minimal server runconfig and falls back to defaults", () => {
+    const minimal = { project_name: "X", hub_height_m: 100 };
+    const hydrated = hydrateConfigFromRunconfig(minimal);
+    expect(hydrated.project.name).toBe("X");
+    expect(hydrated.site.hubHeightM).toBe(100);
+    // Untouched sections keep their defaults.
+    expect(hydrated.ltc.algorithms).toEqual(createDefaultWindAnalysisConfig().ltc.algorithms);
   });
 });
 

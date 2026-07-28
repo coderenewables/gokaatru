@@ -2,6 +2,8 @@
 
 > **For AI coding agents.** Read `BUILD_SPECIFICATION.md` first for full context.
 > Each phase is self-contained: complete it, test it, then move to the next.
+>
+> **Historical note.** Phase 5 below describes Docker packaging (`Dockerfile`, `docker-compose.yml`). That packaging has since been **removed** — the app is now local-dev-only (see `startup.ps1` / the README Quick Start). The Phase 5 Docker content is retained as a build history record only and is no longer actionable.
 
 ---
 

@@ -2,6 +2,7 @@ data/
 __pycache__/
 *.pyc
 .ruff_cache/
+.pytest_cache/
 *.egg-info/
 dist/
 build/
@@ -9,3 +10,7 @@ build/
 the idea.txt
 .venv/
 logic/
+
+# Local agent / IDE working files
+.zcode/
+.phase3-pytest.log

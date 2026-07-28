@@ -873,16 +873,6 @@ Validation commands for the web workflow:
 python -m pytest tests/test_api_sessions.py tests/test_api_workflow.py -v
 ```
 
-### Docker (Production)
-```dockerfile
-FROM python:3.11-slim
-COPY . /app
-WORKDIR /app
-RUN pip install --no-cache-dir .
-EXPOSE 8080
-CMD ["python", "-m", "server.main", "--transport", "sse", "--port", "8080"]
-```
-
 ### Web App Connection
 - Clients talk to `http://localhost:8000/api`
 - Each request carries a session identifier so backend state is workspace-scoped

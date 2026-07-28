@@ -72,14 +72,6 @@ npm run build                        # tsc --noEmit && vite build → frontend/d
 npm run test                         # vitest
 ```
 
-### Docker
-
-```bash
-docker compose up --build            # MCP server at http://localhost:8080/sse
-```
-
-The production Compose stack ([`docker-compose.prod.yml`](./docker-compose.prod.yml)) adds the FastAPI API service and a Caddy reverse proxy; see [`DEPLOY_AWS_EC2.md`](./DEPLOY_AWS_EC2.md) for EC2 deployment.
-
 ## Project layout
 
 ```
@@ -243,15 +235,12 @@ Smoke checks:
 ```bash
 python -m server.main --help
 python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000
-docker build -t gokaatru .
-docker compose config
 ```
 
 ## Documentation
 
 - **[`WORKFLOW_FRONTEND_SPEC.md`](./WORKFLOW_FRONTEND_SPEC.md)** — the complete frontend build contract (8-stage workflow, store, API client, stage specs, endpoint reference). The canonical reference for the web app.
 - [`BUILD_SPECIFICATION.md`](./BUILD_SPECIFICATION.md) / [`BUILD_INSTRUCTIONS.md`](./BUILD_INSTRUCTIONS.md) — backend build contract and phase-by-phase implementation history.
-- [`DEPLOY_AWS_EC2.md`](./DEPLOY_AWS_EC2.md) — EC2 + Caddy + systemd deployment guide.
 
 ## Tech stack
 

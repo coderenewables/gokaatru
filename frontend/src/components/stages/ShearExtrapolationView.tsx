@@ -27,6 +27,12 @@ export function ShearExtrapolationView() {
 
   const speedSensors = useMemo(() => sensors.filter((s) => s.sensor_type === "wind_speed"), [sensors]);
 
+  // Only render the table plot once the corresponding table exists on the
+  // backend — PlotFrame auto-fetches on mount, and plotting before the table
+  // is built returns "Session shear table is not available".
+  const tableReady =
+    method === "power_law" ? Boolean(summary?.shear_table_ready) : Boolean(summary?.roughness_table_ready);
+
   const calculate = async () => {
     if (sensorPair.length < 2) return;
     updateConfigValue("shear.method", method);
@@ -126,11 +132,18 @@ export function ShearExtrapolationView() {
       <section className="plot-grid">
         <div className="plot-cell">
           <h4>{method === "power_law" ? "Shear table" : "Roughness table"}</h4>
-          <PlotFrame
-            plotName="shear_table"
-            params={{ table_type: method === "power_law" ? "shear" : "roughness" }}
-            height={340}
-          />
+          {tableReady ? (
+            <PlotFrame
+              plotName="shear_table"
+              params={{ table_type: method === "power_law" ? "shear" : "roughness" }}
+              height={340}
+            />
+          ) : (
+            <p className="muted">
+              Compute the {method === "power_law" ? "shear" : "roughness"} timeseries and build the
+              lookup table to render the 12×24 heatmap.
+            </p>
+          )}
         </div>
         <div className="plot-cell">
           <h4>Shear profile</h4>

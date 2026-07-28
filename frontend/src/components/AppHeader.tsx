@@ -9,6 +9,7 @@ export function AppHeader() {
   const refreshWorkspace = useWorkspaceStore((state) => state.refreshWorkspace);
   const newSession = useWorkspaceStore((state) => state.newSession);
   const deleteCurrentSession = useWorkspaceStore((state) => state.deleteCurrentSession);
+  const downloadConfig = useWorkspaceStore((state) => state.downloadConfig);
 
   const confirmDelete = () => {
     if (!session) return;
@@ -53,6 +54,15 @@ export function AppHeader() {
           aria-label="Refresh workspace"
         >
           ↻
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={() => void downloadConfig()}
+          disabled={Boolean(busyLabel) || !session}
+          title="Download the session runconfig JSON"
+        >
+          Download config
         </button>
         <button
           type="button"

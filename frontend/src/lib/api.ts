@@ -269,6 +269,33 @@ export async function getSessionConfig(baseUrl: string, sessionId: string): Prom
   return requestJson<Record<string, unknown>>(baseUrl, `/api/sessions/${sessionId}/config`);
 }
 
+/** Download the session runconfig JSON as a file (browser save dialog). */
+export async function downloadRunconfig(baseUrl: string, sessionId: string): Promise<void> {
+  const path = `/api/sessions/${sessionId}/exports/runconfig`;
+  const headers = new Headers({ Accept: "application/json" });
+  headers.set(SESSION_HEADER_NAME, sessionId);
+  const response = await fetch(joinUrl(baseUrl, path), { headers });
+  if (!response.ok) {
+    let detail = response.statusText || `HTTP ${response.status}`;
+    try {
+      const payload = (await response.json()) as unknown;
+      if (isRecord(payload) && typeof payload.detail === "string") detail = payload.detail;
+    } catch {
+      /* keep status text */
+    }
+    throw new Error(detail);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "runconfig.json";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function updateSessionConfig(
   baseUrl: string,
   sessionId: string,

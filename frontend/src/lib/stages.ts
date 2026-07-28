@@ -6,6 +6,7 @@ import type { StageId, StageStatus } from "../types/analysis";
 
 export const STAGE_ORDER: StageId[] = [
   "data",
+  "cleaning",
   "reanalysis",
   "explore",
   "shear",
@@ -30,6 +31,14 @@ export const STAGE_META: Record<StageId, StageMeta> = {
     description: "Load measured data from files or import from BrightHub; set site & hub height.",
     requiredSteps: ["timeseries", "datamodel", "config"],
     prerequisiteStages: [],
+  },
+  cleaning: {
+    title: "Data cleaning",
+    description:
+      "Review sensor stats & profiles, then flag/remove bad data with standard filters or custom AND/OR rules.",
+    // Advisory — cleaning is recommended but not strictly required to proceed.
+    requiredSteps: [],
+    prerequisiteStages: ["data"],
   },
   explore: {
     title: "Measured-data exploration",

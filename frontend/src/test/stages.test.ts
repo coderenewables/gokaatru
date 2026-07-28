@@ -11,9 +11,10 @@ import {
 import { LTC_ALGORITHMS, PLOT_NAMES } from "../types/analysis";
 
 describe("STAGE_ORDER + STAGE_META", () => {
-  it("exposes all 8 stages in dependency order", () => {
+  it("exposes all 9 stages in dependency order", () => {
     expect(STAGE_ORDER).toEqual([
       "data",
+      "cleaning",
       "reanalysis",
       "explore",
       "shear",
@@ -24,11 +25,19 @@ describe("STAGE_ORDER + STAGE_META", () => {
     ]);
   });
 
-  it("every stage has metadata and required steps", () => {
+  it("every stage has metadata and a gating rule", () => {
     for (const stage of STAGE_ORDER) {
       const meta = STAGE_META[stage];
       expect(meta.title.length).toBeGreaterThan(0);
-      expect(meta.requiredSteps.length).toBeGreaterThan(0);
+      // Advisory stages (cleaning) gate on prerequisites alone; all others
+      // require at least one completed-step token.
+      const isAdvisory = stage === "cleaning";
+      if (isAdvisory) {
+        expect(meta.requiredSteps.length).toBe(0);
+        expect(meta.prerequisiteStages.length).toBeGreaterThan(0);
+      } else {
+        expect(meta.requiredSteps.length).toBeGreaterThan(0);
+      }
     }
   });
 });
@@ -38,11 +47,18 @@ describe("computeStageStatuses", () => {
     const statuses = computeStageStatuses([]);
     // data has no prerequisites → always available (or done) until completed.
     expect(statuses.data).toBe("available");
-    // every other stage has at least one prerequisite that isn't done → locked.
+    // cleaning is advisory (no required steps) → done immediately; every other
+    // stage has at least one prerequisite that isn't done → locked.
+    expect(statuses.cleaning).toBe("done");
     for (const stage of STAGE_ORDER) {
-      if (stage === "data") continue;
+      if (stage === "data" || stage === "cleaning") continue;
       expect(statuses[stage]).toBe("locked");
     }
+  });
+
+  it("treats cleaning as advisory (done once its data prerequisite is done)", () => {
+    const statuses = computeStageStatuses(["timeseries", "datamodel", "config"]);
+    expect(statuses.cleaning).toBe("done");
   });
 
   it("marks data done once timeseries+datamodel+config are present", () => {

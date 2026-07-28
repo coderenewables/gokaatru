@@ -103,6 +103,7 @@ describe("PhaseTabs", () => {
 function STAGE_META_TITLE(stage: StageId): string {
   const titles: Record<StageId, string> = {
     data: "Data loading",
+    cleaning: "Data cleaning",
     reanalysis: "Reanalysis acquisition",
     explore: "Measured-data exploration",
     shear: "Shear",

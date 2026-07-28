@@ -4,6 +4,7 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
+import ast
 import json
 from datetime import datetime, timezone
 
@@ -22,6 +23,7 @@ RULES = {
     "spike_filter": {"window_size": 6, "sigma_threshold": 4.0},
     "timestamp_gap_fill": {},
     "custom_period_exclude": {"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"},
+    "expression_filter": {"expression": "Spd_100m < 0 or Spd_100m > 50"},
 }
 
 
@@ -183,6 +185,90 @@ def _apply_custom_period_exclude(df: pd.DataFrame, sensor: str, mask: np.ndarray
     return int(affected.sum())
 
 
+_COMPARE_OPS = {
+    ast.Lt: "__lt__",
+    ast.LtE: "__le__",
+    ast.Gt: "__gt__",
+    ast.GtE: "__ge__",
+    ast.Eq: "__eq__",
+    ast.NotEq: "__ne__",
+}
+
+
+def _eval_expression_node(node: ast.AST, df: pd.DataFrame) -> pd.Series:
+    """Recursively evaluate a validated cleaning-filter AST node into a boolean Series."""
+    if isinstance(node, ast.BoolOp):
+        if not isinstance(node.op, (ast.And, ast.Or)):
+            raise ValueError("Only 'and' / 'or' boolean operators are allowed")
+        operands = [_eval_expression_node(value, df) for value in node.values]
+        result = operands[0]
+        for operand in operands[1:]:
+            result = (result & operand) if isinstance(node.op, ast.And) else (result | operand)
+        return result
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return ~_eval_expression_node(node.operand, df)
+    if isinstance(node, ast.Compare):
+        if len(node.ops) != 1 or len(node.comparators) != 1:
+            raise ValueError("Chained comparisons are not allowed in cleaning filters")
+        left = node.left
+        right = node.comparators[0]
+        op = node.ops[0]
+        # Column must be on one side, a numeric constant on the other.
+        if isinstance(left, ast.Name) and isinstance(right, ast.Constant):
+            column, value = left.id, right.value
+        elif isinstance(right, ast.Name) and isinstance(left, ast.Constant):
+            column, value = right.id, left.value
+            op = _flip_compare_op(op)
+        else:
+            raise ValueError("Each comparison must be '<column> <op> <number>'")
+        if column not in df.columns:
+            raise ValueError(f"Column '{column}' not found in loaded timeseries")
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise ValueError("Cleaning filter comparison value must be a number")
+        method = _COMPARE_OPS.get(type(op))
+        if method is None:
+            raise ValueError("Only <, <=, >, >=, ==, != comparisons are allowed")
+        series = pd.to_numeric(df[column], errors="coerce")
+        result = getattr(series, method)(value)
+        return result.fillna(False)
+    raise ValueError("Cleaning filters may only use column comparisons combined with and/or/not")
+
+
+def _flip_compare_op(op: ast.cmpop) -> ast.cmpop:
+    """Mirror a comparison operator when the constant is on the left side."""
+    flip = {ast.Lt: ast.Gt, ast.LtE: ast.GtE, ast.Gt: ast.Lt, ast.GtE: ast.LtE, ast.Eq: ast.Eq, ast.NotEq: ast.NotEq}
+    return flip[type(op)]()
+
+
+def _expression_mask(df: pd.DataFrame, expression: str) -> np.ndarray:
+    """Parse and evaluate a Windographer-style boolean filter into a row mask."""
+    text = (expression or "").strip()
+    if not text:
+        raise ValueError("expression_filter requires a non-empty 'expression' param")
+    try:
+        tree = ast.parse(text, mode="eval")
+    except SyntaxError as exc:
+        raise ValueError(f"Invalid cleaning filter expression: {exc.msg}") from exc
+    mask = _eval_expression_node(tree.body, df)
+    return mask.to_numpy(dtype=bool)
+
+
+def _apply_expression_filter(
+    df: pd.DataFrame,
+    sensor: str,
+    mask: np.ndarray,
+    params: dict[str, object],
+) -> int:
+    """Flag-and-remove rows matching a boolean expression (AND/OR combinations) as NA."""
+    expression = params.get("expression", "")
+    if not isinstance(expression, str):
+        raise ValueError("expression_filter 'expression' param must be a string")
+    expression_mask = _expression_mask(df, expression)
+    affected = mask & expression_mask & df[sensor].notna().to_numpy()
+    df.loc[affected, sensor] = np.nan
+    return int(affected.sum())
+
+
 def _apply_rule(
     state: SessionState,
     rule_type: str,
@@ -206,6 +292,8 @@ def _apply_rule(
         return _apply_tower_shadow(state, df, sensor, mask, params)
     if rule_type == "spike_filter":
         return _apply_spike_filter(df, sensor, mask, params)
+    if rule_type == "expression_filter":
+        return _apply_expression_filter(df, sensor, mask, params)
     if rule_type == "timestamp_gap_fill":
         return _apply_timestamp_gap_fill(state, df, start_date, end_date)
     return _apply_custom_period_exclude(df, sensor, mask)

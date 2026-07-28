@@ -44,6 +44,7 @@ import {
   createSession,
   deleteSession,
   downloadBrightHubReanalysis,
+  downloadRunconfig,
   fetchBrightHubReanalysisNodes,
   fetchPlot,
   getAnalysisSummary,
@@ -56,6 +57,9 @@ import {
   getSiteMap,
   analyzeHomogeneity,
   applyHomogeneityCutoff as applyHomogeneityCutoffApi,
+  applyCleaningRule,
+  undoCleaningRule,
+  getCleaningLog,
   getStatistics,
   getSessionConfig,
   getSessionSummary,
@@ -198,6 +202,7 @@ interface WorkspaceStore {
   refreshWorkspace: () => Promise<void>;
   resetCurrentSession: () => Promise<void>;
   deleteCurrentSession: () => Promise<void>;
+  downloadConfig: () => Promise<void>;
   saveConfig: () => Promise<void>;
   fetchPlot: (plotName: PlotName, params: PlotRequest) => Promise<PlotResult>;
   refreshResults: () => Promise<void>;
@@ -228,6 +233,11 @@ interface WorkspaceStore {
   loadSiteMap: () => Promise<void>;
   runHomogeneity: (method: "annual" | "monthly") => Promise<void>;
   applyHomogeneityCutoff: (cutoffYear: number) => Promise<void>;
+
+  // Stage 2 — cleaning
+  applyCleaning: (payload: import("../lib/api").CleaningRuleRequest) => Promise<Record<string, unknown>>;
+  undoCleaning: (entryIndex: number) => Promise<void>;
+  refreshCleaningLog: () => Promise<import("../lib/api").CleaningLogEntry[]>;
 
   // Stage 3 — exploration
   loadSensorStatistics: (sensorName: string) => Promise<import("../types/analysis").SensorStatistics>;
@@ -629,6 +639,24 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
   },
 
+  downloadConfig: async () => {
+    const session = get().session;
+    if (!session) return;
+    set({ busyLabel: "Downloading config" });
+    try {
+      await downloadRunconfig(get().apiBaseUrl, session.session_id);
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Downloaded runconfig", "ok", "runconfig.json"),
+      }));
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Config download failed", "error", asErrorMessage(error)),
+      }));
+    }
+  },
+
   saveConfig: async () => {
     const session = get().session;
     if (!session) return;
@@ -994,6 +1022,64 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         busyLabel: null,
         activity: appendActivity(state.activity, "Homogeneity cutoff failed", "error", asErrorMessage(error)),
       }));
+    }
+  },
+
+  // ---- Stage 2: cleaning --------------------------------------------------
+
+  applyCleaning: async (payload) => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    set({ busyLabel: `Cleaning ${payload.sensor || "timeseries"}` });
+    try {
+      const result = await applyCleaningRule(get().apiBaseUrl, session.session_id, payload);
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(
+          state.activity,
+          `Cleaning · ${payload.rule_type}`,
+          "ok",
+          `${String(result.records_affected ?? 0)} record(s)`,
+        ),
+      }));
+      await get().refreshWorkspace();
+      return result;
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Cleaning failed", "error", asErrorMessage(error)),
+      }));
+      throw error;
+    }
+  },
+
+  undoCleaning: async (entryIndex) => {
+    const session = get().session;
+    if (!session) return;
+    set({ busyLabel: "Undoing cleaning rule" });
+    try {
+      await undoCleaningRule(get().apiBaseUrl, session.session_id, entryIndex);
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Undid cleaning rule", "ok", `#${entryIndex}`),
+      }));
+      await get().refreshWorkspace();
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Undo cleaning failed", "error", asErrorMessage(error)),
+      }));
+    }
+  },
+
+  refreshCleaningLog: async () => {
+    const session = get().session;
+    if (!session) return [];
+    try {
+      const result = await getCleaningLog(get().apiBaseUrl, session.session_id);
+      return result.entries ?? [];
+    } catch {
+      return [];
     }
   },
 

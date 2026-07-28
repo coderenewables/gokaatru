@@ -11,6 +11,7 @@ import { AssetsDrawer } from "../AssetsDrawer";
 import { useWorkspaceStore } from "../../store/useWorkspaceStore";
 import { STAGE_META, STAGE_ORDER } from "../../lib/stages";
 import { DataLoadView } from "./DataLoadView";
+import { CleaningView } from "./CleaningView";
 import { ReanalysisView } from "./ReanalysisView";
 import { ExploreView } from "./ExploreView";
 import { ShearExtrapolationView } from "./ShearExtrapolationView";
@@ -67,6 +68,8 @@ function StageBody({
   switch (stage) {
     case "data":
       return <DataLoadView />;
+    case "cleaning":
+      return <CleaningView />;
     case "reanalysis":
       return <ReanalysisView />;
     case "explore":

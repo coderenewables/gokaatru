@@ -10,6 +10,7 @@ import { z } from "zod";
 
 export type StageId =
   | "data"
+  | "cleaning"
   | "reanalysis"
   | "explore"
   | "shear"

@@ -195,6 +195,132 @@ def _calculate_roughness_timeseries(state: SessionState, height_sensors: str) ->
     }
 
 
+def _parse_sensor_names(sensor_names: str) -> list[str]:
+    """Parse optional comma-separated sensor names supplied by the browser overview."""
+    return [name.strip() for name in sensor_names.split(",") if name.strip()]
+
+
+def _mapped_height_sensors(state: SessionState, field_name: str) -> dict[float, str]:
+    """Return valid mapped sensor columns of one type keyed by their measurement height."""
+    df = _require_timeseries(state)
+    mapped = {
+        float(height): str(mapping[field_name])
+        for height, mapping in state.sensor_mapping.items()
+        if mapping.get(field_name) in df.columns
+    }
+    return dict(sorted(mapped.items()))
+
+
+def _resolve_height_sensors(state: SessionState, sensor_names: str, field_name: str) -> dict[float, str]:
+    """Use explicit overview choices when supplied, otherwise use mapped sensors of the requested type."""
+    selected = _parse_sensor_names(sensor_names)
+    if selected:
+        return _parse_height_sensors(json.dumps(selected))
+    return _mapped_height_sensors(state, field_name)
+
+
+def _compute_veer(direction_matrix: np.ndarray, heights: np.ndarray) -> np.ndarray:
+    """Calculate signed directional veer in degrees per 100 m between outer valid heights."""
+    result = np.full(direction_matrix.shape[0], np.nan, dtype=float)
+    for row_index, row in enumerate(direction_matrix):
+        valid_indices = np.flatnonzero(np.isfinite(row))
+        if len(valid_indices) < 2:
+            continue
+        lower = valid_indices[0]
+        upper = valid_indices[-1]
+        direction_change = (row[upper] - row[lower] + 180.0) % 360.0 - 180.0
+        height_span = heights[upper] - heights[lower]
+        if height_span > 0:
+            result[row_index] = direction_change / height_span * 100.0
+    return result
+
+
+def _profile_fit_metrics(height_map: dict[float, str], df: pd.DataFrame) -> dict[str, object]:
+    """Fit mean vertical wind profile in power-law and log-law coordinates for overview metrics."""
+    heights = np.asarray(list(height_map.keys()), dtype=float)
+    mean_speeds = np.asarray([df[column].mean() for column in height_map.values()], dtype=float)
+    valid = np.isfinite(mean_speeds) & (mean_speeds > 0)
+    if valid.sum() < 2:
+        raise ValueError("Vertical profile requires valid mean wind speeds at two or more heights")
+    log_height = np.log(heights[valid])
+    log_speed = np.log(mean_speeds[valid])
+    alpha, log_intercept = np.polyfit(log_height, log_speed, 1)
+    predicted_log_speed = alpha * log_height + log_intercept
+    residual = float(np.sum((log_speed - predicted_log_speed) ** 2))
+    total = float(np.sum((log_speed - log_speed.mean()) ** 2))
+    power_r_squared = 1.0 if total == 0 else float(1.0 - residual / total)
+    log_slope, log_intercept_linear = np.polyfit(log_height, mean_speeds[valid], 1)
+    roughness_length = float(np.exp(-log_intercept_linear / log_slope)) if log_slope > 0 else float("nan")
+    return {
+        "mean_profile": [
+            {"height_m": float(height), "mean_speed": float(speed)}
+            for height, speed in zip(heights[valid], mean_speeds[valid], strict=True)
+        ],
+        "power_law_alpha": float(alpha),
+        "power_law_r_squared": power_r_squared,
+        "roughness_length_m": roughness_length,
+    }
+
+
+def _vertical_structure_series(
+    state: SessionState,
+    speed_sensors: str = "",
+    direction_sensors: str = "",
+) -> tuple[pd.Series, pd.Series | None, dict[str, object]]:
+    """Derive timestamp-wise alpha and optional veer series without mutating the session state."""
+    df = _require_timeseries(state)
+    speed_map = _resolve_height_sensors(state, speed_sensors, "speed_col")
+    if len(speed_map) < 2:
+        raise ValueError("Vertical structure requires at least two wind-speed heights")
+    _require_columns(df, speed_map)
+    heights = np.asarray(list(speed_map.keys()), dtype=float)
+    alpha = pd.Series(
+        _compute_pairwise_shear(df[list(speed_map.values())].to_numpy(dtype=float), heights),
+        index=df.index,
+        name="alpha",
+    )
+    direction_map = _resolve_height_sensors(state, direction_sensors, "dir_col")
+    veer: pd.Series | None = None
+    if len(direction_map) >= 2:
+        _require_columns(df, direction_map)
+        direction_heights = np.asarray(list(direction_map.keys()), dtype=float)
+        veer = pd.Series(
+            _compute_veer(df[list(direction_map.values())].to_numpy(dtype=float), direction_heights),
+            index=df.index,
+            name="veer_deg_per_100m",
+        )
+    return alpha, veer, _profile_fit_metrics(speed_map, df)
+
+
+def _compute_vertical_structure(state: SessionState, speed_sensors: str = "", direction_sensors: str = "") -> dict:
+    """Summarize measured profile, shear alpha, and optional wind veer for the Sensor Overview."""
+    alpha, veer, profile = _vertical_structure_series(state, speed_sensors, direction_sensors)
+    valid_alpha = alpha.dropna()
+    if valid_alpha.empty:
+        raise ValueError("No concurrent valid wind-speed records are available for shear analysis")
+    result: dict[str, object] = {
+        **profile,
+        "alpha": {
+            "record_count": int(valid_alpha.count()),
+            "mean": float(valid_alpha.mean()),
+            "median": float(valid_alpha.median()),
+            "std": float(valid_alpha.std(ddof=0)),
+            "p10": float(valid_alpha.quantile(0.10)),
+            "p90": float(valid_alpha.quantile(0.90)),
+        },
+        "veer": None,
+    }
+    if veer is not None:
+        valid_veer = veer.dropna()
+        if not valid_veer.empty:
+            result["veer"] = {
+                "record_count": int(valid_veer.count()),
+                "mean_deg_per_100m": float(valid_veer.mean()),
+                "std_deg_per_100m": float(valid_veer.std(ddof=0)),
+            }
+    return result
+
+
 def _build_shear_table(state: SessionState, aggregation: str = "mean") -> dict:
     """Build a 12x24 power-law shear lookup table using mean, median, or Windographer MoMM aggregation."""
     if aggregation not in {"mean", "median", "momm"}:
@@ -267,6 +393,12 @@ def calculate_shear_timeseries(height_sensors: str) -> dict:
 def calculate_roughness_timeseries(height_sensors: str) -> dict:
     """Calculate timestamp-wise roughness lengths from U versus ln(z) fits per IEC 61400-12-1 Section B.3."""
     return _calculate_roughness_timeseries(session, height_sensors)
+
+
+@mcp.tool()
+def compute_vertical_structure(speed_sensors: str = "", direction_sensors: str = "") -> dict:
+    """Summarize multi-height power-law shear, profile fit, roughness, and optional wind veer."""
+    return _compute_vertical_structure(session, speed_sensors, direction_sensors)
 
 
 @mcp.tool()

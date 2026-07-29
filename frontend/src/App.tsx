@@ -11,6 +11,7 @@ import { CopilotView } from "./components/CopilotView";
 import { CompareView } from "./components/CompareView";
 import { WindKitExplorerView } from "./components/WindKitExplorerView";
 import { HowToView } from "./components/HowToView";
+import { SensorReviewView } from "./components/SensorReviewView";
 import { useWorkspaceStore } from "./store/useWorkspaceStore";
 
 function ViewFallback() {
@@ -44,6 +45,7 @@ export default function App() {
         {activeTab === "copilot" ? <CopilotView /> : null}
         {activeTab === "compare" ? <CompareView /> : null}
         {activeTab === "howto" ? <HowToView /> : null}
+        {activeTab === "sensor_review" ? <SensorReviewView /> : null}
       </Suspense>
     </main>
   );

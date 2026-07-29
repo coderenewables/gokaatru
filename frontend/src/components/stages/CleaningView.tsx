@@ -1,7 +1,7 @@
 // Stage 2 — Data cleaning (spec §4 / Stage 2 insert).
 //
 // Two areas:
-//  1. "Review sensors" — a modal with per-sensor stats (max/min/mean/Weibull),
+//  1. "Review sensors" — a browser tab with per-sensor stats (max/min/mean/Weibull),
 //     wind roses per height, a combined diurnal profile of all speed sensors,
 //     the temperature diurnal profile, and the measured shear profile.
 //  2. "Cleaning rules" — standard wind filters (range, icing, stuck sensor,
@@ -10,7 +10,6 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { useWorkspaceStore } from "../../store/useWorkspaceStore";
-import { PlotFrame } from "../common/PlotFrame";
 import { SensorPicker } from "../common/SensorPicker";
 import { RunButton } from "../common/RunButton";
 import type { CleaningLogEntry } from "../../lib/api";
@@ -80,8 +79,8 @@ export function CleaningView() {
   const applyCleaning = useWorkspaceStore((state) => state.applyCleaning);
   const undoCleaning = useWorkspaceStore((state) => state.undoCleaning);
   const refreshCleaningLog = useWorkspaceStore((state) => state.refreshCleaningLog);
+  const setActiveTab = useWorkspaceStore((state) => state.setActiveTab);
 
-  const [statsOpen, setStatsOpen] = useState(false);
   const [log, setLog] = useState<CleaningLogEntry[]>([]);
 
   // standard-filter state
@@ -94,8 +93,6 @@ export function CleaningView() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  const speedSensors = useMemo(() => sensors.filter((s) => s.sensor_type === "wind_speed"), [sensors]);
-  const tempSensors = useMemo(() => sensors.filter((s) => s.sensor_type === "temperature"), [sensors]);
   const allColumns = useMemo(() => sensors.map((s) => s.name).sort(), [sensors]);
 
   const loadLog = async () => setLog(await refreshCleaningLog());
@@ -154,7 +151,7 @@ export function CleaningView() {
           Inspect per-sensor statistics (max / min / mean / Weibull), wind roses per height, combined
           diurnal profiles, the temperature diurnal profile, and the measured shear profile.
         </p>
-        <RunButton label="Open sensor review" onClick={() => setStatsOpen(true)} />
+        <RunButton label="Open sensor review" onClick={() => setActiveTab("sensor_review")} />
       </section>
 
       <section className="path-panel">
@@ -282,169 +279,6 @@ export function CleaningView() {
         )}
       </section>
 
-      {statsOpen ? (
-        <SensorStatsModal
-          speedSensors={speedSensors.map((s) => s.name)}
-          tempSensors={tempSensors.map((s) => s.name)}
-          sensors={sensors}
-          onClose={() => setStatsOpen(false)}
-        />
-      ) : null}
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Stats modal
-// ---------------------------------------------------------------------------
-
-function SensorStatsModal({
-  speedSensors,
-  tempSensors,
-  sensors,
-  onClose,
-}: {
-  speedSensors: string[];
-  tempSensors: string[];
-  sensors: import("../../types/analysis").SensorRow[];
-  onClose: () => void;
-}) {
-  const loadSensorStatistics = useWorkspaceStore((state) => state.loadSensorStatistics);
-  const [stats, setStats] = useState<Record<string, import("../../types/analysis").SensorStatistics>>({});
-
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      const out: Record<string, import("../../types/analysis").SensorStatistics> = {};
-      for (const sensor of sensors) {
-        try {
-          out[sensor.name] = await loadSensorStatistics(sensor.name);
-        } catch {
-          /* skip sensors without stats */
-        }
-        if (cancelled) return;
-      }
-      if (!cancelled) setStats(out);
-    };
-    void run();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sensors]);
-
-  const allSpeed = speedSensors.join(", ");
-  const allTemp = tempSensors.join(", ");
-  const rows = sensors.filter((s) => stats[s.name]);
-
-  // Pair each speed sensor with the direction sensor at the same height so the
-  // wind rose (which needs both) can be plotted side by side with the Weibull.
-  const dirByHeight = new Map<number, string>();
-  for (const s of sensors) {
-    if (s.sensor_type === "wind_direction" && !dirByHeight.has(s.height_m)) {
-      dirByHeight.set(s.height_m, s.name);
-    }
-  }
-  const heightRows = sensors
-    .filter((s) => s.sensor_type === "wind_speed")
-    .sort((a, b) => b.height_m - a.height_m)
-    .map((s) => ({ speed: s.name, direction: dirByHeight.get(s.height_m) ?? "", height: s.height_m }));
-
-  return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="modal-card sensor-stats-modal" onClick={(e) => e.stopPropagation()}>
-        <header className="modal-head">
-          <h2>Sensor review</h2>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </header>
-
-        <div className="modal-body">
-          <section>
-            <h3>Statistics (all sensors)</h3>
-            <div className="stats-table-wrap">
-              <table className="stats-table">
-                <thead>
-                  <tr>
-                    <th>Sensor</th>
-                    <th>Min</th>
-                    <th>Mean</th>
-                    <th>Max</th>
-                    <th>Weibull k</th>
-                    <th>Weibull A</th>
-                    <th>Coverage %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((sensor) => {
-                    const s = stats[sensor.name];
-                    return (
-                      <tr key={sensor.name}>
-                        <td>{sensor.name}</td>
-                        <td>{fmt(s.min_value)}</td>
-                        <td>{fmt(s.mean)}</td>
-                        <td>{fmt(s.max_value)}</td>
-                        <td>{fmt(s.weibull_k)}</td>
-                        <td>{fmt(s.weibull_A)}</td>
-                        <td>{fmt(s.coverage_pct)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {speedSensors.length > 0 ? (
-            <section>
-              <h3>Diurnal profile — all speed sensors</h3>
-              <PlotFrame plotName="diurnal" params={{ sensor_names: allSpeed }} height={320} />
-            </section>
-          ) : null}
-
-          {tempSensors.length > 0 ? (
-            <section>
-              <h3>Temperature diurnal profile</h3>
-              <PlotFrame plotName="diurnal" params={{ sensor_names: allTemp }} height={320} />
-            </section>
-          ) : null}
-
-          <section>
-            <h3>Shear profile</h3>
-            <PlotFrame plotName="shear_profile" params={{}} height={320} />
-          </section>
-
-          <section>
-            <h3>Weibull &amp; wind rose per height</h3>
-            {heightRows.map(({ speed, direction, height }) => (
-              <div key={speed} className="height-pair">
-                <h4 className="height-pair-title">{height}m — {speed}</h4>
-                <div className="height-pair-plots">
-                  <div className="height-pair-cell">
-                    <PlotFrame plotName="weibull" params={{ sensor_name: speed }} height={300} />
-                  </div>
-                  <div className="height-pair-cell">
-                    {direction ? (
-                      <PlotFrame
-                        plotName="windrose"
-                        params={{ speed_sensor: speed, direction_sensor: direction }}
-                        height={300}
-                      />
-                    ) : (
-                      <p className="muted">No direction sensor at {height}m — wind rose unavailable.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </section>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function fmt(value: number | undefined): string {
-  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(2) : "—";
 }

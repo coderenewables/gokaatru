@@ -27,6 +27,9 @@ import {
   type StageStatus,
   type UncertaintyResult,
   type WindAnalysisConfig,
+  type WindClimateSummary,
+  type TurbulenceSummary,
+  type VerticalStructureSummary,
   type WorkflowDispatchCapability,
   type WorkflowExecutionStatusResponse,
 } from "../types/analysis";
@@ -61,6 +64,9 @@ import {
   undoCleaningRule,
   getCleaningLog,
   getStatistics,
+  getTurbulenceAnalysis,
+  getVerticalStructure,
+  getWindClimate,
   getSessionConfig,
   getSessionSummary,
   getSensors,
@@ -124,7 +130,7 @@ import { extractWindKitTools } from "../lib/openapi";
 
 const ACTIVE_SESSION_STORAGE_KEY = "gokaatru-active-session-id";
 
-type TabId = "setup" | "workflow" | "windkit" | "copilot" | "compare" | "howto";
+type TabId = "setup" | "workflow" | "windkit" | "copilot" | "compare" | "howto" | "sensor_review";
 
 interface ActivePlot {
   plotName: PlotName;
@@ -242,6 +248,9 @@ interface WorkspaceStore {
   // Stage 3 — exploration
   loadSensorStatistics: (sensorName: string) => Promise<import("../types/analysis").SensorStatistics>;
   loadCoverage: (sensorName: string) => Promise<import("../types/analysis").CoverageDetail>;
+  loadWindClimate: (speedSensor: string, directionSensor?: string) => Promise<WindClimateSummary>;
+  loadVerticalStructure: (speedSensors: string, directionSensors: string) => Promise<VerticalStructureSummary>;
+  loadTurbulenceAnalysis: (speedSensor: string) => Promise<TurbulenceSummary>;
 
   // Stage 6 — LTC
   runLtcAlgorithms: (payload: {
@@ -1117,6 +1126,24 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       }));
       throw error;
     }
+  },
+
+  loadWindClimate: async (speedSensor, directionSensor = "") => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    return getWindClimate(get().apiBaseUrl, session.session_id, speedSensor, directionSensor);
+  },
+
+  loadVerticalStructure: async (speedSensors, directionSensors) => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    return getVerticalStructure(get().apiBaseUrl, session.session_id, speedSensors, directionSensors);
+  },
+
+  loadTurbulenceAnalysis: async (speedSensor) => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    return getTurbulenceAnalysis(get().apiBaseUrl, session.session_id, speedSensor);
   },
 
   // ---- Stage 6: LTC ------------------------------------------------------

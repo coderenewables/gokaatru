@@ -23,6 +23,7 @@ from server.tools.visualization import (
     _plot_timeseries_preview,
     _plot_turbulence_intensity,
 )
+from server.tools.data_io import _list_sensors, _parse_datamodel, _parse_timeseries
 
 
 @pytest.fixture
@@ -178,3 +179,96 @@ def test_sensor_statistics_endpoint(
     assert len(payload["monthly_means"]) == 12
     assert len(payload["diurnal_means"]) == 24
     assert set(payload["percentiles"]) == {"p10", "p25", "p50", "p75", "p90", "p99"}
+
+
+def test_sensor_statistics_endpoint_supports_temperature_and_pressure(
+    sample_timeseries_df: pd.DataFrame,
+    api_client: tuple[TestClient, SessionManager],
+) -> None:
+    """Verify non-speed sensors retain descriptive and diurnal statistics without Weibull fitting."""
+    client, _manager = api_client
+    frame = sample_timeseries_df.copy()
+    frame["Temp_100m"] = [-5.0 + (index % 24) * 0.5 for index in range(len(frame))]
+    frame["Pressure_100m"] = 1000.0 + (pd.Series(range(len(frame)), index=frame.index) % 12).to_numpy()
+
+    create_response = client.post("/api/sessions")
+    session_id = create_response.json()["session_id"]
+    headers = {"X-GoKaatru-Session": session_id}
+    datamodel = {
+        "measurement_point": [
+            {"name": "Spd_100m", "height_m": 100, "measurement_type_id": "wind_speed"},
+            {"name": "Temp_100m", "height_m": 100, "measurement_type_id": "temperature"},
+            {"name": "Pressure_100m", "height_m": 100, "measurement_type_id": "pressure"},
+        ]
+    }
+    client.post(
+        f"/api/sessions/{session_id}/uploads/timeseries",
+        headers=headers,
+        files={"file": ("timeseries.csv", _timeseries_upload_bytes(frame), "text/csv")},
+    )
+    client.post(
+        f"/api/sessions/{session_id}/uploads/datamodel",
+        headers=headers,
+        files={"file": ("datamodel.json", json.dumps(datamodel).encode("utf-8"), "application/json")},
+    )
+
+    for sensor_name in ("Temp_100m", "Pressure_100m"):
+        response = client.get(f"/api/sessions/{session_id}/statistics/{sensor_name}", headers=headers)
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["weibull_k"] is None
+        assert payload["weibull_A"] is None
+        assert len(payload["diurnal_means"]) == 24
+
+
+def test_sensor_inventory_includes_all_datamodel_backed_uploaded_sensors(tmp_path: Path) -> None:
+    """Verify inventory retains auxiliary sensor types and sensors below ground level."""
+    timeseries_path = tmp_path / "timeseries.csv"
+    datamodel_path = tmp_path / "datamodel.json"
+    pd.DataFrame(
+        {
+            "Timestamp": pd.date_range("2024-01-01", periods=3, freq="10min"),
+            "Spd_60m": [5.0, 6.0, 7.0],
+            "Tmp_55m": [10.0, 11.0, 12.0],
+            "Prs_55m": [1010.0, 1011.0, 1012.0],
+            "Hum_13m": [70.0, 71.0, 72.0],
+            "Wtr_tmp_-4m": [8.0, 8.1, 8.2],
+            "Qual_Spd_60m": [1, 1, 1],
+        }
+    ).to_csv(timeseries_path, index=False)
+    datamodel_path.write_text(
+        json.dumps(
+            {
+                "measurement_point": [
+                    {"name": "Spd_60m", "height_m": 60, "measurement_type_id": "wind_speed"},
+                    {"name": "Tmp_55m", "height_m": 55, "measurement_type_id": "air_temperature"},
+                    {"name": "Prs_55m", "height_m": 55, "measurement_type_id": "air_pressure"},
+                    {"name": "Hum_13m", "height_m": 13, "measurement_type_id": "relative_humidity"},
+                    {"name": "Wtr_tmp_-4m", "height_m": -4, "measurement_type_id": "water_temperature"},
+                    {"name": "Qual_Spd_60m", "height_m": 60, "measurement_type_id": "quality"},
+                    {"name": "Missing", "height_m": 20, "measurement_type_id": "air_pressure"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _parse_timeseries(session, str(timeseries_path))
+    _parse_datamodel(session, str(datamodel_path))
+    inventory = _list_sensors(session)["sensors"]
+
+    assert [sensor["name"] for sensor in inventory] == [
+        "Qual_Spd_60m",
+        "Spd_60m",
+        "Prs_55m",
+        "Tmp_55m",
+        "Hum_13m",
+        "Wtr_tmp_-4m",
+    ]
+    sensor_types = {sensor["name"]: sensor["sensor_type"] for sensor in inventory}
+    assert sensor_types["Tmp_55m"] == "temperature"
+    assert sensor_types["Prs_55m"] == "pressure"
+    assert sensor_types["Hum_13m"] == "humidity"
+    assert inventory[-1]["height_m"] == -4.0
+    assert inventory[-1]["sensor_type"] == "water_temperature"

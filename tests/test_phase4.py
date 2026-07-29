@@ -19,7 +19,7 @@ from server.tools.ensemble import run_ensemble
 from server.tools.homogeneity import analyze_homogeneity
 from server.tools.map import get_mast_marker
 from server.tools.uncertainty import calculate_uncertainty
-from server.tools.visualization import plot_weibull
+from server.tools.visualization import plot_diurnal, plot_weibull, plot_windrose
 
 
 def _ltc_result_frame(index: pd.DatetimeIndex, values: np.ndarray) -> pd.DataFrame:
@@ -85,6 +85,17 @@ def test_plot_weibull_returns_plotly_json(sample_timeseries_df: pd.DataFrame) ->
     parsed = json.loads(result["plotly_json"])
     assert "data" in parsed
     assert result["title"].startswith("Weibull Fit")
+
+
+def test_diurnal_and_wind_rose_labels_identify_the_measurements(sample_timeseries_df: pd.DataFrame) -> None:
+    """Verify generic diurnals avoid a speed-only label and wind roses identify their direction input."""
+    session.timeseries_df = sample_timeseries_df.copy()
+
+    diurnal = json.loads(plot_diurnal("Spd_100m")["plotly_json"])
+    wind_rose = plot_windrose("Spd_100m", "Dir_100m")
+
+    assert diurnal["layout"]["yaxis"]["title"]["text"] == "Mean Value"
+    assert wind_rose["title"] == "Wind Rose - Spd_100m by Dir_100m"
 
 
 def test_geojson_mast_marker() -> None:

@@ -33,6 +33,7 @@ class SessionState:
     timeseries_df: pd.DataFrame | None
     raw_timeseries_df: pd.DataFrame | None
     sensor_mapping: dict[float, dict[str, str | None]]
+    sensor_inventory: dict[str, dict[str, object]]
     cleaning_log: list[dict[str, object]]
     shear_timeseries_df: pd.DataFrame | None
     roughness_timeseries_df: pd.DataFrame | None
@@ -72,6 +73,7 @@ class SessionState:
         self.timeseries_df = None
         self.raw_timeseries_df = None
         self.sensor_mapping = {}
+        self.sensor_inventory = {}
         self.cleaning_log = []
         self.shear_timeseries_df = None
         self.roughness_timeseries_df = None

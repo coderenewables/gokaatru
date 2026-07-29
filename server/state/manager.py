@@ -62,6 +62,7 @@ class SessionManager:
         target.timeseries_df = None if source.timeseries_df is None else source.timeseries_df.copy(deep=True)
         target.raw_timeseries_df = None if source.raw_timeseries_df is None else source.raw_timeseries_df.copy(deep=True)
         target.sensor_mapping = copy.deepcopy(source.sensor_mapping)
+        target.sensor_inventory = copy.deepcopy(source.sensor_inventory)
         target.cleaning_log = copy.deepcopy(source.cleaning_log)
 
         target.shear_timeseries_df = None if source.shear_timeseries_df is None else source.shear_timeseries_df.copy(deep=True)

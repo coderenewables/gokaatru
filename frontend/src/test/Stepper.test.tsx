@@ -78,13 +78,14 @@ describe("PhaseTabs", () => {
     });
   });
 
-  it("renders all 5 tabs", () => {
+  it("renders all browser tabs", () => {
     render(<PhaseTabs />);
     expect(screen.getByRole("button", { name: "Stepper" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Canvas" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "WindKit" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copilot" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Compare" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sensor Overview" })).toBeInTheDocument();
   });
 
   it("marks the active tab and switches on click", () => {
@@ -96,6 +97,10 @@ describe("PhaseTabs", () => {
     expect(useWorkspaceStore.getState().activeTab).toBe("workflow");
     expect(screen.getByRole("button", { name: "Canvas" })).toHaveAttribute("aria-current", "page");
     expect(stepperTab).not.toHaveAttribute("aria-current", "page");
+
+    fireEvent.click(screen.getByRole("button", { name: "Sensor Overview" }));
+    expect(useWorkspaceStore.getState().activeTab).toBe("sensor_review");
+    expect(screen.getByRole("button", { name: "Sensor Overview" })).toHaveAttribute("aria-current", "page");
   });
 });
 

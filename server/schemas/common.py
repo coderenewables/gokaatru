@@ -22,8 +22,8 @@ class SensorInfo(BaseModel):
     """Sensor metadata schema for Phase 1 coverage reporting in the GoKaatru tool contract."""
 
     name: str
-    height_m: float = Field(..., gt=0)
-    sensor_type: Literal["wind_speed", "wind_direction", "temperature", "pressure"]
+    height_m: float
+    sensor_type: str
     data_coverage_pct: float = Field(..., ge=0, le=100)
     record_count: int = Field(..., ge=0)
 

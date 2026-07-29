@@ -94,7 +94,7 @@ def test_api_workflow(
     sensors_response = client.get(f"/api/sessions/{session_id}/sensors", headers=headers)
     assert sensors_response.status_code == 200
     assert len(sensors_response.json()["sensors"]) == 16
-    assert sensors_response.json()["sensors"][0]["name"] == "Spd_250m"
+    assert "Spd_250m" in {sensor["name"] for sensor in sensors_response.json()["sensors"]}
 
     coverage_response = client.get(f"/api/sessions/{session_id}/coverage/Spd_100m", headers=headers)
     assert coverage_response.status_code == 200
@@ -106,6 +106,40 @@ def test_api_workflow(
     assert statistics_response.json()["sensor_name"] == "Spd_100m"
     assert statistics_response.json()["count"] == 65879
     assert statistics_response.json()["coverage_pct"] == pytest.approx(89.59228635152043)
+
+    wind_climate_response = client.get(
+        f"/api/sessions/{session_id}/wind-climate/Spd_100m?direction_sensor=Dir_100m",
+        headers=headers,
+    )
+    assert wind_climate_response.status_code == 200
+    wind_climate = wind_climate_response.json()
+    assert wind_climate["weibull_k"] > 0
+    assert wind_climate["direction"]["prevailing_sector"]
+    assert len(wind_climate["sectors"]) == 16
+
+    distribution_response = client.post(
+        f"/api/sessions/{session_id}/plots/speed_distribution",
+        headers=headers,
+        json={"sensor_name": "Spd_100m"},
+    )
+    assert distribution_response.status_code == 200
+    assert json.loads(distribution_response.json()["plotly_json"])["data"]
+
+    vertical_structure_response = client.get(
+        f"/api/sessions/{session_id}/vertical-structure?speed_sensors=Spd_80m,Spd_100m,Spd_120m&direction_sensors=Dir_80m,Dir_100m,Dir_120m",
+        headers=headers,
+    )
+    assert vertical_structure_response.status_code == 200
+    assert vertical_structure_response.json()["alpha"]["record_count"] > 0
+    assert vertical_structure_response.json()["veer"] is not None
+
+    alpha_plot_response = client.post(
+        f"/api/sessions/{session_id}/plots/shear_alpha",
+        headers=headers,
+        json={"sensor_names": "Spd_80m,Spd_100m,Spd_120m"},
+    )
+    assert alpha_plot_response.status_code == 200
+    assert json.loads(alpha_plot_response.json()["plotly_json"])["data"]
 
     config_response = client.put(
         f"/api/sessions/{session_id}/config",

@@ -16,6 +16,9 @@ import type {
   ScenarioSnapshot,
   SensorRow,
   SensorStatistics,
+  TurbulenceSummary,
+  VerticalStructureSummary,
+  WindClimateSummary,
   SessionSummary,
   SharedDatasetSummary,
   WorkflowDispatchCapability,
@@ -550,6 +553,34 @@ export async function getStatistics(
   sensorName: string,
 ): Promise<SensorStatistics> {
   return requestJson<SensorStatistics>(baseUrl, `/api/sessions/${sessionId}/statistics/${encodeURIComponent(sensorName)}`);
+}
+
+export async function getWindClimate(
+  baseUrl: string,
+  sessionId: string,
+  speedSensor: string,
+  directionSensor = "",
+): Promise<WindClimateSummary> {
+  const query = directionSensor ? `?direction_sensor=${encodeURIComponent(directionSensor)}` : "";
+  return requestJson<WindClimateSummary>(baseUrl, `/api/sessions/${sessionId}/wind-climate/${encodeURIComponent(speedSensor)}${query}`);
+}
+
+export async function getVerticalStructure(
+  baseUrl: string,
+  sessionId: string,
+  speedSensors: string,
+  directionSensors: string,
+): Promise<VerticalStructureSummary> {
+  const query = new URLSearchParams({ speed_sensors: speedSensors, direction_sensors: directionSensors });
+  return requestJson<VerticalStructureSummary>(baseUrl, `/api/sessions/${sessionId}/vertical-structure?${query.toString()}`);
+}
+
+export async function getTurbulenceAnalysis(
+  baseUrl: string,
+  sessionId: string,
+  speedSensor: string,
+): Promise<TurbulenceSummary> {
+  return requestJson<TurbulenceSummary>(baseUrl, `/api/sessions/${sessionId}/turbulence/${encodeURIComponent(speedSensor)}`);
 }
 
 export async function fetchPlot(

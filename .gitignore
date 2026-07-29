@@ -14,3 +14,8 @@ logic/
 # Local agent / IDE working files
 .zcode/
 .phase3-pytest.log
+BUILD_INSTRUCTIONS.md
+BUILD_SPECIFICATION.md
+CODE_REVIEW_LOG.md
+WORKFLOW_FRONTEND_SPEC.md
+SENSOR_OVERVIEW_REWRITE_PLAN.md

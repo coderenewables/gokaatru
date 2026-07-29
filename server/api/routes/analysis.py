@@ -60,8 +60,9 @@ from server.tools.shear import (
     _build_shear_table,
     _calculate_roughness_timeseries,
     _calculate_shear_timeseries,
+    _compute_vertical_structure,
 )
-from server.tools.statistics import _sensor_statistics
+from server.tools.statistics import _compute_turbulence_analysis, _compute_wind_climate, _sensor_statistics
 from server.tools.config import _sync_state_from_runconfig
 from server.tools.uncertainty import _calculate_uncertainty
 
@@ -288,6 +289,50 @@ def get_sensor_statistics(
     del session_id
     try:
         return SensorStatisticsResponse(**_sensor_statistics(state, sensor_name))
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+
+
+@router.get("/wind-climate/{speed_sensor}")
+def get_wind_climate(
+    session_id: str,
+    speed_sensor: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+    direction_sensor: str = "",
+) -> dict:
+    """Return bankable wind-climate summary statistics for the selected measurement pair."""
+    del session_id
+    try:
+        return _compute_wind_climate(state, speed_sensor, direction_sensor)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+
+
+@router.get("/vertical-structure")
+def get_vertical_structure(
+    session_id: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+    speed_sensors: str = "",
+    direction_sensors: str = "",
+) -> dict:
+    """Return measured profile, shear alpha, roughness, and optional wind-veer statistics."""
+    del session_id
+    try:
+        return _compute_vertical_structure(state, speed_sensors, direction_sensors)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+
+
+@router.get("/turbulence/{speed_sensor}")
+def get_turbulence_analysis(
+    session_id: str,
+    speed_sensor: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict:
+    """Return IEC-style turbulence metrics when a matching standard-deviation channel is present."""
+    del session_id
+    try:
+        return _compute_turbulence_analysis(state, speed_sensor)
     except ValueError as exc:
         raise to_bad_request(exc) from exc
 

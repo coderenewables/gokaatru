@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 // Mock react-plotly.js so PlotFrame doesn't render a real figure in jsdom.
 vi.mock("react-plotly.js", () => ({
@@ -20,6 +20,7 @@ import { ReanalysisView } from "../components/stages/ReanalysisView";
 import { ExploreView } from "../components/stages/ExploreView";
 import { ShearExtrapolationView } from "../components/stages/ShearExtrapolationView";
 import { ReanalysisExtrapolationView } from "../components/stages/ReanalysisExtrapolationView";
+import { findNearestDirectionSensor, ProfileSection, SensorReviewView } from "../components/SensorReviewView";
 import { computeStageStatuses } from "../lib/stages";
 import type { SensorRow, StageId, StageStatus } from "../types/analysis";
 
@@ -41,6 +42,69 @@ const SENSORS: SensorRow[] = [
   { name: "Spd_120m", height_m: 120, sensor_type: "wind_speed", data_coverage_pct: 92, record_count: 980 },
   { name: "Dir_120m", height_m: 120, sensor_type: "wind_direction", data_coverage_pct: 93, record_count: 975 },
 ];
+
+describe("Sensor Review direction pairing", () => {
+  it("uses the closest direction sensor when the speed height has no exact match", () => {
+    const direction = findNearestDirectionSensor(80, SENSORS.filter((sensor) => sensor.sensor_type === "wind_direction"));
+
+    expect(direction?.name).toBe("Dir_120m");
+  });
+});
+
+describe("Sensor Review diurnal selection", () => {
+  it("allows sensors to be included or excluded with checkboxes", () => {
+    render(<ProfileSection title="Temperature diurnal profile" sensors={SENSORS.slice(0, 2)} />);
+
+    const firstSensor = screen.getByRole("checkbox", { name: /Spd_80m/i });
+    const secondSensor = screen.getByRole("checkbox", { name: /Spd_120m/i });
+    expect(firstSensor).toBeChecked();
+    expect(secondSensor).toBeChecked();
+
+    fireEvent.click(firstSensor);
+    expect(firstSensor).not.toBeChecked();
+    expect(secondSensor).toBeChecked();
+  });
+});
+
+describe("Sensor Overview", () => {
+  beforeEach(() => seedStore({ sensors: SENSORS }));
+
+  it("shows the measurement summary and can switch to coverage analysis", () => {
+    render(<SensorReviewView />);
+
+    expect(screen.getByRole("heading", { name: "Sensor overview" })).toBeInTheDocument();
+    expect(screen.getByText("Measurement inventory")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Coverage & gaps" }));
+    expect(screen.getByRole("heading", { name: /Availability/i })).toBeInTheDocument();
+    expect(screen.getByText("Coverage timeline")).toBeInTheDocument();
+  });
+
+  it("renders the wind-climate distribution and directional analyses", () => {
+    render(<SensorReviewView />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Wind climate" }));
+    expect(screen.getByText("Speed distribution & exceedance")).toBeInTheDocument();
+    expect(screen.getByText("Exceedance probability")).toBeInTheDocument();
+    expect(screen.getByText("Wind rose")).toBeInTheDocument();
+  });
+
+  it("renders vertical alpha and veer analysis for multi-height sensor inventories", () => {
+    render(<SensorReviewView />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Vertical structure" }));
+    expect(screen.getByText("Measured shear profile")).toBeInTheDocument();
+    expect(screen.getByText("Wind shear alpha")).toBeInTheDocument();
+    expect(screen.getByText("Wind veer")).toBeInTheDocument();
+  });
+
+  it("shows the turbulence analysis state", () => {
+    render(<SensorReviewView />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Turbulence" }));
+    expect(screen.getByText("Turbulence intensity")).toBeInTheDocument();
+  });
+});
 
 describe("StageShell routing", () => {
   beforeEach(() => seedStore());

@@ -68,7 +68,7 @@ export interface AnalysisSummary {
   completed_steps?: string[];
 }
 
-export type SensorType = "wind_speed" | "wind_direction" | "temperature" | "pressure";
+export type SensorType = "wind_speed" | "wind_direction" | "temperature" | "pressure" | (string & {});
 
 export interface SensorRow {
   name: string;
@@ -96,11 +96,54 @@ export interface SensorStatistics {
   max_value: number;
   count: number;
   coverage_pct: number;
-  weibull_k: number;
-  weibull_A: number;
+  weibull_k: number | null;
+  weibull_A: number | null;
   monthly_means: number[];
   diurnal_means: number[];
   percentiles: Record<string, number>;
+}
+
+export interface WindClimateSummary {
+  speed_sensor: string;
+  record_count: number;
+  mean_speed: number;
+  cube_mean_speed: number;
+  weibull_k: number;
+  weibull_A: number;
+  weibull_rmse: number;
+  exceedance: { p50: number; p75: number; p90: number; p95: number };
+  direction: {
+    sensor_name: string;
+    mean_direction_deg: number;
+    circular_variance: number;
+    prevailing_sector: string;
+  } | null;
+  sectors: Array<{
+    center_deg: number;
+    label: string;
+    occurrence_pct: number;
+    mean_speed: number;
+    energy_pct: number;
+  }>;
+}
+
+export interface VerticalStructureSummary {
+  mean_profile: Array<{ height_m: number; mean_speed: number }>;
+  power_law_alpha: number;
+  power_law_r_squared: number;
+  roughness_length_m: number;
+  alpha: { record_count: number; mean: number; median: number; std: number; p10: number; p90: number };
+  veer: { record_count: number; mean_deg_per_100m: number; std_deg_per_100m: number } | null;
+}
+
+export interface TurbulenceSummary {
+  speed_sensor: string;
+  sd_sensor: string;
+  record_count: number;
+  mean_ti: number;
+  p90_ti: number;
+  representative_ti: number;
+  iec_ti_at_15ms: number;
 }
 
 export interface EraNode {
@@ -197,6 +240,13 @@ export interface PlotResult {
 export type PlotName =
   | "windrose"
   | "weibull"
+  | "speed_distribution"
+  | "exceedance_curve"
+  | "direction_distribution"
+  | "sector_speed"
+  | "energy_rose"
+  | "shear_alpha"
+  | "wind_veer"
   | "diurnal"
   | "scatter"
   | "timeseries"
@@ -239,6 +289,13 @@ export interface PlotRequest {
 export const PLOT_NAMES: readonly PlotName[] = [
   "windrose",
   "weibull",
+  "speed_distribution",
+  "exceedance_curve",
+  "direction_distribution",
+  "sector_speed",
+  "energy_rose",
+  "shear_alpha",
+  "wind_veer",
   "diurnal",
   "scatter",
   "timeseries",

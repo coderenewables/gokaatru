@@ -22,6 +22,27 @@ SENSOR_FIELDS = {
     "temp_col": "temperature",
     "pressure_col": "pressure",
 }
+CANONICAL_SENSOR_TYPES = {
+    "air_temperature": "temperature",
+    "air_pressure": "pressure",
+    "relative_humidity": "humidity",
+}
+
+
+def _build_sensor_inventory(points: list[dict[str, object]]) -> dict[str, dict[str, object]]:
+    """Capture every named Task 43 measurement point for inventory presentation."""
+    inventory: dict[str, dict[str, object]] = {}
+    for point in points:
+        sensor_name = point.get("name")
+        height_m = _coerce_float(point.get("height_m"))
+        sensor_type = str(point.get("measurement_type_id", "")).strip()
+        if not isinstance(sensor_name, str) or not sensor_name.strip() or height_m is None:
+            continue
+        inventory[sensor_name] = {
+            "height_m": height_m,
+            "sensor_type": CANONICAL_SENSOR_TYPES.get(sensor_type, sensor_type or "unknown"),
+        }
+    return inventory
 
 
 def _read_tabular_file(file_path: str) -> pd.DataFrame:
@@ -200,6 +221,24 @@ def _build_sensor_rows(state: SessionState, require_mapping: bool) -> list[dict[
         raise ValueError("Sensor mapping is not loaded. Run parse_datamodel first")
     sensors: list[dict[str, object]] = []
     total_rows = len(state.timeseries_df)
+    if state.sensor_inventory:
+        for name, metadata in state.sensor_inventory.items():
+            if name not in state.timeseries_df.columns:
+                continue
+            series = state.timeseries_df[name]
+            coverage = 0.0 if total_rows == 0 else float(series.notna().sum() / total_rows * 100.0)
+            sensors.append(
+                SensorInfo(
+                    name=name,
+                    height_m=float(metadata["height_m"]),
+                    sensor_type=str(metadata["sensor_type"]),
+                    data_coverage_pct=coverage,
+                    record_count=int(series.notna().sum()),
+                ).model_dump()
+            )
+        sensors.sort(key=lambda sensor: (-float(sensor["height_m"]), str(sensor["name"])))
+        return sensors
+
     for height, mapping in sorted(state.sensor_mapping.items(), reverse=True):
         for field_name, sensor_type in SENSOR_FIELDS.items():
             column_name = mapping.get(field_name)
@@ -309,7 +348,9 @@ def _parse_datamodel(state: SessionState, file_path: str) -> dict:
         raise ValueError(f"Datamodel file does not exist: {file_path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
     site_metadata = _extract_site_metadata(payload)
-    mapping = _build_sensor_mapping(_extract_measurement_points(payload))
+    points = _extract_measurement_points(payload)
+    mapping = _build_sensor_mapping(points)
+    state.sensor_inventory = _build_sensor_inventory(points)
     if state.timeseries_df is not None:
         mapping = {
             height: sensor_map

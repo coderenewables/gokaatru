@@ -183,8 +183,8 @@ class SensorStatisticsResponse(BaseModel):
     max_value: float
     count: int
     coverage_pct: float
-    weibull_k: float
-    weibull_A: float
+    weibull_k: float | None
+    weibull_A: float | None
     monthly_means: list[float]
     diurnal_means: list[float]
     percentiles: dict[str, float]

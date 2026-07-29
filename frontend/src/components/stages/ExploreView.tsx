@@ -91,8 +91,8 @@ export function ExploreView() {
             <Tile label="Max" value={sensorStatistics.max_value.toFixed(2)} />
             <Tile label="Count" value={String(sensorStatistics.count)} />
             <Tile label="Coverage" value={`${sensorStatistics.coverage_pct.toFixed(1)}%`} />
-            <Tile label="Weibull k" value={sensorStatistics.weibull_k.toFixed(2)} />
-            <Tile label="Weibull A" value={sensorStatistics.weibull_A.toFixed(2)} />
+            <Tile label="Weibull k" value={sensorStatistics.weibull_k?.toFixed(2) ?? "N/A"} />
+            <Tile label="Weibull A" value={sensorStatistics.weibull_A?.toFixed(2) ?? "N/A"} />
           </dl>
         </section>
       ) : null}

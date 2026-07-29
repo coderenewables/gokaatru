@@ -16,6 +16,7 @@ from scipy.stats import norm, weibull_min
 
 from server.main import mcp
 from server.state.session import SessionState, session
+from server.tools.shear import _vertical_structure_series
 
 COMPASS_16 = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
 MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -295,8 +296,9 @@ def _plot_windrose(state: SessionState, speed_sensor: str, direction_sensor: str
             count = int((mask & (sector_index == sector)).sum())
             radii.append(float(count / len(frame) * 100.0))
         figure.add_trace(go.Barpolar(r=radii, theta=COMPASS_16, name=label, opacity=0.8))
-    figure.update_layout(title="Wind Rose", polar=dict(radialaxis=dict(ticksuffix="%")))
-    return _plot_result(figure, "Wind Rose")
+    title = f"Wind Rose - {speed_sensor} by {direction_sensor}"
+    figure.update_layout(title=title, polar=dict(radialaxis=dict(ticksuffix="%")))
+    return _plot_result(figure, title)
 
 
 def _plot_weibull(state: SessionState, sensor_name: str) -> dict:
@@ -322,6 +324,77 @@ def _plot_weibull(state: SessionState, sensor_name: str) -> dict:
     return _plot_result(figure, f"Weibull Fit — {sensor_name}")
 
 
+def _plot_speed_distribution(state: SessionState, sensor_name: str) -> dict:
+    """Plot wind-speed probability density and cumulative distribution for one sensor."""
+    speed = _require_series(state, sensor_name).dropna()
+    if speed.empty:
+        raise ValueError(f"Sensor '{sensor_name}' has no valid values for distribution plotting")
+    sorted_speed = np.sort(speed.to_numpy(dtype=float))
+    exceedance = 100.0 * (1.0 - (np.arange(len(sorted_speed)) + 0.5) / len(sorted_speed))
+    figure = make_subplots(specs=[[{"secondary_y": True}]])
+    figure.add_trace(go.Histogram(x=speed, histnorm="probability density", nbinsx=40, name="Density", opacity=0.72), secondary_y=False)
+    figure.add_trace(go.Scatter(x=sorted_speed, y=exceedance, mode="lines", name="Exceedance", line=dict(color="#c86a2a")), secondary_y=True)
+    figure.update_layout(title=f"Wind-Speed Distribution — {sensor_name}", bargap=0.04)
+    figure.update_xaxes(title_text="Wind Speed (m/s)")
+    figure.update_yaxes(title_text="Probability Density", secondary_y=False)
+    figure.update_yaxes(title_text="Exceedance (%)", range=[100, 0], secondary_y=True)
+    return _plot_result(figure, f"Wind-Speed Distribution — {sensor_name}")
+
+
+def _plot_exceedance_curve(state: SessionState, sensor_name: str) -> dict:
+    """Plot wind-speed exceedance probability using ranked valid observations."""
+    speed = _require_series(state, sensor_name).dropna()
+    if speed.empty:
+        raise ValueError(f"Sensor '{sensor_name}' has no valid values for exceedance plotting")
+    sorted_speed = np.sort(speed.to_numpy(dtype=float))
+    exceedance = 100.0 * (1.0 - (np.arange(len(sorted_speed)) + 0.5) / len(sorted_speed))
+    figure = go.Figure(go.Scatter(x=exceedance, y=sorted_speed, mode="lines", name=sensor_name))
+    figure.update_layout(title=f"Exceedance Probability — {sensor_name}", xaxis_title="Exceedance Probability (%)", yaxis_title="Wind Speed (m/s)")
+    figure.update_xaxes(autorange="reversed")
+    return _plot_result(figure, f"Exceedance Probability — {sensor_name}")
+
+
+def _plot_direction_distribution(state: SessionState, direction_sensor: str) -> dict:
+    """Plot the circular directional-frequency distribution for one wind vane."""
+    direction = np.mod(_require_series(state, direction_sensor).dropna().to_numpy(dtype=float), 360.0)
+    if len(direction) == 0:
+        raise ValueError(f"Sensor '{direction_sensor}' has no valid values for direction plotting")
+    counts, _ = np.histogram(direction, bins=np.arange(-11.25, 371.25, 22.5))
+    figure = go.Figure(go.Barpolar(r=counts / counts.sum() * 100.0, theta=COMPASS_16, name=direction_sensor))
+    figure.update_layout(title=f"Direction Distribution — {direction_sensor}", polar=dict(radialaxis=dict(ticksuffix="%")))
+    return _plot_result(figure, f"Direction Distribution — {direction_sensor}")
+
+
+def _directional_frame(state: SessionState, speed_sensor: str, direction_sensor: str) -> tuple[pd.DataFrame, np.ndarray]:
+    """Return concurrent speed/direction records and 16-sector indices for directional plots."""
+    frame = pd.concat([_require_series(state, speed_sensor), _require_series(state, direction_sensor)], axis=1).dropna()
+    if frame.empty:
+        raise ValueError("Directional analysis requires concurrent non-null speed and direction values")
+    frame.columns = [speed_sensor, direction_sensor]
+    sector_index = (((np.mod(frame[direction_sensor], 360.0) + 11.25) % 360.0) // 22.5).astype(int).to_numpy()
+    return frame, sector_index
+
+
+def _plot_sector_speed(state: SessionState, speed_sensor: str, direction_sensor: str) -> dict:
+    """Plot sector mean wind speed for a selected speed/direction pair."""
+    frame, sector_index = _directional_frame(state, speed_sensor, direction_sensor)
+    speeds = [float(frame.loc[sector_index == index, speed_sensor].mean()) if (sector_index == index).any() else 0.0 for index in range(16)]
+    figure = go.Figure(go.Bar(x=COMPASS_16, y=speeds, name="Mean speed", marker_color="#0b7a6f"))
+    figure.update_layout(title=f"Sector Mean Wind Speed — {speed_sensor}", xaxis_title="Direction sector", yaxis_title="Mean Speed (m/s)")
+    return _plot_result(figure, f"Sector Mean Wind Speed — {speed_sensor}")
+
+
+def _plot_energy_rose(state: SessionState, speed_sensor: str, direction_sensor: str) -> dict:
+    """Plot directional wind-energy contribution proportional to the cube of measured speed."""
+    frame, sector_index = _directional_frame(state, speed_sensor, direction_sensor)
+    cube_speed = frame[speed_sensor].to_numpy(dtype=float) ** 3
+    total = float(cube_speed.sum())
+    contribution = [0.0 if total == 0 else float(cube_speed[sector_index == index].sum() / total * 100.0) for index in range(16)]
+    figure = go.Figure(go.Barpolar(r=contribution, theta=COMPASS_16, name="Energy contribution", marker_color="#c86a2a"))
+    figure.update_layout(title=f"Directional Energy Contribution — {speed_sensor}", polar=dict(radialaxis=dict(ticksuffix="%")))
+    return _plot_result(figure, f"Directional Energy Contribution — {speed_sensor}")
+
+
 def _plot_diurnal(state: SessionState, sensor_names: str) -> dict:
     """Plot mean diurnal wind-speed profiles by hour of day for one or more measured sensors."""
     figure = go.Figure()
@@ -329,7 +402,7 @@ def _plot_diurnal(state: SessionState, sensor_names: str) -> dict:
         series = _require_series(state, sensor_name)
         profile = series.groupby(series.index.hour).mean().reindex(range(24))
         figure.add_trace(go.Scatter(x=list(range(24)), y=profile.tolist(), mode="lines+markers", name=sensor_name))
-    figure.update_layout(title="Diurnal Profile", xaxis_title="Hour", yaxis_title="Mean Speed (m/s)")
+    figure.update_layout(title="Diurnal Profile", xaxis_title="Hour", yaxis_title="Mean Value")
     return _plot_result(figure, "Diurnal Profile")
 
 
@@ -832,6 +905,63 @@ def _plot_coverage_timeline(state: SessionState) -> dict:
     )
     figure.update_layout(title="Data Coverage Timeline", xaxis_title="Month", yaxis_title="Sensor")
     return _plot_result(figure, "Data Coverage Timeline")
+
+
+def _plot_shear_alpha(state: SessionState, sensor_names: str = "") -> dict:
+    """Plot timestamp-wise alpha with distribution and diurnal structure for selected speed heights."""
+    alpha, _veer, _profile = _vertical_structure_series(state, speed_sensors=sensor_names)
+    valid = alpha.dropna()
+    if valid.empty:
+        raise ValueError("No valid shear alpha values are available for plotting")
+    time_series = valid.resample("D").mean() if len(valid) > 50000 else valid
+    diurnal = valid.groupby(valid.index.hour).mean().reindex(range(24))
+    figure = make_subplots(
+        rows=2,
+        cols=2,
+        subplot_titles=("Alpha Time Series", "Alpha Distribution", "Diurnal Alpha", "Monthly Alpha"),
+    )
+    figure.add_trace(go.Scatter(x=time_series.index, y=time_series, mode="lines", name="Alpha"), row=1, col=1)
+    figure.add_trace(go.Histogram(x=valid, nbinsx=40, name="Alpha distribution"), row=1, col=2)
+    figure.add_trace(go.Scatter(x=list(range(24)), y=diurnal, mode="lines+markers", name="Diurnal alpha"), row=2, col=1)
+    monthly = valid.groupby(valid.index.month).mean().reindex(range(1, 13))
+    figure.add_trace(go.Bar(x=MONTH_LABELS, y=monthly, name="Monthly alpha"), row=2, col=2)
+    figure.update_layout(title="Wind Shear Alpha", showlegend=False)
+    figure.update_xaxes(title_text="Timestamp", row=1, col=1)
+    figure.update_xaxes(title_text="Alpha", row=1, col=2)
+    figure.update_xaxes(title_text="Hour", row=2, col=1)
+    figure.update_yaxes(title_text="Alpha", row=1, col=1)
+    figure.update_yaxes(title_text="Count", row=1, col=2)
+    figure.update_yaxes(title_text="Alpha", row=2, col=1)
+    figure.update_yaxes(title_text="Alpha", row=2, col=2)
+    return _plot_result(figure, "Wind Shear Alpha")
+
+
+def _plot_wind_veer(state: SessionState, direction_sensors: str = "") -> dict:
+    """Plot signed vertical wind veer in degrees per 100 m with distribution and diurnal structure."""
+    _alpha, veer, _profile = _vertical_structure_series(state, direction_sensors=direction_sensors)
+    if veer is None:
+        raise ValueError("Wind veer requires at least two wind-direction heights")
+    valid = veer.dropna()
+    if valid.empty:
+        raise ValueError("No valid wind-veer values are available for plotting")
+    time_series = valid.resample("D").mean() if len(valid) > 50000 else valid
+    diurnal = valid.groupby(valid.index.hour).mean().reindex(range(24))
+    figure = make_subplots(
+        rows=1,
+        cols=3,
+        subplot_titles=("Veer Time Series", "Veer Distribution", "Diurnal Veer"),
+    )
+    figure.add_trace(go.Scatter(x=time_series.index, y=time_series, mode="lines", name="Veer"), row=1, col=1)
+    figure.add_trace(go.Histogram(x=valid, nbinsx=40, name="Veer distribution"), row=1, col=2)
+    figure.add_trace(go.Scatter(x=list(range(24)), y=diurnal, mode="lines+markers", name="Diurnal veer"), row=1, col=3)
+    figure.update_layout(title="Wind Veer", showlegend=False)
+    figure.update_xaxes(title_text="Timestamp", row=1, col=1)
+    figure.update_xaxes(title_text="Veer (deg / 100 m)", row=1, col=2)
+    figure.update_xaxes(title_text="Hour", row=1, col=3)
+    figure.update_yaxes(title_text="Veer (deg / 100 m)", row=1, col=1)
+    figure.update_yaxes(title_text="Count", row=1, col=2)
+    figure.update_yaxes(title_text="Veer (deg / 100 m)", row=1, col=3)
+    return _plot_result(figure, "Wind Veer")
 
 
 def _plot_turbulence_intensity(state: SessionState, speed_sensor: str, sd_sensor: str) -> dict:

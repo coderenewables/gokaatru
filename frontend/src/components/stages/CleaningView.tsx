@@ -286,6 +286,7 @@ export function CleaningView() {
         <SensorStatsModal
           speedSensors={speedSensors.map((s) => s.name)}
           tempSensors={tempSensors.map((s) => s.name)}
+          sensors={sensors}
           onClose={() => setStatsOpen(false)}
         />
       ) : null}
@@ -300,13 +301,14 @@ export function CleaningView() {
 function SensorStatsModal({
   speedSensors,
   tempSensors,
+  sensors,
   onClose,
 }: {
   speedSensors: string[];
   tempSensors: string[];
+  sensors: import("../../types/analysis").SensorRow[];
   onClose: () => void;
 }) {
-  const sensors = useWorkspaceStore((state) => state.sensors);
   const loadSensorStatistics = useWorkspaceStore((state) => state.loadSensorStatistics);
   const [stats, setStats] = useState<Record<string, import("../../types/analysis").SensorStatistics>>({});
 
@@ -334,6 +336,19 @@ function SensorStatsModal({
   const allSpeed = speedSensors.join(", ");
   const allTemp = tempSensors.join(", ");
   const rows = sensors.filter((s) => stats[s.name]);
+
+  // Pair each speed sensor with the direction sensor at the same height so the
+  // wind rose (which needs both) can be plotted side by side with the Weibull.
+  const dirByHeight = new Map<number, string>();
+  for (const s of sensors) {
+    if (s.sensor_type === "wind_direction" && !dirByHeight.has(s.height_m)) {
+      dirByHeight.set(s.height_m, s.name);
+    }
+  }
+  const heightRows = sensors
+    .filter((s) => s.sensor_type === "wind_speed")
+    .sort((a, b) => b.height_m - a.height_m)
+    .map((s) => ({ speed: s.name, direction: dirByHeight.get(s.height_m) ?? "", height: s.height_m }));
 
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
@@ -402,20 +417,27 @@ function SensorStatsModal({
 
           <section>
             <h3>Weibull &amp; wind rose per height</h3>
-            <div className="plot-grid">
-              {speedSensors.map((name) => (
-                <div key={name} className="plot-cell">
-                  <h4>Weibull — {name}</h4>
-                  <PlotFrame plotName="weibull" params={{ sensor_name: name }} height={280} />
+            {heightRows.map(({ speed, direction, height }) => (
+              <div key={speed} className="height-pair">
+                <h4 className="height-pair-title">{height}m — {speed}</h4>
+                <div className="height-pair-plots">
+                  <div className="height-pair-cell">
+                    <PlotFrame plotName="weibull" params={{ sensor_name: speed }} height={300} />
+                  </div>
+                  <div className="height-pair-cell">
+                    {direction ? (
+                      <PlotFrame
+                        plotName="windrose"
+                        params={{ speed_sensor: speed, direction_sensor: direction }}
+                        height={300}
+                      />
+                    ) : (
+                      <p className="muted">No direction sensor at {height}m — wind rose unavailable.</p>
+                    )}
+                  </div>
                 </div>
-              ))}
-              {speedSensors.map((name) => (
-                <div key={name} className="plot-cell">
-                  <h4>Wind rose — {name}</h4>
-                  <PlotFrame plotName="windrose" params={{ speed_sensor: name }} height={280} />
-                </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </section>
         </div>
       </div>

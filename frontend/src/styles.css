@@ -1979,3 +1979,45 @@ h3 {
   flex-direction: column;
   gap: 0.1rem;
 }
+
+/* ---------- Plot zoom + per-height pairs ---------- */
+
+.plot-frame-zoomable {
+  cursor: zoom-in;
+}
+
+.plot-zoom-modal {
+  max-width: 1100px;
+  width: 95vw;
+  height: 88vh;
+}
+
+.plot-zoom-body {
+  flex: 1;
+  min-height: 0;
+  padding: 0.5rem;
+}
+
+.height-pair {
+  margin-bottom: 1.25rem;
+}
+
+.height-pair-title {
+  margin: 0 0 0.5rem;
+}
+
+.height-pair-plots {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.height-pair-cell {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .height-pair-plots {
+    grid-template-columns: 1fr;
+  }
+}

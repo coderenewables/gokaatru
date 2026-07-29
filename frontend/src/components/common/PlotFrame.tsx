@@ -46,6 +46,7 @@ export function PlotFrame({ plotName, params, result, height = 420, autoFetch = 
   const busyLabel = useWorkspaceStore((state) => state.busyLabel);
   const [data, setData] = useState<PlotResult | null>(result ?? null);
   const [error, setError] = useState<string | null>(null);
+  const [zoomed, setZoomed] = useState(false);
 
   useEffect(() => {
     if (result) {
@@ -131,15 +132,58 @@ export function PlotFrame({ plotName, params, result, height = 420, autoFetch = 
     );
   }
 
+  const baseLayout = {
+    autosize: true,
+    title: data.title,
+    ...(figure.layout as object),
+    // Legend docked to the bottom of every plot.
+    legend: { orientation: "h", y: -0.2, yanchor: "top", x: 0.5, xanchor: "center" },
+    margin: { b: 90, t: 60, l: 60, r: 40 },
+  };
+
   return (
-    <div className="plot-frame" style={{ minHeight: height }}>
-      <Plot
-        data={figure.data}
-        layout={{ autosize: true, title: data.title, ...(figure.layout as object) }}
-        config={{ displaylogo: false, responsive: true }}
-        style={{ width: "100%", height: `${height}px` }}
-        useResizeHandler
-      />
-    </div>
+    <>
+      <div
+        className="plot-frame plot-frame-zoomable"
+        style={{ minHeight: height }}
+        onClick={() => setZoomed(true)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") setZoomed(true);
+        }}
+        title="Click to enlarge"
+      >
+        <Plot
+          data={figure.data}
+          layout={baseLayout}
+          config={{ displaylogo: false, responsive: true }}
+          style={{ width: "100%", height: `${height}px` }}
+          useResizeHandler
+        />
+      </div>
+
+      {zoomed ? (
+        <div className="modal-overlay" role="dialog" aria-modal="true" onClick={() => setZoomed(false)}>
+          <div className="modal-card plot-zoom-modal" onClick={(e) => e.stopPropagation()}>
+            <header className="modal-head">
+              <h2>{data.title}</h2>
+              <button type="button" className="icon-button" onClick={() => setZoomed(false)} aria-label="Close">
+                ✕
+              </button>
+            </header>
+            <div className="plot-zoom-body">
+              <Plot
+                data={figure.data}
+                layout={baseLayout}
+                config={{ displaylogo: false, responsive: true }}
+                style={{ width: "100%", height: "100%" }}
+                useResizeHandler
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

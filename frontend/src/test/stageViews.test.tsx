@@ -31,7 +31,7 @@ function seedStore(overrides: Partial<ReturnType<typeof useWorkspaceStore.getSta
     sensors: [],
     summary: { completed_steps: [], hub_height_m: 120, project_name: "Test" } as never,
     stageStatuses: computeStageStatuses([]) as unknown as Record<StageId, StageStatus>,
-    selectedStage: "data",
+    selectedStage: "cleaning",
     config: useWorkspaceStore.getState().config,
     ...overrides,
   });
@@ -80,6 +80,14 @@ describe("Sensor Overview", () => {
     expect(screen.getByText("Coverage timeline")).toBeInTheDocument();
   });
 
+  it("renders the bankable summary table and print command", () => {
+    render(<SensorReviewView />);
+
+    expect(screen.getByText("Bankable assessment summary")).toBeInTheDocument();
+    expect(screen.getByText("Key assessment statistics")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Print summary" })).toBeInTheDocument();
+  });
+
   it("renders the wind-climate distribution and directional analyses", () => {
     render(<SensorReviewView />);
 
@@ -104,19 +112,42 @@ describe("Sensor Overview", () => {
     fireEvent.click(screen.getByRole("button", { name: "Turbulence" }));
     expect(screen.getByText("Turbulence intensity")).toBeInTheDocument();
   });
+
+  it("renders the P4 climatology and atmospheric availability surfaces", () => {
+    render(<SensorReviewView />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Climatology" }));
+    expect(screen.getByText("Seasonal wind-speed profile")).toBeInTheDocument();
+    expect(screen.getByText("Diurnal & monthly wind-speed distributions")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Atmosphere" }));
+    expect(screen.getByText("Air density")).toBeInTheDocument();
+    expect(screen.getByText("Rainfall & icing")).toBeInTheDocument();
+  });
+
+  it("renders the P5 energy and advanced-analysis states", () => {
+    render(<SensorReviewView />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Energy metrics" }));
+    expect(screen.getByRole("heading", { name: "Energy metrics" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced checks" }));
+    expect(screen.getByRole("heading", { name: "Advanced checks" })).toBeInTheDocument();
+  });
+
+  it("renders the P6 comparison and MCP readiness states", () => {
+    render(<SensorReviewView />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Comparison & QC" }));
+    expect(screen.getByRole("heading", { name: "Comparison & QC" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "MCP readiness" }));
+    expect(screen.getByRole("heading", { name: "MCP readiness" })).toBeInTheDocument();
+  });
 });
 
 describe("StageShell routing", () => {
   beforeEach(() => seedStore());
-
-  it("renders the DataLoadView for the data stage", () => {
-    useWorkspaceStore.setState({ selectedStage: "data" });
-    render(<StageShell />);
-    // The three path tabs render (use role to avoid clashing with panel headings).
-    expect(screen.getByRole("tab", { name: "Upload files" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "BrightHub import" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Shared dataset" })).toBeInTheDocument();
-  });
 
   it("renders the ReanalysisView for the reanalysis stage", () => {
     useWorkspaceStore.setState({ selectedStage: "reanalysis" });
@@ -164,7 +195,8 @@ describe("DataLoadView", () => {
   it("renders the site & hub config form", () => {
     render(<DataLoadView />);
     expect(screen.getByText("Site & hub height")).toBeInTheDocument();
-    expect(screen.getByLabelText("Hub height (m)")).toBeInTheDocument();
+    expect(screen.getByLabelText("Hub height (m)")).toHaveValue(null);
+    expect(screen.getByRole("button", { name: "Save config and run model" })).toBeInTheDocument();
   });
 });
 
@@ -221,7 +253,6 @@ describe("ReanalysisExtrapolationView", () => {
 
   it("reports the reference column at the configured hub height", () => {
     render(<ReanalysisExtrapolationView />);
-    // config default hub height is 120
-    expect(screen.getByText("Spd_120m_hub")).toBeInTheDocument();
+    expect(screen.getByText("Spd_0m_hub")).toBeInTheDocument();
   });
 });

@@ -8,6 +8,7 @@ import json
 import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from server.core.validators import detect_timestep_minutes
@@ -21,6 +22,7 @@ SENSOR_FIELDS = {
     "dir_col": "wind_direction",
     "temp_col": "temperature",
     "pressure_col": "pressure",
+    "humidity_col": "humidity",
 }
 CANONICAL_SENSOR_TYPES = {
     "air_temperature": "temperature",
@@ -190,6 +192,7 @@ def _build_sensor_mapping(points: list[dict[str, object]]) -> dict[float, dict[s
         "air_temperature": "temp_col",
         "pressure": "pressure_col",
         "air_pressure": "pressure_col",
+        "relative_humidity": "humidity_col",
     }
     for point in points:
         height_value = point.get("height_m")
@@ -205,6 +208,7 @@ def _build_sensor_mapping(points: list[dict[str, object]]) -> dict[float, dict[s
                 "sd_col": None,
                 "temp_col": None,
                 "pressure_col": None,
+                "humidity_col": None,
             },
         )
         mapping[float(height_value)][sensor_type] = sensor_name
@@ -319,6 +323,32 @@ def _gap_lengths_in_minutes(series: pd.Series, timestep_minutes: int) -> list[in
     return [int(size * timestep_minutes) for size in gap_sizes[gap_sizes > 0].tolist()]
 
 
+def _cadence_aligned_series(series: pd.Series, timestep_minutes: int) -> pd.Series:
+    """Reindex a series on its dominant timestamp phase, tolerating small logger clock offsets."""
+    if series.empty:
+        return series
+    frequency_ns = int(pd.Timedelta(minutes=timestep_minutes).value)
+    origin_ns = int(pd.Timestamp("1970-01-01").value)
+    index_ns = series.index.to_numpy(dtype="datetime64[ns]").astype("int64")
+    phases = pd.Series((index_ns - origin_ns) % frequency_ns)
+    phase_ns = int(phases.mode().iloc[0])
+    relative_start = int(index_ns.min()) - origin_ns - phase_ns
+    relative_end = int(index_ns.max()) - origin_ns - phase_ns
+    start_step = -(-relative_start // frequency_ns)
+    end_step = relative_end // frequency_ns
+    expected_ns = origin_ns + phase_ns + np.arange(start_step, end_step + 1, dtype=np.int64) * frequency_ns
+    expected_index = pd.DatetimeIndex(expected_ns)
+
+    nearest_steps = np.rint((index_ns - origin_ns - phase_ns) / frequency_ns).astype(np.int64)
+    normalized_ns = origin_ns + phase_ns + nearest_steps * frequency_ns
+    tolerance_ns = frequency_ns // 4
+    on_cadence = np.abs(index_ns - normalized_ns) <= tolerance_ns
+    normalized = series.loc[on_cadence].copy()
+    normalized.index = pd.DatetimeIndex(normalized_ns[on_cadence])
+    normalized = normalized[~normalized.index.duplicated(keep="last")]
+    return normalized.reindex(expected_index)
+
+
 def _parse_timeseries(state: SessionState, file_path: str) -> dict:
     """Parse a wind timeseries file into session state following the GoKaatru Phase 1 ingest spec."""
     source_df = _read_tabular_file(file_path)
@@ -405,12 +435,7 @@ def _get_data_coverage(state: SessionState, sensor_name: str) -> dict:
     if sensor_name not in state.timeseries_df.columns:
         raise ValueError(f"Sensor column '{sensor_name}' not found in loaded timeseries")
     timestep_minutes = detect_timestep_minutes(state.timeseries_df)
-    full_index = pd.date_range(
-        state.timeseries_df.index.min(),
-        state.timeseries_df.index.max(),
-        freq=f"{timestep_minutes}min",
-    )
-    series = state.timeseries_df[sensor_name].reindex(full_index)
+    series = _cadence_aligned_series(state.timeseries_df[sensor_name], timestep_minutes)
     gap_lengths = _gap_lengths_in_minutes(series, timestep_minutes)
     total_records = int(len(series))
     valid_records = int(series.notna().sum())

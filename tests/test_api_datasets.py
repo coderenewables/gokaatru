@@ -4,6 +4,7 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -39,7 +40,7 @@ def test_dataset_pool_crud_and_load(
     dataset_client: tuple[TestClient, SessionManager, DatasetPoolManager],
 ) -> None:
     """Verify shared dataset upload/list/get/load/delete API behavior."""
-    client, _session_manager, _dataset_manager = dataset_client
+    client, session_manager, _dataset_manager = dataset_client
 
     create_dataset_response = client.post(
         "/api/datasets",
@@ -101,6 +102,13 @@ def test_dataset_pool_crud_and_load(
     summary_payload = summary_response.json()
     assert summary_payload["timeseries_loaded"] is True
     assert summary_payload["datamodel_loaded"] is True
+
+    # runconfig.json on disk is the single source of truth: the dataset load
+    # must have written dataset_id through to the session file.
+    workspace_dir = session_manager.get_session(session_id).workspace_dir
+    assert workspace_dir is not None
+    runconfig_path = Path(workspace_dir) / "runconfig.json"
+    assert json.loads(runconfig_path.read_text(encoding="utf-8"))["dataset_id"] == dataset_id
 
     delete_response = client.delete(f"/api/datasets/{dataset_id}")
     assert delete_response.status_code == 200

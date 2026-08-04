@@ -244,3 +244,113 @@ def test_api_workflow(
     export_response = client.get(f"/api/sessions/{session_id}/runconfig/export", headers=headers)
     assert export_response.status_code == 200
     assert Path(export_response.json()["file_path"]).exists()
+
+
+def test_api_atmosphere_workflow(
+    uploaded_timeseries_path: Path,
+    api_client: tuple[TestClient, SessionManager],
+) -> None:
+    """Verify P4 atmospheric analysis and density plotting through the browser-facing session API."""
+    client, manager = api_client
+    uploads_dir = uploaded_timeseries_path.parent
+    timeseries_path = uploads_dir / "HornsRev-MAST_timeseries_data.csv"
+    datamodel_path = uploads_dir / "HornsRev-MAST_data_model.json"
+    create_response = client.post("/api/sessions")
+    assert create_response.status_code == 200
+    session_id = create_response.json()["session_id"]
+    headers = {"X-GoKaatru-Session": session_id}
+
+    for kind, path, content_type in [
+        ("timeseries", timeseries_path, "text/csv"),
+        ("datamodel", datamodel_path, "application/json"),
+    ]:
+        response = client.post(
+            f"/api/sessions/{session_id}/uploads/{kind}",
+            headers=headers,
+            files={"file": (path.name, _upload_bytes(path), content_type)},
+        )
+        assert response.status_code == 200
+
+    atmosphere_response = client.get(
+        f"/api/sessions/{session_id}/atmosphere?temperature_sensor=Tmp2_55m&pressure_sensor=Prs_55m&humidity_sensor=Hum_13m",
+        headers=headers,
+    )
+    assert atmosphere_response.status_code == 200
+    assert 0.9 < atmosphere_response.json()["air_density"]["mean"] < 1.4
+
+    density_plot_response = client.post(
+        f"/api/sessions/{session_id}/plots/air_density",
+        headers=headers,
+        json={"sensor_a": "Tmp2_55m", "sensor_b": "Prs_55m", "sensor_name": "Hum_13m"},
+    )
+    assert density_plot_response.status_code == 200
+    assert json.loads(density_plot_response.json()["plotly_json"])["data"]
+
+    energy_response = client.get(
+        f"/api/sessions/{session_id}/energy/Spd_58m?direction_sensor=Dir_58m",
+        headers=headers,
+    )
+    assert energy_response.status_code == 200
+    assert energy_response.json()["wind_power_density_w_m2"] > 0
+
+    extremes_response = client.get(f"/api/sessions/{session_id}/extremes/Spd_58m", headers=headers)
+    assert extremes_response.status_code == 200
+    assert extremes_response.json()["screening_only"] is True
+
+    ramps_response = client.get(f"/api/sessions/{session_id}/ramps/Spd_58m", headers=headers)
+    assert ramps_response.status_code == 200
+    assert ramps_response.json()["record_count"] > 0
+
+    persistence_response = client.get(f"/api/sessions/{session_id}/persistence/Spd_58m", headers=headers)
+    assert persistence_response.status_code == 200
+    assert persistence_response.json()["calm_period_count"] > 0
+
+    power_density_plot_response = client.post(
+        f"/api/sessions/{session_id}/plots/power_density",
+        headers=headers,
+        json={"speed_sensor": "Spd_58m", "direction_sensor": "Dir_58m"},
+    )
+    assert power_density_plot_response.status_code == 200
+    assert json.loads(power_density_plot_response.json()["plotly_json"])["data"]
+
+    comparison_response = client.get(f"/api/sessions/{session_id}/comparison", headers=headers)
+    assert comparison_response.status_code == 200
+    comparison = comparison_response.json()
+    assert comparison["record_count"] > 0
+
+    mast_effects_response = client.get(
+        f"/api/sessions/{session_id}/mast-effects?direction_sensor=Dir_43m",
+        headers=headers,
+    )
+    assert mast_effects_response.status_code == 200
+    assert len(mast_effects_response.json()["sectors"]) == 16
+
+    qc_response = client.get(f"/api/sessions/{session_id}/qc-diagnostics", headers=headers)
+    assert qc_response.status_code == 200
+    assert len(qc_response.json()["sensors"]) == 8
+
+    state = manager.get_session(session_id)
+    hourly = state.timeseries_df[["Spd_58m"]].resample("h").mean().dropna().iloc[:1000]
+    state.era5_interpolated_df = pd.DataFrame(
+        {"Spd_100m": hourly["Spd_58m"].to_numpy(dtype=float) * 0.96 + 0.35},
+        index=hourly.index,
+    )
+    mcp_response = client.get(f"/api/sessions/{session_id}/mcp-readiness/Spd_58m", headers=headers)
+    assert mcp_response.status_code == 200
+    assert mcp_response.json()["r_squared"] > 0.99
+
+    mcp_plot_response = client.post(
+        f"/api/sessions/{session_id}/plots/mcp_readiness",
+        headers=headers,
+        json={"speed_sensor": "Spd_58m"},
+    )
+    assert mcp_plot_response.status_code == 200
+    assert json.loads(mcp_plot_response.json()["plotly_json"])["data"]
+
+    summary_response = client.get(
+        f"/api/sessions/{session_id}/overview-summary?speed_sensor=Spd_58m&direction_sensor=Dir_58m",
+        headers=headers,
+    )
+    assert summary_response.status_code == 200
+    assert summary_response.json()["speed_sensor"] == "Spd_58m"
+    assert summary_response.json()["items"]

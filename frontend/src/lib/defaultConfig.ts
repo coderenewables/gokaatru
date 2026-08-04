@@ -16,7 +16,7 @@ export function createDefaultWindAnalysisConfig(): WindAnalysisConfig {
       elevationM: 0,
       region: "",
       timeZone: "UTC",
-      hubHeightM: 120,
+      hubHeightM: 0,
       rotorDiameterM: 150,
     },
     mast: {
@@ -65,7 +65,7 @@ export function createDefaultWindAnalysisConfig(): WindAnalysisConfig {
       speedSensorPair: [],
       directionSensor: "",
       aggregation: "mean",
-      targetHubHeightM: 120,
+      targetHubHeightM: 0,
       useWindKit: false,
     },
     reanalysis: {
@@ -86,7 +86,7 @@ export function createDefaultWindAnalysisConfig(): WindAnalysisConfig {
       uncertainty: {
         measurementUncertaintyPct: 2.5,
         measurementHeightM: 100,
-        hubHeightM: 120,
+        hubHeightM: 0,
         shearMethod: "power_law",
         mcpRSquared: 0.92,
         concurrentHours: 8760,
@@ -99,6 +99,7 @@ export function createDefaultWindAnalysisConfig(): WindAnalysisConfig {
     workflow: {
       mode: "auto",
       snapshotName: "baseline",
+      defaultPlanKey: "",
     },
     compare: {
       branchSessionIds: [],

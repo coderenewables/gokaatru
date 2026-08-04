@@ -5,6 +5,7 @@ import { Suspense, useEffect } from "react";
 import { AppHeader } from "./components/AppHeader";
 import { PhaseTabs } from "./components/PhaseTabs";
 import { HomeView } from "./components/HomeView";
+import { DataLoadView } from "./components/stages/DataLoadView";
 import { StageShell } from "./components/stages/StageShell";
 import { WorkflowView } from "./components/WorkflowView";
 import { CopilotView } from "./components/CopilotView";
@@ -39,6 +40,11 @@ export default function App() {
       <AppHeader />
       <PhaseTabs />
       <Suspense fallback={<ViewFallback />}>
+        {activeTab === "import" ? (
+          <section className="data-import-view">
+            <DataLoadView />
+          </section>
+        ) : null}
         {activeTab === "setup" ? <StageShell /> : null}
         {activeTab === "workflow" ? <WorkflowView /> : null}
         {activeTab === "windkit" ? <WindKitExplorerView /> : null}

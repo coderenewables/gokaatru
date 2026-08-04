@@ -9,8 +9,7 @@ import { Stepper } from "../Stepper";
 import { StageHeader } from "../common/StageHeader";
 import { AssetsDrawer } from "../AssetsDrawer";
 import { useWorkspaceStore } from "../../store/useWorkspaceStore";
-import { STAGE_META, STAGE_ORDER } from "../../lib/stages";
-import { DataLoadView } from "./DataLoadView";
+import { STAGE_META, STEPPER_STAGE_ORDER } from "../../lib/stages";
 import { CleaningView } from "./CleaningView";
 import { ReanalysisView } from "./ReanalysisView";
 import { ExploreView } from "./ExploreView";
@@ -33,7 +32,8 @@ export function StageShell({ children }: StageShellProps) {
   const [assetsOpen, setAssetsOpen] = useState(true);
 
   const status = stageStatuses[selectedStage];
-  const index = STAGE_ORDER.indexOf(selectedStage) + 1;
+  const visibleStageIndex = STEPPER_STAGE_ORDER.indexOf(selectedStage);
+  const index = visibleStageIndex >= 0 ? visibleStageIndex + 1 : 1;
   const completedSteps = summary?.completed_steps ?? [];
 
   return (
@@ -67,7 +67,7 @@ function StageBody({
   // All 8 stages now render their real view (Phases D + E complete).
   switch (stage) {
     case "data":
-      return <DataLoadView />;
+      return null;
     case "cleaning":
       return <CleaningView />;
     case "reanalysis":

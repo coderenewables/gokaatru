@@ -47,11 +47,10 @@ describe("computeStageStatuses", () => {
     const statuses = computeStageStatuses([]);
     // data has no prerequisites → always available (or done) until completed.
     expect(statuses.data).toBe("available");
-    // cleaning is advisory (no required steps) → done immediately; every other
-    // stage has at least one prerequisite that isn't done → locked.
-    expect(statuses.cleaning).toBe("done");
+    // Cleaning is advisory once data is available, but cannot precede data import.
+    expect(statuses.cleaning).toBe("locked");
     for (const stage of STAGE_ORDER) {
-      if (stage === "data" || stage === "cleaning") continue;
+      if (stage === "data") continue;
       expect(statuses[stage]).toBe("locked");
     }
   });
@@ -117,7 +116,7 @@ describe("default config", () => {
   it("parses against the zod schema", () => {
     const config = createDefaultWindAnalysisConfig();
     expect(config.version).toBe("2026-05");
-    expect(config.site.hubHeightM).toBe(120);
+    expect(config.site.hubHeightM).toBe(0);
     expect(config.shear.method).toBe("power_law");
     expect(config.ltc.uncertainty.algorithm).toBe("speedsort");
   });
@@ -141,7 +140,7 @@ describe("configSync", () => {
   it("falls back to defaults for unknown runconfig shapes", () => {
     const config = hydrateConfigFromRunconfig({});
     expect(config.project.name).toBe("GoKaatru Project");
-    expect(config.site.hubHeightM).toBe(120);
+    expect(config.site.hubHeightM).toBe(0);
   });
 
   it("setConfigValue updates a dotted path immutably", () => {
@@ -224,6 +223,23 @@ describe("configSync", () => {
     // Untouched sections keep their defaults.
     expect(hydrated.ltc.algorithms).toEqual(createDefaultWindAnalysisConfig().ltc.algorithms);
   });
+
+  it("hydrate prefers backend dataset_id over a stale persisted inputs.sharedDatasetId", () => {
+    const hydrated = hydrateConfigFromRunconfig({
+      dataset_id: "dataset-abc",
+      inputs: { sharedDatasetId: "", timeseriesFileName: "", datamodelFileName: "", activeSensorNames: [] },
+    });
+    expect(hydrated.inputs.sharedDatasetId).toBe("dataset-abc");
+  });
+
+  it("serialize persists dataset_id so saves round-trip the dataset intake param", () => {
+    let config = createDefaultWindAnalysisConfig();
+    config = setConfigValue(config, "inputs.sharedDatasetId", "dataset-xyz");
+    const runconfig = serializeConfigToRunconfig(config);
+    expect(runconfig.dataset_id).toBe("dataset-xyz");
+    const rehydrated = hydrateConfigFromRunconfig(runconfig);
+    expect(rehydrated.inputs.sharedDatasetId).toBe("dataset-xyz");
+  });
 });
 
 describe("type constants", () => {
@@ -237,7 +253,18 @@ describe("type constants", () => {
     ]);
   });
 
-  it("PLOT_NAMES has 24 entries", () => {
-    expect(PLOT_NAMES.length).toBe(24);
+  it("PLOT_NAMES contains the core plot protocol entries", () => {
+    // The plot registry grows as analysis phases ship (P2–P7 added ~20 plots);
+    // assert presence of representative entries rather than a brittle count.
+    for (const name of [
+      "windrose",
+      "weibull",
+      "timeseries",
+      "power_density",
+      "mcp_readiness",
+      "qc_flags",
+    ]) {
+      expect(PLOT_NAMES).toContain(name);
+    }
   });
 });

@@ -146,6 +146,128 @@ export interface TurbulenceSummary {
   iec_ti_at_15ms: number;
 }
 
+export interface AtmosphericSeriesSummary {
+  record_count: number;
+  mean: number;
+  min: number;
+  max: number;
+  std: number;
+  monthly_means: Array<number | null>;
+  diurnal_means: Array<number | null>;
+}
+
+export interface AtmosphericConditionsSummary {
+  temperature_sensor: string;
+  pressure_sensor: string;
+  humidity_sensor: string | null;
+  temperature: AtmosphericSeriesSummary;
+  pressure: AtmosphericSeriesSummary;
+  humidity: AtmosphericSeriesSummary | null;
+  air_density: AtmosphericSeriesSummary & { density_correction_factor: number };
+}
+
+export interface EnergyMetricsSummary {
+  speed_sensor: string;
+  record_count: number;
+  air_density_kg_m3: number;
+  density_source: "measured" | "standard";
+  wind_power_density_w_m2: number;
+  mean_cube_speed_m_s: number;
+  monthly_power_density_w_m2: Array<number | null>;
+  sectors: Array<{ label: string; power_density_w_m2: number; energy_pct: number }>;
+}
+
+export interface ExtremeWindSummary {
+  speed_sensor: string;
+  sample_years: number;
+  minimum_recommended_years: number;
+  screening_only: boolean;
+  annual_maxima: Array<{ year: number; max_speed: number }>;
+  gev: { shape: number; location: number; scale: number; wind_50_year: number; wind_100_year: number };
+  gumbel: { location: number; scale: number; wind_50_year: number; wind_100_year: number };
+}
+
+export interface RampSummary {
+  speed_sensor: string;
+  timestep_minutes: number;
+  record_count: number;
+  mean_absolute_ramp_m_s: number;
+  p95_absolute_ramp_m_s: number;
+  event_threshold_m_s: number;
+  event_count: number;
+  largest_events: Array<{ timestamp: string; ramp_m_s: number }>;
+}
+
+export interface PersistenceSummary {
+  speed_sensor: string;
+  timestep_minutes: number;
+  calm_threshold_m_s: number;
+  high_wind_threshold_m_s: number;
+  calm_pct: number;
+  high_wind_pct: number;
+  calm_period_count: number;
+  high_wind_period_count: number;
+  max_calm_duration_minutes: number;
+  max_high_wind_duration_minutes: number;
+  calm_durations_minutes: number[];
+  high_wind_durations_minutes: number[];
+}
+
+export interface SensorComparisonSummary {
+  sensor_a: string;
+  sensor_b: string;
+  correlation: number;
+  r_squared: number;
+  slope: number;
+  offset: number;
+  rmse: number;
+  bias: number;
+  record_count: number;
+  residuals: Array<{ timestamp: string; value: number }>;
+}
+
+export interface MastEffectsSummary {
+  sensor_a: string;
+  sensor_b: string;
+  direction_sensor: string;
+  baseline_speed_ratio: number;
+  affected_sectors: string[];
+  sectors: Array<{ label: string; speed_ratio: number; record_count: number }>;
+}
+
+export interface QcDiagnosticsSummary {
+  cleaning_rules_applied: number;
+  cleaning_log: Array<Record<string, unknown>>;
+  sensors: Array<{
+    sensor: string;
+    range_failures: number;
+    spike_failures: number;
+    flatline_records: number;
+    removed_after_cleaning: number;
+  }>;
+}
+
+export interface McpReadinessSummary {
+  speed_sensor: string;
+  reference_sensor: string;
+  concurrent_hours: number;
+  correlation: number;
+  r_squared: number;
+  slope: number;
+  offset: number;
+  rmse: number;
+  bias: number;
+  record_count: number;
+  long_term_adjustment_factor: number;
+  ready: boolean;
+}
+
+export interface OverviewSummary {
+  speed_sensor: string;
+  direction_sensor: string | null;
+  items: Array<{ category: string; metric: string; value: string | number; unit: string; status: "available" | "unavailable" }>;
+}
+
 export interface EraNode {
   latitude: number;
   longitude: number;
@@ -247,6 +369,19 @@ export type PlotName =
   | "energy_rose"
   | "shear_alpha"
   | "wind_veer"
+  | "sensor_distribution"
+  | "diurnal_boxplot"
+  | "monthly_boxplot"
+  | "seasonal_profile"
+  | "air_density"
+  | "power_density"
+  | "extremes_fit"
+  | "ramp_histogram"
+  | "duration_curve"
+  | "sensor_residuals"
+  | "mast_shadow"
+  | "qc_flags"
+  | "mcp_readiness"
   | "diurnal"
   | "scatter"
   | "timeseries"
@@ -261,6 +396,7 @@ export type PlotName =
   | "shear_profile"
   | "monthly_means"
   | "turbulence_intensity"
+  | "turbulence_windrose"
   | "ltc_comparison"
   | "ltc_scatter"
   | "ltc_residuals"
@@ -296,6 +432,19 @@ export const PLOT_NAMES: readonly PlotName[] = [
   "energy_rose",
   "shear_alpha",
   "wind_veer",
+  "sensor_distribution",
+  "diurnal_boxplot",
+  "monthly_boxplot",
+  "seasonal_profile",
+  "air_density",
+  "power_density",
+  "extremes_fit",
+  "ramp_histogram",
+  "duration_curve",
+  "sensor_residuals",
+  "mast_shadow",
+  "qc_flags",
+  "mcp_readiness",
   "diurnal",
   "scatter",
   "timeseries",
@@ -310,6 +459,7 @@ export const PLOT_NAMES: readonly PlotName[] = [
   "shear_profile",
   "monthly_means",
   "turbulence_intensity",
+  "turbulence_windrose",
   "ltc_comparison",
   "ltc_scatter",
   "ltc_residuals",
@@ -492,7 +642,7 @@ const shearConfigSchema = z.object({
   speedSensorPair: z.array(z.string()),
   directionSensor: z.string(),
   aggregation: z.enum(["mean", "median", "p90", "momm"]),
-  targetHubHeightM: z.number().positive(),
+  targetHubHeightM: z.number().nonnegative(),
   useWindKit: z.boolean(),
 });
 
@@ -522,7 +672,7 @@ const ltcConfigSchema = z.object({
   uncertainty: z.object({
     measurementUncertaintyPct: z.number().nonnegative(),
     measurementHeightM: z.number().positive(),
-    hubHeightM: z.number().positive(),
+    hubHeightM: z.number().nonnegative(),
     shearMethod: z.string(),
     mcpRSquared: z.number().min(0).max(1),
     concurrentHours: z.number().positive(),
@@ -536,6 +686,7 @@ const ltcConfigSchema = z.object({
 const workflowConfigSchema = z.object({
   mode: z.enum(["auto", "manual"]),
   snapshotName: z.string(),
+  defaultPlanKey: z.string(),
 });
 
 const compareConfigSchema = z.object({
@@ -547,7 +698,7 @@ export const windAnalysisConfigSchema = z.object({
   version: z.literal("2026-05"),
   project: projectSchema,
   site: locationSchema.extend({
-    hubHeightM: z.number().positive(),
+    hubHeightM: z.number().nonnegative(),
     rotorDiameterM: z.number().positive(),
   }),
   mast: z.object({

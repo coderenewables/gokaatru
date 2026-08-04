@@ -2,7 +2,8 @@
 //
 // Surfaced through the primary "How To" nav tab. Mirrors the layout of the
 // other top-level views (a centered scrollable card) and documents the
-// session lifecycle, the 8-stage Stepper pipeline, and the navigation tabs.
+// session lifecycle, automatic canvas planning, the post-import Stepper, and
+// the navigation tabs.
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
 
 interface PipelineStep {
@@ -14,41 +15,51 @@ interface PipelineStep {
 export const PIPELINE: PipelineStep[] = [
   {
     n: 1,
-    title: "Data loading",
-    body: "Upload your measured time-series files (or import from BrightHub), then set the site coordinate and hub height. This stage unlocks everything else.",
+    title: "Data import",
+    body: "Upload measured time-series files (or import from BrightHub), then set the site coordinate and hub height.",
   },
   {
     n: 2,
+    title: "Canvas planning",
+    body: "After data and hub height are saved, GoKaatru prepares an editable Canvas plan with default shear, ERA5, linear least-squares, variance-ratio, ensemble, and clipping decisions.",
+  },
+  {
+    n: 3,
+    title: "Data cleaning",
+    body: "Review the measurement inventory and apply only the cleaning filters appropriate for the campaign.",
+  },
+  {
+    n: 4,
     title: "Reanalysis acquisition",
     body: "Download ERA5 and MERRA-2 at the four surrounding nodes and interpolate them to your site. Provides the long-term reference series.",
   },
   {
-    n: 3,
+    n: 5,
     title: "Measured-data exploration",
     body: "Inspect recovery and availability, the wind rose, the Weibull fit, diurnal and annual profiles, and the measured shear profile.",
   },
   {
-    n: 4,
+    n: 6,
     title: "Shear → hub (measured)",
     body: "Apply a shear or roughness calculation to extrapolate the measured sensors up to hub height.",
   },
   {
-    n: 5,
+    n: 7,
     title: "Reanalysis → hub",
     body: "Confirm the long-term reference series exist at hub height using the chosen shear method.",
   },
   {
-    n: 6,
+    n: 8,
     title: "Long-Term Correction (LTC)",
     body: "Run the MCP correlation between the short measured record and the long reanalysis record, and visualize the fits.",
   },
   {
-    n: 7,
+    n: 9,
     title: "Clipping analysis",
     body: "Decide the representative historical window for the energy yield assessment (advisory).",
   },
   {
-    n: 8,
+    n: 10,
     title: "Ensemble & uncertainty",
     body: "Blend the LTC outputs, compute the uncertainty, and save your scenarios.",
   },
@@ -60,8 +71,9 @@ interface TabDoc {
 }
 
 const TAB_DOCS: TabDoc[] = [
-  { label: "Stepper", body: "The 8-stage guided pipeline. Each stage must be completed before the next unlocks." },
-  { label: "Canvas", body: "A free-form workspace view for inspecting your data and results." },
+  { label: "Data import", body: "Upload or import measurements and save the site and hub-height configuration." },
+  { label: "Canvas", body: "Review and edit the automatically prepared analysis plan before running it." },
+  { label: "Stepper", body: "The eight post-import guided analysis stages. Each stage unlocks from its prerequisites." },
   { label: "WindKit", body: "Explorer for WindKit tools and their responses." },
   { label: "Copilot", body: "Chat with the agent to drive the workflow conversationally." },
   { label: "Compare", body: "Compare saved scenarios side by side." },
@@ -78,7 +90,7 @@ export function HowToView() {
           <h1>How to use GoKaatru</h1>
           <p className="muted">
             GoKaatru is a workflow-driven wind resource assessment tool. The pages below walk through the session
-            lifecycle and the 8-stage analysis pipeline.
+            lifecycle, automatic Canvas planning, and the eight-stage analysis pipeline.
           </p>
         </header>
 
@@ -92,9 +104,10 @@ export function HowToView() {
         </article>
 
         <article className="howto-section">
-          <h2>2 · Move through the Stepper pipeline</h2>
+          <h2>2 · Import data, review Canvas, then use Stepper</h2>
           <p>
-            The <strong>Stepper</strong> tab shows an 8-stage rail. Each chip is color-coded by status:
+            The <strong>Data import</strong> tab prepares the default Canvas once measurements and hub height are
+            saved. The <strong>Stepper</strong> tab then shows the eight post-import stages. Each chip is color-coded by status:
           </p>
           <ul className="howto-legend">
             <li><span className="howto-dot status-done" aria-hidden="true" /> <strong>Done</strong> — completed.</li>
@@ -102,8 +115,8 @@ export function HowToView() {
             <li><span className="howto-dot status-locked" aria-hidden="true" /> <strong>Locked</strong> — finish its prerequisite first.</li>
           </ul>
           <p>
-            Click a ready stage to open it, then use its action button to run that stage. Locked stages show a tooltip
-            naming the blocking upstream stage. The stages run in this order:
+            Review or edit the Canvas before running it. Click a ready Stepper stage to open it, then use its action
+            button to run that stage. Locked stages show a tooltip naming the blocking upstream stage. The full flow is:
           </p>
           <ol className="howto-pipeline">
             {PIPELINE.map((step) => (
@@ -144,9 +157,9 @@ export function HowToView() {
           <button
             type="button"
             className="primary-button"
-            onClick={() => setActiveTab("setup")}
+            onClick={() => setActiveTab("import")}
           >
-            Go to Stepper
+            Go to Data import
           </button>
         </footer>
       </section>

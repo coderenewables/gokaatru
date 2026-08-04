@@ -13,12 +13,12 @@ import { createDefaultWindAnalysisConfig } from "../lib/defaultConfig";
 import type { AnalysisSummary, SensorRow } from "../types/analysis";
 
 describe("asset builders", () => {
-  it("buildConfigAsset captures project + hub height + shear method", () => {
+  it("buildConfigAsset prompts for hub height until it is configured", () => {
     const config = createDefaultWindAnalysisConfig();
     const asset = buildConfigAsset(config);
     expect(asset.kind).toBe("config");
     expect(asset.id).toBe("config");
-    expect(asset.summary).toContain("hub 120m");
+    expect(asset.summary).toContain("hub height required");
     expect(asset.summary).toContain("power_law");
   });
 

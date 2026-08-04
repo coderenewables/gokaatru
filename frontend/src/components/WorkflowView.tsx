@@ -5,7 +5,7 @@
 // workflowStatus.node_statuses. SSE live streaming is wired via the run action
 // (the store polls refreshWorkflowStatus after each run; long runs can be
 // stopped via the Stop control).
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import {
   Background,
   Controls,
@@ -26,6 +26,7 @@ import "@xyflow/react/dist/style.css";
 
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
 import type { WorkflowCanvasNode, WorkflowCanvasEdge, StageKind } from "../lib/workflow";
+import type { WorkflowExecutionStatusResponse } from "../types/analysis";
 import { RunButton } from "./common/RunButton";
 
 const STAGE_COLORS: Record<StageKind, string> = {
@@ -52,12 +53,74 @@ const STATUS_BORDER: Record<string, string> = {
   pending: "#d8d2c4",
 };
 
+function formatDuration(milliseconds: number | null): string {
+  if (milliseconds === null || !Number.isFinite(milliseconds) || milliseconds < 0) return "-";
+  const seconds = Math.round(milliseconds / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+interface WorkflowProgress {
+  total: number;
+  completed: number;
+  elapsedMs: number | null;
+  etaMs: number | null;
+  nodeDurations: Record<string, number | null>;
+}
+
+export function getWorkflowProgress(
+  nodes: WorkflowCanvasNode[],
+  status: WorkflowExecutionStatusResponse | null,
+  now: number,
+): WorkflowProgress {
+  const executableNodes = nodes.filter((node) => node.data.executionKind !== "group");
+  const events = status?.events ?? [];
+  const runStarted = events.find((event) => event.event_type === "run_started");
+  const runStartedAt = runStarted ? Date.parse(runStarted.timestamp) : Number.NaN;
+  const startedAt = new Map<string, number>();
+  const finishedAt = new Map<string, number>();
+  for (const event of events) {
+    if (!event.node_id) continue;
+    const timestamp = Date.parse(event.timestamp);
+    if (!Number.isFinite(timestamp)) continue;
+    if (event.event_type === "node_started") startedAt.set(event.node_id, timestamp);
+    if (event.event_type === "node_finished" || event.event_type === "node_failed") finishedAt.set(event.node_id, timestamp);
+  }
+  const nodeDurations: Record<string, number | null> = {};
+  const completedDurations: number[] = [];
+  for (const node of executableNodes) {
+    const start = startedAt.get(node.id);
+    const finish = finishedAt.get(node.id);
+    const isRunning = status?.node_statuses[node.id] === "running";
+    const ending = finish ?? (isRunning ? now : undefined);
+    nodeDurations[node.id] = start === undefined || ending === undefined ? null : Math.max(0, ending - start);
+    if (start !== undefined && finish !== undefined && status?.node_statuses[node.id] === "done") {
+      completedDurations.push(Math.max(0, finish - start));
+    }
+  }
+  const completed = executableNodes.filter((node) => status?.node_statuses[node.id] === "done").length;
+  const averageDuration = completedDurations.length > 0
+    ? completedDurations.reduce((total, duration) => total + duration, 0) / completedDurations.length
+    : null;
+  return {
+    total: executableNodes.length,
+    completed,
+    elapsedMs: Number.isFinite(runStartedAt) ? Math.max(0, now - runStartedAt) : null,
+    etaMs: averageDuration === null || completed >= executableNodes.length
+      ? null
+      : averageDuration * (executableNodes.length - completed),
+    nodeDurations,
+  };
+}
+
 function StageNode({ data, selected }: NodeProps) {
   const nodeData = data as WorkflowCanvasNode["data"];
   const color = STAGE_COLORS[nodeData.stage] ?? "#5f716a";
+  const status = typeof nodeData.runStatus === "string" ? nodeData.runStatus : "idle";
+  const duration = typeof nodeData.runDuration === "string" ? nodeData.runDuration : null;
   return (
     <div
-      className="wf-stage-node"
+      className={`wf-stage-node wf-node-${status}`}
       style={{
         borderColor: selected ? "#083434" : "var(--color-border)",
         borderTopColor: color,
@@ -66,6 +129,10 @@ function StageNode({ data, selected }: NodeProps) {
       <Handle type="target" position={Position.Left} />
       <div className="wf-stage-node-label">{nodeData.label}</div>
       <div className="wf-stage-node-summary">{nodeData.summary}</div>
+      <div className="wf-stage-node-runtime">
+        <span className={`wf-node-status status-${status}`}>{status}</span>
+        {duration ? <span>{duration}</span> : null}
+      </div>
       {nodeData.templateId ? (
         <div className="wf-stage-node-template">{nodeData.templateId}</div>
       ) : null}
@@ -91,18 +158,45 @@ export function WorkflowView() {
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [snapshotName, setSnapshotName] = useState("");
+  const [now, setNow] = useState(() => Date.now());
 
   // React Flow local state mirrors the store; changes propagate back.
   const [rfNodes, setRfNodes] = useState(nodes);
   const [rfEdges, setRfEdges] = useState(edges);
 
-  // Keep local RF state in sync when the store graph rebuilds.
+  const isRunning = workflowStatus?.is_running ?? false;
+  const progress = useMemo(() => getWorkflowProgress(nodes, workflowStatus, now), [nodes, workflowStatus, now]);
+  const displayNodes = useMemo(
+    () => nodes.map((node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        runStatus: workflowStatus?.node_statuses[node.id] ?? "idle",
+        runDuration: formatDuration(progress.nodeDurations[node.id] ?? null),
+      },
+    })),
+    [nodes, workflowStatus, progress.nodeDurations],
+  );
+
+  useEffect(() => {
+    if (!isRunning) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(timer);
+  }, [isRunning]);
+
+  // Keep local RF state in sync when the store graph rebuilds or status changes.
   const graphSignature = useMemo(
-    () => JSON.stringify({ n: nodes.length, e: edges.length, ids: nodes.map((n) => n.id).join(",") }),
-    [nodes, edges],
+    () => JSON.stringify({
+      n: displayNodes.length,
+      e: edges.length,
+      ids: displayNodes.map((node) => node.id).join(","),
+      status: workflowStatus?.node_statuses,
+      durations: displayNodes.map((node) => node.data.runDuration),
+    }),
+    [displayNodes, edges, workflowStatus?.node_statuses],
   );
   useMemo(() => {
-    setRfNodes(nodes);
+    setRfNodes(displayNodes);
     setRfEdges(edges);
   }, [graphSignature]);
 
@@ -137,7 +231,6 @@ export function WorkflowView() {
   );
 
   const selectedNode = rfNodes.find((n) => n.id === selectedNodeId) ?? null;
-  const isRunning = workflowStatus?.is_running ?? false;
   const canvasEmpty = rfNodes.length === 0;
 
   return (
@@ -157,9 +250,17 @@ export function WorkflowView() {
         <RunButton label="Stop" variant="secondary" onClick={stopWorkflowGraph} disabled={!isRunning} />
         <RunButton label="Rebuild from config" variant="secondary" onClick={rebuildWorkflowGraph} />
         <span className="muted workflow-run-status">
-          {workflowStatus?.run_id ? `run ${workflowStatus.run_id.slice(0, 8)}` : "no run yet"}
+          {isRunning ? "running" : workflowStatus?.run_id ? `run ${workflowStatus.run_id.slice(0, 8)}` : "no run yet"}
         </span>
       </div>
+
+      {(isRunning || workflowStatus?.events.length) ? (
+        <div className="workflow-progress" role="status">
+          <span><strong>{progress.completed}/{progress.total}</strong> nodes complete</span>
+          <span>Elapsed <strong>{formatDuration(progress.elapsedMs)}</strong></span>
+          <span>Estimated remaining <strong>{progress.etaMs === null ? "calculating" : formatDuration(progress.etaMs)}</strong></span>
+        </div>
+      ) : null}
 
       <div className="workflow-canvas-wrap">
         <ReactFlow
@@ -187,13 +288,11 @@ export function WorkflowView() {
         {canvasEmpty ? (
           <div className="workflow-empty-hint">
             <p>
-              The canvas is empty. Complete all 8 stages in the <strong>Stepper</strong> and the
-              pipeline graph will be built here from your finalized configuration — ready to run
-              and snapshot.
+              The canvas is empty. Load measurement data and save a hub height in <strong>Data import</strong>;
+              GoKaatru will prepare a default workflow here for you to edit and run.
             </p>
             <p className="muted">
-              Or use <strong>Rebuild from config</strong> to load the pipeline now with the current
-              configuration.
+              Use <strong>Rebuild from config</strong> to load the current configuration manually.
             </p>
           </div>
         ) : null}

@@ -103,6 +103,18 @@ def _save_run_config(state: SessionState) -> dict:
     return {"status": "ok", "file_path": str(runconfig_path), "keys": sorted(state.runconfig.keys())}
 
 
+def _persist_runconfig(state: SessionState) -> None:
+    """Write-through helper: persist the current runconfig to runconfig.json.
+
+    runconfig.json in the session workspace is the single source of truth, so
+    every in-memory mutation (dataset load, BrightHub import, scenario import)
+    must call this to keep the on-disk file authoritative.
+    """
+    if state.workspace_dir is None:
+        return
+    _save_run_config(state)
+
+
 def _load_run_config(state: SessionState) -> dict:
     """Load data/runconfig.json into session state following the Phase 1 configuration workflow."""
     runconfig_path = _runconfig_path(state)

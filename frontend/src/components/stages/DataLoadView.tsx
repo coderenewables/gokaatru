@@ -1,4 +1,4 @@
-// Stage 1 — Data loading (spec §4 / Stage 1).
+// Standalone data import and site configuration.
 //
 // Three entry paths: (a) upload local files, (b) import a BrightHub location,
 // (c) load a shared dataset. After load: sensor inventory + site/hub config.
@@ -11,6 +11,11 @@ type LoadPath = "upload" | "brighthub" | "dataset";
 
 export function DataLoadView() {
   const [path, setPath] = useState<LoadPath>("upload");
+  const brighthubPromptRequired = useWorkspaceStore((state) => state.brighthubPromptRequired);
+
+  useEffect(() => {
+    if (brighthubPromptRequired) setPath("brighthub");
+  }, [brighthubPromptRequired]);
 
   return (
     <div className="stage-view">
@@ -328,7 +333,7 @@ function SensorInventory() {
 function SiteConfigForm() {
   const config = useWorkspaceStore((state) => state.config);
   const updateConfigValue = useWorkspaceStore((state) => state.updateConfigValue);
-  const saveConfig = useWorkspaceStore((state) => state.saveConfig);
+  const saveConfigAndRunModel = useWorkspaceStore((state) => state.saveConfigAndRunModel);
 
   return (
     <section className="path-panel">
@@ -388,12 +393,13 @@ function SiteConfigForm() {
           <input
             type="number"
             step="0.1"
-            value={config.site.hubHeightM}
+            value={config.site.hubHeightM || ""}
             onChange={(e) => updateConfigValue("site.hubHeightM", Number(e.target.value))}
           />
         </label>
       </div>
-      <RunButton label="Save config" onClick={() => saveConfig()} />
+      <p className="muted">Hub height is required to build and run the default model.</p>
+      <RunButton label="Save config and run model" onClick={() => saveConfigAndRunModel()} />
     </section>
   );
 }

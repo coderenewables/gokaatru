@@ -76,12 +76,11 @@ describe("App bootable shell", () => {
     });
 
     await waitFor(() => {
-      // Phase C shell renders the primary nav (Stepper tab).
+      // The workspace opens at the standalone data import view.
+      expect(screen.getByRole("button", { name: "Data import" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Stepper" })).toBeInTheDocument();
-      // The selected stage chip is present (data is available by default).
-      expect(screen.getByRole("button", { name: "Data loading" })).toBeInTheDocument();
+      expect(screen.getByText("Site & hub height")).toBeInTheDocument();
     });
-    // All 8 stage chips render
-    expect(screen.getByRole("button", { name: "Ensemble & uncertainty" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Data loading" })).not.toBeInTheDocument();
   });
 });

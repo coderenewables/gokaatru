@@ -4,13 +4,13 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { Stepper } from "../components/Stepper";
 import { PhaseTabs } from "../components/PhaseTabs";
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
-import { computeStageStatuses, STAGE_ORDER } from "../lib/stages";
+import { computeStageStatuses, STEPPER_STAGE_ORDER } from "../lib/stages";
 import type { StageId, StageStatus } from "../types/analysis";
 
 function setStatuses(completedSteps: string[]) {
   useWorkspaceStore.setState({
     stageStatuses: computeStageStatuses(completedSteps) as unknown as Record<StageId, StageStatus>,
-    selectedStage: "data",
+    selectedStage: "cleaning",
     session: { session_id: "s1" } as never,
   });
 }
@@ -20,9 +20,9 @@ describe("Stepper", () => {
     setStatuses([]);
   });
 
-  it("renders all 8 stages in order with index badges", () => {
+  it("renders the post-import stages in order with index badges", () => {
     render(<Stepper />);
-    STAGE_ORDER.forEach((stage) => {
+    STEPPER_STAGE_ORDER.forEach((stage) => {
       // Title text from STAGE_META appears
       expect(screen.getByText(new RegExp(STAGE_META_TITLE(stage)))).toBeInTheDocument();
     });
@@ -31,31 +31,30 @@ describe("Stepper", () => {
   });
 
   it("disables locked stages and enables available ones", () => {
-    setStatuses([]); // only data is available, everything else locked
+    setStatuses([]); // data import is required before every visible stage
     render(<Stepper />);
-    // data is a button, not disabled
-    const dataChip = screen.getByRole("button", { name: /data loading/i });
-    expect(dataChip).not.toBeDisabled();
+    const cleaningChip = screen.getByRole("button", { name: /data cleaning/i });
+    expect(cleaningChip).toBeDisabled();
     // ltc is locked
     const ltcChip = screen.getByRole("button", { name: /long-term correction/i });
     expect(ltcChip).toBeDisabled();
   });
 
   it("selecting an available stage updates the store", () => {
-    setStatuses([]); // data available
+    setStatuses(["timeseries", "datamodel", "config"]);
     render(<Stepper />);
-    fireEvent.click(screen.getByRole("button", { name: /data loading/i }));
-    expect(useWorkspaceStore.getState().selectedStage).toBe("data");
+    fireEvent.click(screen.getByRole("button", { name: /data cleaning/i }));
+    expect(useWorkspaceStore.getState().selectedStage).toBe("cleaning");
   });
 
   it("clicking a locked stage does not change selection", () => {
     setStatuses([]);
-    useWorkspaceStore.setState({ selectedStage: "data" });
+    useWorkspaceStore.setState({ selectedStage: "cleaning" });
     render(<Stepper />);
     const ltcChip = screen.getByRole("button", { name: /long-term correction/i });
     // disabled buttons don't fire click, but verify state unchanged regardless
     expect(ltcChip).toBeDisabled();
-    expect(useWorkspaceStore.getState().selectedStage).toBe("data");
+    expect(useWorkspaceStore.getState().selectedStage).toBe("cleaning");
   });
 
   it("unlocks downstream stages as prerequisites complete", () => {
@@ -80,6 +79,7 @@ describe("PhaseTabs", () => {
 
   it("renders all browser tabs", () => {
     render(<PhaseTabs />);
+    expect(screen.getByRole("button", { name: "Data import" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Stepper" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Canvas" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "WindKit" })).toBeInTheDocument();

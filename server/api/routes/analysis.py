@@ -33,6 +33,10 @@ from server.api.schemas import (
 )
 from server.state.session import SessionState
 from server.tools.cleaning import _apply_cleaning_rule, _get_cleaning_log, _undo_cleaning_rule
+from server.tools.atmosphere import _compute_atmospheric_conditions
+from server.tools.advanced_analysis import _compute_energy_metrics, _compute_extremes, _compute_persistence, _compute_ramps
+from server.tools.diagnostics import _compute_mast_effects, _compute_mcp_readiness, _compute_qc_diagnostics, _compute_sensor_comparison
+from server.tools.overview_summary import _compute_overview_summary
 from server.tools.clipping import _run_clipping_analysis
 from server.tools.ensemble import _run_ensemble
 from server.tools.era5 import (
@@ -63,7 +67,7 @@ from server.tools.shear import (
     _compute_vertical_structure,
 )
 from server.tools.statistics import _compute_turbulence_analysis, _compute_wind_climate, _sensor_statistics
-from server.tools.config import _sync_state_from_runconfig
+from server.tools.config import _persist_runconfig, _sync_state_from_runconfig
 from server.tools.uncertainty import _calculate_uncertainty
 
 router = APIRouter(prefix="/sessions/{session_id}", tags=["analysis"])
@@ -161,9 +165,14 @@ def _build_scenario_snapshot(state: SessionState, name: str) -> dict[str, object
 
 
 def _import_runconfig(state: SessionState, runconfig: dict[str, object]) -> dict[str, object]:
-    """Import a runconfig payload into the session, merging over the current runconfig."""
+    """Import a runconfig payload into the session, merging over the current runconfig.
+
+    The session runconfig.json is the single source of truth, so the merge is
+    written through to disk.
+    """
     state.runconfig.update(runconfig)
     _sync_state_from_runconfig(state)
+    _persist_runconfig(state)
     return dict(state.runconfig)
 
 
@@ -333,6 +342,153 @@ def get_turbulence_analysis(
     del session_id
     try:
         return _compute_turbulence_analysis(state, speed_sensor)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+
+
+@router.get("/atmosphere")
+def get_atmospheric_conditions(
+    session_id: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+    temperature_sensor: str = "",
+    pressure_sensor: str = "",
+    humidity_sensor: str = "",
+) -> dict:
+    """Return measured atmospheric and air-density summaries for the selected sensors."""
+    del session_id
+    try:
+        return _compute_atmospheric_conditions(state, temperature_sensor, pressure_sensor, humidity_sensor)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+
+
+@router.get("/energy/{speed_sensor}")
+def get_energy_metrics(
+    session_id: str,
+    speed_sensor: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+    direction_sensor: str = "",
+) -> dict:
+    """Return measured wind-power density and optional directional energy metrics."""
+    del session_id
+    try:
+        return _compute_energy_metrics(state, speed_sensor, direction_sensor)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+
+
+@router.get("/extremes/{speed_sensor}")
+def get_extreme_winds(
+    session_id: str,
+    speed_sensor: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict:
+    """Return annual-maxima GEV/Gumbel extreme-wind estimates for a measured speed sensor."""
+    del session_id
+    try:
+        return _compute_extremes(state, speed_sensor)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+
+
+@router.get("/ramps/{speed_sensor}")
+def get_wind_ramps(
+    session_id: str,
+    speed_sensor: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict:
+    """Return consecutive-record wind-speed ramp metrics for the selected sensor."""
+    del session_id
+    try:
+        return _compute_ramps(state, speed_sensor)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+
+
+@router.get("/persistence/{speed_sensor}")
+def get_wind_persistence(
+    session_id: str,
+    speed_sensor: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict:
+    """Return calm and high-wind duration metrics for the selected speed sensor."""
+    del session_id
+    try:
+        return _compute_persistence(state, speed_sensor)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+
+
+@router.get("/comparison")
+def get_sensor_comparison(
+    session_id: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+    sensor_a: str = "",
+    sensor_b: str = "",
+) -> dict:
+    """Return concurrent correlation and residual metrics for a selected speed-sensor pair."""
+    del session_id
+    try:
+        return _compute_sensor_comparison(state, sensor_a, sensor_b)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+
+
+@router.get("/mast-effects")
+def get_mast_effects(
+    session_id: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+    sensor_a: str = "",
+    sensor_b: str = "",
+    direction_sensor: str = "",
+) -> dict:
+    """Return directional speed-ratio diagnostics for potential mast-shadow review."""
+    del session_id
+    try:
+        return _compute_mast_effects(state, sensor_a, sensor_b, direction_sensor)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+
+
+@router.get("/qc-diagnostics")
+def get_qc_diagnostics(
+    session_id: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict:
+    """Return non-mutating QC diagnostic counts for the loaded wind-speed sensors."""
+    del session_id
+    try:
+        return _compute_qc_diagnostics(state)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+
+
+@router.get("/mcp-readiness/{speed_sensor}")
+def get_mcp_readiness(
+    session_id: str,
+    speed_sensor: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+    reference_sensor: str = "",
+) -> dict:
+    """Return concurrent ERA5 correlation metrics used to assess MCP readiness."""
+    del session_id
+    try:
+        return _compute_mcp_readiness(state, speed_sensor, reference_sensor)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+
+
+@router.get("/overview-summary")
+def get_overview_summary(
+    session_id: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+    speed_sensor: str = "",
+    direction_sensor: str = "",
+) -> dict:
+    """Return a concise bankable summary table assembled from available overview analyses."""
+    del session_id
+    try:
+        return _compute_overview_summary(state, speed_sensor, direction_sensor)
     except ValueError as exc:
         raise to_bad_request(exc) from exc
 

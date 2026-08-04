@@ -109,9 +109,29 @@ class SessionManager:
     def get_session(self, session_id: str) -> SessionState:
         """Return an existing managed session or raise when the id is unknown."""
         state = self._sessions.get(session_id)
-        if state is None:
-            raise KeyError(f"Unknown session_id '{session_id}'")
-        return state
+        if state is not None:
+            return state
+        # Restore from the on-disk workspace if it exists (e.g. after a server
+        # restart). runconfig.json is the single source of truth, so reload it.
+        workspace_dir = self._workspace_dir(session_id)
+        runconfig_path = workspace_dir / "runconfig.json"
+        if runconfig_path.exists():
+            restored = SessionState()
+            restored.session_id = session_id
+            restored.workspace_dir = workspace_dir
+            restored.touch()
+            try:
+                import json as _json
+                restored.runconfig = _json.loads(runconfig_path.read_text(encoding="utf-8"))
+                from server.tools.config import _sync_state_from_runconfig
+                _sync_state_from_runconfig(restored)
+            except Exception:
+                # Corrupt or unreadable runconfig must not block session attach;
+                # the session starts with an empty runconfig instead.
+                restored.runconfig = {}
+            self._sessions[session_id] = restored
+            return restored
+        raise KeyError(f"Unknown session_id '{session_id}'")
 
     def reset_session(self, session_id: str) -> SessionState:
         """Clear a managed session's in-memory and on-disk workspace data while keeping its identity."""

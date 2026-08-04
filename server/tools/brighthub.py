@@ -7,6 +7,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pandas as pd
+
 from server.core.brighthub import (
     authenticate,
     download_reanalysis_data,
@@ -16,6 +18,7 @@ from server.core.brighthub import (
     list_measurement_locations,
 )
 from server.main import mcp
+from server.schemas.common import Coordinate
 from server.state.session import SessionState, session
 
 
@@ -237,6 +240,111 @@ def brighthub_download_reanalysis(
         items.append({"latitude": r["latitude"], "longitude": r["longitude"], "rows": row_count})
 
     return {"dataset": dataset, "source": "brighthub", "items": items, "count": len(items)}
+
+
+_BRIGHTHUB_ERA5_COLUMNS = {
+    "Spd_100m_mps": "Spd_100m",
+    "Dir_100m_deg": "Dir_100m",
+    "Tmp_2m_degC": "t2m",
+    "Prs_0m_hPa": "sp",
+}
+
+_BRIGHTHUB_MERRA_COLUMNS = {
+    "Spd_100m_mps": "Spd_100m",
+    "Dir_100m_deg": "Dir_100m",
+    "Spd_50m_mps": "Spd_50m",
+    "Dir_50m_deg": "Dir_50m",
+    "Tmp_2m_degC": "t2m",
+    "Prs_0m_hPa": "sp",
+}
+
+
+def _reanalysis_frame(payload: dict, column_map: dict[str, str]) -> pd.DataFrame:
+    """Normalize a BrightHub reanalysis payload into the session dataframe format."""
+    timeseries = payload.get("timeseries_data")
+    if not isinstance(timeseries, dict):
+        raise ValueError("BrightHub reanalysis response did not include timeseries data")
+    data = timeseries.get("data", [])
+    if not data:
+        raise ValueError("BrightHub reanalysis response contained no rows")
+    if isinstance(data[0], dict):
+        frame = pd.DataFrame(data)
+    else:
+        frame = pd.DataFrame(data, columns=timeseries.get("columns") or None)
+    timestamp = next((name for name in frame.columns if str(name).lower() in {"timestamp", "time", "datetime"}), None)
+    if timestamp is None:
+        raise ValueError("BrightHub reanalysis response did not include a timestamp column")
+    frame[timestamp] = pd.to_datetime(frame[timestamp], utc=True)
+    frame = frame.set_index(timestamp)
+    frame.index = frame.index.tz_localize(None)
+    frame.index.name = "time"
+    return frame.rename(columns=column_map).sort_index()
+
+
+def _prepare_brighthub_reanalysis(state: SessionState, latitude: float, longitude: float) -> dict:
+    """Load BrightHub ERA5 + MERRA-2 and interpolate ERA5 to the project site."""
+    from server.core.spatial import bearing_compass, haversine_km
+    from server.tools.era5 import _era5_key, _interpolate_era5_to_site
+
+    token = _require_token(state)
+    try:
+        node_sets = fetch_reanalysis_nodes(token, latitude, longitude)
+        era5_nodes = node_sets.get("era5_nodes", [])
+        merra_nodes = node_sets.get("merra2_nodes", [])
+        era5_results = download_reanalysis_data(token, era5_nodes, "ERA5")
+        merra_results = download_reanalysis_data(token, merra_nodes, "MERRA-2")
+    except Exception as exc:
+        raise RuntimeError(f"BrightHub reanalysis preparation failed: {exc}") from exc
+
+    if len(era5_results) < 4:
+        raise ValueError("BrightHub returned fewer than four ERA5 nodes; site interpolation requires four nodes")
+    if not merra_results:
+        raise ValueError("BrightHub returned no MERRA-2 reanalysis data")
+
+    current_coordinate = state.get_coordinate()
+    elevation_m = 0.0 if current_coordinate is None else current_coordinate.elevation_m
+    state.set_coordinate(Coordinate(latitude=latitude, longitude=longitude, elevation_m=elevation_m))
+    state.era5_nodes = [
+        {
+            "latitude": float(item["latitude"]),
+            "longitude": float(item["longitude"]),
+            "distance_km": haversine_km(latitude, longitude, float(item["latitude"]), float(item["longitude"])),
+            "bearing": bearing_compass(latitude, longitude, float(item["latitude"]), float(item["longitude"])),
+        }
+        for item in era5_results
+    ]
+    state.merra_nodes = [
+        {
+            "latitude": float(item["latitude"]),
+            "longitude": float(item["longitude"]),
+            "distance_km": haversine_km(latitude, longitude, float(item["latitude"]), float(item["longitude"])),
+            "bearing": bearing_compass(latitude, longitude, float(item["latitude"]), float(item["longitude"])),
+        }
+        for item in merra_results
+    ]
+    state.era5_data = {
+        _era5_key(float(item["latitude"]), float(item["longitude"])): _reanalysis_frame(item, _BRIGHTHUB_ERA5_COLUMNS)
+        for item in era5_results
+    }
+    state.merra_data = {
+        f"{float(item['latitude'])}_{float(item['longitude'])}": _reanalysis_frame(item, _BRIGHTHUB_MERRA_COLUMNS)
+        for item in merra_results
+    }
+    interpolation = _interpolate_era5_to_site(state)
+    state.touch()
+    return {
+        "status": "ok",
+        "source": "brighthub",
+        "era5_nodes": len(state.era5_nodes),
+        "merra2_nodes": len(state.merra_nodes),
+        "interpolation": interpolation,
+    }
+
+
+@mcp.tool()
+def brighthub_prepare_reanalysis(latitude: float, longitude: float) -> dict:
+    """Load BrightHub ERA5 and MERRA-2, then interpolate ERA5 to the project site."""
+    return _prepare_brighthub_reanalysis(session, latitude, longitude)
 
 
 def _download_era5_earthdatahub(nodes: list[dict]) -> dict:

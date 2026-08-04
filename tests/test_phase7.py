@@ -22,6 +22,7 @@ from server.tools.visualization import (
     _plot_shear_profile,
     _plot_timeseries_preview,
     _plot_turbulence_intensity,
+    _plot_turbulence_windrose,
 )
 from server.tools.data_io import _list_sensors, _parse_datamodel, _parse_timeseries
 
@@ -134,6 +135,22 @@ def test_plot_turbulence_intensity_bins(sample_timeseries_df: pd.DataFrame) -> N
 
     assert {"Samples", "Mean TI", "Representative TI"}.issubset(names)
     assert len(parsed["data"]) >= 6
+    iec_a = next(trace for trace in parsed["data"] if trace["name"] == "IEC Class A")
+    assert iec_a["y"][0] > iec_a["y"][-1]
+
+
+def test_plot_turbulence_windrose_uses_directional_ti(sample_timeseries_df: pd.DataFrame) -> None:
+    """Verify the turbulence rose summarizes TI by the corresponding wind direction."""
+    session.timeseries_df = sample_timeseries_df.copy()
+    session.raw_timeseries_df = sample_timeseries_df.copy()
+    _set_sensor_mapping()
+
+    result = _plot_turbulence_windrose(session, "Spd_100m", "Spd_100m_sd", "Dir_100m")
+    parsed = json.loads(result["plotly_json"])
+
+    assert result["title"] == "Turbulence Wind Rose — Spd_100m by Dir_100m"
+    assert {trace["name"] for trace in parsed["data"]} == {"Mean TI", "P90 TI"}
+    assert len(parsed["data"][0]["r"]) == 16
 
 
 def test_plot_shear_profile_annotation(sample_timeseries_df: pd.DataFrame) -> None:

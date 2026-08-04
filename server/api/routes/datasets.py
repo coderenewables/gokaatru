@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from server.api.deps import get_dataset_pool_manager, get_session_state, to_bad_request
 from server.state.dataset_pool import DatasetPoolManager
 from server.state.session import SessionState
+from server.tools.config import _persist_runconfig
 from server.tools.data_io import _parse_datamodel, _parse_timeseries
 
 router = APIRouter(tags=["datasets"])
@@ -110,9 +111,11 @@ def load_dataset_into_session(
         raise to_bad_request(exc) from exc
 
     # Record the loaded dataset in runconfig so the frontend canvas can
-    # rebuild node params (e.g. dataset intake) from the saved config.
+    # rebuild node params (e.g. dataset intake) from the saved config. The
+    # session runconfig.json is the single source of truth — write through.
     state.runconfig["dataset_id"] = dataset_id
     state.touch()
+    _persist_runconfig(state)
     return {
         "status": "ok",
         "dataset_id": dataset_id,

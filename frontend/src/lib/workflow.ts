@@ -29,6 +29,8 @@ export type StageKind =
   | "uncertainty"
   | "clipping";
 
+export type WorkflowNodeKind = "group" | "operation" | "dataset" | "fork";
+
 export interface WorkflowNodeData {
   label: string;
   stage: StageKind;
@@ -38,6 +40,7 @@ export interface WorkflowNodeData {
   paramsJson: string;
   requiredParams: string[];
   optionalParams: string[];
+  executionKind?: WorkflowNodeKind;
   [key: string]: unknown;
 }
 
@@ -74,6 +77,7 @@ function buildNode(
   summary: string,
   capability: WorkflowDispatchCapability | undefined,
   params: unknown,
+  executionKind: WorkflowNodeKind = "operation",
 ): WorkflowCanvasNode {
   return {
     id,
@@ -87,6 +91,7 @@ function buildNode(
       paramsJson: prettyJson(params),
       requiredParams: capability?.required_params ?? [],
       optionalParams: capability?.optional_params ?? [],
+      executionKind,
     },
   };
 }
@@ -111,11 +116,9 @@ export function createWorkflowGraph(
   const shearCap = matchCapability(capabilities, "calculate_shear_timeseries", ["shear"]);
   const shearTableCap = matchCapability(capabilities, "build_shear_table", ["shear", "table"]);
   const hubCap = matchCapability(capabilities, "extrapolate_to_hub_height", ["extrapolate", "hub"]);
-  const era5NodesCap = matchCapability(capabilities, "find_era5_nodes", ["era5", "nodes"]);
-  const era5ExtractCap = matchCapability(capabilities, "extract_era5_data", ["era5", "extract"]);
-  const era5InterpCap = matchCapability(capabilities, "interpolate_era5_to_site", ["era5", "interpolate"]);
+  const reanalysisHubCap = matchCapability(capabilities, "extrapolate_reanalysis_to_hub", ["extrapolate", "reanalysis", "hub"]);
+  const brighthubReanalysisCap = matchCapability(capabilities, "brighthub_prepare_reanalysis", ["brighthub", "reanalysis"]);
   const homogCap = matchCapability(capabilities, "analyze_homogeneity", ["homogeneity"]);
-  const ltcCap = matchCapability(capabilities, "run_ltc_speedsort", ["ltc"]);
   const ensembleCap = matchCapability(capabilities, "run_ensemble", ["ensemble"]);
   const uncertaintyCap = matchCapability(capabilities, "calculate_uncertainty", ["uncertainty"]);
   const clippingCap = matchCapability(capabilities, "run_clipping_analysis", ["clipping"]);
@@ -126,7 +129,8 @@ export function createWorkflowGraph(
   const speedSensors = context.speedSensors ?? [];
   const dirSensors = context.directionSensors ?? [];
   const fallbackShort = speedSensors[speedSensors.length - 1] ?? "";
-  const fallbackLong = "ERA5_site";
+  const hubHeightLabel = String(config.site.hubHeightM);
+  const fallbackLong = `Spd_${hubHeightLabel}m_hub`;
 
   const datasetId = config.inputs.sharedDatasetId;
   const shearPair =
@@ -138,99 +142,67 @@ export function createWorkflowGraph(
   const ltcLongDirCol = config.ltc.longDirectionColumn || (ltcShortDirCol ? "ERA5_Direction" : "");
   const measuredCol = config.ltc.measuredColumn || ltcShortCol;
   const algorithmsRun = context.ltcAlgorithms ?? [];
-  const clippingSource = algorithmsRun.length > 0 ? algorithmsRun[0] : "ensemble";
-  const clippingSpeedCol =
-    algorithmsRun.length > 0 ? `${algorithmsRun[0]}_Speed` : "Ensemble_Speed";
+  const ltcAlgorithms = config.ltc.algorithms.filter((algorithm) => algorithm !== "ensemble");
+  const selectedLtcAlgorithms = ltcAlgorithms.length > 0 ? ltcAlgorithms : ["speedsort"];
+  const useEnsembleForClipping = selectedLtcAlgorithms.length > 1 || algorithmsRun.length > 1;
+  const clippingSource = useEnsembleForClipping ? "ensemble" : algorithmsRun[0] ?? selectedLtcAlgorithms[0];
+  const clippingSpeedCol = useEnsembleForClipping ? "Ensemble_Speed" : `${clippingSource}_Speed`;
+  const cleaningRule = config.cleaning.rules[0];
+
+  const ltcNodes = selectedLtcAlgorithms.map((algorithm, index) => {
+    const id = selectedLtcAlgorithms.length === 1 ? "ltc" : `ltc_${algorithm}`;
+    const capability = matchCapability(capabilities, `run_ltc_${algorithm}`, ["ltc", algorithm]);
+    return buildNode(
+      id,
+      { x: 1120, y: 50 + index * 160 },
+      "ltc",
+      `LTC · ${algorithm.replaceAll("_", " ")}`,
+      "Measured hub-height and ERA5 reference",
+      capability,
+      {
+        short_col: ltcShortCol,
+        long_col: ltcLongCol,
+        short_dir_col: ltcShortDirCol,
+        long_dir_col: ltcLongDirCol,
+      },
+    );
+  });
 
   const nodes: WorkflowCanvasNode[] = [
-    buildNode(
-      "dataset",
-      { x: 0, y: 40 },
-      "dataset",
-      "Dataset intake",
-      datasetId || "Upload/import data",
-      datasetCap,
-      { dataset_id: datasetId },
-    ),
+    buildNode("dataset", { x: 0, y: 40 }, "dataset", "Dataset intake", datasetId || "Upload/import data", datasetCap, { dataset_id: datasetId }, "dataset"),
     buildNode(
       "cleaning",
       { x: 280, y: 40 },
       "cleaning",
       "Cleaning",
-      `${config.cleaning.rules.length} rule(s)`,
-      cleaningCap,
-      config.cleaning.rules[0] ?? { rule_type: "range_check", sensor: "", params: {} },
+      cleaningRule ? `${config.cleaning.rules.length} rule(s)` : "Manual review",
+      cleaningRule ? cleaningCap : undefined,
+      cleaningRule
+        ? { rule_type: cleaningRule.ruleType, sensor: cleaningRule.sensor, params: cleaningRule.params, start_date: cleaningRule.startDate, end_date: cleaningRule.endDate }
+        : {},
+      cleaningRule ? "operation" : "group",
     ),
+    buildNode("explore", { x: 280, y: 220 }, "explore", "Explore stats", "List sensors & coverage", exploreCap, {}),
+    buildNode("shear", { x: 560, y: 40 }, "shear", "Shear timeseries", `${config.shear.method} · aggregation ${config.shear.aggregation}`, shearCap, { height_sensors: heightSensors }),
+    buildNode("shear_table", { x: 560, y: 220 }, "shear", "Shear table", `12×24 · ${config.shear.aggregation}`, shearTableCap, { aggregation: config.shear.aggregation }),
+    buildNode("extrapolate_hub", { x: 840, y: 130 }, "extrapolate_hub", "Extrapolate → hub", `${config.site.hubHeightM}m · ${config.shear.method}`, hubCap, { hub_height_m: config.site.hubHeightM, shear_model: config.shear.method }),
     buildNode(
-      "explore",
-      { x: 280, y: 220 },
-      "explore",
-      "Explore stats",
-      "List sensors & coverage",
-      exploreCap,
-      {},
-    ),
-    buildNode(
-      "shear",
-      { x: 560, y: 40 },
-      "shear",
-      "Shear timeseries",
-      `${config.shear.method} · aggregation ${config.shear.aggregation}`,
-      shearCap,
-      { height_sensors: heightSensors },
-    ),
-    buildNode(
-      "shear_table",
-      { x: 560, y: 220 },
-      "shear",
-      "Shear table",
-      `12×24 · ${config.shear.aggregation}`,
-      shearTableCap,
-      { aggregation: config.shear.aggregation },
-    ),
-    buildNode(
-      "extrapolate_hub",
-      { x: 840, y: 130 },
-      "extrapolate_hub",
-      "Extrapolate → hub",
-      `${config.site.hubHeightM}m · ${config.shear.method}`,
-      hubCap,
-      { hub_height_m: config.site.hubHeightM, shear_model: config.shear.method },
-    ),
-    buildNode(
-      "era5_nodes",
-      { x: 0, y: 300 },
-      "era5_nodes",
-      "ERA5 nodes",
-      `lat ${config.reanalysis.searchLatitude}, lon ${config.reanalysis.searchLongitude}`,
-      era5NodesCap,
-      {
-        latitude: config.reanalysis.searchLatitude,
-        longitude: config.reanalysis.searchLongitude,
-      },
-    ),
-    buildNode(
-      "era5_extract",
+      "brighthub_reanalysis",
       { x: 280, y: 400 },
       "era5_extract",
-      "ERA5 extract",
-      `${config.reanalysis.startDate} → ${config.reanalysis.endDate}`,
-      era5ExtractCap,
-      {
-        latitude: config.reanalysis.searchLatitude,
-        longitude: config.reanalysis.searchLongitude,
-        start_date: config.reanalysis.startDate,
-        end_date: config.reanalysis.endDate,
-      },
+      "BrightHub ERA5 + MERRA-2",
+      "Authenticated download and ERA5 site interpolation",
+      brighthubReanalysisCap,
+      { latitude: config.reanalysis.searchLatitude, longitude: config.reanalysis.searchLongitude },
     ),
     buildNode(
-      "era5_interpolate",
-      { x: 560, y: 400 },
-      "era5_interpolate",
-      "ERA5 interpolate",
-      "Interpolate to site",
-      era5InterpCap,
-      {},
+      "extrapolate_reanalysis_hub",
+      { x: 840, y: 400 },
+      "extrapolate_hub",
+      "ERA5 → hub",
+      `${config.site.hubHeightM}m reference series`,
+      reanalysisHubCap,
+      { hub_height_m: config.site.hubHeightM },
     ),
     buildNode(
       "homogeneity",
@@ -241,20 +213,7 @@ export function createWorkflowGraph(
       homogCap,
       { method: "annual" },
     ),
-    buildNode(
-      "ltc",
-      { x: 1120, y: 130 },
-      "ltc",
-      "LTC",
-      `${config.ltc.algorithms.join(", ") || "no algorithms"}`,
-      ltcCap,
-      {
-        short_col: ltcShortCol,
-        long_col: ltcLongCol,
-        short_dir_col: ltcShortDirCol,
-        long_dir_col: ltcLongDirCol,
-      },
-    ),
+    ...ltcNodes,
     buildNode(
       "ensemble",
       { x: 1400, y: 40 },
@@ -301,13 +260,15 @@ export function createWorkflowGraph(
     { id: "cleaning-shear", source: "cleaning", target: "shear", type: "smoothstep" },
     { id: "shear-shear_table", source: "shear", target: "shear_table", type: "smoothstep" },
     { id: "shear_table-extrapolate_hub", source: "shear_table", target: "extrapolate_hub", type: "smoothstep" },
-    { id: "dataset-era5_nodes", source: "dataset", target: "era5_nodes", type: "smoothstep" },
-    { id: "era5_nodes-era5_extract", source: "era5_nodes", target: "era5_extract", type: "smoothstep" },
-    { id: "era5_extract-era5_interpolate", source: "era5_extract", target: "era5_interpolate", type: "smoothstep" },
-    { id: "era5_interpolate-homogeneity", source: "era5_interpolate", target: "homogeneity", type: "smoothstep" },
-    { id: "extrapolate_hub-ltc", source: "extrapolate_hub", target: "ltc", type: "smoothstep" },
-    { id: "era5_interpolate-ltc", source: "era5_interpolate", target: "ltc", type: "smoothstep" },
-    { id: "ltc-ensemble", source: "ltc", target: "ensemble", type: "smoothstep" },
+    { id: "dataset-brighthub_reanalysis", source: "dataset", target: "brighthub_reanalysis", type: "smoothstep" },
+    { id: "brighthub_reanalysis-homogeneity", source: "brighthub_reanalysis", target: "homogeneity", type: "smoothstep" },
+    { id: "shear_table-extrapolate_reanalysis_hub", source: "shear_table", target: "extrapolate_reanalysis_hub", type: "smoothstep" },
+    { id: "brighthub_reanalysis-extrapolate_reanalysis_hub", source: "brighthub_reanalysis", target: "extrapolate_reanalysis_hub", type: "smoothstep" },
+    ...ltcNodes.flatMap((node) => [
+      { id: `extrapolate_hub-${node.id}`, source: "extrapolate_hub", target: node.id, type: "smoothstep" },
+      { id: `extrapolate_reanalysis_hub-${node.id}`, source: "extrapolate_reanalysis_hub", target: node.id, type: "smoothstep" },
+      { id: `${node.id}-ensemble`, source: node.id, target: "ensemble", type: "smoothstep" },
+    ]),
     { id: "ensemble-uncertainty", source: "ensemble", target: "uncertainty", type: "smoothstep" },
     { id: "ensemble-clipping", source: "ensemble", target: "clipping", type: "smoothstep" },
   ];
@@ -321,7 +282,7 @@ export function createWorkflowGraph(
 
 export interface ExecutionNodePayload {
   id: string;
-  kind: "group" | "operation" | "dataset" | "fork";
+  kind: WorkflowNodeKind;
   label: string;
   template_id: string | null;
   config: Record<string, unknown>;
@@ -356,7 +317,7 @@ export function toExecutionRequest(
     mode,
     nodes: nodes.map((node, index) => ({
       id: node.id,
-      kind: index === 0 ? ("dataset" as const) : ("operation" as const),
+      kind: node.data.executionKind ?? (index === 0 ? "dataset" : "operation"),
       label: node.data.label,
       template_id: node.data.templateId || null,
       config: decodeParams(node.data.paramsJson),

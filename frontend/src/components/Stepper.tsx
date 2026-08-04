@@ -6,7 +6,7 @@
 import clsx from "clsx";
 
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
-import { STAGE_META, STAGE_ORDER } from "../lib/stages";
+import { STAGE_META, STEPPER_STAGE_ORDER } from "../lib/stages";
 import type { StageId, StageStatus } from "../types/analysis";
 
 const STATUS_LABEL: Record<StageStatus, string> = {
@@ -34,7 +34,7 @@ export function Stepper() {
 
   return (
     <section className="stage-rail" aria-label="Workflow stages">
-      {STAGE_ORDER.map((stageId, index) => {
+      {STEPPER_STAGE_ORDER.map((stageId, index) => {
         const meta = STAGE_META[stageId];
         const status = stageStatuses[stageId];
         const locked = status === "locked";

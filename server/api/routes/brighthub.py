@@ -36,6 +36,7 @@ from server.core.brighthub import (
     list_measurement_locations,
 )
 from server.state.session import SessionState
+from server.tools.config import _persist_runconfig
 
 router = APIRouter(prefix="/sessions/{session_id}/brighthub", tags=["brighthub"])
 
@@ -527,6 +528,7 @@ def brighthub_import_location(
 
     # 6. Store BrightHub UUID in runconfig for traceability
     state.runconfig["brighthub_uuid"] = safe_uuid
+    _persist_runconfig(state)
     state.touch()
 
     return ImportLocationResponse(

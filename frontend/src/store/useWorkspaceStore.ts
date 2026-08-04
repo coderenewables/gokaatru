@@ -8,6 +8,16 @@ import { create } from "zustand";
 import {
   type AnalysisSummary,
   type ActivityEntry,
+  type AtmosphericConditionsSummary,
+  type EnergyMetricsSummary,
+  type ExtremeWindSummary,
+  type MastEffectsSummary,
+  type McpReadinessSummary,
+  type OverviewSummary,
+  type PersistenceSummary,
+  type QcDiagnosticsSummary,
+  type RampSummary,
+  type SensorComparisonSummary,
   type DatasetPreview,
   type EraNode,
   type HttpMethod,
@@ -64,8 +74,18 @@ import {
   undoCleaningRule,
   getCleaningLog,
   getStatistics,
+  getAtmosphericConditions,
+  getEnergyMetrics,
+  getExtremeWinds,
+  getMastEffects,
+  getMcpReadiness,
+  getOverviewSummary,
+  getQcDiagnostics,
+  getSensorComparison,
   getTurbulenceAnalysis,
   getVerticalStructure,
+  getWindPersistence,
+  getWindRamps,
   getWindClimate,
   getSessionConfig,
   getSessionSummary,
@@ -85,8 +105,8 @@ import {
   saveScenario,
   deleteScenario,
   getClippingColumns,
-  executeWorkflow as apiExecuteWorkflow,
   executeWorkflowStep as apiExecuteWorkflowStep,
+  streamWorkflowExecution,
   getWorkflowStatus as apiGetWorkflowStatus,
   stopWorkflow as apiStopWorkflow,
   listWorkflowSnapshots as apiListSnapshots,
@@ -111,6 +131,7 @@ import {
   setConfigValue,
 } from "../lib/configSync";
 import { createDefaultWindAnalysisConfig } from "../lib/defaultConfig";
+import { buildDefaultWorkflowConfig, defaultWorkflowPlanKey } from "../lib/defaultWorkflowPlan";
 import { computeStageStatuses } from "../lib/stages";
 import {
   createWorkflowGraph,
@@ -130,7 +151,7 @@ import { extractWindKitTools } from "../lib/openapi";
 
 const ACTIVE_SESSION_STORAGE_KEY = "gokaatru-active-session-id";
 
-type TabId = "setup" | "workflow" | "windkit" | "copilot" | "compare" | "howto" | "sensor_review";
+type TabId = "import" | "setup" | "workflow" | "windkit" | "copilot" | "compare" | "howto" | "sensor_review";
 
 interface ActivePlot {
   plotName: PlotName;
@@ -146,6 +167,7 @@ interface WorkspaceStore {
   sessionStatus: "idle" | "loading" | "ready" | "error";
   sessionError: string | null;
   busyLabel: string | null;
+  brighthubPromptRequired: boolean;
   activeTab: TabId;
   selectedStage: StageId;
 
@@ -186,6 +208,7 @@ interface WorkspaceStore {
   workflowEdges: WorkflowCanvasEdge[];
   workflowStatus: WorkflowExecutionStatusResponse | null;
   workflowSnapshots: import("../lib/api").WorkflowSnapshotSummary[];
+  defaultWorkflowStatus: "idle" | "preparing" | "ready" | "error";
 
   // copilot + compare + windkit (Phase G)
   chatSettings: CopilotSettings;
@@ -210,6 +233,7 @@ interface WorkspaceStore {
   deleteCurrentSession: () => Promise<void>;
   downloadConfig: () => Promise<void>;
   saveConfig: () => Promise<void>;
+  saveConfigAndRunModel: () => Promise<void>;
   fetchPlot: (plotName: PlotName, params: PlotRequest) => Promise<PlotResult>;
   refreshResults: () => Promise<void>;
   invokeSessionOperation: <T>(
@@ -251,6 +275,16 @@ interface WorkspaceStore {
   loadWindClimate: (speedSensor: string, directionSensor?: string) => Promise<WindClimateSummary>;
   loadVerticalStructure: (speedSensors: string, directionSensors: string) => Promise<VerticalStructureSummary>;
   loadTurbulenceAnalysis: (speedSensor: string) => Promise<TurbulenceSummary>;
+  loadAtmosphericConditions: (temperatureSensor: string, pressureSensor: string, humiditySensor?: string) => Promise<AtmosphericConditionsSummary>;
+  loadEnergyMetrics: (speedSensor: string, directionSensor?: string) => Promise<EnergyMetricsSummary>;
+  loadExtremeWinds: (speedSensor: string) => Promise<ExtremeWindSummary>;
+  loadWindRamps: (speedSensor: string) => Promise<RampSummary>;
+  loadWindPersistence: (speedSensor: string) => Promise<PersistenceSummary>;
+  loadSensorComparison: (sensorA?: string, sensorB?: string) => Promise<SensorComparisonSummary>;
+  loadMastEffects: (sensorA?: string, sensorB?: string, directionSensor?: string) => Promise<MastEffectsSummary>;
+  loadQcDiagnostics: () => Promise<QcDiagnosticsSummary>;
+  loadMcpReadiness: (speedSensor: string, referenceSensor?: string) => Promise<McpReadinessSummary>;
+  loadOverviewSummary: (speedSensor?: string, directionSensor?: string) => Promise<OverviewSummary>;
 
   // Stage 6 — LTC
   runLtcAlgorithms: (payload: {
@@ -273,6 +307,7 @@ interface WorkspaceStore {
 
   // Phase F — workflow canvas
   setWorkflowGraph: (nodes: WorkflowCanvasNode[], edges: WorkflowCanvasEdge[]) => void;
+  prepareDefaultWorkflow: () => Promise<void>;
   rebuildWorkflowGraph: () => Promise<void>;
   executeWorkflowGraph: (mode: "auto" | "manual") => Promise<void>;
   stopWorkflowGraph: () => Promise<void>;
@@ -382,8 +417,9 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   sessionStatus: "idle",
   sessionError: null,
   busyLabel: null,
-  activeTab: "setup",
-  selectedStage: "data",
+  brighthubPromptRequired: false,
+  activeTab: "import",
+  selectedStage: "cleaning",
 
   config: createDefaultWindAnalysisConfig(),
   serverRunconfig: {},
@@ -418,6 +454,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   workflowEdges: [],
   workflowStatus: null,
   workflowSnapshots: [],
+  defaultWorkflowStatus: "idle",
 
   chatSettings: readChatSettings(),
   chatMessages: [],
@@ -496,8 +533,11 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       chatMessages: [],
       compareResult: null,
       compareSlotNames: ["baseline", null, null],
-      activeTab: "setup",
-      selectedStage: "data",
+      activeTab: "import",
+      selectedStage: "cleaning",
+      workflowNodes: [],
+      workflowEdges: [],
+      defaultWorkflowStatus: "idle",
     });
     await get().bootstrapSession();
   },
@@ -544,21 +584,12 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       const nextConfig = hydrateConfigFromRunconfig(runconfig);
       const completedSteps = summary.completed_steps ?? [];
       const stageStatuses = computeStageStatuses(completedSteps);
-      const allStagesDone = Object.values(stageStatuses).every((status) => status === "done");
       const scenarios = scenariosPayload.scenarios ?? [];
       const nextAssets = upsertAssets(get().assets, [
         buildConfigAsset(nextConfig),
         buildSummaryAsset(summary),
         buildSensorInventoryAsset(sensorsPayload.sensors ?? []),
       ]);
-      // The canvas stays empty until every Stepper stage is complete; then the
-      // pipeline graph is built once from the finalized runconfig, ready to run
-      // and snapshot. ("Rebuild from config" remains available as a manual
-      // escape hatch.)
-      const workflowGraph = allStagesDone
-        ? createWorkflowGraph(nextConfig, capabilitiesPayload.capabilities, graphContextFromState(get()))
-        : null;
-
       set({
         summary,
         serverRunconfig: runconfig,
@@ -568,11 +599,12 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         scenarios,
         stageStatuses,
         assets: nextAssets,
-        ...(workflowGraph
-          ? { workflowNodes: workflowGraph.nodes, workflowEdges: workflowGraph.edges }
-          : {}),
         busyLabel: null,
       });
+      // The planner is intentionally non-blocking: importing data and saving
+      // the hub height can happen in either order, and the final qualifying
+      // refresh seeds the editable canvas exactly once.
+      void get().prepareDefaultWorkflow();
       // Best-effort workflow status + snapshots (non-fatal).
       void get().refreshWorkflowStatus();
       void get().refreshWorkflowSnapshots();
@@ -634,10 +666,13 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         coverageDetail: null,
         activePlot: null,
         workflowStatus: null,
+        workflowNodes: [],
+        workflowEdges: [],
+        defaultWorkflowStatus: "idle",
         stageStatuses: emptyStageStatuses(),
         busyLabel: null,
-        activeTab: "setup",
-        selectedStage: "data",
+        activeTab: "import",
+        selectedStage: "cleaning",
         activity: appendActivity(get().activity, "Deleted session", "ok", session.session_id),
       });
     } catch (error) {
@@ -671,7 +706,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     if (!session) return;
     const nextRunconfig = serializeConfigToRunconfig(get().config);
     const updates = buildRunconfigUpdates(get().serverRunconfig, nextRunconfig);
-    if (updates.length === 0) return;
+    if (updates.length === 0) {
+      void get().prepareDefaultWorkflow();
+      return;
+    }
 
     set({ busyLabel: "Saving config" });
     try {
@@ -695,6 +733,68 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         busyLabel: null,
         activity: appendActivity(get().activity, "Config save failed", "error", asErrorMessage(error)),
       });
+    }
+  },
+
+  saveConfigAndRunModel: async () => {
+    const current = get();
+    const session = current.session;
+    if (!session) return;
+    if (!current.summary?.timeseries_loaded) {
+      set((state) => ({
+        activity: appendActivity(state.activity, "Model run blocked", "error", "Import measurement data before running the model"),
+      }));
+      return;
+    }
+    if (!Number.isFinite(current.config.site.hubHeightM) || current.config.site.hubHeightM <= 0) {
+      set((state) => ({
+        activity: appendActivity(state.activity, "Model run blocked", "error", "Enter a hub height greater than zero"),
+      }));
+      return;
+    }
+
+    set({ busyLabel: "Checking BrightHub access" });
+    try {
+      const brighthubStatus = await getBrightHubStatus(get().apiBaseUrl, session.session_id);
+      if (!brighthubStatus.authenticated) {
+        set((state) => ({
+          busyLabel: null,
+          brighthubStatus,
+          brighthubPromptRequired: true,
+          activeTab: "import",
+          activity: appendActivity(state.activity, "BrightHub credentials required", "error", "Sign in to run the default ERA5 and MERRA-2 workflow"),
+        }));
+        return;
+      }
+
+      const plannedConfig = buildDefaultWorkflowConfig(current.config, current.sensors);
+      const updates = buildRunconfigUpdates(
+        current.serverRunconfig,
+        serializeConfigToRunconfig(plannedConfig),
+      );
+      set({ busyLabel: "Saving config" });
+      const response = await updateSessionConfig(get().apiBaseUrl, session.session_id, updates);
+      const savedConfig = hydrateConfigFromRunconfig(response.runconfig);
+      const graph = createWorkflowGraph(savedConfig, get().capabilities, graphContextFromState(get()));
+      set((state) => ({
+        config: savedConfig,
+        serverRunconfig: response.runconfig,
+        workflowNodes: graph.nodes,
+        workflowEdges: graph.edges,
+        activeTab: "workflow",
+        busyLabel: null,
+        brighthubStatus,
+        brighthubPromptRequired: false,
+        defaultWorkflowStatus: "ready",
+        assets: upsertAssets(state.assets, [buildConfigAsset(savedConfig)]),
+        activity: appendActivity(state.activity, "Saved config and prepared model", "ok", `${graph.nodes.length} nodes`),
+      }));
+      await get().executeWorkflowGraph("auto");
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Save and run failed", "error", asErrorMessage(error)),
+      }));
     }
   },
 
@@ -814,7 +914,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set({ busyLabel: "Loading dataset into session" });
     try {
       await loadDatasetIntoSession(get().apiBaseUrl, session.session_id, datasetId);
+      // Keep the typed config in sync immediately so the stepper reflects the
+      // loaded dataset and a subsequent save persists it back to runconfig.
       set((state) => ({
+        config: setConfigValue(state.config, "inputs.sharedDatasetId", datasetId),
         busyLabel: null,
         activity: appendActivity(state.activity, "Loaded shared dataset", "ok", datasetId),
       }));
@@ -853,6 +956,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       });
       set((state) => ({
         busyLabel: null,
+        brighthubPromptRequired: false,
         activity: appendActivity(state.activity, "BrightHub login", "ok", "Authenticated"),
       }));
       await get().refreshBrightHub();
@@ -1146,6 +1250,66 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     return getTurbulenceAnalysis(get().apiBaseUrl, session.session_id, speedSensor);
   },
 
+  loadAtmosphericConditions: async (temperatureSensor, pressureSensor, humiditySensor = "") => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    return getAtmosphericConditions(get().apiBaseUrl, session.session_id, temperatureSensor, pressureSensor, humiditySensor);
+  },
+
+  loadEnergyMetrics: async (speedSensor, directionSensor = "") => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    return getEnergyMetrics(get().apiBaseUrl, session.session_id, speedSensor, directionSensor);
+  },
+
+  loadExtremeWinds: async (speedSensor) => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    return getExtremeWinds(get().apiBaseUrl, session.session_id, speedSensor);
+  },
+
+  loadWindRamps: async (speedSensor) => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    return getWindRamps(get().apiBaseUrl, session.session_id, speedSensor);
+  },
+
+  loadWindPersistence: async (speedSensor) => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    return getWindPersistence(get().apiBaseUrl, session.session_id, speedSensor);
+  },
+
+  loadSensorComparison: async (sensorA = "", sensorB = "") => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    return getSensorComparison(get().apiBaseUrl, session.session_id, sensorA, sensorB);
+  },
+
+  loadMastEffects: async (sensorA = "", sensorB = "", directionSensor = "") => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    return getMastEffects(get().apiBaseUrl, session.session_id, sensorA, sensorB, directionSensor);
+  },
+
+  loadQcDiagnostics: async () => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    return getQcDiagnostics(get().apiBaseUrl, session.session_id);
+  },
+
+  loadMcpReadiness: async (speedSensor, referenceSensor = "") => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    return getMcpReadiness(get().apiBaseUrl, session.session_id, speedSensor, referenceSensor);
+  },
+
+  loadOverviewSummary: async (speedSensor = "", directionSensor = "") => {
+    const session = get().session;
+    if (!session) throw new Error("Session is not initialized");
+    return getOverviewSummary(get().apiBaseUrl, session.session_id, speedSensor, directionSensor);
+  },
+
   // ---- Stage 6: LTC ------------------------------------------------------
 
   runLtcAlgorithms: async (payload) => {
@@ -1315,6 +1479,82 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   setWorkflowGraph: (nodes, edges) => set({ workflowNodes: nodes, workflowEdges: edges }),
 
+  prepareDefaultWorkflow: async () => {
+    const current = get();
+    const session = current.session;
+    const savedHubHeight = current.serverRunconfig.hub_height_m;
+    const hubHeightM =
+      typeof savedHubHeight === "number"
+        ? savedHubHeight
+        : typeof savedHubHeight === "string"
+          ? Number(savedHubHeight)
+          : Number.NaN;
+    const hasLoadedMeasurements = current.summary?.timeseries_loaded === true;
+    const hasSpeedSensor = current.sensors.some((sensor) => sensor.sensor_type === "wind_speed");
+
+    if (
+      !session ||
+      current.defaultWorkflowStatus === "preparing" ||
+      !hasLoadedMeasurements ||
+      !hasSpeedSensor ||
+      !Number.isFinite(hubHeightM) ||
+      hubHeightM <= 0
+    ) {
+      return;
+    }
+
+    const expectedPlanKey = defaultWorkflowPlanKey(current.config, current.sensors);
+    if (current.config.workflow.defaultPlanKey === expectedPlanKey) {
+      if (current.workflowNodes.length === 0) {
+        const graph = createWorkflowGraph(current.config, current.capabilities, graphContextFromState(current));
+        set({
+          workflowNodes: graph.nodes,
+          workflowEdges: graph.edges,
+          defaultWorkflowStatus: "ready",
+        });
+      }
+      return;
+    }
+
+    const plannedConfig = buildDefaultWorkflowConfig(current.config, current.sensors);
+    const updates = buildRunconfigUpdates(
+      current.serverRunconfig,
+      serializeConfigToRunconfig(plannedConfig),
+    );
+    set({ busyLabel: "Preparing default workflow", defaultWorkflowStatus: "preparing" });
+    try {
+      const response = await updateSessionConfig(get().apiBaseUrl, session.session_id, updates);
+      const persistedConfig = hydrateConfigFromRunconfig(response.runconfig);
+      const graph = createWorkflowGraph(
+        persistedConfig,
+        get().capabilities,
+        graphContextFromState(get()),
+      );
+      set((state) => ({
+        config: persistedConfig,
+        serverRunconfig: response.runconfig,
+        workflowNodes: graph.nodes,
+        workflowEdges: graph.edges,
+        activeTab: "workflow",
+        busyLabel: null,
+        defaultWorkflowStatus: "ready",
+        assets: upsertAssets(state.assets, [buildConfigAsset(persistedConfig)]),
+        activity: appendActivity(
+          state.activity,
+          "Prepared default workflow",
+          "ok",
+          `${graph.nodes.length} nodes ready to edit and run`,
+        ),
+      }));
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        defaultWorkflowStatus: "error",
+        activity: appendActivity(state.activity, "Default workflow preparation failed", "error", asErrorMessage(error)),
+      }));
+    }
+  },
+
   rebuildWorkflowGraph: async () => {
     // Rebuild the canvas from the authoritative runconfig: pull the latest
     // config from the backend, hydrate it into the store, then emit the graph.
@@ -1360,28 +1600,65 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     const session = get().session;
     if (!session) return;
     const payload = toExecutionRequest(get().workflowNodes, get().workflowEdges, mode);
-    set({ busyLabel: mode === "auto" ? "Executing workflow" : "Executing step" });
+    set({
+      busyLabel: mode === "auto" ? "Executing workflow" : "Executing step",
+      activeTab: "workflow",
+      workflowStatus: {
+        run_id: null,
+        is_running: true,
+        cancelled: false,
+        node_statuses: Object.fromEntries(payload.nodes.map((node) => [node.id, "pending"])),
+        events: [],
+      },
+    });
     try {
-      const response =
-        mode === "auto"
-          ? await apiExecuteWorkflow(get().apiBaseUrl, session.session_id, payload)
-          : await apiExecuteWorkflowStep(get().apiBaseUrl, session.session_id, payload);
-      set((state) => ({
-        workflowStatus: {
-          run_id: response.run_id,
-          is_running: false,
-          cancelled: false,
-          node_statuses: response.node_statuses,
-          events: response.events,
-        },
-        assets: upsertAssets(state.assets, [buildOperationResultAsset(`workflow-${mode}`, response)]),
-        busyLabel: null,
-        activity: appendActivity(state.activity, `Workflow ${mode}`, "ok", response.status),
-      }));
+      if (mode === "auto") {
+        await streamWorkflowExecution(get().apiBaseUrl, session.session_id, payload, (event) => {
+          set((state) => {
+            const current = state.workflowStatus;
+            const nodeStatuses = { ...(current?.node_statuses ?? {}) };
+            if (event.node_id && event.status) nodeStatuses[event.node_id] = event.status;
+            const events = [...(current?.events ?? []), event].slice(-400);
+            const isFinished = event.event_type === "run_finished" || event.event_type === "run_cancelled";
+            return {
+              workflowStatus: {
+                run_id: event.run_id || current?.run_id || null,
+                is_running: !isFinished,
+                cancelled: event.event_type === "run_cancelled",
+                node_statuses: nodeStatuses,
+                events,
+              },
+            };
+          });
+        });
+        const streamed = get().workflowStatus;
+        set((state) => ({
+          busyLabel: null,
+          assets: upsertAssets(state.assets, [buildOperationResultAsset("workflow-auto", streamed ?? {})]),
+          activity: appendActivity(state.activity, "Workflow auto", "ok", streamed?.cancelled ? "cancelled" : "completed"),
+        }));
+      } else {
+        const response = await apiExecuteWorkflowStep(get().apiBaseUrl, session.session_id, payload);
+        set((state) => ({
+          workflowStatus: {
+            run_id: response.run_id,
+            is_running: false,
+            cancelled: false,
+            node_statuses: response.node_statuses,
+            events: response.events,
+          },
+          assets: upsertAssets(state.assets, [buildOperationResultAsset("workflow-manual", response)]),
+          busyLabel: null,
+          activity: appendActivity(state.activity, "Workflow manual", "ok", response.status),
+        }));
+      }
       await get().refreshWorkspace();
     } catch (error) {
       set((state) => ({
         busyLabel: null,
+        workflowStatus: state.workflowStatus
+          ? { ...state.workflowStatus, is_running: false }
+          : state.workflowStatus,
         activity: appendActivity(state.activity, `Workflow ${mode} failed`, "error", asErrorMessage(error)),
       }));
     }

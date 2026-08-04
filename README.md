@@ -4,36 +4,75 @@
 
 GoKaatru ships as two parts that work together:
 
-- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **209 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration, and WindKit (142 climate/spatial/Weibull/topography/wind-farm tools).
-- **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) that guides analysts through an **8-stage pipeline**, with an expert React-Flow canvas, a BYOK AI copilot, scenario comparison, and a WindKit explorer.
+- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **222 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration, and WindKit.
+- **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a BYOK AI copilot, scenario comparison, and a WindKit explorer.
 
 State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings).
 
-## The 8-stage workflow
+## Application workflow
 
-The web app drives the backend's tools in their required dependency order:
+The default application flow is:
 
 ```
-Stage 1 Data ─► Stage 2 Reanalysis ─► Stage 3 Explore ─► Stage 4 Shear → hub
-                                       │                    │
-                                       └─► Stage 5 Reanalysis → hub
-                                                            │
-                                                            ▼
-                   Stage 6 LTC ─► Stage 7 Clipping ─► Stage 8 Ensemble + Uncertainty + Scenarios
+Data import + hub height
+    │
+    ├──► BrightHub sign-in when required
+    │
+    └──► Save config and run model
+           │
+           ▼
+    Editable Canvas default plan
+    (live node progress, timing, and ETA)
+           │
+           ▼
+       Post-import Stepper and specialist tools
 ```
+
+### Data import and default Canvas plan
+
+1. Import measured time-series and an IEA Task 43 data model, import a BrightHub location, or load a shared dataset.
+2. Enter the site metadata and **hub height**. Hub height has no default and is required before a model can run.
+3. Click **Save config and run model**. If BrightHub credentials are not available, the app opens the BrightHub sign-in view instead of starting a run.
+4. On successful authentication, the app persists the runconfig, opens the Canvas, and starts the default graph. The graph remains editable for later reruns or manual changes.
+
+### Running a model on Canvas
+
+`Run auto` sends the Canvas graph to the session workflow executor. The backend executes executable nodes in dependency order and streams lifecycle events back to the browser as each node starts, finishes, fails, or is cancelled.
+
+While a run is active, the Canvas shows:
+
+- a node state of `pending`, `running`, `done`, or `error` for every executable operation;
+- elapsed time for the active node and completed duration for finished nodes;
+- completed-node count and total elapsed run time;
+- an estimated remaining time once at least one node has finished. The estimate uses the average duration of completed nodes, so it improves as the run advances;
+- a rolling event log with the server message for each operation.
+
+Use **Stop** to request cancellation. The graph stays on the Canvas with its final statuses and event history so the analyst can inspect or edit the failing branch before another run.
+
+The default graph makes conservative, editable choices:
+
+- uses the two measured wind-speed heights nearest to the requested hub height for power-law shear;
+- loads BrightHub ERA5 and MERRA-2, then interpolates ERA5 to the site;
+- runs `linear_least_squares` and `variance_ratio` LTC branches;
+- produces an inverse-RMSE ensemble, ensemble-based clipping, and uncertainty;
+- leaves cleaning as a manual review node, so importing data never silently removes measurements.
+
+### Post-import Stepper
+
+The Stepper remains available after data import for guided review and manual operation of the analysis stages:
 
 | Stage | What happens |
 |---|---|
-| **1. Data loading** | Upload files (CSV/IEA Task 43 JSON) **or** import from BrightHub **or** load a shared dataset; set site & hub height. |
-| **2. Reanalysis acquisition** | Find the 4 surrounding ERA5 + MERRA-2 nodes, download, derive wind speed, interpolate to the site (optional Pettitt homogeneity cutoff). |
-| **3. Measured-data exploration** | Recovery/availability, wind rose, Weibull, diurnal/annual profiles, shear profile, turbulence intensity — to choose shear sensors & LTC strategy. |
-| **4. Shear → hub (measured)** | Power-law (α) or log-law (z₀) shear + 12×24 lookup, extrapolate measured sensors to hub height (with direct/interpolated/extrapolated method counts). |
-| **5. Reanalysis → hub** | Apply the same shear method to long-term ERA/MERRA nodes at hub height. |
+| **1. Data cleaning** | Review the imported measurement inventory and apply explicit cleaning filters when appropriate. |
+| **2. Reanalysis acquisition** | Review BrightHub ERA5 + MERRA-2 nodes and site interpolation; optional direct EarthDataHub ERA5 is available as a separate, credentialed fallback. |
+| **3. Measured-data exploration** | Recovery/availability, wind rose, Weibull, diurnal/annual profiles, shear profile, turbulence intensity — to refine shear sensors and LTC strategy. |
+| **4. Shear → hub (measured)** | Power-law (α) or log-law (z₀) shear + 12×24 lookup, extrapolate measured sensors to hub height. |
+| **5. Reanalysis → hub** | Confirm long-term reference series are available at hub height using the chosen shear method. |
 | **6. Long-Term Correction** | MCP between measured (short) and reanalysis (long) across 5 algorithms (`speedsort`, `linear_least_squares`, `total_least_squares`, `variance_ratio`, `xgboost`); scatter/residual/convergence diagnostics. |
-| **7. Clipping** | Pick the representative historical window that minimizes combined historic + climate uncertainty (advisory). |
-| **8. Ensemble & uncertainty** | Inverse-RMSE ensemble blend, RSS total uncertainty + P50/75/90/99, save named scenarios for comparison. |
+| **7. Clipping** | Pick the representative historical window that minimizes combined historic + climate uncertainty. |
+| **8. Ensemble & uncertainty** | Inverse-RMSE ensemble blend, RSS total uncertainty + P50/75/90/99, and named scenarios for comparison. |
 
-Beyond the stepper, the **Canvas** tab renders the full pipeline as an editable React-Flow DAG (run auto/step, snapshots, fork branches), the **Copilot** tab is a BYOK chat that drives backend tools via natural language, the **Compare** tab diffs saved scenarios, and the **WindKit** tab exposes the 142-tool WindKit surface.
+Beyond the stepper, the **Canvas** tab renders the full pipeline as an editable React-Flow DAG (run auto/step, snapshots, fork branches), the **Copilot** tab is a BYOK chat that drives backend tools via natural language, the **Compare** tab diffs saved scenarios, and the **WindKit** tab exposes the WindKit tool surface.
 
 ## Quick start
 
@@ -79,7 +118,7 @@ server/                 # Python MCP server + FastAPI web API
 ├── api/                # FastAPI routes (sessions, analysis, brighthub, workflow, windkit, …)
 ├── core/               # executor, regression, spatial, formulas, validators
 ├── tools/              # MCP tools: data_io, cleaning, shear, extrapolation, era5, ltc, …
-│   └── windkit/        # 142 WindKit tools
+│   └── windkit/        # WindKit tools
 ├── state/              # session + dataset pool managers
 └── schemas/            # Pydantic models (Coordinate, SensorInfo, PlotResult, …)
 
@@ -127,13 +166,13 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/windkit/*` | POST | ~95 WindKit endpoints (OpenAPI-documented) |
 | `/mcp/catalog` | GET | MCP tool/resource catalog for discovery |
 
-## Tool inventory (209 MCP tools)
+## Tool inventory
 
 ### Air Density
 - `compute_air_density`, `compute_air_density_timeseries`
 
 ### BrightHub
-- `brighthub_login`, `brighthub_logout`, `brighthub_status`, `brighthub_list_locations`, `brighthub_get_data_model`, `brighthub_import_location`, `brighthub_find_reanalysis_nodes`, `brighthub_download_reanalysis`
+- `brighthub_login`, `brighthub_logout`, `brighthub_status`, `brighthub_list_locations`, `brighthub_get_data_model`, `brighthub_import_location`, `brighthub_find_reanalysis_nodes`, `brighthub_download_reanalysis`, `brighthub_prepare_reanalysis`
 
 ### Cleaning
 - `list_cleaning_rules`, `apply_cleaning_rule`, `get_cleaning_log`, `undo_cleaning_rule`
@@ -213,7 +252,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 
 ## Validation
 
-Backend (209 registered MCP tools — 67 core + 142 WindKit, ~200 web API routes, full test suite):
+Backend (registered tool count changes as capabilities are added; verify it with the command below):
 
 ```bash
 python -m ruff check server/ tests/
@@ -223,7 +262,7 @@ python -m pytest tests/test_windkit.py -v
 python -c "import asyncio, json; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())), 'tools')"
 ```
 
-Frontend (vitest, ~85 tests across types, store, stages, canvas, copilot, compare, windkit):
+Frontend (Vitest coverage across types, store, import, stages, Canvas, copilot, compare, and WindKit):
 
 ```bash
 cd frontend && npm run test

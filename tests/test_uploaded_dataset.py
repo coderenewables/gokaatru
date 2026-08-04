@@ -59,10 +59,9 @@ def test_uploaded_dataset_sensor_inventory_and_coverage(uploaded_dataset_session
     coverage_250m_dir = _get_data_coverage(state, "Dir_250m")
 
     assert len(sensors) == 16
-    assert sensors[0]["name"] == "Spd_250m"
-    assert sensors[0]["record_count"] == 64460
-    assert sensors[-1]["name"] == "Dir_80m"
-    assert sensors[-1]["record_count"] == 63882
+    sensors_by_name = {sensor["name"]: sensor for sensor in sensors}
+    assert sensors_by_name["Spd_250m"]["record_count"] == 64460
+    assert sensors_by_name["Dir_80m"]["record_count"] == 63882
     assert coverage_100m["total_records"] == 105498
     assert coverage_100m["valid_records"] == 65879
     assert coverage_100m["coverage_pct"] == pytest.approx(62.445733568408876)

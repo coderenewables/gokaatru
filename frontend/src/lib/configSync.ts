@@ -64,11 +64,6 @@ export function hydrateConfigFromRunconfig(runconfig: unknown): WindAnalysisConf
     next.ltc.uncertainty.hubHeightM = hubHeight;
   }
 
-  // Dataset the session loaded (written by the backend on dataset load); used
-  // to repopulate the canvas "Dataset intake" node params on rebuild.
-  const datasetId = asString(runconfig.dataset_id);
-  if (datasetId) next.inputs.sharedDatasetId = datasetId;
-
   // --- full-surface blocks (round-tripped by serializeConfigToRunconfig) ---
   // Deep-merge each present block over the defaults so partial runconfigs
   // (e.g. minimal server-side JSON) still hydrate cleanly.
@@ -82,6 +77,13 @@ export function hydrateConfigFromRunconfig(runconfig: unknown): WindAnalysisConf
   if (isRecord(runconfig.ltc)) next.ltc = deepMerge(next.ltc, runconfig.ltc);
   if (isRecord(runconfig.workflow)) next.workflow = deepMerge(next.workflow, runconfig.workflow);
   if (isRecord(runconfig.compare)) next.compare = deepMerge(next.compare, runconfig.compare);
+
+  // Dataset the session loaded (written by the backend on dataset load); used
+  // to repopulate the canvas "Dataset intake" node params on rebuild. Applied
+  // AFTER the inputs deep-merge so the authoritative backend dataset_id wins
+  // over a stale/empty persisted inputs.sharedDatasetId.
+  const datasetId = asString(runconfig.dataset_id);
+  if (datasetId) next.inputs.sharedDatasetId = datasetId;
 
   return next;
 }
@@ -125,6 +127,9 @@ export function serializeConfigToRunconfig(config: WindAnalysisConfig): AnyRecor
       elevation_m: config.site.elevationM,
     },
     hub_height_m: config.site.hubHeightM,
+    // Shared dataset loaded into the session; round-tripped so saves never
+    // drop the dataset intake node's parameter on the backend.
+    dataset_id: config.inputs.sharedDatasetId,
 
     // --- full frontend editing surface (round-tripped) ---
     project: {

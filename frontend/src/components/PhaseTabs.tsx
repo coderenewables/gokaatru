@@ -3,11 +3,12 @@ import clsx from "clsx";
 
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
 
-type TabId = "setup" | "workflow" | "windkit" | "copilot" | "compare" | "howto" | "sensor_review";
+type TabId = "import" | "setup" | "workflow" | "windkit" | "copilot" | "compare" | "howto" | "sensor_review";
 
 const TABS: Array<{ id: TabId; label: string }> = [
-  { id: "setup", label: "Stepper" },
+  { id: "import", label: "Data import" },
   { id: "workflow", label: "Canvas" },
+  { id: "setup", label: "Stepper" },
   { id: "windkit", label: "WindKit" },
   { id: "copilot", label: "Copilot" },
   { id: "compare", label: "Compare" },

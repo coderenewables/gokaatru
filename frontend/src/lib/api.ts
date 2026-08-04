@@ -5,6 +5,16 @@
 // from spec §9 are exposed as typed wrappers.
 import type {
   AnalysisSummary,
+  AtmosphericConditionsSummary,
+  EnergyMetricsSummary,
+  ExtremeWindSummary,
+  MastEffectsSummary,
+  McpReadinessSummary,
+  OverviewSummary,
+  PersistenceSummary,
+  QcDiagnosticsSummary,
+  RampSummary,
+  SensorComparisonSummary,
   ApiHealthResponse,
   CoverageDetail,
   DatasetPreview,
@@ -22,6 +32,7 @@ import type {
   SessionSummary,
   SharedDatasetSummary,
   WorkflowDispatchCapability,
+  WorkflowExecutionEvent,
   WorkflowExecutionResponse,
   WorkflowExecutionStatusResponse,
 } from "../types/analysis";
@@ -583,6 +594,62 @@ export async function getTurbulenceAnalysis(
   return requestJson<TurbulenceSummary>(baseUrl, `/api/sessions/${sessionId}/turbulence/${encodeURIComponent(speedSensor)}`);
 }
 
+export async function getAtmosphericConditions(
+  baseUrl: string,
+  sessionId: string,
+  temperatureSensor: string,
+  pressureSensor: string,
+  humiditySensor = "",
+): Promise<AtmosphericConditionsSummary> {
+  const query = new URLSearchParams({
+    temperature_sensor: temperatureSensor,
+    pressure_sensor: pressureSensor,
+    humidity_sensor: humiditySensor,
+  });
+  return requestJson<AtmosphericConditionsSummary>(baseUrl, `/api/sessions/${sessionId}/atmosphere?${query.toString()}`);
+}
+
+export async function getEnergyMetrics(baseUrl: string, sessionId: string, speedSensor: string, directionSensor = ""): Promise<EnergyMetricsSummary> {
+  const query = directionSensor ? `?direction_sensor=${encodeURIComponent(directionSensor)}` : "";
+  return requestJson<EnergyMetricsSummary>(baseUrl, `/api/sessions/${sessionId}/energy/${encodeURIComponent(speedSensor)}${query}`);
+}
+
+export async function getExtremeWinds(baseUrl: string, sessionId: string, speedSensor: string): Promise<ExtremeWindSummary> {
+  return requestJson<ExtremeWindSummary>(baseUrl, `/api/sessions/${sessionId}/extremes/${encodeURIComponent(speedSensor)}`);
+}
+
+export async function getWindRamps(baseUrl: string, sessionId: string, speedSensor: string): Promise<RampSummary> {
+  return requestJson<RampSummary>(baseUrl, `/api/sessions/${sessionId}/ramps/${encodeURIComponent(speedSensor)}`);
+}
+
+export async function getWindPersistence(baseUrl: string, sessionId: string, speedSensor: string): Promise<PersistenceSummary> {
+  return requestJson<PersistenceSummary>(baseUrl, `/api/sessions/${sessionId}/persistence/${encodeURIComponent(speedSensor)}`);
+}
+
+export async function getSensorComparison(baseUrl: string, sessionId: string, sensorA = "", sensorB = ""): Promise<SensorComparisonSummary> {
+  const query = new URLSearchParams({ sensor_a: sensorA, sensor_b: sensorB });
+  return requestJson<SensorComparisonSummary>(baseUrl, `/api/sessions/${sessionId}/comparison?${query.toString()}`);
+}
+
+export async function getMastEffects(baseUrl: string, sessionId: string, sensorA = "", sensorB = "", directionSensor = ""): Promise<MastEffectsSummary> {
+  const query = new URLSearchParams({ sensor_a: sensorA, sensor_b: sensorB, direction_sensor: directionSensor });
+  return requestJson<MastEffectsSummary>(baseUrl, `/api/sessions/${sessionId}/mast-effects?${query.toString()}`);
+}
+
+export async function getQcDiagnostics(baseUrl: string, sessionId: string): Promise<QcDiagnosticsSummary> {
+  return requestJson<QcDiagnosticsSummary>(baseUrl, `/api/sessions/${sessionId}/qc-diagnostics`);
+}
+
+export async function getMcpReadiness(baseUrl: string, sessionId: string, speedSensor: string, referenceSensor = ""): Promise<McpReadinessSummary> {
+  const query = referenceSensor ? `?reference_sensor=${encodeURIComponent(referenceSensor)}` : "";
+  return requestJson<McpReadinessSummary>(baseUrl, `/api/sessions/${sessionId}/mcp-readiness/${encodeURIComponent(speedSensor)}${query}`);
+}
+
+export async function getOverviewSummary(baseUrl: string, sessionId: string, speedSensor = "", directionSensor = ""): Promise<OverviewSummary> {
+  const query = new URLSearchParams({ speed_sensor: speedSensor, direction_sensor: directionSensor });
+  return requestJson<OverviewSummary>(baseUrl, `/api/sessions/${sessionId}/overview-summary?${query.toString()}`);
+}
+
 export async function fetchPlot(
   baseUrl: string,
   sessionId: string,
@@ -755,6 +822,49 @@ export async function executeWorkflowStep(
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function streamWorkflowExecution(
+  baseUrl: string,
+  sessionId: string,
+  payload: unknown,
+  onEvent: (event: WorkflowExecutionEvent) => void,
+): Promise<void> {
+  const response = await fetch(joinUrl(baseUrl, `/api/sessions/${sessionId}/workflow/execute/stream`), {
+    method: "POST",
+    headers: {
+      Accept: "text/event-stream",
+      "Content-Type": "application/json",
+      [SESSION_HEADER_NAME]: sessionId,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok || !response.body) {
+    let detail = response.statusText || `HTTP ${response.status}`;
+    try {
+      const error = (await response.json()) as unknown;
+      if (isRecord(error) && typeof error.detail === "string") detail = error.detail;
+    } catch {
+      /* retain status text */
+    }
+    throw new Error(detail);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    buffered += decoder.decode(value, { stream: !done });
+    const frames = buffered.split("\n\n");
+    buffered = frames.pop() ?? "";
+    for (const frame of frames) {
+      const payloadLine = frame.split("\n").find((line) => line.startsWith("data: "));
+      if (!payloadLine) continue;
+      onEvent(JSON.parse(payloadLine.slice(6)) as WorkflowExecutionEvent);
+    }
+    if (done) break;
+  }
 }
 
 export async function getWorkflowStatus(

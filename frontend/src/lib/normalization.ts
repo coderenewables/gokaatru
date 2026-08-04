@@ -33,11 +33,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // ---------------------------------------------------------------------------
 
 export function buildConfigAsset(config: WindAnalysisConfig): NormalizedAsset {
+  const hubHeight = config.site.hubHeightM > 0 ? `hub ${config.site.hubHeightM}m` : "hub height required";
   return {
     id: "config",
     kind: "config",
     label: "Central config",
-    summary: `${config.project.name} · hub ${config.site.hubHeightM}m · ${config.shear.method}`,
+    summary: `${config.project.name} · ${hubHeight} · ${config.shear.method}`,
     payload: config,
     updatedAt: new Date().toISOString(),
   };

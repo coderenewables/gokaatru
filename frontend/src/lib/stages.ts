@@ -16,6 +16,9 @@ export const STAGE_ORDER: StageId[] = [
   "ensemble",
 ];
 
+/** Data import is a prerequisite screen, not a step in the editable workflow. */
+export const STEPPER_STAGE_ORDER: StageId[] = STAGE_ORDER.filter((stage) => stage !== "data");
+
 export interface StageMeta {
   title: string;
   description: string;
@@ -103,10 +106,10 @@ export function computeStageStatuses(completedSteps: string[]): Record<StageId, 
   const result = {} as Record<StageId, StageStatus>;
   for (const stage of STAGE_ORDER) {
     const meta = STAGE_META[stage];
-    if (isStageDone(stage)) {
-      result[stage] = "done";
-    } else if (meta.prerequisiteStages.some((prereq) => !isStageDone(prereq))) {
+    if (meta.prerequisiteStages.some((prereq) => !isStageDone(prereq))) {
       result[stage] = "locked";
+    } else if (isStageDone(stage)) {
+      result[stage] = "done";
     } else {
       result[stage] = "available";
     }

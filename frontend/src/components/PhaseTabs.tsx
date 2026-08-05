@@ -1,4 +1,4 @@
-// Primary navigation (spec §3.1): Stepper / Canvas / WindKit / Copilot / Compare.
+// Primary navigation (spec §3.1): Stepper / Canvas / WindKit / Copilot / Sensor Overview / Compare.
 import clsx from "clsx";
 
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
@@ -11,8 +11,8 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: "setup", label: "Stepper" },
   { id: "windkit", label: "WindKit" },
   { id: "copilot", label: "Copilot" },
-  { id: "compare", label: "Compare" },
   { id: "sensor_review", label: "Sensor Overview" },
+  { id: "compare", label: "Compare" },
   { id: "howto", label: "How To" },
 ];
 

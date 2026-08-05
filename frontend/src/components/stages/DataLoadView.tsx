@@ -300,32 +300,135 @@ function DatasetPath() {
 
 function SensorInventory() {
   const sensors = useWorkspaceStore((state) => state.sensors);
+  const deleteSensors = useWorkspaceStore((state) => state.deleteSensors);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Clear selection whenever the sensor list changes (e.g. after deletion/import).
+  useEffect(() => {
+    setSelected(new Set());
+  }, [sensors]);
+
   if (sensors.length === 0) return null;
+
+  // Group sensors by type for display.
+  const grouped = sensors.reduce<Record<string, typeof sensors>>((acc, s) => {
+    (acc[s.sensor_type] ??= []).push(s);
+    return acc;
+  }, {});
+
+  // Display order: speed first, then direction, temperature, pressure, humidity,
+  // then any remaining types alphabetically.
+  const TYPE_ORDER = [
+    "wind_speed",
+    "wind_direction",
+    "temperature",
+    "pressure",
+    "humidity",
+  ];
+  const types = Object.keys(grouped).sort((a, b) => {
+    const ia = TYPE_ORDER.indexOf(a);
+    const ib = TYPE_ORDER.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b);
+  });
+
+  const toggle = (name: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const toggleGroup = (names: string[]) => {
+    setSelected((prev) => {
+      const allSelected = names.every((n) => prev.has(n));
+      const next = new Set(prev);
+      if (allSelected) {
+        names.forEach((n) => next.delete(n));
+      } else {
+        names.forEach((n) => next.add(n));
+      }
+      return next;
+    });
+  };
+
+  const handleDelete = () => {
+    const names = Array.from(selected);
+    if (names.length === 0) return;
+    if (window.confirm(`Remove ${names.length} sensor(s) from the session?\n\nThis removes them from the analysis inventory. Raw timeseries columns are preserved — a full re-import of the datamodel restores all sensors.`)) {
+      void deleteSensors(names);
+    }
+  };
+
+  const selectedCount = selected.size;
+
   return (
     <section className="path-panel">
-      <h3>Sensor inventory</h3>
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Height (m)</th>
-            <th>Coverage</th>
-            <th>Records</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sensors.map((s) => (
-            <tr key={s.name}>
-              <td>{s.name}</td>
-              <td>{s.sensor_type}</td>
-              <td>{s.height_m}</td>
-              <td>{s.data_coverage_pct.toFixed(1)}%</td>
-              <td>{s.record_count}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="sensor-inventory-header">
+        <h3>Sensor inventory</h3>
+        {selectedCount > 0 ? (
+          <div className="path-actions">
+            <span className="muted">{selectedCount} selected</span>
+            <button type="button" className="link-button danger" onClick={handleDelete}>
+              Delete selected
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <p className="muted sensor-hint">
+        Select unwanted sensors and delete them from the analysis. Raw columns are preserved;
+        re-import the datamodel to restore the full inventory.
+      </p>
+      {types.map((type) => {
+        const groupSensors = grouped[type];
+        const groupNames = groupSensors.map((s) => s.name);
+        const groupAllSelected = groupNames.every((n) => selected.has(n));
+        return (
+          <div key={type} className="sensor-group">
+            <label className="sensor-group-header">
+              <input
+                type="checkbox"
+                checked={groupAllSelected}
+                onChange={() => toggleGroup(groupNames)}
+              />
+              <strong>{type}</strong>
+              <span className="muted">({groupSensors.length})</span>
+            </label>
+            <table className="data-table sensor-table">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Name</th>
+                  <th>Height (m)</th>
+                  <th>Coverage</th>
+                  <th>Records</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupSensors.map((s) => (
+                  <tr key={s.name} className={selected.has(s.name) ? "row-selected" : ""}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(s.name)}
+                        onChange={() => toggle(s.name)}
+                      />
+                    </td>
+                    <td>{s.name}</td>
+                    <td>{s.height_m}</td>
+                    <td>{s.data_coverage_pct.toFixed(1)}%</td>
+                    <td>{s.record_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
     </section>
   );
 }

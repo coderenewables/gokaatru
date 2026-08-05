@@ -628,14 +628,10 @@ def extrapolate_hub(
     shear_added = _add_shear_to_timeseries(state)
     result["shear_added"] = shear_added
 
-    # Extrapolate all reanalysis nodes + interpolated to hub height
-    reanalysis_result: dict | None = None
-    if state.shear_table is not None and (state.era5_data or state.era5_interpolated_df is not None):
-        try:
-            reanalysis_result = _extrapolate_all_reanalysis_nodes(state, body.hub_height_m)
-        except ValueError:
-            pass  # non-fatal — reanalysis may not be loaded yet
-    result["reanalysis"] = reanalysis_result
+    # Reanalysis extrapolation is now performed inside _extrapolate_to_hub_height
+    # itself (so both the MCP tool path used by the canvas executor and this HTTP
+    # route produce identical results). The result dict already carries the
+    # "reanalysis" key when reanalysis data + a shear table were available.
 
     state.touch()
     return result

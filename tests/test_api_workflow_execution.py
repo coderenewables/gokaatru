@@ -191,6 +191,69 @@ def test_workflow_stream_endpoint_emits_events(execution_client: tuple[TestClien
     assert any("run_finished" in line for line in lines)
 
 
+def test_workflow_runs_preserve_config_and_step_results_for_comparison(
+    execution_client: tuple[TestClient, SessionManager],
+) -> None:
+    """Archive each canvas run separately and compare their configs and node outcomes."""
+    client, manager = execution_client
+    session_id, headers = _create_session(client)
+    state = manager.get_session(session_id)
+    state.ensemble_df = pd.DataFrame({"ensemble_speed": [8.1, 8.4]})
+    payload = {
+        "mode": "auto",
+        "nodes": [{
+            "id": "op-1",
+            "kind": "operation",
+            "label": "Sector coordinates",
+            "template_id": "windkit_create_sector_coords",
+            "config": {"params_json": "{}"},
+        }],
+        "edges": [],
+    }
+
+    first_config = client.put(
+        f"/api/sessions/{session_id}/workflow/run-config",
+        headers=headers,
+        json={"config": {"hub_height_m": 120}},
+    )
+    assert first_config.status_code == 200
+    first_run = client.post(f"/api/sessions/{session_id}/workflow/execute", headers=headers, json=payload)
+    assert first_run.status_code == 200
+
+    second_config = client.put(
+        f"/api/sessions/{session_id}/workflow/run-config",
+        headers=headers,
+        json={"config": {"hub_height_m": 150}},
+    )
+    assert second_config.status_code == 200
+    second_run = client.post(f"/api/sessions/{session_id}/workflow/execute", headers=headers, json=payload)
+    assert second_run.status_code == 200
+
+    runs_response = client.get(f"/api/sessions/{session_id}/workflow/runs", headers=headers)
+    assert runs_response.status_code == 200
+    runs = runs_response.json()["runs"]
+    assert len(runs) == 2
+    assert all(run["completed_node_count"] == 1 for run in runs)
+
+    first_run_id = first_run.json()["run_id"]
+    second_run_id = second_run.json()["run_id"]
+    compare_response = client.post(
+        f"/api/sessions/{session_id}/workflow/runs/compare",
+        headers=headers,
+        json={"run_ids": [first_run_id, second_run_id]},
+    )
+    assert compare_response.status_code == 200
+    comparison = compare_response.json()
+    assert comparison["run_ids"] == [first_run_id, second_run_id]
+    assert any(entry["key"] == "hub_height_m" for entries in comparison["config_diff"].values() for entry in entries)
+    assert comparison["steps"][0]["statuses"] == {first_run_id: "done", second_run_id: "done"}
+
+    assert state.workspace_dir is not None
+    assert (state.workspace_dir / "workflow-runs" / f"{first_run_id}.json").exists()
+    assert (state.workspace_dir / "workflow-runs" / f"{second_run_id}.json").exists()
+    assert (state.workspace_dir / "workflow-runs" / first_run_id / "ensemble.csv").exists()
+
+
 def test_workflow_capabilities_endpoint_returns_signature_hints(
     execution_client: tuple[TestClient, SessionManager],
 ) -> None:

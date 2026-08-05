@@ -1585,6 +1585,53 @@ h3 {
   white-space: pre-wrap;
 }
 
+.workflow-config-modal {
+  max-width: 840px;
+}
+
+.workflow-config-editor {
+  min-height: 440px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.workflow-run-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.workflow-run-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.workflow-run-option input {
+  margin-top: 0.25rem;
+}
+
+.workflow-run-option span,
+.workflow-step-results small {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.workflow-run-option small,
+.workflow-step-results small {
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+.workflow-step-results td {
+  vertical-align: top;
+}
+
 .workflow-snapshots {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -2261,4 +2308,50 @@ h3 {
   .height-pair-plots {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------- Sensor inventory (grouped + selectable) ---------- */
+
+.sensor-inventory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.sensor-hint {
+  font-size: 0.8rem;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.sensor-group {
+  margin-bottom: 1rem;
+}
+
+.sensor-group-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.sensor-group-header input {
+  margin: 0;
+}
+
+.sensor-table td:first-child,
+.sensor-table th:first-child {
+  width: 32px;
+  text-align: center;
+}
+
+.sensor-table .row-selected {
+  background: rgba(11, 122, 111, 0.08);
+}
+
+.link-button.danger {
+  color: var(--color-error);
 }

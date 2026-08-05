@@ -78,6 +78,7 @@ class SessionManager:
         )
         target.merra_nodes = copy.deepcopy(source.merra_nodes)
         target.merra_data = {key: frame.copy(deep=True) for key, frame in source.merra_data.items()}
+        target.reanalysis_cache_identity = copy.deepcopy(source.reanalysis_cache_identity)
 
         target.ltc_results = copy.deepcopy(source.ltc_results)
         target.ensemble_df = None if source.ensemble_df is None else source.ensemble_df.copy(deep=True)
@@ -93,6 +94,7 @@ class SessionManager:
             "node_statuses": {},
             "events": [],
         }
+        target.workflow_runs = copy.deepcopy(source.workflow_runs)
 
     def create_session(self) -> SessionState:
         """Create a new managed SessionState with its own workspace directory."""

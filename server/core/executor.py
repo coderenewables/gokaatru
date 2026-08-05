@@ -10,6 +10,7 @@ import inspect
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from types import ModuleType
 from typing import Any, AsyncIterator, Callable, get_type_hints
 from uuid import uuid4
@@ -445,9 +446,11 @@ class WorkflowExecutor:
         node_statuses = {node.id: _as_status(node.status, fallback="pending") for node in ordered_nodes}
         self.state.workflow_execution = {
             "run_id": run_id,
+            "started_at": _utcnow().isoformat(),
             "is_running": True,
             "cancel_requested": False,
             "node_statuses": node_statuses,
+            "node_results": {},
             "events": [],
         }
         self.state.touch()
@@ -470,6 +473,88 @@ class WorkflowExecutor:
             statuses = {}
         statuses[node_id] = status
         runtime["node_statuses"] = statuses
+
+    def _set_node_result(self, node_id: str, message: str) -> None:
+        """Store the compact result message for one completed workflow step."""
+        results = self.state.workflow_execution.get("node_results", {})
+        if not isinstance(results, dict):
+            results = {}
+        results[node_id] = message
+        self.state.workflow_execution["node_results"] = results
+
+    def _analysis_snapshot(self) -> dict[str, object]:
+        """Capture compact, JSON-safe outputs needed for later run comparison."""
+        ltc = {
+            algorithm: payload.get("metrics", {})
+            for algorithm, payload in self.state.ltc_results.items()
+            if isinstance(payload, dict)
+        }
+        ensemble = None
+        if self.state.ensemble_df is not None:
+            ensemble = {
+                "rows": int(len(self.state.ensemble_df)),
+                "columns": [str(column) for column in self.state.ensemble_df.columns],
+            }
+        return {
+            "cleaning_rule_count": len(self.state.cleaning_log),
+            "shear_table_shape": None if self.state.shear_table is None else list(self.state.shear_table.shape),
+            "era5_interpolated_rows": None if self.state.era5_interpolated_df is None else int(len(self.state.era5_interpolated_df)),
+            "ltc_metrics": ltc,
+            "ensemble": ensemble,
+            "uncertainty": self.state.latest_uncertainty,
+        }
+
+    def _archive_run(self, ordered_nodes: list[WorkflowExecutionNode], status: str) -> None:
+        """Write an immutable run artifact separate from the mutable live session state."""
+        runtime = self.state.workflow_execution
+        run_id = str(runtime.get("run_id") or uuid4().hex)
+        statuses = runtime.get("node_statuses", {})
+        results = runtime.get("node_results", {})
+        nodes = [
+            {
+                "id": node.id,
+                "label": node.label,
+                "template_id": node.template_id,
+                "config": node.config,
+                "status": str(statuses.get(node.id, "pending")) if isinstance(statuses, dict) else "pending",
+                "result": results.get(node.id) if isinstance(results, dict) else None,
+            }
+            for node in ordered_nodes
+        ]
+        run_dir = Path(self.state.get_data_dir()) / "workflow-runs"
+        artifact_dir = run_dir / run_id
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        analysis = self._analysis_snapshot()
+        artifacts: list[dict[str, object]] = []
+
+        def archive_table(table: object, filename: str) -> None:
+            writer = getattr(table, "to_csv", None)
+            if not callable(writer):
+                return
+            destination = artifact_dir / filename
+            writer(destination, index=True)
+            artifacts.append({"path": f"{run_id}/{filename}", "rows": int(len(table))})
+
+        for algorithm, payload in self.state.ltc_results.items():
+            if isinstance(payload, dict):
+                archive_table(payload.get("df"), f"ltc_{algorithm}.csv")
+        archive_table(self.state.ensemble_df, "ensemble.csv")
+        analysis["artifacts"] = artifacts
+
+        record = {
+            "run_id": run_id,
+            "status": status,
+            "started_at": runtime.get("started_at"),
+            "finished_at": _utcnow().isoformat(),
+            "config": self.state.to_runconfig(),
+            "nodes": nodes,
+            "analysis": analysis,
+        }
+        serialized = json.loads(json.dumps(record, default=str))
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / f"{run_id}.json").write_text(json.dumps(serialized, indent=2), encoding="utf-8")
+        self.state.workflow_runs = [item for item in self.state.workflow_runs if item.get("run_id") != run_id]
+        self.state.workflow_runs.append(serialized)
 
     def _finish_runtime(self, cancelled: bool) -> None:
         """Mark runtime as no longer running and persist cancellation state."""
@@ -509,12 +594,14 @@ class WorkflowExecutor:
             try:
                 message = await self._execute_node(node)
                 self._set_node_status(node.id, "done")
+                self._set_node_result(node.id, message)
                 node_finished = _as_event(run_id, "node_finished", node.id, "done", message)
                 self._append_event(node_finished)
                 yield node_finished
             except Exception as exc:  # pragma: no cover - defensive wrapper
                 encountered_error = True
                 self._set_node_status(node.id, "error")
+                self._set_node_result(node.id, str(exc))
                 node_failed = _as_event(run_id, "node_failed", node.id, "error", str(exc))
                 self._append_event(node_failed)
                 yield node_failed
@@ -527,6 +614,7 @@ class WorkflowExecutor:
         finished = _as_event(run_id, final_event_type, None, final_status, final_message)
         self._append_event(finished)
         self._finish_runtime(cancelled)
+        self._archive_run(ordered, final_status)
         yield finished
 
     async def execute_step(self) -> list[dict[str, object]]:
@@ -566,6 +654,7 @@ class WorkflowExecutor:
         try:
             message = await self._execute_node(next_node)
             self._set_node_status(next_node.id, "done")
+            self._set_node_result(next_node.id, message)
             node_finished = _as_event(run_id, "node_finished", next_node.id, "done", message)
             self._append_event(node_finished)
             events.append(node_finished)
@@ -573,9 +662,11 @@ class WorkflowExecutor:
             self._append_event(finished)
             events.append(finished)
             self._finish_runtime(False)
+            self._archive_run(ordered, "ok")
             return events
         except Exception as exc:  # pragma: no cover - defensive wrapper
             self._set_node_status(next_node.id, "error")
+            self._set_node_result(next_node.id, str(exc))
             node_failed = _as_event(run_id, "node_failed", next_node.id, "error", str(exc))
             self._append_event(node_failed)
             events.append(node_failed)
@@ -583,4 +674,5 @@ class WorkflowExecutor:
             self._append_event(finished)
             events.append(finished)
             self._finish_runtime(False)
+            self._archive_run(ordered, "error")
             return events

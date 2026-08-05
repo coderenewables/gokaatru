@@ -281,10 +281,49 @@ def _reanalysis_frame(payload: dict, column_map: dict[str, str]) -> pd.DataFrame
     return frame.rename(columns=column_map).sort_index()
 
 
-def _prepare_brighthub_reanalysis(state: SessionState, latitude: float, longitude: float) -> dict:
+def _prepare_brighthub_reanalysis(
+    state: SessionState,
+    latitude: float,
+    longitude: float,
+    source: str = "brighthub",
+) -> dict:
     """Load BrightHub ERA5 + MERRA-2 and interpolate ERA5 to the project site."""
     from server.core.spatial import bearing_compass, haversine_km
     from server.tools.era5 import _era5_key, _interpolate_era5_to_site
+
+    if source != "brighthub":
+        raise ValueError("Combined ERA5 + MERRA-2 preparation currently supports the BrightHub source only")
+
+    cache_identity = {
+        "source": source,
+        "latitude": float(latitude),
+        "longitude": float(longitude),
+    }
+    if (
+        state.reanalysis_cache_identity == cache_identity
+        and state.era5_nodes is not None
+        and len(state.era5_nodes) >= 4
+        and bool(state.era5_data)
+        and state.merra_nodes is not None
+        and bool(state.merra_data)
+        and state.era5_interpolated_df is not None
+    ):
+        current_coordinate = state.get_coordinate()
+        elevation_m = 0.0 if current_coordinate is None else current_coordinate.elevation_m
+        state.set_coordinate(Coordinate(latitude=latitude, longitude=longitude, elevation_m=elevation_m))
+        return {
+            "status": "ok",
+            "source": source,
+            "cached": True,
+            "era5_nodes": len(state.era5_nodes),
+            "merra2_nodes": len(state.merra_nodes),
+            "interpolation": {
+                "status": "ok",
+                "rows": int(len(state.era5_interpolated_df)),
+                "method": "cached",
+                "variables": state.era5_interpolated_df.columns.tolist(),
+            },
+        }
 
     token = _require_token(state)
     try:
@@ -331,10 +370,12 @@ def _prepare_brighthub_reanalysis(state: SessionState, latitude: float, longitud
         for item in merra_results
     }
     interpolation = _interpolate_era5_to_site(state)
+    state.reanalysis_cache_identity = cache_identity
     state.touch()
     return {
         "status": "ok",
-        "source": "brighthub",
+        "source": source,
+        "cached": False,
         "era5_nodes": len(state.era5_nodes),
         "merra2_nodes": len(state.merra_nodes),
         "interpolation": interpolation,
@@ -342,9 +383,9 @@ def _prepare_brighthub_reanalysis(state: SessionState, latitude: float, longitud
 
 
 @mcp.tool()
-def brighthub_prepare_reanalysis(latitude: float, longitude: float) -> dict:
+def brighthub_prepare_reanalysis(latitude: float, longitude: float, source: str = "brighthub") -> dict:
     """Load BrightHub ERA5 and MERRA-2, then interpolate ERA5 to the project site."""
-    return _prepare_brighthub_reanalysis(session, latitude, longitude)
+    return _prepare_brighthub_reanalysis(session, latitude, longitude, source)
 
 
 def _download_era5_earthdatahub(nodes: list[dict]) -> dict:

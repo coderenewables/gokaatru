@@ -55,9 +55,52 @@ def _set_nested_value(config: dict[str, object], key: str, value: object) -> Non
     cursor[parts[-1]] = value
 
 
+def _normalize_runconfig(config: dict[str, object]) -> dict[str, object]:
+    """Promote legacy UI aliases to canonical keys and remove duplicated values."""
+    project = config.get("project")
+    if isinstance(project, dict):
+        if "project_name" not in config and isinstance(project.get("name"), str):
+            config["project_name"] = project["name"]
+        if "measurement_type" not in config and isinstance(project.get("measurementType"), str):
+            config["measurement_type"] = project["measurementType"]
+        project.pop("name", None)
+        project.pop("measurementType", None)
+
+    site = config.get("site")
+    if isinstance(site, dict):
+        location = config.get("location")
+        if not isinstance(location, dict):
+            location = {}
+            config["location"] = location
+        for legacy_key, canonical_key in (("latitude", "latitude"), ("longitude", "longitude"), ("elevationM", "elevation_m")):
+            if canonical_key not in location and legacy_key in site:
+                location[canonical_key] = site[legacy_key]
+            site.pop(legacy_key, None)
+        if "hub_height_m" not in config and "hubHeightM" in site:
+            config["hub_height_m"] = site["hubHeightM"]
+        site.pop("hubHeightM", None)
+
+    shear = config.get("shear")
+    if isinstance(shear, dict):
+        shear.pop("targetHubHeightM", None)
+
+    reanalysis = config.get("reanalysis")
+    if isinstance(reanalysis, dict):
+        reanalysis.pop("searchLatitude", None)
+        reanalysis.pop("searchLongitude", None)
+
+    ltc = config.get("ltc")
+    if isinstance(ltc, dict):
+        uncertainty = ltc.get("uncertainty")
+        if isinstance(uncertainty, dict):
+            uncertainty.pop("hubHeightM", None)
+
+    return config
+
+
 def _sync_state_from_runconfig(state: SessionState) -> None:
     """Project known runconfig fields back onto session state per the GoKaatru session model."""
-    config = state.runconfig
+    config = _normalize_runconfig(state.runconfig)
     state.coordinate = None
     state.project_name = None
     state.measurement_type = None
@@ -83,7 +126,8 @@ def _runconfig_path(state: SessionState) -> Path:
 
 def _get_run_config(state: SessionState) -> dict:
     """Return the active run configuration dictionary defined by the GoKaatru Phase 1 config spec."""
-    state.runconfig = state.to_runconfig()
+    _normalize_runconfig(state.runconfig)
+    state.runconfig = _normalize_runconfig(state.to_runconfig())
     return dict(state.runconfig)
 
 
@@ -91,13 +135,15 @@ def _update_run_config(state: SessionState, key: str, value: str) -> dict:
     """Update a dotted runconfig key using JSON parsing rules from the Phase 1 config manager spec."""
     _set_nested_value(state.runconfig, key, _parse_config_value(value))
     _sync_state_from_runconfig(state)
-    state.runconfig = state.to_runconfig()
+    _normalize_runconfig(state.runconfig)
+    state.runconfig = _normalize_runconfig(state.to_runconfig())
     return dict(state.runconfig)
 
 
 def _save_run_config(state: SessionState) -> dict:
     """Write the current run configuration to data/runconfig.json per the Phase 1 persistence spec."""
-    state.runconfig = state.to_runconfig()
+    _normalize_runconfig(state.runconfig)
+    state.runconfig = _normalize_runconfig(state.to_runconfig())
     runconfig_path = _runconfig_path(state)
     runconfig_path.write_text(json.dumps(state.runconfig, indent=2), encoding="utf-8")
     return {"status": "ok", "file_path": str(runconfig_path), "keys": sorted(state.runconfig.keys())}

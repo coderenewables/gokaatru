@@ -152,6 +152,31 @@ export interface WorkflowCompareResponse {
   };
 }
 
+export interface WorkflowRunSummary {
+  run_id: string;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  node_count: number;
+  completed_node_count: number;
+}
+
+export interface WorkflowRunStepComparison {
+  node_id: string;
+  label: string;
+  template_id: string | null;
+  statuses: Record<string, string>;
+  results: Record<string, string | null>;
+}
+
+export interface WorkflowRunCompareResponse {
+  status: string;
+  run_ids: string[];
+  metrics: WorkflowCompareMetric[];
+  config_diff: Record<string, WorkflowCompareDiffEntry[]>;
+  steps: WorkflowRunStepComparison[];
+}
+
 export interface LtcResultListResponse {
   results: Array<{
     algorithm: string;
@@ -940,6 +965,35 @@ export async function compareWorkflowBranches(
   });
 }
 
+export async function replaceWorkflowRunConfig(
+  baseUrl: string,
+  sessionId: string,
+  config: Record<string, unknown>,
+): Promise<{ status: string; runconfig: Record<string, unknown>; file_path: string }> {
+  return requestJson(baseUrl, `/api/sessions/${sessionId}/workflow/run-config`, {
+    method: "PUT",
+    body: JSON.stringify({ config }),
+  });
+}
+
+export async function listWorkflowRuns(
+  baseUrl: string,
+  sessionId: string,
+): Promise<{ runs: WorkflowRunSummary[] }> {
+  return requestJson(baseUrl, `/api/sessions/${sessionId}/workflow/runs`);
+}
+
+export async function compareWorkflowRuns(
+  baseUrl: string,
+  sessionId: string,
+  runIds: string[],
+): Promise<WorkflowRunCompareResponse> {
+  return requestJson(baseUrl, `/api/sessions/${sessionId}/workflow/runs/compare`, {
+    method: "POST",
+    body: JSON.stringify({ run_ids: runIds }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Chat (Copilot, Phase G)
 // ---------------------------------------------------------------------------
@@ -1109,4 +1163,26 @@ export async function getCleaningLog(
   sessionId: string,
 ): Promise<{ entries: CleaningLogEntry[] }> {
   return requestJson(baseUrl, `/api/sessions/${sessionId}/cleaning/log`);
+}
+
+// ---------------------------------------------------------------------------
+// Sensor selection / deletion (spec §4 Stage 1)
+// ---------------------------------------------------------------------------
+
+export interface DeleteSensorsResponse {
+  status: string;
+  removed: string[];
+  not_found: string[];
+  remaining_count: number;
+}
+
+export async function deleteSensors(
+  baseUrl: string,
+  sessionId: string,
+  sensorNames: string[],
+): Promise<DeleteSensorsResponse> {
+  return requestJson<DeleteSensorsResponse>(baseUrl, `/api/sessions/${sessionId}/sensors/delete`, {
+    method: "POST",
+    body: JSON.stringify({ sensor_names: sensorNames }),
+  });
 }

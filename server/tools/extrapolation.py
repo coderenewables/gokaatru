@@ -160,7 +160,23 @@ def _extrapolate_to_hub_height(state: SessionState, hub_height_m: float, shear_m
     column_name = _hub_column_name(hub_height_m)
     state.timeseries_df[column_name] = result
     state.set_hub_height_m(float(hub_height_m))
-    return {"status": "ok", "column_name": column_name, "method_counts": counts}
+
+    # Also extrapolate all reanalysis nodes (ERA5 nodes, MERRA-2 nodes, and the
+    # interpolated site series) to hub height using the shear table. This is a
+    # best-effort side-effect: it runs when a shear table and reanalysis data are
+    # available, and is skipped silently otherwise. This ensures both the MCP
+    # tool (canvas executor) and the HTTP route produce identical results.
+    reanalysis_result = None
+    try:
+        if (
+            state.shear_table is not None
+            and (state.era5_data or state.era5_interpolated_df is not None)
+        ):
+            reanalysis_result = _extrapolate_all_reanalysis_nodes(state, float(hub_height_m))
+    except (ValueError, KeyError):
+        pass
+
+    return {"status": "ok", "column_name": column_name, "method_counts": counts, "reanalysis": reanalysis_result}
 
 
 def _extrapolate_reanalysis_to_hub(

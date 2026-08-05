@@ -10,7 +10,7 @@ import numpy as np
 
 from server.core.spatial import bilinear_interpolate, haversine_km, idw_interpolate
 from server.state.session import session
-from server.tools.config import load_run_config, save_run_config, update_run_config
+from server.tools.config import _load_run_config, _save_run_config, load_run_config, save_run_config, update_run_config
 from server.tools.statistics import (
     compute_diurnal_profile,
     compute_momm,
@@ -121,3 +121,29 @@ def test_config_update_save_load(monkeypatch, tmp_path) -> None:
     assert session.coordinate is not None
     assert session.coordinate.latitude == 52.4
     assert session.hub_height_m == 150.0
+
+
+def test_config_load_migrates_legacy_aliases_to_canonical_fields(monkeypatch, tmp_path) -> None:
+    """Legacy camelCase UI aliases are removed in favor of the backend canonical values."""
+    monkeypatch.chdir(tmp_path)
+    session.runconfig = {
+        "project": {"name": "Legacy site", "measurementType": "lidar", "client": "Acme"},
+        "site": {"latitude": 54.2, "longitude": -10.2, "elevationM": 4, "hubHeightM": 175, "region": "IE"},
+        "shear": {"targetHubHeightM": 120},
+        "reanalysis": {"searchLatitude": 54.2, "searchLongitude": -10.2},
+        "ltc": {"uncertainty": {"hubHeightM": 120}},
+    }
+    _save_run_config(session)
+    session.runconfig = {}
+
+    loaded = _load_run_config(session)
+
+    assert loaded["project_name"] == "Legacy site"
+    assert loaded["measurement_type"] == "lidar"
+    assert loaded["location"] == {"latitude": 54.2, "longitude": -10.2, "elevation_m": 4}
+    assert loaded["hub_height_m"] == 175
+    assert loaded["project"] == {"client": "Acme"}
+    assert loaded["site"] == {"region": "IE"}
+    assert "targetHubHeightM" not in loaded["shear"]
+    assert "searchLatitude" not in loaded["reanalysis"]
+    assert "hubHeightM" not in loaded["ltc"]["uncertainty"]

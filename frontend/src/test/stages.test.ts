@@ -188,6 +188,11 @@ describe("configSync", () => {
     // Backend-canonical keys still present.
     expect(runconfig.project_name).toBe(config.project.name);
     expect(runconfig.hub_height_m).toBe(config.site.hubHeightM);
+    expect((runconfig.project as Record<string, unknown>).name).toBeUndefined();
+    expect((runconfig.site as Record<string, unknown>).hubHeightM).toBeUndefined();
+    expect((runconfig.shear as Record<string, unknown>).targetHubHeightM).toBeUndefined();
+    expect((runconfig.reanalysis as Record<string, unknown>).searchLatitude).toBeUndefined();
+    expect(((runconfig.ltc as { uncertainty: Record<string, unknown> }).uncertainty).hubHeightM).toBeUndefined();
     // Full-surface blocks persisted.
     expect((runconfig.project as Record<string, unknown>).client).toBe("Acme Energy");
     expect((runconfig.site as Record<string, unknown>).rotorDiameterM).toBe(162);
@@ -213,6 +218,18 @@ describe("configSync", () => {
     // Canonical fields still drive the derived setters.
     expect(rehydrated.site.hubHeightM).toBe(config.site.hubHeightM);
     expect(rehydrated.shear.targetHubHeightM).toBe(config.site.hubHeightM);
+  });
+
+  it("uses canonical fields when a legacy runconfig contains conflicting aliases", () => {
+    const hydrated = hydrateConfigFromRunconfig({
+      hub_height_m: 175,
+      site: { hubHeightM: 120 },
+      location: { latitude: 54.2, longitude: -10.2, elevation_m: 0 },
+      reanalysis: { searchLatitude: 0, searchLongitude: 0 },
+    });
+    expect(hydrated.site.hubHeightM).toBe(175);
+    expect(hydrated.reanalysis.searchLatitude).toBe(54.2);
+    expect(hydrated.reanalysis.searchLongitude).toBe(-10.2);
   });
 
   it("hydrate tolerates a minimal server runconfig and falls back to defaults", () => {

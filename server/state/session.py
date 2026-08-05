@@ -45,6 +45,7 @@ class SessionState:
     era5_interpolated_df: pd.DataFrame | None
     merra_nodes: list[dict[str, object]] | None
     merra_data: dict[str, pd.DataFrame]
+    reanalysis_cache_identity: dict[str, object] | None
     ltc_results: dict[str, dict[str, object]]
     ensemble_df: pd.DataFrame | None
     latest_uncertainty: dict[str, object] | None
@@ -52,6 +53,7 @@ class SessionState:
     runconfig: dict[str, object]
     windkit_data: dict[str, object]
     workflow_execution: dict[str, object]
+    workflow_runs: list[dict[str, object]]
 
     def __init__(self) -> None:
         """Initialize the singleton session state per the GoKaatru build spec."""
@@ -85,6 +87,7 @@ class SessionState:
         self.era5_interpolated_df = None
         self.merra_nodes = None
         self.merra_data = {}
+        self.reanalysis_cache_identity = None
         self.ltc_results = {}
         self.ensemble_df = None
         self.latest_uncertainty = None
@@ -98,6 +101,7 @@ class SessionState:
             "node_statuses": {},
             "events": [],
         }
+        self.workflow_runs = []
         self.session_id = preserved_session_id
         self.workspace_dir = preserved_workspace_dir
         self.created_at = preserved_created_at
@@ -200,6 +204,19 @@ class SessionState:
             config["shear_table_shape"] = list(self.shear_table.shape)
         if self.roughness_table is not None:
             config["roughness_table_shape"] = list(self.roughness_table.shape)
+        for section, fields in {
+            "project": ("name", "measurementType"),
+            "site": ("latitude", "longitude", "elevationM", "hubHeightM"),
+            "shear": ("targetHubHeightM",),
+            "reanalysis": ("searchLatitude", "searchLongitude"),
+        }.items():
+            payload = config.get(section)
+            if isinstance(payload, dict):
+                for field in fields:
+                    payload.pop(field, None)
+        ltc = config.get("ltc")
+        if isinstance(ltc, dict) and isinstance(ltc.get("uncertainty"), dict):
+            ltc["uncertainty"].pop("hubHeightM", None)
         return config
 
     def get_data_dir(self) -> str:

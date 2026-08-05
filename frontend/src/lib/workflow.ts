@@ -193,7 +193,7 @@ export function createWorkflowGraph(
       "BrightHub ERA5 + MERRA-2",
       "Authenticated download and ERA5 site interpolation",
       brighthubReanalysisCap,
-      { latitude: config.reanalysis.searchLatitude, longitude: config.reanalysis.searchLongitude },
+      { latitude: config.reanalysis.searchLatitude, longitude: config.reanalysis.searchLongitude, source: "brighthub" },
     ),
     buildNode(
       "extrapolate_reanalysis_hub",

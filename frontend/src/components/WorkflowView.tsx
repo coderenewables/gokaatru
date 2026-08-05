@@ -155,10 +155,16 @@ export function WorkflowView() {
   const saveWorkflowSnapshot = useWorkspaceStore((state) => state.saveWorkflowSnapshot);
   const loadWorkflowSnapshot = useWorkspaceStore((state) => state.loadWorkflowSnapshot);
   const forkWorkflowBranch = useWorkspaceStore((state) => state.forkWorkflowBranch);
+  const serverRunconfig = useWorkspaceStore((state) => state.serverRunconfig);
+  const replaceWorkflowRunConfig = useWorkspaceStore((state) => state.replaceWorkflowRunConfig);
+  const refreshWorkflowRuns = useWorkspaceStore((state) => state.refreshWorkflowRuns);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [snapshotName, setSnapshotName] = useState("");
   const [now, setNow] = useState(() => Date.now());
+  const [configEditorOpen, setConfigEditorOpen] = useState(false);
+  const [configText, setConfigText] = useState("");
+  const [configError, setConfigError] = useState<string | null>(null);
 
   // React Flow local state mirrors the store; changes propagate back.
   const [rfNodes, setRfNodes] = useState(nodes);
@@ -183,6 +189,10 @@ export function WorkflowView() {
     const timer = window.setInterval(() => setNow(Date.now()), 500);
     return () => window.clearInterval(timer);
   }, [isRunning]);
+
+  useEffect(() => {
+    void refreshWorkflowRuns();
+  }, [refreshWorkflowRuns]);
 
   // Keep local RF state in sync when the store graph rebuilds or status changes.
   const graphSignature = useMemo(
@@ -233,6 +243,31 @@ export function WorkflowView() {
   const selectedNode = rfNodes.find((n) => n.id === selectedNodeId) ?? null;
   const canvasEmpty = rfNodes.length === 0;
 
+  const openConfigEditor = () => {
+    setConfigText(JSON.stringify(serverRunconfig, null, 2));
+    setConfigError(null);
+    setConfigEditorOpen(true);
+  };
+
+  const saveConfigAndRun = async () => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(configText);
+    } catch {
+      setConfigError("Configuration must be valid JSON.");
+      return;
+    }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      setConfigError("Configuration must be a JSON object.");
+      return;
+    }
+    const saved = await replaceWorkflowRunConfig(parsed as Record<string, unknown>);
+    if (!saved) return;
+    setConfigEditorOpen(false);
+    await rebuildWorkflowGraph();
+    await executeWorkflowGraph("auto");
+  };
+
   return (
     <div className="workflow-view">
       <div className="workflow-toolbar">
@@ -248,6 +283,7 @@ export function WorkflowView() {
           disabled={isRunning}
         />
         <RunButton label="Stop" variant="secondary" onClick={stopWorkflowGraph} disabled={!isRunning} />
+        <RunButton label="Edit config" variant="secondary" onClick={openConfigEditor} disabled={isRunning} />
         <RunButton label="Rebuild from config" variant="secondary" onClick={rebuildWorkflowGraph} />
         <span className="muted workflow-run-status">
           {isRunning ? "running" : workflowStatus?.run_id ? `run ${workflowStatus.run_id.slice(0, 8)}` : "no run yet"}
@@ -369,6 +405,36 @@ export function WorkflowView() {
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {configEditorOpen ? (
+        <div className="modal-overlay" role="presentation">
+          <section className="modal-card workflow-config-modal" role="dialog" aria-modal="true" aria-labelledby="workflow-config-title">
+            <header className="modal-head">
+              <h2 id="workflow-config-title">Edit run configuration</h2>
+              <button type="button" className="link-button" onClick={() => setConfigEditorOpen(false)}>Close</button>
+            </header>
+            <div className="modal-body">
+              <label className="form-field">
+                <span>Run configuration JSON</span>
+                <textarea
+                  className="workflow-config-editor"
+                  value={configText}
+                  onChange={(event) => {
+                    setConfigText(event.target.value);
+                    setConfigError(null);
+                  }}
+                  spellCheck={false}
+                />
+              </label>
+              {configError ? <p className="error-text">{configError}</p> : null}
+              <div className="path-actions">
+                <RunButton label="Save and run" onClick={() => void saveConfigAndRun()} />
+                <RunButton label="Cancel" variant="secondary" onClick={() => setConfigEditorOpen(false)} />
+              </div>
+            </div>
+          </section>
         </div>
       ) : null}
     </div>

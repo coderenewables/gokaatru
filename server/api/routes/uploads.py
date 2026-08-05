@@ -9,10 +9,17 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from pydantic import BaseModel, Field
 
 from server.api.deps import get_session_state, to_bad_request
 from server.state.session import SessionState
-from server.tools.data_io import _build_sensor_rows, _get_data_coverage, _list_sensors, _parse_datamodel, _parse_timeseries
+from server.tools.data_io import (
+    _build_sensor_rows,
+    _get_data_coverage,
+    _list_sensors,
+    _parse_datamodel,
+    _parse_timeseries,
+)
 
 router = APIRouter(prefix="/sessions/{session_id}", tags=["uploads"])
 
@@ -143,3 +150,81 @@ def get_sensor_coverage(
         return _get_data_coverage(state, sensor_name)
     except ValueError as exc:
         raise to_bad_request(exc) from exc
+
+
+# ---------------------------------------------------------------------------
+# Sensor selection / removal
+# ---------------------------------------------------------------------------
+
+# Maps sensor_type (as stored in sensor_inventory) to the sensor_mapping slot
+# that holds the column name for that measurement kind.
+_SENSOR_TYPE_TO_SLOT: dict[str, str] = {
+    "wind_speed": "speed_col",
+    "wind_direction": "dir_col",
+    "temperature": "temp_col",
+    "pressure": "pressure_col",
+}
+
+
+class DeleteSensorsRequest(BaseModel):
+    """Request body for POST /sensors/delete — a list of sensor names to remove."""
+
+    sensor_names: list[str] = Field(..., min_length=1)
+
+
+@router.post("/sensors/delete")
+def delete_sensors(
+    session_id: str,
+    body: DeleteSensorsRequest,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict:
+    """Remove unwanted sensors from the session inventory and mapping.
+
+    Removes the named sensors from ``sensor_inventory`` and clears their column
+    slot from ``sensor_mapping`` (by height). If a height entry in the mapping
+    becomes entirely ``None`` after removal, the height is dropped from the
+    mapping. The raw timeseries columns are preserved — only the *selection* is
+    removed. A full re-import of the datamodel restores the complete inventory.
+    """
+    del session_id
+    if not state.sensor_inventory:
+        raise to_bad_request(ValueError("Sensor inventory is not loaded"))
+
+    removed: list[str] = []
+    not_found: list[str] = []
+
+    for name in body.sensor_names:
+        if name not in state.sensor_inventory:
+            not_found.append(name)
+            continue
+
+        meta = state.sensor_inventory.pop(name)
+        removed.append(name)
+
+        # Clean up the height-keyed sensor_mapping slot for this sensor type.
+        height = meta.get("height_m")
+        sensor_type = meta.get("sensor_type", "")
+        slot = _SENSOR_TYPE_TO_SLOT.get(str(sensor_type))
+        if slot is not None and height is not None:
+            # sensor_mapping keys are float heights; match loosely.
+            for map_height, slots in list(state.sensor_mapping.items()):
+                if abs(float(map_height) - float(height)) < 0.01 and slots.get(slot) == name:
+                    slots[slot] = None
+                    # Also clear auto-derived sd_col if this was a speed sensor.
+                    if slot == "speed_col":
+                        slots["sd_col"] = None
+                    # If every slot is now None, drop the height entirely.
+                    if all(v is None for v in slots.values()):
+                        del state.sensor_mapping[map_height]
+                    break
+
+    # Re-sort the mapping descending by height (consistent with parse_datamodel).
+    state.sensor_mapping = dict(sorted(state.sensor_mapping.items(), reverse=True))
+    state.touch()
+
+    return {
+        "status": "ok",
+        "removed": removed,
+        "not_found": not_found,
+        "remaining_count": len(state.sensor_inventory),
+    }

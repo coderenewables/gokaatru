@@ -113,6 +113,9 @@ import {
   saveWorkflowSnapshot as apiSaveSnapshot,
   loadWorkflowSnapshot as apiLoadSnapshot,
   forkWorkflowBranch as apiForkBranch,
+  replaceWorkflowRunConfig as apiReplaceWorkflowRunConfig,
+  listWorkflowRuns as apiListWorkflowRuns,
+  compareWorkflowRuns as apiCompareWorkflowRuns,
   fetchOpenApiSpec,
   compareWorkflowBranches,
   invokeWindKitRoute as apiInvokeWindKitRoute,
@@ -208,6 +211,9 @@ interface WorkspaceStore {
   workflowEdges: WorkflowCanvasEdge[];
   workflowStatus: WorkflowExecutionStatusResponse | null;
   workflowSnapshots: import("../lib/api").WorkflowSnapshotSummary[];
+  workflowRuns: import("../lib/api").WorkflowRunSummary[];
+  selectedWorkflowRunIds: string[];
+  workflowRunComparison: import("../lib/api").WorkflowRunCompareResponse | null;
   defaultWorkflowStatus: "idle" | "preparing" | "ready" | "error";
 
   // copilot + compare + windkit (Phase G)
@@ -245,6 +251,7 @@ interface WorkspaceStore {
 
   // Stage 1 — data loading
   uploadSessionFile: (kind: "timeseries" | "datamodel", file: File) => Promise<void>;
+  deleteSensors: (sensorNames: string[]) => Promise<void>;
   refreshDatasets: () => Promise<void>;
   previewDataset: (datasetId: string) => Promise<void>;
   loadDataset: (datasetId: string) => Promise<void>;
@@ -316,6 +323,10 @@ interface WorkspaceStore {
   saveWorkflowSnapshot: (name: string) => Promise<void>;
   loadWorkflowSnapshot: (name: string) => Promise<void>;
   forkWorkflowBranch: (name: string, fromNodeId?: string) => Promise<void>;
+  replaceWorkflowRunConfig: (runconfig: Record<string, unknown>) => Promise<boolean>;
+  refreshWorkflowRuns: () => Promise<void>;
+  setSelectedWorkflowRunIds: (runIds: string[]) => void;
+  compareWorkflowRuns: () => Promise<void>;
 
   // Phase G — copilot / compare / windkit
   setChatSettings: (settings: CopilotSettings) => void;
@@ -454,6 +465,9 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   workflowEdges: [],
   workflowStatus: null,
   workflowSnapshots: [],
+  workflowRuns: [],
+  selectedWorkflowRunIds: [],
+  workflowRunComparison: null,
   defaultWorkflowStatus: "idle",
 
   chatSettings: readChatSettings(),
@@ -503,6 +517,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       writeStoredSessionId(session.session_id);
       set({ session, sessionStatus: "ready", busyLabel: null });
       await get().refreshWorkspace();
+      await get().refreshWorkflowRuns();
       set({
         activity: appendActivity(get().activity, "Created session", "ok", session.session_id),
       });
@@ -878,6 +893,32 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       set((state) => ({
         busyLabel: null,
         activity: appendActivity(state.activity, `Failed to upload ${kind}`, "error", asErrorMessage(error)),
+      }));
+    }
+  },
+
+  deleteSensors: async (sensorNames) => {
+    const session = get().session;
+    if (!session || sensorNames.length === 0) return;
+    set({ busyLabel: `Removing ${sensorNames.length} sensor(s)` });
+    try {
+      const { deleteSensors: apiDeleteSensors } = await import("../lib/api");
+      const response = await apiDeleteSensors(get().apiBaseUrl, session.session_id, sensorNames);
+      set((state) => ({
+        busyLabel: null,
+        sensors: state.sensors.filter((s) => !sensorNames.includes(s.name)),
+        assets: upsertAssets(state.assets, [buildOperationResultAsset("sensor-delete", response)]),
+        activity: appendActivity(
+          state.activity,
+          "Removed sensors",
+          "ok",
+          `${response.removed.length} removed, ${response.remaining_count} remaining`,
+        ),
+      }));
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Sensor removal failed", "error", asErrorMessage(error)),
       }));
     }
   },
@@ -1698,6 +1739,69 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       set({ workflowSnapshots: payload.snapshots });
     } catch {
       /* non-fatal */
+    }
+  },
+
+  replaceWorkflowRunConfig: async (runconfig) => {
+    const session = get().session;
+    if (!session) return false;
+    set({ busyLabel: "Saving run config" });
+    try {
+      const response = await apiReplaceWorkflowRunConfig(get().apiBaseUrl, session.session_id, runconfig);
+      const nextConfig = hydrateConfigFromRunconfig(response.runconfig);
+      set((state) => ({
+        config: nextConfig,
+        serverRunconfig: response.runconfig,
+        assets: upsertAssets(state.assets, [buildConfigAsset(nextConfig)]),
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Saved run config", "ok", response.file_path),
+      }));
+      return true;
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Save run config failed", "error", asErrorMessage(error)),
+      }));
+      return false;
+    }
+  },
+
+  refreshWorkflowRuns: async () => {
+    const session = get().session;
+    if (!session) return;
+    try {
+      const payload = await apiListWorkflowRuns(get().apiBaseUrl, session.session_id);
+      set((state) => ({
+        workflowRuns: payload.runs,
+        selectedWorkflowRunIds: state.selectedWorkflowRunIds.filter((runId) => payload.runs.some((run) => run.run_id === runId)),
+      }));
+    } catch {
+      /* non-fatal; run history is optional until a canvas run completes */
+    }
+  },
+
+  setSelectedWorkflowRunIds: (runIds) => set({
+    selectedWorkflowRunIds: [...new Set(runIds)].slice(0, 4),
+    workflowRunComparison: null,
+  }),
+
+  compareWorkflowRuns: async () => {
+    const session = get().session;
+    const runIds = get().selectedWorkflowRunIds;
+    if (!session || runIds.length < 2) return;
+    set({ busyLabel: "Comparing runs" });
+    try {
+      const response = await apiCompareWorkflowRuns(get().apiBaseUrl, session.session_id, runIds);
+      set((state) => ({
+        workflowRunComparison: response,
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Compared workflow runs", "ok", response.run_ids.map((runId) => runId.slice(0, 8)).join(", ")),
+      }));
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "Run comparison failed", "error", asErrorMessage(error)),
+      }));
     }
   },
 

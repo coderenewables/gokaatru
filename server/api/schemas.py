@@ -343,6 +343,55 @@ class WorkflowCompareResponse(BaseModel):
     plots: WorkflowComparePlots = Field(default_factory=WorkflowComparePlots)
 
 
+class WorkflowReplaceRunConfigRequest(BaseModel):
+    """Replace the active canvas run configuration before executing a new run."""
+
+    config: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class WorkflowRunSummary(BaseModel):
+    """Describe one immutable canvas execution saved for later comparison."""
+
+    run_id: str
+    status: str
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    node_count: int = 0
+    completed_node_count: int = 0
+
+
+class WorkflowRunListResponse(BaseModel):
+    """Return all archived workflow executions for the active session."""
+
+    runs: list[WorkflowRunSummary] = Field(default_factory=list)
+
+
+class WorkflowRunCompareRequest(BaseModel):
+    """Select two to four archived runs from one session for comparison."""
+
+    run_ids: list[str] = Field(default_factory=list, min_length=2, max_length=4)
+
+
+class WorkflowRunStepComparison(BaseModel):
+    """Compare the persisted outcome of one canvas node across selected runs."""
+
+    node_id: str
+    label: str
+    template_id: str | None = None
+    statuses: dict[str, str] = Field(default_factory=dict)
+    results: dict[str, str | None] = Field(default_factory=dict)
+
+
+class WorkflowRunCompareResponse(BaseModel):
+    """Return metrics, config diffs, and step-wise results for archived runs."""
+
+    status: str = "ok"
+    run_ids: list[str] = Field(default_factory=list)
+    metrics: list[WorkflowCompareMetric] = Field(default_factory=list)
+    config_diff: dict[str, list[WorkflowCompareDiffEntry]] = Field(default_factory=dict)
+    steps: list[WorkflowRunStepComparison] = Field(default_factory=list)
+
+
 class WorkflowSaveSnapshotRequest(BaseModel):
     """Persist one workflow designer snapshot payload for the active session."""
 

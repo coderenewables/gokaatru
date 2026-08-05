@@ -36,6 +36,22 @@ export function hydrateConfigFromRunconfig(runconfig: unknown): WindAnalysisConf
 
   const next: WindAnalysisConfig = structuredClone(base);
 
+  // --- full-surface blocks (round-tripped by serializeConfigToRunconfig) ---
+  // Deep-merge each present block over the defaults so partial runconfigs
+  // (e.g. minimal server-side JSON) still hydrate cleanly.
+  if (isRecord(runconfig.project)) next.project = deepMerge(next.project, runconfig.project);
+  if (isRecord(runconfig.site)) next.site = deepMerge(next.site, runconfig.site);
+  if (isRecord(runconfig.mast)) next.mast = deepMerge(next.mast, runconfig.mast);
+  if (isRecord(runconfig.inputs)) next.inputs = deepMerge(next.inputs, runconfig.inputs);
+  if (isRecord(runconfig.cleaning)) next.cleaning = deepMerge(next.cleaning, runconfig.cleaning);
+  if (isRecord(runconfig.shear)) next.shear = deepMerge(next.shear, runconfig.shear);
+  if (isRecord(runconfig.reanalysis)) next.reanalysis = deepMerge(next.reanalysis, runconfig.reanalysis);
+  if (isRecord(runconfig.ltc)) next.ltc = deepMerge(next.ltc, runconfig.ltc);
+  if (isRecord(runconfig.workflow)) next.workflow = deepMerge(next.workflow, runconfig.workflow);
+  if (isRecord(runconfig.compare)) next.compare = deepMerge(next.compare, runconfig.compare);
+
+  // Canonical backend fields win over legacy nested aliases. The typed
+  // frontend model derives its convenience fields from these persisted values.
   const projectName = asString(runconfig.project_name);
   if (projectName) next.project.name = projectName;
 
@@ -64,19 +80,8 @@ export function hydrateConfigFromRunconfig(runconfig: unknown): WindAnalysisConf
     next.ltc.uncertainty.hubHeightM = hubHeight;
   }
 
-  // --- full-surface blocks (round-tripped by serializeConfigToRunconfig) ---
-  // Deep-merge each present block over the defaults so partial runconfigs
-  // (e.g. minimal server-side JSON) still hydrate cleanly.
-  if (isRecord(runconfig.project)) next.project = deepMerge(next.project, runconfig.project);
-  if (isRecord(runconfig.site)) next.site = deepMerge(next.site, runconfig.site);
-  if (isRecord(runconfig.mast)) next.mast = deepMerge(next.mast, runconfig.mast);
-  if (isRecord(runconfig.inputs)) next.inputs = deepMerge(next.inputs, runconfig.inputs);
-  if (isRecord(runconfig.cleaning)) next.cleaning = deepMerge(next.cleaning, runconfig.cleaning);
-  if (isRecord(runconfig.shear)) next.shear = deepMerge(next.shear, runconfig.shear);
-  if (isRecord(runconfig.reanalysis)) next.reanalysis = deepMerge(next.reanalysis, runconfig.reanalysis);
-  if (isRecord(runconfig.ltc)) next.ltc = deepMerge(next.ltc, runconfig.ltc);
-  if (isRecord(runconfig.workflow)) next.workflow = deepMerge(next.workflow, runconfig.workflow);
-  if (isRecord(runconfig.compare)) next.compare = deepMerge(next.compare, runconfig.compare);
+  next.reanalysis.searchLatitude = next.site.latitude;
+  next.reanalysis.searchLongitude = next.site.longitude;
 
   // Dataset the session loaded (written by the backend on dataset load); used
   // to repopulate the canvas "Dataset intake" node params on rebuild. Applied
@@ -117,6 +122,7 @@ function deepMerge<T>(base: T, incoming: Record<string, unknown>): T {
 // preserved with their canonical names so server-side tools keep working.
 
 export function serializeConfigToRunconfig(config: WindAnalysisConfig): AnyRecord {
+  const { hubHeightM: _uncertaintyHubHeightM, ...uncertainty } = config.ltc.uncertainty;
   return {
     // --- backend-canonical keys (recognized by server-side tools) ---
     project_name: config.project.name,
@@ -133,26 +139,34 @@ export function serializeConfigToRunconfig(config: WindAnalysisConfig): AnyRecor
 
     // --- full frontend editing surface (round-tripped) ---
     project: {
-      name: config.project.name,
       client: config.project.client,
-      measurementType: config.project.measurementType,
       notes: config.project.notes,
     },
     site: {
-      latitude: config.site.latitude,
-      longitude: config.site.longitude,
-      elevationM: config.site.elevationM,
       region: config.site.region,
       timeZone: config.site.timeZone,
-      hubHeightM: config.site.hubHeightM,
       rotorDiameterM: config.site.rotorDiameterM,
     },
     mast: config.mast,
     inputs: config.inputs,
     cleaning: config.cleaning,
-    shear: config.shear,
-    reanalysis: config.reanalysis,
-    ltc: config.ltc,
+    shear: {
+      method: config.shear.method,
+      speedSensorPair: config.shear.speedSensorPair,
+      directionSensor: config.shear.directionSensor,
+      aggregation: config.shear.aggregation,
+      useWindKit: config.shear.useWindKit,
+    },
+    reanalysis: {
+      preferredProvider: config.reanalysis.preferredProvider,
+      startDate: config.reanalysis.startDate,
+      endDate: config.reanalysis.endDate,
+      nodes: config.reanalysis.nodes,
+    },
+    ltc: {
+      ...config.ltc,
+      uncertainty,
+    },
     workflow: config.workflow,
     compare: config.compare,
   };

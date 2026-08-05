@@ -36,14 +36,22 @@ from server.api.schemas import (
     WorkflowSaveSnapshotResponse,
     WorkflowSnapshotListResponse,
     WorkflowSnapshotSummary,
+    WorkflowReplaceRunConfigRequest,
+    WorkflowRunCompareRequest,
+    WorkflowRunCompareResponse,
+    WorkflowRunListResponse,
+    WorkflowRunStepComparison,
+    WorkflowRunSummary,
 )
 from server.core.executor import WorkflowExecutionEdge, WorkflowExecutionNode, WorkflowExecutor, dispatch_capabilities
 from server.state.manager import SessionManager
 from server.state.session import SessionState
+from server.tools.config import _save_run_config, _sync_state_from_runconfig
 
 router = APIRouter(prefix="/sessions/{session_id}/workflow", tags=["workflow-execution"])
 SNAPSHOT_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 SNAPSHOT_DIR_NAME = "workflows"
+RUN_DIR_NAME = "workflow-runs"
 
 
 def _to_executor(state: SessionState, body: WorkflowExecuteRequest) -> WorkflowExecutor:
@@ -113,6 +121,123 @@ def _snapshot_dir(state: SessionState) -> Path:
     directory = workspace_dir / SNAPSHOT_DIR_NAME
     directory.mkdir(parents=True, exist_ok=True)
     return directory
+
+def _run_dir(state: SessionState) -> Path:
+    """Resolve the directory holding immutable workflow execution artifacts."""
+    directory = Path(state.get_data_dir()) / RUN_DIR_NAME
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+def _archived_runs(state: SessionState) -> list[dict[str, object]]:
+    """Load persisted run artifacts, newest first, while ignoring malformed files."""
+    records: list[dict[str, object]] = []
+    for path in sorted(_run_dir(state).glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict) and isinstance(payload.get("run_id"), str):
+            records.append(payload)
+    state.workflow_runs = records
+    return records
+
+def _run_summary(record: dict[str, object]) -> WorkflowRunSummary:
+    """Convert an archived run record into compact selector metadata."""
+    nodes = record.get("nodes", [])
+    node_items = nodes if isinstance(nodes, list) else []
+    completed = sum(1 for node in node_items if isinstance(node, dict) and node.get("status") == "done")
+    return WorkflowRunSummary(
+        run_id=str(record["run_id"]),
+        status=str(record.get("status", "unknown")),
+        started_at=record.get("started_at"),
+        finished_at=record.get("finished_at"),
+        node_count=len(node_items),
+        completed_node_count=completed,
+    )
+
+def _record_metric(record: dict[str, object], name: str, unit: str, extractor: Callable[[dict[str, object]], float | None]) -> WorkflowCompareMetric:
+    """Create a metric row for archived records keyed by immutable run id."""
+    run_id = str(record["run_id"])
+    return WorkflowCompareMetric(name=name, unit=unit, values={run_id: extractor(record)})
+
+def _run_analysis(record: dict[str, object]) -> dict[str, object]:
+    """Return a well-formed archived analysis block."""
+    analysis = record.get("analysis", {})
+    return analysis if isinstance(analysis, dict) else {}
+
+def _run_metric_rows(records: list[dict[str, object]]) -> list[WorkflowCompareMetric]:
+    """Aggregate key archived output metrics across selected run records."""
+    def numeric(path: tuple[str, ...]) -> Callable[[dict[str, object]], float | None]:
+        def extract(record: dict[str, object]) -> float | None:
+            current: object = _run_analysis(record)
+            for key in path:
+                if not isinstance(current, dict):
+                    return None
+                current = current.get(key)
+            return _safe_float(current)
+        return extract
+
+    definitions = [
+        ("Completed steps", "count", lambda record: float(sum(1 for node in record.get("nodes", []) if isinstance(node, dict) and node.get("status") == "done"))),
+        ("Cleaning rules", "count", numeric(("cleaning_rule_count",))),
+        ("ERA5 interpolated records", "count", numeric(("era5_interpolated_rows",))),
+        ("Ensemble records", "count", numeric(("ensemble", "rows"))),
+        ("P50", "-", numeric(("uncertainty", "p_factors", "p50"))),
+        ("P90", "-", numeric(("uncertainty", "p_factors", "p90"))),
+        ("Total uncertainty", "%", numeric(("uncertainty", "total_uncertainty_pct"))),
+    ]
+    rows: list[WorkflowCompareMetric] = []
+    for name, unit, extractor in definitions:
+        rows.append(
+            WorkflowCompareMetric(
+                name=name,
+                unit=unit,
+                values={str(record["run_id"]): extractor(record) for record in records},
+            )
+        )
+    return rows
+
+def _run_config_diff(records: list[dict[str, object]]) -> dict[str, list[WorkflowCompareDiffEntry]]:
+    """Diff archived configurations against the first selected run."""
+    if len(records) < 2:
+        return {}
+    base = records[0]
+    base_id = str(base["run_id"])
+    base_config = _flatten_config(base.get("config", {}))
+    differences: dict[str, list[WorkflowCompareDiffEntry]] = {}
+    for record in records[1:]:
+        run_id = str(record["run_id"])
+        compare_config = _flatten_config(record.get("config", {}))
+        differences[f"{base_id}<->{run_id}"] = [
+            WorkflowCompareDiffEntry(key=key, a=_to_json_value(base_config.get(key)), b=_to_json_value(compare_config.get(key)))
+            for key in sorted(set(base_config) | set(compare_config))
+            if base_config.get(key) != compare_config.get(key)
+        ][:300]
+    return differences
+
+def _run_step_comparison(records: list[dict[str, object]]) -> list[WorkflowRunStepComparison]:
+    """Align saved node statuses and messages across selected archived runs."""
+    by_node: dict[str, dict[str, object]] = {}
+    run_ids = [str(record["run_id"]) for record in records]
+    for record in records:
+        run_id = str(record["run_id"])
+        nodes = record.get("nodes", [])
+        for node in nodes if isinstance(nodes, list) else []:
+            if not isinstance(node, dict) or not isinstance(node.get("id"), str):
+                continue
+            node_id = str(node["id"])
+            current = by_node.setdefault(node_id, {"label": node.get("label", node_id), "template_id": node.get("template_id"), "nodes": {}})
+            current["nodes"][run_id] = node
+    return [
+        WorkflowRunStepComparison(
+            node_id=node_id,
+            label=str(value["label"]),
+            template_id=str(value["template_id"]) if value["template_id"] is not None else None,
+            statuses={run_id: str(value["nodes"].get(run_id, {}).get("status", "not run")) for run_id in run_ids},
+            results={run_id: value["nodes"].get(run_id, {}).get("result") for run_id in run_ids},
+        )
+        for node_id, value in sorted(by_node.items())
+    ]
 
 
 def _snapshot_name(raw_name: str) -> str:
@@ -636,6 +761,55 @@ def get_workflow_execution_status(
     """Return current workflow execution status for the active browser session."""
     del session_id
     return _runtime_snapshot(state)
+
+
+@router.put("/run-config")
+def replace_workflow_run_config(
+    session_id: str,
+    body: WorkflowReplaceRunConfigRequest,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict[str, object]:
+    """Replace the active canvas configuration before creating a distinct execution run."""
+    del session_id
+    state.runconfig = dict(body.config)
+    _sync_state_from_runconfig(state)
+    saved = _save_run_config(state)
+    state.touch()
+    return {"status": "ok", "runconfig": state.to_runconfig(), "file_path": saved["file_path"]}
+
+
+@router.get("/runs", response_model=WorkflowRunListResponse)
+def list_workflow_runs(
+    session_id: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> WorkflowRunListResponse:
+    """List immutable canvas executions available for same-session comparison."""
+    del session_id
+    return WorkflowRunListResponse(runs=[_run_summary(record) for record in _archived_runs(state)])
+
+
+@router.post("/runs/compare", response_model=WorkflowRunCompareResponse)
+def compare_workflow_runs(
+    session_id: str,
+    body: WorkflowRunCompareRequest,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> WorkflowRunCompareResponse:
+    """Compare selected archived runs without changing the active analysis state."""
+    del session_id
+    requested_ids = list(dict.fromkeys(body.run_ids))
+    if len(requested_ids) < 2:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Select at least two distinct archived runs")
+    by_id = {str(record["run_id"]): record for record in _archived_runs(state)}
+    missing = [run_id for run_id in requested_ids if run_id not in by_id]
+    if missing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Archived run not found: {missing[0]}")
+    records = [by_id[run_id] for run_id in requested_ids]
+    return WorkflowRunCompareResponse(
+        run_ids=requested_ids,
+        metrics=_run_metric_rows(records),
+        config_diff=_run_config_diff(records),
+        steps=_run_step_comparison(records),
+    )
 
 
 @router.post("/stop")

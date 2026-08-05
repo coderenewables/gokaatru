@@ -13,12 +13,12 @@ from server.tools.windkit._serializers import _ok, dict_to_ds, fig_to_dict, geoj
 
 
 @mcp.tool()
-def windkit_plot_histogram(bwc_dataset: str, style: str = "bar", weibull: bool = False) -> dict:
+def windkit_plot_histogram(bwc_dataset: str, style: str = "faceted", weibull: bool = False) -> dict:
     """Plot the histogram from a binned wind climate (WindKit Plot).
 
     Args:
         bwc_dataset: JSON-serialized BWC xarray Dataset.
-        style: Plot style - 'bar' or 'line' (default 'bar').
+        style: Plot style - 'faceted' or 'rose' (default 'faceted').
         weibull: Whether to overlay Weibull fit (default False).
     """
     ds = dict_to_ds(json.loads(bwc_dataset))
@@ -46,7 +46,7 @@ def windkit_plot_operational_curves(wtg_dataset: str) -> dict:
         wtg_dataset: JSON-serialized WTG xarray Dataset.
     """
     ds = dict_to_ds(json.loads(wtg_dataset))
-    fig = windkit.plot.operational_curves(ds)
+    fig = windkit.plot.operational_curves.power_ct_curves(ds)
     return _ok(fig_to_dict(fig))
 
 
@@ -65,12 +65,12 @@ def windkit_plot_raster(data_array: str, contour: bool = False) -> dict:
 
 
 @mcp.tool()
-def windkit_plot_roughness_rose(dataset: str, style: str = "bar") -> dict:
+def windkit_plot_roughness_rose(dataset: str, style: str = "rose") -> dict:
     """Create a roughness rose plot (WindKit Plot).
 
     Args:
         dataset: JSON-serialized xarray Dataset.
-        style: Plot style (default 'bar').
+        style: Plot style - 'faceted' or 'rose' (default 'rose').
     """
     ds = dict_to_ds(json.loads(dataset))
     fig = windkit.plot.roughness_rose(ds, style=style)
@@ -106,13 +106,13 @@ def windkit_plot_vertical_profile(data_array: str = "") -> dict:
 
 
 @mcp.tool()
-def windkit_plot_wind_rose(bwc_dataset: str, wind_speed_bins: str = "", style: str = "bar") -> dict:
+def windkit_plot_wind_rose(bwc_dataset: str, wind_speed_bins: str = "", style: str = "rose") -> dict:
     """Create a wind rose plot (WindKit Plot).
 
     Args:
         bwc_dataset: JSON-serialized BWC xarray Dataset.
         wind_speed_bins: JSON array of wind speed bin edges (optional).
-        style: Plot style (default 'bar').
+        style: Plot style - 'faceted' or 'rose' (default 'rose').
     """
     ds = dict_to_ds(json.loads(bwc_dataset))
     kwargs = {"style": style}

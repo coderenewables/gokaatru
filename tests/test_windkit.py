@@ -8,10 +8,12 @@ import json
 import math
 from pathlib import Path
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from shapely.geometry import Point
 
 from server.tools.windkit._serializers import (
     _NumpyEncoder,
@@ -22,6 +24,9 @@ from server.tools.windkit._serializers import (
     dict_to_df,
     dict_to_ds,
     ds_to_dict,
+    gdf_to_geojson,
+    geojson_to_gdf,
+    windkit_file_path,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -129,6 +134,21 @@ class TestDataFrameSerialization:
         d = df_to_dict(df)
         rebuilt = dict_to_df(d)
         assert len(rebuilt) == 3
+
+
+class TestGeoDataFrameSerialization:
+    """Round-trip tests for GeoDataFrame serialization."""
+
+    def test_geojson_preserves_projected_crs(self) -> None:
+        source = gpd.GeoDataFrame({"id": [1]}, geometry=[Point(500000, 6200000)], crs="EPSG:32632")
+
+        restored = geojson_to_gdf(gdf_to_geojson(source))
+
+        assert restored.crs == source.crs
+
+    def test_windkit_file_path_rejects_traversal(self) -> None:
+        with pytest.raises(ValueError, match="must remain inside"):
+            windkit_file_path("../../escape")
 
 
 class TestOkHelper:

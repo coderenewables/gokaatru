@@ -5,20 +5,12 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pandas as pd
 
 import windkit
 from server.main import mcp
-from server.state.session import session
-from server.tools.windkit._serializers import _ok, da_to_dict, dict_to_ds, ds_to_dict, gdf_to_geojson, df_to_dict
-
-
-def _windkit_dir() -> Path:
-    base = Path(session.get_data_dir()) / "windkit"
-    base.mkdir(parents=True, exist_ok=True)
-    return base
+from server.tools.windkit._serializers import _ok, da_to_dict, dict_to_ds, ds_to_dict, gdf_to_geojson, df_to_dict, windkit_file_path
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +150,7 @@ def windkit_read_wtg(filename: str, file_format: str = "") -> dict:
         filename: Path to the WTG file.
         file_format: File format hint (optional).
     """
-    path = _windkit_dir() / filename if not Path(filename).is_absolute() else Path(filename)
+    path = windkit_file_path(filename)
     kwargs = {}
     if file_format:
         kwargs["file_format"] = file_format

@@ -5,12 +5,15 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
+
+from server.state.session import session
 
 
 class _NumpyEncoder(json.JSONEncoder):
@@ -57,12 +60,30 @@ def dict_to_da(data: dict[str, Any]) -> xr.DataArray:
 
 def gdf_to_geojson(gdf: gpd.GeoDataFrame) -> dict[str, Any]:
     """Serialize a GeoDataFrame to GeoJSON dict."""
-    return json.loads(gdf.to_json())
+    data = json.loads(gdf.to_json())
+    if gdf.crs is not None:
+        data["crs"] = {"type": "name", "properties": {"name": gdf.crs.to_string()}}
+    return data
 
 
 def geojson_to_gdf(data: dict[str, Any]) -> gpd.GeoDataFrame:
     """Reconstruct a GeoDataFrame from a GeoJSON dict."""
-    return gpd.GeoDataFrame.from_features(data.get("features", data), crs="EPSG:4326")
+    crs_data = data.get("crs")
+    crs = crs_data.get("properties", {}).get("name") if isinstance(crs_data, dict) else None
+    return gpd.GeoDataFrame.from_features(data.get("features", data), crs=crs or "EPSG:4326")
+
+
+def windkit_file_path(filename: str) -> Path:
+    """Return a session-scoped WindKit path, rejecting traversal outside its data directory."""
+    base = (Path(session.get_data_dir()) / "windkit").resolve()
+    base.mkdir(parents=True, exist_ok=True)
+    candidate = Path(filename)
+    if candidate.is_absolute():
+        raise ValueError("filename must be relative to the session WindKit directory")
+    path = (base / candidate).resolve()
+    if not path.is_relative_to(base):
+        raise ValueError("filename must remain inside the session WindKit directory")
+    return path
 
 
 def df_to_dict(df: pd.DataFrame) -> dict[str, Any]:

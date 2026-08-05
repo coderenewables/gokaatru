@@ -4,11 +4,13 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
+import copy
 import json
 import math
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from server.core.formulas import air_density_iec, power_law_extrapolate
 from server.core.regression import robust_huber_fit, total_least_squares_fit
@@ -87,6 +89,24 @@ def test_cleaning_undo(sample_timeseries_df: pd.DataFrame) -> None:
     result = undo_cleaning_rule(0)
     pd.testing.assert_frame_equal(session.timeseries_df, session.raw_timeseries_df)
     assert result["remaining_rules"] == 0
+
+
+def test_cleaning_undo_preserves_state_when_replay_fails(sample_timeseries_df: pd.DataFrame) -> None:
+    """Keep the existing cleaned data and log when a retained rule cannot be replayed."""
+    dirty = sample_timeseries_df.copy()
+    dirty.iloc[0, dirty.columns.get_loc("Spd_100m")] = 30.0
+    _load_sample_session(dirty)
+    apply_cleaning_rule("range_check", "Spd_100m", '{"min": 0.0, "max": 25.0}')
+    apply_cleaning_rule("range_check", "Spd_80m", '{"min": 0.0, "max": 25.0}')
+    session.cleaning_log[1]["sensor"] = "Missing_sensor"
+    expected_timeseries = session.timeseries_df.copy(deep=True)
+    expected_log = copy.deepcopy(session.cleaning_log)
+
+    with pytest.raises(ValueError, match="Missing_sensor"):
+        undo_cleaning_rule(0)
+
+    pd.testing.assert_frame_equal(session.timeseries_df, expected_timeseries)
+    assert session.cleaning_log == expected_log
 
 
 def test_huber_regression() -> None:

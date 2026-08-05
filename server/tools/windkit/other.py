@@ -5,19 +5,11 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import windkit
 import windkit.weibull
 from server.main import mcp
-from server.state.session import session
-from server.tools.windkit._serializers import _ok, da_to_dict, ds_to_dict, dict_to_ds
-
-
-def _windkit_dir() -> Path:
-    base = Path(session.get_data_dir()) / "windkit"
-    base.mkdir(parents=True, exist_ok=True)
-    return base
+from server.tools.windkit._serializers import _ok, da_to_dict, ds_to_dict, dict_to_ds, windkit_file_path
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +167,7 @@ def windkit_read_cfdres(filename: str, crs: str) -> dict:
         crs: CRS string.
     """
     import pyproj
-    path = _windkit_dir() / filename if not Path(filename).is_absolute() else Path(filename)
+    path = windkit_file_path(filename)
     ds = windkit.read_cfdres(str(path), pyproj.CRS.from_user_input(crs))
     return _ok(ds_to_dict(ds))
 

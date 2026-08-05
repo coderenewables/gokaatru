@@ -5,18 +5,10 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import windkit
 from server.main import mcp
-from server.state.session import session
-from server.tools.windkit._serializers import _ok, da_to_dict, dict_to_ds, ds_to_dict, gdf_to_geojson, geojson_to_gdf
-
-
-def _windkit_dir() -> Path:
-    base = Path(session.get_data_dir()) / "windkit"
-    base.mkdir(parents=True, exist_ok=True)
-    return base
+from server.tools.windkit._serializers import _ok, da_to_dict, dict_to_ds, ds_to_dict, gdf_to_geojson, geojson_to_gdf, windkit_file_path
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +79,7 @@ def windkit_read_roughness_map(filename: str, crs: str = "") -> dict:
         filename: Path to roughness map file.
         crs: CRS string override (optional).
     """
-    path = _windkit_dir() / filename if not Path(filename).is_absolute() else Path(filename)
+    path = windkit_file_path(filename)
     kwargs = {}
     if crs:
         import pyproj
@@ -104,7 +96,7 @@ def windkit_read_landcover_map(filename: str, crs: str = "") -> dict:
         filename: Path to landcover map file.
         crs: CRS string override (optional).
     """
-    path = _windkit_dir() / filename if not Path(filename).is_absolute() else Path(filename)
+    path = windkit_file_path(filename)
     kwargs = {}
     if crs:
         import pyproj
@@ -122,7 +114,7 @@ def windkit_landcover_map_to_file(geojson_data: str, filename: str) -> dict:
         filename: Output filename.
     """
     gdf = geojson_to_gdf(json.loads(geojson_data))
-    path = _windkit_dir() / filename if not Path(filename).is_absolute() else Path(filename)
+    path = windkit_file_path(filename)
     windkit.landcover_map_to_file(gdf, str(path))
     return _ok({"written": str(path)})
 
@@ -136,7 +128,7 @@ def windkit_roughness_map_to_file(geojson_data: str, filename: str) -> dict:
         filename: Output filename.
     """
     gdf = geojson_to_gdf(json.loads(geojson_data))
-    path = _windkit_dir() / filename if not Path(filename).is_absolute() else Path(filename)
+    path = windkit_file_path(filename)
     windkit.roughness_map_to_file(gdf, str(path))
     return _ok({"written": str(path)})
 
@@ -153,7 +145,7 @@ def windkit_read_elevation_map(filename: str, crs: str = "") -> dict:
         filename: Path to elevation map file.
         crs: CRS string override (optional).
     """
-    path = _windkit_dir() / filename if not Path(filename).is_absolute() else Path(filename)
+    path = windkit_file_path(filename)
     kwargs = {}
     if crs:
         import pyproj
@@ -172,7 +164,7 @@ def windkit_elevation_map_to_file(dataset: str, filename: str) -> dict:
     """
     from server.tools.windkit._serializers import dict_to_da
     da = dict_to_da(json.loads(dataset))
-    path = _windkit_dir() / filename if not Path(filename).is_absolute() else Path(filename)
+    path = windkit_file_path(filename)
     windkit.elevation_map_to_file(da, str(path))
     return _ok({"written": str(path)})
 

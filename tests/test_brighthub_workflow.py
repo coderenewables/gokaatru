@@ -1,9 +1,17 @@
 from __future__ import annotations
 
-import pandas as pd
+import json
+from pathlib import Path
 
-from server.state.session import SessionState
-from server.tools.brighthub import _prepare_brighthub_reanalysis
+import pandas as pd
+import pytest
+
+from server.state.session import SessionState, session
+from server.tools.brighthub import (
+    _prepare_brighthub_reanalysis,
+    brighthub_download_reanalysis,
+    brighthub_import_location,
+)
 from server.tools.extrapolation import _extrapolate_reanalysis_to_hub
 
 
@@ -20,8 +28,9 @@ def _payload(latitude: float, longitude: float) -> dict:
     }
 
 
-def test_prepare_brighthub_reanalysis_stores_era5_merra_and_interpolates(monkeypatch) -> None:
+def test_prepare_brighthub_reanalysis_stores_era5_merra_and_interpolates(monkeypatch, tmp_path) -> None:
     state = SessionState()
+    state.workspace_dir = tmp_path
     state.brighthub_token = "token"
     era5_nodes = [
         {"latitude_ddeg": 52.0, "longitude_ddeg": 4.0},
@@ -51,6 +60,72 @@ def test_prepare_brighthub_reanalysis_stores_era5_merra_and_interpolates(monkeyp
     assert len(state.era5_data) == 4
     assert len(state.merra_data) == 1
     assert isinstance(state.era5_interpolated_df, pd.DataFrame)
+
+    # Each downloaded BrightHub reanalysis node is persisted to the session workspace.
+    cache_dir = tmp_path / "brighthub_cache"
+    assert cache_dir.is_dir()
+    assert len(list(cache_dir.glob("ERA5_*.parquet"))) == 4
+    assert len(list(cache_dir.glob("MERRA-2_*.parquet"))) == 1
+
+
+def test_brighthub_download_reanalysis_persists_brighthub_frames(monkeypatch, tmp_path) -> None:
+    """brighthub_download_reanalysis writes one parquet per node into the session workspace."""
+    session.workspace_dir = tmp_path
+    session.brighthub_token = "token"
+    nodes = [
+        {"latitude_ddeg": 52.0, "longitude_ddeg": 4.0},
+        {"latitude_ddeg": 52.0, "longitude_ddeg": 5.0},
+    ]
+
+    monkeypatch.setattr(
+        "server.tools.brighthub.download_reanalysis_data",
+        lambda _token, req_nodes, dataset: [
+            _payload(node["latitude_ddeg"], node["longitude_ddeg"]) for node in req_nodes
+        ],
+    )
+
+    result = brighthub_download_reanalysis("ERA5", json.dumps(nodes), source="brighthub")
+
+    assert result["source"] == "brighthub"
+    assert result["count"] == 2
+    cache_dir = tmp_path / "brighthub_cache"
+    assert len(list(cache_dir.glob("ERA5_*.parquet"))) == 2
+    assert len(session.era5_data) == 2
+
+
+def test_brighthub_import_rolls_back_when_datamodel_parsing_fails(monkeypatch, tmp_path) -> None:
+    """Do not replace session data or saved imports when a BrightHub import cannot be fully parsed."""
+    session.workspace_dir = tmp_path
+    session.brighthub_token = "token"
+    session.timeseries_df = pd.DataFrame({"existing": [1.0]})
+    session.raw_timeseries_df = session.timeseries_df.copy(deep=True)
+    session.runconfig = {"project_name": "Existing"}
+    uploads_dir = tmp_path / "uploads"
+    uploads_dir.mkdir()
+    datamodel_path = uploads_dir / "datamodel_site.json"
+    timeseries_path = uploads_dir / "ts_site.csv"
+    datamodel_path.write_text("previous datamodel", encoding="utf-8")
+    timeseries_path.write_text("previous timeseries", encoding="utf-8")
+
+    monkeypatch.setattr("server.tools.brighthub.get_data_model", lambda *_args: {"measurement_point": []})
+    monkeypatch.setattr(
+        "server.tools.brighthub.fetch_timeseries_csv",
+        lambda *_args, **_kwargs: "Timestamp,Spd_100m\n2024-01-01T00:00:00,8\n2024-01-01T01:00:00,9\n",
+    )
+
+    def fail_datamodel_parse(*_args):
+        raise ValueError("invalid datamodel")
+
+    monkeypatch.setattr("server.tools.data_io._parse_datamodel", fail_datamodel_parse)
+
+    with pytest.raises(ValueError, match="invalid datamodel"):
+        brighthub_import_location("site")
+
+    pd.testing.assert_frame_equal(session.timeseries_df, pd.DataFrame({"existing": [1.0]}))
+    assert session.runconfig == {"project_name": "Existing"}
+    assert datamodel_path.read_text(encoding="utf-8") == "previous datamodel"
+    assert timeseries_path.read_text(encoding="utf-8") == "previous timeseries"
+    assert not list(uploads_dir.glob("tmp*"))
 
 
 def test_prepare_brighthub_reanalysis_reuses_matching_site_cache(monkeypatch) -> None:

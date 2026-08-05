@@ -232,6 +232,8 @@ def _compute_turbulence_analysis(state: SessionState, speed_sensor: str) -> dict
     valid["speed_bin"] = np.floor(valid[speed_sensor]).astype(int)
     grouped = valid.groupby("speed_bin", observed=False)["ti"]
     representative = grouped.mean() + 1.28 * grouped.std(ddof=0).fillna(0.0)
+    if representative.empty:
+        raise ValueError("No wind-speed bins are available for TI analysis")
     at_15 = representative.iloc[(representative.index.to_numpy(dtype=float) - 15.0).argmin()]
     return {
         "speed_sensor": speed_sensor,

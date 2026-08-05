@@ -10,9 +10,9 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from server.core.executor import WorkflowExecutor, _loads_lenient
 from server.api.deps import get_session_manager
 from server.api.main import create_app
+from server.core.executor import WorkflowExecutor, _loads_lenient, _tool_registry
 from server.state.manager import SessionManager
 from server.tools.shear import calculate_shear_timeseries
 
@@ -46,6 +46,23 @@ def test_loads_lenient_repairs_windows_paths_with_unicode_prefix() -> None:
         "file_path": r"D:\gokaatru\data\uploads\HKW-B-FLS-Boxkite_timeseries_data.csv",
         "alias": "HKW-B-FLS-Boxkite",
     }
+
+
+def test_executor_registers_all_public_sensor_review_tools() -> None:
+    """Expose all public tools from the modules added to workflow dispatch."""
+    registry = _tool_registry()
+
+    assert {
+        "compute_energy_metrics",
+        "compute_extreme_winds",
+        "compute_wind_ramps",
+        "compute_wind_persistence",
+        "compute_atmospheric_conditions",
+        "compute_sensor_comparison",
+        "compute_mast_effects",
+        "compute_qc_diagnostics",
+        "compute_mcp_readiness",
+    }.issubset(registry)
 
 
 def test_build_kwargs_coerces_list_for_postponed_str_annotations(

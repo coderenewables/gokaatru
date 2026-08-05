@@ -315,6 +315,7 @@ def _store_coordinate(state: SessionState, latitude: float, longitude: float) ->
 
 def _find_era5_nodes(state: SessionState, latitude: float, longitude: float) -> dict:
     """Find the four surrounding ERA5 grid nodes using 0.25° bounds and haversine distance."""
+    dataset: xr.Dataset | None = None
     try:
         dataset = _open_era5_dataset()
     except Exception as exc:  # noqa: BLE001
@@ -323,29 +324,31 @@ def _find_era5_nodes(state: SessionState, latitude: float, longitude: float) -> 
                 "ERA5 node lookup failed while contacting EarthDataHub. Please retry the request."
             ) from exc
         raise
-    lon_values = np.asarray(dataset.longitude.values)
-    norm_lon = _normalize_longitude(longitude, lon_values)
-    lower_lat, upper_lat = _bounding_pair(np.asarray(dataset.latitude.values), latitude)
-    lower_lon, upper_lon = _bounding_pair(lon_values, norm_lon)
-    candidate_points = [(lower_lat, lower_lon), (lower_lat, upper_lon), (upper_lat, lower_lon), (upper_lat, upper_lon)]
-    nodes = []
-    for node_lat, node_lon in candidate_points:
-        signed_lon = _to_signed_longitude(node_lon)
-        nodes.append(
-            {
-                "latitude": float(node_lat),
-                "longitude": signed_lon,
-                "distance_km": haversine_km(latitude, longitude, node_lat, signed_lon),
-                "bearing": bearing_compass(latitude, longitude, node_lat, signed_lon),
-            }
-        )
-    state.era5_nodes = sorted(nodes, key=lambda node: float(node["distance_km"]))
-    _store_coordinate(state, latitude, longitude)
-    resolution = _grid_resolution(np.asarray(dataset.latitude.values))
-    if resolution is None:
-        resolution = _grid_resolution(np.asarray(dataset.longitude.values))
-    _close_dataset(dataset)
-    return {"nodes": state.era5_nodes, "grid_resolution_deg": resolution}
+    try:
+        lon_values = np.asarray(dataset.longitude.values)
+        norm_lon = _normalize_longitude(longitude, lon_values)
+        lower_lat, upper_lat = _bounding_pair(np.asarray(dataset.latitude.values), latitude)
+        lower_lon, upper_lon = _bounding_pair(lon_values, norm_lon)
+        candidate_points = [(lower_lat, lower_lon), (lower_lat, upper_lon), (upper_lat, lower_lon), (upper_lat, upper_lon)]
+        nodes = []
+        for node_lat, node_lon in candidate_points:
+            signed_lon = _to_signed_longitude(node_lon)
+            nodes.append(
+                {
+                    "latitude": float(node_lat),
+                    "longitude": signed_lon,
+                    "distance_km": haversine_km(latitude, longitude, node_lat, signed_lon),
+                    "bearing": bearing_compass(latitude, longitude, node_lat, signed_lon),
+                }
+            )
+        state.era5_nodes = sorted(nodes, key=lambda node: float(node["distance_km"]))
+        _store_coordinate(state, latitude, longitude)
+        resolution = _grid_resolution(np.asarray(dataset.latitude.values))
+        if resolution is None:
+            resolution = _grid_resolution(np.asarray(dataset.longitude.values))
+        return {"nodes": state.era5_nodes, "grid_resolution_deg": resolution}
+    finally:
+        _close_dataset(dataset)
 
 
 def _extract_era5_data(

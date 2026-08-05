@@ -4,6 +4,7 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
+import copy
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from datetime import datetime, timezone
@@ -114,6 +115,14 @@ class SessionState:
         if self.created_at is None:
             self.created_at = _utcnow()
         self.updated_at = _utcnow()
+
+    def clone_for_transaction(self) -> SessionState:
+        """Return an isolated snapshot for all-or-nothing session mutations."""
+        return copy.deepcopy(self)
+
+    def commit_transaction(self, staged: SessionState) -> None:
+        """Replace this session's state with a successfully staged snapshot."""
+        self.__dict__.update(staged.__dict__)
 
     def set_project_name(self, project_name: str | None) -> None:
         """Persist project name in runconfig while retaining a mirrored session convenience field."""

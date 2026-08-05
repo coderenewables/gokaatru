@@ -408,7 +408,7 @@ def windkit_clip_with_margin(dataset: str, clipper_dataset: str, margin: float =
     clipper = dict_to_ds(json.loads(clipper_dataset))
     kwargs = {}
     if margin > 0:
-        kwargs["margin"] = margin
+        kwargs["margin_dx_factor"] = margin
     result = windkit.spatial.clip_with_margin(ds, clipper, **kwargs)
     return _ok(ds_to_dict(result))
 

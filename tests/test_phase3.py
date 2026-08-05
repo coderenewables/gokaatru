@@ -64,6 +64,20 @@ def test_find_era5_nodes_grid(monkeypatch: pytest.MonkeyPatch) -> None:
     assert session.runconfig["location"]["longitude"] == 4.8
 
 
+def test_find_era5_nodes_closes_dataset_when_lookup_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Close the remote dataset even when coordinate-boundary calculation raises."""
+    fake_dataset = xr.Dataset(coords={"latitude": [52.0, 52.25], "longitude": [4.5, 4.75]})
+    closed: list[xr.Dataset] = []
+    monkeypatch.setattr("server.tools.era5._open_era5_dataset", lambda: fake_dataset)
+    monkeypatch.setattr("server.tools.era5._close_dataset", lambda dataset: closed.append(dataset))
+    monkeypatch.setattr("server.tools.era5._bounding_pair", lambda *_args: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    with pytest.raises(RuntimeError, match="boom"):
+        find_era5_nodes(52.1, 4.6)
+
+    assert closed == [fake_dataset]
+
+
 def test_era5_storage_options_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify EarthDataHub bearer-token auth is translated into HTTP storage headers."""
     monkeypatch.delenv("EARTHDATAHUB_AUTH_HEADER", raising=False)

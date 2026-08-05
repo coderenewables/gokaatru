@@ -5,26 +5,13 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pandas as pd
 import xarray as xr
 
 import windkit
 from server.main import mcp
-from server.state.session import session
-from server.tools.windkit._serializers import _ok, da_to_dict, dict_to_ds, ds_to_dict
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _windkit_dir() -> Path:
-    """Return the session-scoped windkit data directory, creating it if needed."""
-    base = Path(session.get_data_dir()) / "windkit"
-    base.mkdir(parents=True, exist_ok=True)
-    return base
+from server.tools.windkit._serializers import _ok, da_to_dict, dict_to_ds, ds_to_dict, windkit_file_path
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +77,7 @@ def windkit_read_tswc(filename: str, file_format: str = "") -> dict:
         filename: Path to the TSWC file (relative to session windkit dir or absolute).
         file_format: File format hint (optional).
     """
-    path = _windkit_dir() / filename if not Path(filename).is_absolute() else Path(filename)
+    path = windkit_file_path(filename)
     kwargs = {}
     if file_format:
         kwargs["file_format"] = file_format
@@ -112,7 +99,7 @@ def windkit_tswc_from_dataframe(dataframe_json: str, west_east: float, south_nor
     """
     import pyproj
     df = pd.read_json(dataframe_json, orient="split")
-    ds = windkit.tswc_from_dataframe(df, west_east, south_north, height, pyproj.CRS.from_user_input(crs))
+    ds = windkit.tswc_from_dataframe(df, west_east, south_north, pyproj.CRS.from_user_input(crs))
     return _ok(ds_to_dict(ds))
 
 
@@ -187,7 +174,7 @@ def windkit_read_bwc(filename: str, crs: str = "", file_format: str = "") -> dic
         crs: CRS string override (optional).
         file_format: File format hint (optional).
     """
-    path = _windkit_dir() / filename if not Path(filename).is_absolute() else Path(filename)
+    path = windkit_file_path(filename)
     kwargs = {}
     if crs:
         import pyproj
@@ -224,7 +211,7 @@ def windkit_bwc_to_file(dataset: str, filename: str, file_format: str = "") -> d
         file_format: File format hint (optional).
     """
     ds = dict_to_ds(json.loads(dataset))
-    path = _windkit_dir() / filename if not Path(filename).is_absolute() else Path(filename)
+    path = windkit_file_path(filename)
     kwargs = {}
     if file_format:
         kwargs["file_format"] = file_format
@@ -313,7 +300,7 @@ def windkit_read_wwc(filename: str, file_format: str = "") -> dict:
         filename: Path to the WWC file.
         file_format: File format hint (optional).
     """
-    path = _windkit_dir() / filename if not Path(filename).is_absolute() else Path(filename)
+    path = windkit_file_path(filename)
     kwargs = {}
     if file_format:
         kwargs["file_format"] = file_format
@@ -348,7 +335,7 @@ def windkit_wwc_to_file(dataset: str, filename: str, file_format: str = "") -> d
         file_format: File format hint (optional).
     """
     ds = dict_to_ds(json.loads(dataset))
-    path = _windkit_dir() / filename if not Path(filename).is_absolute() else Path(filename)
+    path = windkit_file_path(filename)
     kwargs = {}
     if file_format:
         kwargs["file_format"] = file_format
@@ -439,7 +426,7 @@ def windkit_read_gwc(filename: str, crs: str = "", file_format: str = "") -> dic
         crs: CRS string override (optional).
         file_format: File format hint (optional).
     """
-    path = _windkit_dir() / filename if not Path(filename).is_absolute() else Path(filename)
+    path = windkit_file_path(filename)
     kwargs = {}
     if crs:
         import pyproj
@@ -460,7 +447,7 @@ def windkit_gwc_to_file(dataset: str, filename: str, file_format: str = "") -> d
         file_format: File format hint (optional).
     """
     ds = dict_to_ds(json.loads(dataset))
-    path = _windkit_dir() / filename if not Path(filename).is_absolute() else Path(filename)
+    path = windkit_file_path(filename)
     kwargs = {}
     if file_format:
         kwargs["file_format"] = file_format

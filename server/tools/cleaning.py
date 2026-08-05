@@ -346,18 +346,22 @@ def _undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
     if entry_index < 0 or entry_index >= len(state.cleaning_log):
         raise ValueError(f"Cleaning log entry_index out of range: {entry_index}")
     retained = [entry.copy() for idx, entry in enumerate(state.cleaning_log) if idx != entry_index]
-    state.timeseries_df = state.raw_timeseries_df.copy(deep=True)
-    state.cleaning_log = []
+    replay_state = SessionState()
+    replay_state.timeseries_df = state.raw_timeseries_df.copy(deep=True)
+    replay_state.raw_timeseries_df = state.raw_timeseries_df.copy(deep=True)
+    replay_state.sensor_mapping = state.sensor_mapping.copy()
+    replay_state.cleaning_log = []
     for entry in retained:
         params = json.dumps(entry.get("params", {}))
         _apply_cleaning_rule(
-            state,
+            replay_state,
             str(entry["rule_type"]),
             str(entry["sensor"]),
             params,
             str(entry.get("start_date", "")),
             str(entry.get("end_date", "")),
         )
+    state.timeseries_df = replay_state.timeseries_df
     state.cleaning_log = retained
     return {"status": "ok", "remaining_rules": len(state.cleaning_log)}
 

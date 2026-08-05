@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 import pandas as pd
 
@@ -19,7 +20,8 @@ from server.core.brighthub import (
 )
 from server.main import mcp
 from server.schemas.common import Coordinate
-from server.state.session import SessionState, session
+from server.state.session import SessionState, get_active_session, session
+from server.tools.era5 import _era5_key
 
 
 def _require_token(state: SessionState) -> str:
@@ -123,16 +125,13 @@ def brighthub_import_location(
     from server.tools.data_io import _parse_datamodel, _parse_timeseries
 
     token = _require_token(session)
-    data_dir = Path(session.get_data_dir())
+    live_session = get_active_session()
+    data_dir = Path(live_session.get_data_dir())
     uploads_dir = data_dir / "uploads"
     uploads_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Fetch and save datamodel JSON
+    # 1. Fetch import inputs before mutating session state or its workspace files.
     dm_payload = get_data_model(token, uuid)
-    datamodel_path = uploads_dir / f"datamodel_{uuid}.json"
-    datamodel_path.write_text(json.dumps(dm_payload, indent=2), encoding="utf-8")
-
-    # 2. Fetch and save timeseries CSV
     csv_text = fetch_timeseries_csv(
         token,
         uuid,
@@ -142,26 +141,39 @@ def brighthub_import_location(
         apply_deadband_offset=apply_deadband_offset,
         apply_orientation_offset=apply_orientation_offset,
     )
+    datamodel_path = uploads_dir / f"datamodel_{uuid}.json"
     timeseries_path = uploads_dir / f"ts_{uuid}.csv"
-    timeseries_path.write_text(csv_text, encoding="utf-8")
-
-    # 3. Parse timeseries into session state
-    ts_result = _parse_timeseries(session, str(timeseries_path))
-
-    # 4. Parse datamodel into session state
-    dm_result = _parse_datamodel(session, str(datamodel_path))
+    with (
+        NamedTemporaryFile("w", encoding="utf-8", dir=uploads_dir, suffix=".json", delete=False) as datamodel_file,
+        NamedTemporaryFile("w", encoding="utf-8", dir=uploads_dir, suffix=".csv", delete=False) as timeseries_file,
+    ):
+        temporary_datamodel_path = Path(datamodel_file.name)
+        temporary_timeseries_path = Path(timeseries_file.name)
+        datamodel_file.write(json.dumps(dm_payload, indent=2))
+        timeseries_file.write(csv_text)
+    staged_session = live_session.clone_for_transaction()
+    try:
+        ts_result = _parse_timeseries(staged_session, str(temporary_timeseries_path))
+        dm_result = _parse_datamodel(staged_session, str(temporary_datamodel_path))
+    except Exception:
+        temporary_datamodel_path.unlink(missing_ok=True)
+        temporary_timeseries_path.unlink(missing_ok=True)
+        raise
 
     # 5. Apply location metadata if not already set
-    if name and session.get_project_name() in {None, ""}:
-        session.set_project_name(name)
-    if latitude_ddeg != 0.0 and longitude_ddeg != 0.0 and session.get_coordinate() is None:
+    if name and staged_session.get_project_name() in {None, ""}:
+        staged_session.set_project_name(name)
+    if latitude_ddeg != 0.0 and longitude_ddeg != 0.0 and staged_session.get_coordinate() is None:
         from server.schemas.common import Coordinate
 
-        session.set_coordinate(Coordinate(latitude=latitude_ddeg, longitude=longitude_ddeg))
+        staged_session.set_coordinate(Coordinate(latitude=latitude_ddeg, longitude=longitude_ddeg))
 
     # 6. Store BrightHub UUID in runconfig
-    session.runconfig["brighthub_uuid"] = uuid
-    session.touch()
+    staged_session.runconfig["brighthub_uuid"] = uuid
+    temporary_datamodel_path.replace(datamodel_path)
+    temporary_timeseries_path.replace(timeseries_path)
+    live_session.commit_transaction(staged_session)
+    live_session.touch()
 
     return {
         "status": "ok",
@@ -233,12 +245,23 @@ def brighthub_download_reanalysis(
     except Exception as exc:
         raise RuntimeError(f"BrightHub API error: {exc}") from exc
 
+    column_map = _BRIGHTHUB_ERA5_COLUMNS if dataset == "ERA5" else _BRIGHTHUB_MERRA_COLUMNS
     items = []
     for r in results:
+        latitude = float(r["latitude"])
+        longitude = float(r["longitude"])
         ts = r.get("timeseries_data")
-        row_count = len(ts.get("data", [])) if isinstance(ts, dict) else None
-        items.append({"latitude": r["latitude"], "longitude": r["longitude"], "rows": row_count})
+        if not isinstance(ts, dict) or not ts.get("data"):
+            items.append({"latitude": latitude, "longitude": longitude, "rows": None})
+            continue
+        frame = _persist_reanalysis_frame(session, dataset, latitude, longitude, r, column_map)
+        if dataset == "ERA5":
+            session.era5_data[_era5_key(latitude, longitude)] = frame
+        else:
+            session.merra_data[f"{latitude}_{longitude}"] = frame
+        items.append({"latitude": latitude, "longitude": longitude, "rows": int(len(frame))})
 
+    session.touch()
     return {"dataset": dataset, "source": "brighthub", "items": items, "count": len(items)}
 
 
@@ -281,6 +304,39 @@ def _reanalysis_frame(payload: dict, column_map: dict[str, str]) -> pd.DataFrame
     return frame.rename(columns=column_map).sort_index()
 
 
+_BRIGHTHUB_CACHE_TOKENS = {"ERA5": "ERA5", "MERRA-2": "MERRA-2"}
+
+
+def _brighthub_cache_path(state: SessionState, dataset: str, latitude: float, longitude: float) -> Path:
+    """Build the standard BrightHub reanalysis cache parquet path for a node.
+
+    Mirrors the EarthDataHub ``_era5_cache_path`` layout so each session owns its
+    downloaded BrightHub ERA5 / MERRA-2 files under ``brighthub_cache/``.
+    """
+    token = _BRIGHTHUB_CACHE_TOKENS.get(dataset, dataset.replace(" ", "-"))
+    cache_dir = Path(state.get_data_dir()) / "brighthub_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir / f"{token}_{latitude}_{longitude}.parquet"
+
+
+def _persist_reanalysis_frame(
+    state: SessionState,
+    dataset: str,
+    latitude: float,
+    longitude: float,
+    payload: dict,
+    column_map: dict[str, str],
+) -> pd.DataFrame:
+    """Parse a BrightHub reanalysis payload and persist it to the session workspace.
+
+    Returns the parsed dataframe so callers can store it in ``state.era5_data`` /
+    ``state.merra_data`` exactly as they did before persistence was added.
+    """
+    frame = _reanalysis_frame(payload, column_map)
+    frame.to_parquet(_brighthub_cache_path(state, dataset, latitude, longitude))
+    return frame
+
+
 def _prepare_brighthub_reanalysis(
     state: SessionState,
     latitude: float,
@@ -289,7 +345,7 @@ def _prepare_brighthub_reanalysis(
 ) -> dict:
     """Load BrightHub ERA5 + MERRA-2 and interpolate ERA5 to the project site."""
     from server.core.spatial import bearing_compass, haversine_km
-    from server.tools.era5 import _era5_key, _interpolate_era5_to_site
+    from server.tools.era5 import _interpolate_era5_to_site
 
     if source != "brighthub":
         raise ValueError("Combined ERA5 + MERRA-2 preparation currently supports the BrightHub source only")
@@ -362,11 +418,15 @@ def _prepare_brighthub_reanalysis(
         for item in merra_results
     ]
     state.era5_data = {
-        _era5_key(float(item["latitude"]), float(item["longitude"])): _reanalysis_frame(item, _BRIGHTHUB_ERA5_COLUMNS)
+        _era5_key(float(item["latitude"]), float(item["longitude"])): _persist_reanalysis_frame(
+            state, "ERA5", float(item["latitude"]), float(item["longitude"]), item, _BRIGHTHUB_ERA5_COLUMNS
+        )
         for item in era5_results
     }
     state.merra_data = {
-        f"{float(item['latitude'])}_{float(item['longitude'])}": _reanalysis_frame(item, _BRIGHTHUB_MERRA_COLUMNS)
+        f"{float(item['latitude'])}_{float(item['longitude'])}": _persist_reanalysis_frame(
+            state, "MERRA-2", float(item["latitude"]), float(item["longitude"]), item, _BRIGHTHUB_MERRA_COLUMNS
+        )
         for item in merra_results
     }
     interpolation = _interpolate_era5_to_site(state)

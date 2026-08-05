@@ -61,6 +61,8 @@ def _trend_per_year(series: pd.Series) -> float:
 def _recommended_start_year(series: pd.Series) -> int:
     """Return the earliest suffix start year whose Pettitt test no longer indicates non-homogeneity at $p < 0.01$."""
     years = sorted(series.index.year.unique().tolist())
+    if not years:
+        raise ValueError("Cannot recommend a start year for an empty series")
     for year in years:
         subset = series[series.index.year >= year]
         if len(subset) < 3:

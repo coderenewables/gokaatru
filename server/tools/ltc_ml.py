@@ -176,7 +176,11 @@ def _run_ltc_xgboost(
     top_features = dict(sorted(feature_importance.items(), key=lambda item: item[1], reverse=True)[:10])
     train_error = float(evals_result.get("train", {}).get("rmse", [float("nan")])[-1])
     val_error = float(evals_result.get("eval", {}).get("rmse", [float("nan")])[-1])
-    long_features, _ = _build_features(long_df, long_col, long_dir_col)
+    long_features, long_feature_names = _build_features(long_df, long_col, long_dir_col)
+    if long_feature_names != feature_names:
+        raise ValueError(
+            f"Feature mismatch between fit and predict: {feature_names} vs {long_feature_names}"
+        )
     dlong = DMatrix(long_features.to_numpy(dtype=float), feature_names=feature_names)
     corrected = np.maximum(0.0, booster.predict(dlong))
     result_df = pd.DataFrame(

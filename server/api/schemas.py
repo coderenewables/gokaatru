@@ -4,10 +4,10 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import BaseModel, Field, JsonValue, model_validator
 
 
 class CreateSessionResponse(BaseModel):
@@ -93,13 +93,29 @@ class FindEra5NodesRequest(BaseModel):
     longitude: float = Field(..., ge=-180, le=180)
 
 
+ERA5_MAX_SPAN_YEARS = 30
+
+
 class ExtractEra5Request(BaseModel):
     """Request ERA5 extraction over a date range for one node."""
 
     latitude: float = Field(..., ge=-90, le=90)
     longitude: float = Field(..., ge=-180, le=180)
-    start_date: str = "2000-01-01"
-    end_date: str = "2025-12-31"
+    start_date: date = date(2000, 1, 1)
+    end_date: date = date(2025, 12, 31)
+
+    @model_validator(mode="after")
+    def _validate_date_range(self) -> ExtractEra5Request:
+        if self.end_date < self.start_date:
+            raise ValueError(f"end_date ({self.end_date}) must be on or after start_date ({self.start_date})")
+        span_days = (self.end_date - self.start_date).days
+        max_days = ERA5_MAX_SPAN_YEARS * 365
+        if span_days > max_days:
+            raise ValueError(
+                f"Requested span of {span_days} days exceeds maximum of "
+                f"{ERA5_MAX_SPAN_YEARS} years ({max_days} days)"
+            )
+        return self
 
 
 class RunLtcRequest(BaseModel):

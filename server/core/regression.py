@@ -90,11 +90,11 @@ def total_least_squares_fit(x: np.ndarray, y: np.ndarray) -> tuple[float, float]
     syy = float(np.sum(dy * dy))
     sxy = float(np.sum(dx * dy))
     if abs(sxy) <= 1e-12:
-        slope = 0.0 if sxx >= syy else float(np.sign(np.mean(dy) or 1.0) * 1e12)
+        raise ValueError("TLS is undefined for a degenerate (vertical) relationship")
     else:
         term = syy - sxx
         radical = float(np.sqrt(term * term + 4.0 * sxy * sxy))
-        slope = float((term + np.copysign(radical, sxy)) / (2.0 * sxy))
+        slope = float((term + radical) / (2.0 * sxy))
     return slope, float(mean_y - slope * mean_x)
 
 

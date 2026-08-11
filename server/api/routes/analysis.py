@@ -664,7 +664,9 @@ def extract_era5(
     """Extract ERA5 node data and compute wind speed components required for interpolation."""
     del session_id
     try:
-        result = _extract_era5_data(state, body.latitude, body.longitude, body.start_date, body.end_date)
+        start_str = body.start_date.isoformat()
+        end_str = body.end_date.isoformat()
+        result = _extract_era5_data(state, body.latitude, body.longitude, start_str, end_str)
         wind_result = _compute_era5_wind_speed(state, body.latitude, body.longitude)
     except ValueError as exc:
         raise to_bad_request(exc) from exc

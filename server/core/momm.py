@@ -7,20 +7,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-MEAN_DAYS_IN_MONTH: dict[int, float] = {
-    1: 31,
-    2: 28.24,
-    3: 31,
-    4: 30,
-    5: 31,
-    6: 30,
-    7: 31,
-    8: 31,
-    9: 30,
-    10: 31,
-    11: 30,
-    12: 31,
-}
+from server.core.formulas import MEAN_DAYS_IN_MONTH
 
 
 def _infer_samples_per_hour(timestamp_index: pd.DatetimeIndex) -> float:

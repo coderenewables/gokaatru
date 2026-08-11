@@ -138,5 +138,6 @@ def test_power_law_formula() -> None:
 
 def test_air_density() -> None:
     """Verify the IEC air-density helper reproduces standard-atmosphere density within tolerance."""
-    density = air_density_iec(101325.0, 288.15, 275.0)
+    density, was_clamped = air_density_iec(101325.0, 288.15, 275.0)
+    assert not was_clamped
     assert math.isclose(density, 1.225, abs_tol=0.01)

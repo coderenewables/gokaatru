@@ -395,7 +395,10 @@ def _sample_for_boxplot(values: pd.Series, maximum_points: int = 24000) -> pd.Se
 
 def _plot_diurnal_boxplot(state: SessionState, sensor_name: str) -> dict:
     """Plot measured values as hour-of-day distributions for diurnal variability review."""
-    values = _sample_for_boxplot(_require_series(state, sensor_name).dropna())
+    raw_values = _require_series(state, sensor_name).dropna()
+    total_count = len(raw_values)
+    values = _sample_for_boxplot(raw_values)
+    sampled_count = len(values)
     if values.empty:
         raise ValueError(f"Sensor '{sensor_name}' has no valid values for diurnal plotting")
     figure = go.Figure()
@@ -403,8 +406,14 @@ def _plot_diurnal_boxplot(state: SessionState, sensor_name: str) -> dict:
         group = values[values.index.hour == hour]
         if not group.empty:
             figure.add_trace(go.Box(y=group, name=str(hour), boxpoints=False, showlegend=False))
-    figure.update_layout(title=f"Diurnal Distribution — {sensor_name}", xaxis_title="Hour", yaxis_title="Measured Value")
-    return _plot_result(figure, f"Diurnal Distribution — {sensor_name}")
+    title = f"Diurnal Distribution — {sensor_name}"
+    if sampled_count < total_count:
+        title += f"  (sampled: {sampled_count:,} of {total_count:,} records)"
+    figure.update_layout(title=title, xaxis_title="Hour", yaxis_title="Measured Value")
+    result = _plot_result(figure, title)
+    result["total_count"] = total_count
+    result["sampled_count"] = sampled_count
+    return result
 
 
 def _plot_monthly_boxplot(state: SessionState, sensor_name: str) -> dict:

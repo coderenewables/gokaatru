@@ -5,6 +5,7 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import ast
+import copy
 import json
 from datetime import datetime, timezone
 
@@ -103,14 +104,19 @@ def _apply_icing_filter(
     mask: np.ndarray,
     params: dict[str, object],
 ) -> int:
-    """Apply an icing filter where zero standard deviation and low temperature indicate frozen instrumentation."""
+    """Apply an icing filter where near-zero standard deviation and low temperature indicate frozen instrumentation."""
     sensor_map = _mapping_for_sensor(state, sensor)
     sd_col = sensor_map.get("sd_col")
     temp_col = sensor_map.get("temp_col")
     if sd_col not in df.columns or temp_col not in df.columns:
         raise ValueError("icing_filter requires matching sd and temperature columns in the timeseries")
     threshold = _float_param(params, "temp_threshold_c", 2.0)
-    affected = mask & (df[sd_col].fillna(np.nan) == 0).to_numpy() & (df[temp_col] < threshold).fillna(False).to_numpy()
+    sd_threshold = _float_param(params, "sd_threshold_mps", 0.01)
+    affected = (
+        mask
+        & (df[sd_col].fillna(np.nan) <= sd_threshold).to_numpy()
+        & (df[temp_col] < threshold).fillna(False).to_numpy()
+    )
     df.loc[affected, sensor] = np.nan
     return int(affected.sum())
 
@@ -349,7 +355,7 @@ def _undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
     replay_state = SessionState()
     replay_state.timeseries_df = state.raw_timeseries_df.copy(deep=True)
     replay_state.raw_timeseries_df = state.raw_timeseries_df.copy(deep=True)
-    replay_state.sensor_mapping = state.sensor_mapping.copy()
+    replay_state.sensor_mapping = copy.deepcopy(state.sensor_mapping)
     replay_state.cleaning_log = []
     for entry in retained:
         params = json.dumps(entry.get("params", {}))
@@ -362,7 +368,7 @@ def _undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
             str(entry.get("end_date", "")),
         )
     state.timeseries_df = replay_state.timeseries_df
-    state.cleaning_log = retained
+    state.cleaning_log = replay_state.cleaning_log
     return {"status": "ok", "remaining_rules": len(state.cleaning_log)}
 
 

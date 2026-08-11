@@ -5,6 +5,7 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 from server.main import mcp
@@ -34,12 +35,20 @@ def _avg_coverage(state: SessionState) -> float | None:
     return float(sum(coverage_values) / len(coverage_values))
 
 
+def _reject_constant(name: str) -> object:
+    """Reject non-standard JSON literals (NaN, Infinity, -Infinity)."""
+    raise ValueError(f"Config value may not be {name}")
+
+
 def _parse_config_value(value: str) -> object:
     """Parse config values as JSON first, then preserve raw strings per the Phase 1 config contract."""
     try:
-        return json.loads(value)
+        parsed = json.loads(value, parse_constant=_reject_constant)
     except json.JSONDecodeError:
         return value
+    if isinstance(parsed, float) and not math.isfinite(parsed):
+        raise ValueError(f"Config value must be finite, got {value!r}")
+    return parsed
 
 
 def _set_nested_value(config: dict[str, object], key: str, value: object) -> None:
@@ -145,7 +154,7 @@ def _save_run_config(state: SessionState) -> dict:
     _normalize_runconfig(state.runconfig)
     state.runconfig = _normalize_runconfig(state.to_runconfig())
     runconfig_path = _runconfig_path(state)
-    runconfig_path.write_text(json.dumps(state.runconfig, indent=2), encoding="utf-8")
+    runconfig_path.write_text(json.dumps(state.runconfig, indent=2, allow_nan=False), encoding="utf-8")
     return {"status": "ok", "file_path": str(runconfig_path), "keys": sorted(state.runconfig.keys())}
 
 

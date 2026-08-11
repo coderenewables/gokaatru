@@ -25,7 +25,9 @@ dependencies = [
     "zarr>=2.14",
     "fsspec>=2023.1",
     "s3fs>=2023.1",
-    "windkit>=2.0",
+    "windkit>=2.0,<2.1",  # pin: widen deliberately after testing new major.minor
+                         # headless deployments must set WINDKIT_NAME, WINDKIT_EMAIL,
+                         # WINDKIT_INSTITUTION to avoid interactive first-run prompts
     "geopandas>=0.14",
     "pyproj>=3.6",
 ]

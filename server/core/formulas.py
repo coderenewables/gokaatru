@@ -47,21 +47,40 @@ def shear_from_two_heights(v1: float, h1: float, v2: float, h2: float) -> float:
     return float(math.log(v2 / v1) / math.log(h2 / h1))
 
 
-def roughness_from_two_heights(v1: float, h1: float, v2: float, h2: float) -> float:
-    """Compute roughness length from two heights using the IEC logarithmic profile relationship."""
+def roughness_from_two_heights(v1: float, h1: float, v2: float, h2: float) -> tuple[float, bool]:
+    """Compute roughness length from two heights using the IEC logarithmic profile relationship.
+
+    Returns (z0, was_clamped).  The raw z0 is clamped to the physically
+    plausible range [1e-6, 1.5] metres, matching the guard already applied in
+    ``_fit_rowwise_log_profile`` (shear.py) and the extrapolation tool.
+    """
     if min(v1, v2) <= 0 or min(h1, h2) <= 0 or h1 == h2 or v1 == v2:
-        return float(np.nan)
+        return float(np.nan), False
     exponent = (v2 * math.log(h1) - v1 * math.log(h2)) / (v2 - v1)
-    return float(math.exp(exponent))
+    z0 = float(math.exp(exponent))
+    was_clamped = z0 < 1e-6 or z0 > 1.5
+    z0 = float(np.clip(z0, 1e-6, 1.5))
+    return z0, was_clamped
 
 
-def air_density_iec(pressure_pa: float, temperature_k: float, dewpoint_k: float) -> float:
-    """Compute moist-air density from pressure and dew point per IEC 61400-12-1 Section A.5."""
+def air_density_iec(
+    pressure_pa: float, temperature_k: float, dewpoint_k: float
+) -> tuple[float, bool]:
+    """Compute moist-air density from pressure and dew point per IEC 61400-12-1 Section A.5.
+
+    Returns (density, was_dewpoint_clamped).  When dewpoint exceeds
+    temperature (sensor fault or supersaturation), dewpoint is clamped to
+    temperature to prevent vapour pressure above saturation from distorting
+    the density.
+    """
     if pressure_pa <= 0 or temperature_k <= 0 or dewpoint_k <= 0:
         raise ValueError("Air density requires positive pressure, temperature, and dew point")
+    was_clamped = dewpoint_k > temperature_k
+    if was_clamped:
+        dewpoint_k = temperature_k
     dewpoint_c = dewpoint_k - 273.15
     vapor_pressure_hpa = 6.1078 * 10 ** (7.5 * dewpoint_c / (237.3 + dewpoint_c))
     vapor_pressure_pa = vapor_pressure_hpa * 100.0
     dry_air = (pressure_pa - vapor_pressure_pa) / 287.05
     water_vapor = vapor_pressure_pa / 461.5
-    return float((dry_air + water_vapor) / temperature_k)
+    return float((dry_air + water_vapor) / temperature_k), was_clamped

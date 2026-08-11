@@ -34,13 +34,15 @@ def _get_allowed_origins() -> list[str]:
         for origin in os.getenv("GOKAATRU_CORS_ORIGINS", "").split(",")
         if origin.strip()
     ]
+    if configured:
+        return configured
     defaults = [
         "http://127.0.0.1:5173",
         "http://localhost:5173",
         "http://127.0.0.1:4173",
         "http://localhost:4173",
     ]
-    return list(dict.fromkeys([*defaults, *configured]))
+    return defaults
 
 
 def create_app() -> FastAPI:

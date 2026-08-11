@@ -317,7 +317,7 @@ def windkit_read_mfwwc(filenames: str, file_format: str = "") -> dict:
         file_format: File format hint (optional).
     """
     paths = json.loads(filenames)
-    resolved = [str(_windkit_dir() / f) if not Path(f).is_absolute() else f for f in paths]
+    resolved = [str(windkit_file_path(f)) for f in paths]
     kwargs = {}
     if file_format:
         kwargs["file_format"] = file_format

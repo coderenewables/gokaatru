@@ -151,6 +151,60 @@ class TestGeoDataFrameSerialization:
             windkit_file_path("../../escape")
 
 
+class TestReadMfwwcPathResolution:
+    """Regression tests for windkit_read_mfwwc path handling.
+
+    This tool previously referenced two undefined names (`_windkit_dir` and
+    `Path`), so every call raised NameError. It had no test coverage, which is
+    why the bug went unnoticed. These tests pin the corrected behaviour: each
+    filename is resolved through windkit_file_path(), which confines it to the
+    session WindKit directory.
+    """
+
+    def test_resolves_relative_names_into_session_windkit_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from server.state.session import session
+        from server.tools.windkit import climate
+
+        session.workspace_dir = tmp_path
+        captured: dict[str, object] = {}
+
+        def _fake_read_mfwwc(paths: list[str], **kwargs: object) -> xr.Dataset:
+            captured["paths"] = paths
+            captured["kwargs"] = kwargs
+            return xr.Dataset()
+
+        monkeypatch.setattr(climate.windkit, "read_mfwwc", _fake_read_mfwwc)
+
+        result = climate.windkit_read_mfwwc(json.dumps(["a.nc", "sub/b.nc"]), file_format="netcdf")
+
+        base = (tmp_path / "windkit").resolve()
+        resolved = [Path(p) for p in captured["paths"]]
+        assert [p.name for p in resolved] == ["a.nc", "b.nc"]
+        assert all(p.is_relative_to(base) for p in resolved)
+        assert captured["kwargs"] == {"file_format": "netcdf"}
+        assert result["status"] == "ok"
+
+    def test_rejects_absolute_paths(self, tmp_path: Path) -> None:
+        from server.state.session import session
+        from server.tools.windkit import climate
+
+        session.workspace_dir = tmp_path
+
+        with pytest.raises(ValueError, match="must be relative"):
+            climate.windkit_read_mfwwc(json.dumps(["/etc/passwd"]))
+
+    def test_rejects_traversal_paths(self, tmp_path: Path) -> None:
+        from server.state.session import session
+        from server.tools.windkit import climate
+
+        session.workspace_dir = tmp_path
+
+        with pytest.raises(ValueError, match="must remain inside"):
+            climate.windkit_read_mfwwc(json.dumps(["../../escape.nc"]))
+
+
 class TestOkHelper:
     """Tests for _ok() envelope wrapper."""
 

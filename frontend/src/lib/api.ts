@@ -1027,30 +1027,6 @@ export async function callSessionRoute<T>(
 }
 
 // ---------------------------------------------------------------------------
-// OpenAPI + WindKit (Phase G)
-// ---------------------------------------------------------------------------
-
-export async function fetchOpenApiSpec(baseUrl: string): Promise<Record<string, unknown>> {
-  return requestJson<Record<string, unknown>>(baseUrl, "/openapi.json");
-}
-
-export interface WindKitResponse {
-  status: string;
-  result: unknown;
-}
-
-export async function invokeWindKitRoute(
-  baseUrl: string,
-  routePath: string,
-  payload: unknown,
-): Promise<WindKitResponse> {
-  return requestJson<WindKitResponse>(baseUrl, routePath, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-// ---------------------------------------------------------------------------
 // Exports (Phase G / spec §9) — file downloads, not JSON
 // ---------------------------------------------------------------------------
 

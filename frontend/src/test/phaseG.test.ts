@@ -1,55 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { extractWindKitTools, groupWindKitToolsByCategory } from "../lib/openapi";
 import { toMetricRows, flattenConfigDiff, formatMetricValue } from "../lib/scenarioCompare";
 import { readChatSettings, writeChatSettings, defaultModelForProvider } from "../lib/copilotAgent";
-
-describe("extractWindKitTools", () => {
-  it("returns [] for non-spec input", () => {
-    expect(extractWindKitTools(null)).toEqual([]);
-    expect(extractWindKitTools({})).toEqual([]);
-    expect(extractWindKitTools({ paths: {} })).toEqual([]);
-  });
-
-  it("extracts /api/windkit/{category}/{name} tools with POST", () => {
-    const spec = {
-      paths: {
-        "/api/windkit/wind/wind_speed": {
-          post: { summary: "Compute wind speed from u,v" },
-        },
-        "/api/windkit/climate/validate_tswc": {
-          post: { summary: "Validate a TSWC" },
-        },
-        "/api/health": { get: { summary: "Health" } },
-      },
-    };
-    const tools = extractWindKitTools(spec);
-    expect(tools).toHaveLength(2);
-    // Tools are sorted by category then name (climate < wind alphabetically).
-    const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
-    expect(byName.wind_speed).toMatchObject({
-      category: "wind",
-      name: "wind_speed",
-      method: "POST",
-      path: "/api/windkit/wind/wind_speed",
-      summary: "Compute wind speed from u,v",
-    });
-    expect(byName.validate_tswc.category).toBe("climate");
-  });
-
-  it("groups tools by category", () => {
-    const tools = extractWindKitTools({
-      paths: {
-        "/api/windkit/wind/wind_speed": { post: {} },
-        "/api/windkit/wind/wind_direction": { post: {} },
-        "/api/windkit/climate/is_tswc": { post: {} },
-      },
-    });
-    const grouped = groupWindKitToolsByCategory(tools);
-    expect(Object.keys(grouped).sort()).toEqual(["climate", "wind"]);
-    expect(grouped.wind).toHaveLength(2);
-  });
-});
 
 describe("scenarioCompare", () => {
   it("toMetricRows computes deltas vs the first session", () => {

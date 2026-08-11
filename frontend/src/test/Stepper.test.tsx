@@ -82,7 +82,7 @@ describe("PhaseTabs", () => {
     expect(screen.getByRole("button", { name: "Data import" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Stepper" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Canvas" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "WindKit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Results" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copilot" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Compare" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sensor Overview" })).toBeInTheDocument();

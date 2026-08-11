@@ -10,7 +10,6 @@ import { StageShell } from "./components/stages/StageShell";
 import { WorkflowView } from "./components/WorkflowView";
 import { CopilotView } from "./components/CopilotView";
 import { CompareView } from "./components/CompareView";
-import { WindKitExplorerView } from "./components/WindKitExplorerView";
 import { HowToView } from "./components/HowToView";
 import { SensorReviewView } from "./components/SensorReviewView";
 import { ResultsView } from "./components/results/ResultsView";
@@ -48,7 +47,6 @@ export default function App() {
         ) : null}
         {activeTab === "setup" ? <StageShell /> : null}
         {activeTab === "workflow" ? <WorkflowView /> : null}
-        {activeTab === "windkit" ? <WindKitExplorerView /> : null}
         {activeTab === "copilot" ? <CopilotView /> : null}
         {activeTab === "compare" ? <CompareView /> : null}
         {activeTab === "results" ? <ResultsView /> : null}

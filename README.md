@@ -5,7 +5,7 @@
 GoKaatru ships as two parts that work together:
 
 - **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **222 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration, and WindKit.
-- **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a BYOK AI copilot, scenario comparison, and a WindKit explorer.
+- **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison. (The backend WindKit tool surface remains available via the API/MCP server, but the frontend no longer ships a dedicated WindKit tab.)
 
 State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings).
 
@@ -31,9 +31,10 @@ Data import + hub height
 ### Data import and default Canvas plan
 
 1. Import measured time-series and an IEA Task 43 data model, import a BrightHub location, or load a shared dataset.
-2. Enter the site metadata and **hub height**. Hub height has no default and is required before a model can run.
-3. Click **Save config and run model**. If BrightHub credentials are not available, the app opens the BrightHub sign-in view instead of starting a run.
-4. On successful authentication, the app persists the runconfig, opens the Canvas, and starts the default graph. The graph remains editable for later reruns or manual changes.
+2. (Optional) In the **Analysis sensor selection** table, untick sensors to exclude them. Applying the selection removes them from the working data and records them in `excluded_sensors`; reloading the data file or re-importing from BrightHub restores the full set.
+3. Enter the site metadata and **hub height**. Hub height has no default and is required before a model can run.
+4. Click **Save config and run model**. If BrightHub credentials are not available, the app opens the BrightHub sign-in view instead of starting a run.
+5. On successful authentication, the app persists the runconfig, opens the Canvas, and starts the default graph. The graph remains editable for later reruns or manual changes.
 
 ### Running a model on Canvas
 
@@ -63,16 +64,16 @@ The Stepper remains available after data import for guided review and manual ope
 
 | Stage | What happens |
 |---|---|
-| **1. Data cleaning** | Review the imported measurement inventory and apply explicit cleaning filters when appropriate. |
+| **1. Data cleaning** | Review the imported measurement inventory, choose which sensors stay in the analysis (excluded sensors are removed from the working data and recorded in `excluded_sensors`), and apply explicit cleaning filters when appropriate. |
 | **2. Reanalysis acquisition** | Review BrightHub ERA5 + MERRA-2 nodes and site interpolation; optional direct EarthDataHub ERA5 is available as a separate, credentialed fallback. |
 | **3. Measured-data exploration** | Recovery/availability, wind rose, Weibull, diurnal/annual profiles, shear profile, turbulence intensity — to refine shear sensors and LTC strategy. |
-| **4. Shear → hub (measured)** | Power-law (α) or log-law (z₀) shear + 12×24 lookup, extrapolate measured sensors to hub height. |
+| **4. Shear → hub (measured)** | Power-law (α) or log-law (z₀) shear + 12×24 lookup, extrapolate measured sensors to hub height. The power-law exponent is bounded to α ∈ [−1, 1] so a noisy record can't be amplified into a non-physical hub speed. |
 | **5. Reanalysis → hub** | Confirm long-term reference series are available at hub height using the chosen shear method. |
 | **6. Long-Term Correction** | MCP between measured (short) and reanalysis (long) across 5 algorithms (`speedsort`, `linear_least_squares`, `total_least_squares`, `variance_ratio`, `xgboost`); scatter/residual/convergence diagnostics. |
 | **7. Clipping** | Pick the representative historical window that minimizes combined historic + climate uncertainty. |
 | **8. Ensemble & uncertainty** | Inverse-RMSE ensemble blend, RSS total uncertainty + P50/75/90/99, and named scenarios for comparison. |
 
-Beyond the stepper, the **Canvas** tab renders the full pipeline as an editable React-Flow DAG (run auto/step, snapshots, fork branches), the **Copilot** tab is a BYOK chat that drives backend tools via natural language, the **Compare** tab diffs saved scenarios, and the **WindKit** tab exposes the WindKit tool surface.
+Beyond the stepper, the **Canvas** tab renders the full pipeline as an editable React-Flow DAG (run auto/step, snapshots, fork branches), the **Results** tab is a read-only aggregate report of everything the session has produced (run overview, measured data, shear, reanalysis, LTC, ensemble & uncertainty, clipping/scenarios — it never triggers computation), the **Sensor Overview** tab is a measured-data validation dashboard, the **Copilot** tab is a BYOK chat that drives backend tools via natural language, and the **Compare** tab diffs saved scenarios.
 
 ## Quick start
 
@@ -124,9 +125,9 @@ server/                 # Python MCP server + FastAPI web API
 
 frontend/               # React + Vite + TypeScript web app
 ├── src/
-│   ├── components/     # AppHeader, PhaseTabs, Stepper, stages/, WorkflowView, CopilotView, …
+│   ├── components/     # AppHeader, PhaseTabs, Stepper, stages/, results/, WorkflowView, CopilotView, …
 │   ├── store/          # useWorkspaceStore (Zustand)
-│   ├── lib/            # api, configSync, stages, workflow, copilotAgent, openapi, …
+│   ├── lib/            # api, configSync, stages, workflow, copilotAgent, …
 │   └── types/          # analysis.ts (config schema + response interfaces)
 └── tests/              # backend pytest suite
 ```
@@ -144,6 +145,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/sessions/{id}/summary` | GET | Workflow progress and analysis readiness |
 | `/sessions/{id}/uploads/{timeseries\|datamodel}` | POST | Upload a file (multipart) |
 | `/sessions/{id}/sensors` | GET | Sensor inventory |
+| `/sessions/{id}/sensors/delete` | POST | Remove sensors from the session (drops their columns; persists `excluded_sensors`) |
 | `/sessions/{id}/coverage/{sensor}` | GET | Per-sensor coverage/gap stats |
 | `/sessions/{id}/statistics/{sensor}` | GET | Weibull, monthly/diurnal, percentiles |
 | `/sessions/{id}/era5/{nodes\|extract\|interpolate}` | POST | ERA5 node discovery, extraction, interpolation |
@@ -202,7 +204,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 - `compute_weibull_params`, `compute_windrose_data`, `compute_diurnal_profile`, `compute_monthly_stats`, `compute_turbulence_intensity`, `compute_momm`, `compute_scatter_stats`, `calculate_uncertainty`
 
 ### Visualization
-- `plot_windrose`, `plot_weibull`, `plot_diurnal`, `plot_scatter`, `plot_timeseries`, `plot_data_coverage`, `plot_shear_table`, `plot_monthly_means`, `plot_ltc_comparison`, `plot_annual_means`, `plot_uncertainty_breakdown`
+- `plot_windrose`, `plot_weibull`, `plot_diurnal`, `plot_scatter`, `plot_timeseries`, `plot_data_coverage`, `plot_shear_table`, `plot_shear_profile`, `plot_shear_timeseries`, `plot_era5_scatter`, `plot_monthly_means`, `plot_ltc_comparison`, `plot_annual_means`, `plot_uncertainty_breakdown`
 
 ### WindKit — Wind Functions (13 tools)
 - `windkit_wind_speed`, `windkit_wind_direction`, `windkit_wind_speed_and_direction`, `windkit_wind_vectors`, `windkit_wind_direction_difference`, `windkit_wd_to_sector`, `windkit_vinterp_wind_direction`, `windkit_vinterp_wind_speed`, `windkit_rotor_equivalent_wind_speed`, `windkit_shear_extrapolate`, `windkit_shear_exponent`, `windkit_veer_extrapolate`, `windkit_wind_veer`
@@ -259,6 +261,7 @@ python -m ruff check server/ tests/
 python -m pytest tests/ -v
 python -m pytest tests/test_api_sessions.py tests/test_api_workflow.py -v
 python -m pytest tests/test_windkit.py -v
+python -m pytest tests/test_sensor_selection.py tests/test_uploaded_dataset.py -v
 python -c "import asyncio, json; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())), 'tools')"
 ```
 
@@ -278,8 +281,7 @@ python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000
 
 ## Documentation
 
-- **[`WORKFLOW_FRONTEND_SPEC.md`](./WORKFLOW_FRONTEND_SPEC.md)** — the complete frontend build contract (8-stage workflow, store, API client, stage specs, endpoint reference). The canonical reference for the web app.
-- [`BUILD_SPECIFICATION.md`](./BUILD_SPECIFICATION.md) / [`BUILD_INSTRUCTIONS.md`](./BUILD_INSTRUCTIONS.md) — backend build contract and phase-by-phase implementation history.
+The canonical behavior contract is the code itself: the central config schema and response interfaces live in [`frontend/src/types/analysis.ts`](./frontend/src/types/analysis.ts), the web-API surface in [`server/api/routes/`](./server/api/routes), and the stage metadata in [`frontend/src/lib/stages.ts`](./frontend/src/lib/stages.ts). This README tracks the current workflow, endpoints, and tool inventory.
 
 ## Tech stack
 

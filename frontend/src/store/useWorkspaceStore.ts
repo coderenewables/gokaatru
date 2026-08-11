@@ -116,9 +116,7 @@ import {
   replaceWorkflowRunConfig as apiReplaceWorkflowRunConfig,
   listWorkflowRuns as apiListWorkflowRuns,
   compareWorkflowRuns as apiCompareWorkflowRuns,
-  fetchOpenApiSpec,
   compareWorkflowBranches,
-  invokeWindKitRoute as apiInvokeWindKitRoute,
   uploadSessionFile as apiUploadSessionFile,
   type BrightHubLocation,
   type BrightHubStatusResponse,
@@ -150,11 +148,10 @@ import {
   type CopilotSettings,
   type CopilotToolEvent,
 } from "../lib/copilotAgent";
-import { extractWindKitTools } from "../lib/openapi";
 
 const ACTIVE_SESSION_STORAGE_KEY = "gokaatru-active-session-id";
 
-type TabId = "import" | "setup" | "workflow" | "windkit" | "results" | "copilot" | "compare" | "howto" | "sensor_review";
+type TabId = "import" | "setup" | "workflow" | "results" | "copilot" | "compare" | "howto" | "sensor_review";
 
 interface ActivePlot {
   plotName: PlotName;
@@ -216,13 +213,11 @@ interface WorkspaceStore {
   workflowRunComparison: import("../lib/api").WorkflowRunCompareResponse | null;
   defaultWorkflowStatus: "idle" | "preparing" | "ready" | "error";
 
-  // copilot + compare + windkit (Phase G)
+  // copilot + compare (Phase G)
   chatSettings: CopilotSettings;
   chatMessages: CopilotMessage[];
   compareResult: import("../lib/api").WorkflowCompareResponse | null;
   compareSlotNames: (string | null)[];
-  windkitTools: import("../lib/openapi").WindKitToolDefinition[];
-  windkitResponse: unknown;
 
   // actions
   setActiveTab: (tab: TabId) => void;
@@ -328,13 +323,11 @@ interface WorkspaceStore {
   setSelectedWorkflowRunIds: (runIds: string[]) => void;
   compareWorkflowRuns: () => Promise<void>;
 
-  // Phase G — copilot / compare / windkit
+  // Phase G — copilot / compare
   setChatSettings: (settings: CopilotSettings) => void;
   sendChatMessage: (content: string) => Promise<void>;
   setCompareSlot: (slotIndex: number, scenarioName: string | null) => void;
   runCompare: () => Promise<void>;
-  refreshWindKitTools: () => Promise<void>;
-  invokeWindKitRoute: (routePath: string, payload: unknown) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -474,8 +467,6 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   chatMessages: [],
   compareResult: null,
   compareSlotNames: ["baseline", null, null],
-  windkitTools: [],
-  windkitResponse: null,
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setSelectedStage: (stage) => set({ selectedStage: stage }),
@@ -623,7 +614,6 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       // Best-effort workflow status + snapshots (non-fatal).
       void get().refreshWorkflowStatus();
       void get().refreshWorkflowSnapshots();
-      void get().refreshWindKitTools();
     } catch (error) {
       set({
         busyLabel: null,
@@ -1873,7 +1863,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
   },
 
-  // ---- Phase G: copilot / compare / windkit ------------------------------
+  // ---- Phase G: copilot / compare -----------------------------------------
 
   setChatSettings: (settings) => {
     writeChatSettings(settings);
@@ -2005,32 +1995,6 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
   },
 
-  refreshWindKitTools: async () => {
-    try {
-      const spec = await fetchOpenApiSpec(get().apiBaseUrl);
-      set({ windkitTools: extractWindKitTools(spec) });
-    } catch {
-      /* non-fatal; WindKit optional */
-    }
-  },
-
-  invokeWindKitRoute: async (routePath, payload) => {
-    set({ busyLabel: "Running WindKit tool" });
-    try {
-      const response = await apiInvokeWindKitRoute(get().apiBaseUrl, routePath, payload);
-      set((state) => ({
-        windkitResponse: response.result,
-        busyLabel: null,
-        assets: upsertAssets(state.assets, [buildOperationResultAsset(routePath, response.result)]),
-        activity: appendActivity(state.activity, "WindKit tool", "ok", routePath),
-      }));
-    } catch (error) {
-      set((state) => ({
-        busyLabel: null,
-        activity: appendActivity(state.activity, "WindKit tool failed", "error", asErrorMessage(error)),
-      }));
-    }
-  },
 }));
 
 function deriveApiBaseUrl(): string {

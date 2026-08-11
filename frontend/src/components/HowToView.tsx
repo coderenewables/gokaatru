@@ -20,8 +20,8 @@ export const PIPELINE: PipelineStep[] = [
   },
   {
     n: 2,
-    title: "Canvas planning",
-    body: "After data and hub height are saved, GoKaatru prepares an editable Canvas plan with default shear, ERA5, linear least-squares, variance-ratio, ensemble, and clipping decisions.",
+    title: "Automatic Canvas run",
+    body: "Save config and run model builds the default Canvas plan (shear, ERA5, linear least-squares, variance-ratio, ensemble, clipping, uncertainty) and executes it automatically, streaming live node progress. The plan stays editable for reruns or manual changes.",
   },
   {
     n: 3,
@@ -74,7 +74,8 @@ const TAB_DOCS: TabDoc[] = [
   { label: "Data import", body: "Upload or import measurements and save the site and hub-height configuration." },
   { label: "Canvas", body: "Review and edit the automatically prepared analysis plan before running it." },
   { label: "Stepper", body: "The eight post-import guided analysis stages. Each stage unlocks from its prerequisites." },
-  { label: "WindKit", body: "Explorer for WindKit tools and their responses." },
+  { label: "Results", body: "Read-only aggregate report of everything the session has produced." },
+  { label: "Sensor Overview", body: "Validate measured data quality and characterize the measured wind climate." },
   { label: "Copilot", body: "Chat with the agent to drive the workflow conversationally." },
   { label: "Compare", body: "Compare saved scenarios side by side." },
   { label: "How To", body: "This page." },

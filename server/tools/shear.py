@@ -75,6 +75,11 @@ def _compute_pairwise_shear(speed_matrix: np.ndarray, heights: np.ndarray) -> np
     result = np.full(speed_matrix.shape[0], np.nan, dtype=float)
     usable = (valid_pairs > 0) & (denominator > 0)
     result[usable] = numerator[usable] / denominator[usable]
+    # Bound the power-law exponent to a physically plausible band. Turbulent or
+    # noisy records can otherwise produce extreme alpha (we observed up to ~7),
+    # which the power-law extrapolation amplifies into non-physical hub speeds
+    # (hundreds of m/s). Clamping to [-1, 1] keeps the shear table sane.
+    result[usable] = np.clip(result[usable], -1.0, 1.0)
     return result
 
 

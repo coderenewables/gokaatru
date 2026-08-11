@@ -360,6 +360,10 @@ def _parse_timeseries(state: SessionState, file_path: str) -> dict:
         raise ValueError("Parsed timeseries is empty after timestamp detection")
     state.timeseries_df = filtered_df.copy()
     state.raw_timeseries_df = filtered_df.copy(deep=True)
+    # A new timeseries is a fresh dataset: any previously persisted sensor
+    # selection no longer applies, so drop it. Importing a new dataset (or
+    # re-importing from BrightHub) is how the user restores excluded sensors.
+    state.runconfig.pop("excluded_sensors", None)
     timestep_minutes = detect_timestep_minutes(filtered_df)
     return {
         "status": "ok",
@@ -369,6 +373,49 @@ def _parse_timeseries(state: SessionState, file_path: str) -> dict:
         "end": _format_timestamp(filtered_df.index.max()),
         "timestep_minutes": timestep_minutes,
     }
+
+
+def _prune_sensor_mapping(state: SessionState) -> None:
+    """Drop mapping heights whose speed column is absent from the working dataframe."""
+    if state.timeseries_df is None:
+        return
+    state.sensor_mapping = {
+        height: sensor_map
+        for height, sensor_map in state.sensor_mapping.items()
+        if sensor_map.get("speed_col") in state.timeseries_df.columns
+    }
+
+
+def _apply_sensor_exclusions(state: SessionState) -> None:
+    """Re-apply the persisted sensor exclusion list after a (re)import.
+
+    The user's sensor selection is authoritative: ``excluded_sensors`` in the
+    runconfig records every sensor removed via the selection UI. Any full
+    re-import of a datamodel rebuilds the complete inventory, so this helper
+    trims it back to the persisted selection. ``excluded_sensors`` is cleared
+    whenever a *new* timeseries is ingested, so this is a no-op for fresh
+    datasets and only constrains datamodel-only re-imports of the same data.
+    """
+    excluded = state.runconfig.get("excluded_sensors")
+    if not isinstance(excluded, list) or not excluded:
+        return
+    excluded_names = {str(name) for name in excluded}
+    for name in list(state.sensor_inventory):
+        if name in excluded_names:
+            state.sensor_inventory.pop(name, None)
+    for height, slots in list(state.sensor_mapping.items()):
+        for slot, column in list(slots.items()):
+            if column in excluded_names:
+                slots[slot] = None
+        if all(value is None for value in slots.values()):
+            del state.sensor_mapping[height]
+    # Excluded sensors must not survive in the working data either.
+    for frame_attr in ("timeseries_df", "raw_timeseries_df"):
+        frame = getattr(state, frame_attr)
+        if frame is not None:
+            drop_cols = [column for column in frame.columns if column in excluded_names]
+            if drop_cols:
+                setattr(state, frame_attr, frame.drop(columns=drop_cols))
 
 
 def _parse_datamodel(state: SessionState, file_path: str) -> dict:
@@ -388,6 +435,11 @@ def _parse_datamodel(state: SessionState, file_path: str) -> dict:
             if sensor_map.get("speed_col") in state.timeseries_df.columns
         }
     state.sensor_mapping = dict(sorted(mapping.items(), reverse=True))
+    # A datamodel (re)import rebuilds the full inventory; trim it back to the
+    # persisted selection so excluded sensors never silently reappear.
+    _apply_sensor_exclusions(state)
+    _prune_sensor_mapping(state)
+    state.sensor_mapping = dict(sorted(state.sensor_mapping.items(), reverse=True))
     if state.get_project_name() in {None, ""} and isinstance(site_metadata.get("project_name"), str):
         state.set_project_name(str(site_metadata["project_name"]))
     if state.get_coordinate() is None and isinstance(site_metadata.get("coordinate"), Coordinate):

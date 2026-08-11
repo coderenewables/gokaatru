@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 
 // Mock react-plotly.js so PlotFrame doesn't render a real figure in jsdom.
 vi.mock("react-plotly.js", () => ({
@@ -187,9 +187,47 @@ describe("DataLoadView", () => {
 
   it("renders the sensor inventory when sensors are loaded", () => {
     render(<DataLoadView />);
-    expect(screen.getByText("Sensor inventory")).toBeInTheDocument();
+    expect(screen.getByText("Analysis sensor selection")).toBeInTheDocument();
     expect(screen.getByText("Spd_80m")).toBeInTheDocument();
     expect(screen.getByText("Spd_120m")).toBeInTheDocument();
+  });
+
+  it("removes excluded sensors when saving config with apply-selection checked", async () => {
+    const deleteSensors = vi.fn(async () => {});
+    const saveConfigAndRunModel = vi.fn(async () => {});
+    useWorkspaceStore.setState({ deleteSensors, saveConfigAndRunModel });
+    render(<DataLoadView />);
+
+    // Uncheck Spd_80m to exclude it
+    const speedSensor = screen.getByRole("checkbox", { name: "Include Spd_80m" });
+    fireEvent.click(speedSensor);
+
+    // The "Apply sensor selection" checkbox should appear (checked by default)
+    const applyCheck = screen.getByRole("checkbox", { name: /apply sensor selection/i });
+    expect(applyCheck).toBeChecked();
+
+    // Click "Save config and run model" — should apply selection then save
+    const saveButton = screen.getByRole("button", { name: /save config and run model/i });
+    await act(async () => {
+      fireEvent.click(saveButton);
+    });
+
+    expect(deleteSensors).toHaveBeenCalledWith(["Spd_80m"]);
+  });
+
+  it("selects and clears all imported sensors from the top checkbox", () => {
+    render(<DataLoadView />);
+
+    const selectAll = screen.getByRole("checkbox", { name: "Select all sensors" });
+    expect(selectAll).toBeChecked();
+
+    fireEvent.click(selectAll);
+    expect(screen.getByRole("checkbox", { name: "Include Spd_80m" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Include Spd_120m" })).not.toBeChecked();
+
+    fireEvent.click(selectAll);
+    expect(screen.getByRole("checkbox", { name: "Include Spd_80m" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Include Spd_120m" })).toBeChecked();
   });
 
   it("renders the site & hub config form", () => {

@@ -74,7 +74,11 @@ def _power_extrapolate_array(
     alpha: np.ndarray,
 ) -> np.ndarray:
     """Vectorize power-law extrapolation over concurrent reference speeds and lookup shear values."""
-    return reference_speed * (hub_height_m / reference_height) ** alpha
+    # Clamp the shear exponent to a physically plausible band so a corrupt or
+    # extreme lookup cell cannot amplify reference speeds into non-physical hub
+    # values. This mirrors the clamp applied when the shear table is built.
+    alpha_safe = np.clip(alpha, -1.0, 1.0)
+    return reference_speed * (hub_height_m / reference_height) ** alpha_safe
 
 
 def _log_extrapolate_array(

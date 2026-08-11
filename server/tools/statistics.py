@@ -251,6 +251,26 @@ def _sensor_statistics(state: SessionState, sensor_name: str) -> dict:
     series = _require_series_from_state(state, sensor_name)
     if state.timeseries_df is None:
         raise ValueError("Timeseries data is not loaded")
+    # Guard: non-numeric columns (string flags, status codes) cannot have
+    # statistical reductions computed. Return a minimal safe payload instead
+    # of crashing on .mean()/.median()/.std().
+    if not pd.api.types.is_numeric_dtype(series):
+        coverage_pct = float(series.notna().sum() / len(state.timeseries_df) * 100.0) if len(state.timeseries_df) else 0.0
+        return {
+            "sensor_name": sensor_name,
+            "mean": float("nan"),
+            "median": float("nan"),
+            "std": float("nan"),
+            "min_value": float("nan"),
+            "max_value": float("nan"),
+            "count": int(series.notna().sum()),
+            "coverage_pct": coverage_pct,
+            "weibull_k": None,
+            "weibull_A": None,
+            "monthly_means": [float("nan")] * 12,
+            "diurnal_means": [float("nan")] * 24,
+            "percentiles": {},
+        }
     coverage_pct = float(series.notna().sum() / len(state.timeseries_df) * 100.0) if len(state.timeseries_df) else 0.0
     valid = series.dropna()
     if valid.empty:

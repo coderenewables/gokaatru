@@ -175,7 +175,7 @@ def test_api_workflow(
     )
     assert shear_response.status_code == 200
     assert shear_response.json()["records"] == 66066
-    assert shear_response.json()["mean_shear"] == pytest.approx(0.06056611979501554)
+    assert shear_response.json()["mean_shear"] == pytest.approx(0.060266093228781)
     table_response = client.post(
         f"/api/sessions/{session_id}/shear/table",
         headers=headers,

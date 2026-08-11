@@ -207,6 +207,9 @@ class SessionState:
             config["sensor_mapping"] = {
                 str(height): mapping.copy() for height, mapping in self.sensor_mapping.items()
             }
+        excluded = self.runconfig.get("excluded_sensors")
+        if isinstance(excluded, list) and excluded:
+            config["excluded_sensors"] = [str(name) for name in excluded]
         if self.cleaning_log:
             config["cleaning_log"] = [entry.copy() for entry in self.cleaning_log]
         if self.shear_table is not None:

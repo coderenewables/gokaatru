@@ -154,7 +154,7 @@ import { extractWindKitTools } from "../lib/openapi";
 
 const ACTIVE_SESSION_STORAGE_KEY = "gokaatru-active-session-id";
 
-type TabId = "import" | "setup" | "workflow" | "windkit" | "copilot" | "compare" | "howto" | "sensor_review";
+type TabId = "import" | "setup" | "workflow" | "windkit" | "results" | "copilot" | "compare" | "howto" | "sensor_review";
 
 interface ActivePlot {
   plotName: PlotName;
@@ -1693,7 +1693,9 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
           activity: appendActivity(state.activity, "Workflow manual", "ok", response.status),
         }));
       }
-      await get().refreshWorkspace();
+      // Pull freshly computed results (LTC, ensemble) so read-only surfaces
+      // like the Results tab reflect the run without needing a manual stage run.
+      await Promise.all([get().refreshWorkspace(), get().refreshResults()]);
     } catch (error) {
       set((state) => ({
         busyLabel: null,

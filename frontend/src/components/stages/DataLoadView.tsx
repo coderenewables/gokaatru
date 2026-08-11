@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { useWorkspaceStore } from "../../store/useWorkspaceStore";
 import { RunButton } from "../common/RunButton";
+import type { SensorRow } from "../../types/analysis";
 
 type LoadPath = "upload" | "brighthub" | "dataset";
 
@@ -16,6 +17,22 @@ export function DataLoadView() {
   useEffect(() => {
     if (brighthubPromptRequired) setPath("brighthub");
   }, [brighthubPromptRequired]);
+
+  const sensors = useWorkspaceStore((state) => state.sensors);
+  const deleteSensors = useWorkspaceStore((state) => state.deleteSensors);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(sensors.map((sensor) => sensor.name)));
+  const [applyOnSave, setApplyOnSave] = useState(true);
+
+  useEffect(() => {
+    setSelected(new Set(sensors.map((sensor) => sensor.name)));
+  }, [sensors]);
+
+  const excludedCount = sensors.length - selected.size;
+
+  const applySelection = async () => {
+    const excluded = sensors.filter((sensor) => !selected.has(sensor.name)).map((sensor) => sensor.name);
+    if (excluded.length > 0) await deleteSensors(excluded);
+  };
 
   return (
     <div className="stage-view">
@@ -29,8 +46,13 @@ export function DataLoadView() {
       {path === "brighthub" ? <BrightHubPath /> : null}
       {path === "dataset" ? <DatasetPath /> : null}
 
-      <SensorInventory />
-      <SiteConfigForm />
+      <SensorInventory sensors={sensors} selected={selected} setSelected={setSelected} />
+      <SiteConfigForm
+        applyOnSave={applyOnSave}
+        setApplyOnSave={setApplyOnSave}
+        excludedCount={excludedCount}
+        applySelection={applySelection}
+      />
     </div>
   );
 }
@@ -298,16 +320,13 @@ function DatasetPath() {
   );
 }
 
-function SensorInventory() {
-  const sensors = useWorkspaceStore((state) => state.sensors);
-  const deleteSensors = useWorkspaceStore((state) => state.deleteSensors);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+interface SensorInventoryProps {
+  sensors: SensorRow[];
+  selected: Set<string>;
+  setSelected: React.Dispatch<React.SetStateAction<Set<string>>>;
+}
 
-  // Clear selection whenever the sensor list changes (e.g. after deletion/import).
-  useEffect(() => {
-    setSelected(new Set());
-  }, [sensors]);
-
+function SensorInventory({ sensors, selected, setSelected }: SensorInventoryProps) {
   if (sensors.length === 0) return null;
 
   // Group sensors by type for display.
@@ -356,12 +375,10 @@ function SensorInventory() {
     });
   };
 
-  const handleDelete = () => {
-    const names = Array.from(selected);
-    if (names.length === 0) return;
-    if (window.confirm(`Remove ${names.length} sensor(s) from the session?\n\nThis removes them from the analysis inventory. Raw timeseries columns are preserved — a full re-import of the datamodel restores all sensors.`)) {
-      void deleteSensors(names);
-    }
+  const toggleAll = () => {
+    setSelected((previous) => (
+      previous.size === sensors.length ? new Set() : new Set(sensors.map((sensor) => sensor.name))
+    ));
   };
 
   const selectedCount = selected.size;
@@ -369,20 +386,25 @@ function SensorInventory() {
   return (
     <section className="path-panel">
       <div className="sensor-inventory-header">
-        <h3>Sensor inventory</h3>
-        {selectedCount > 0 ? (
-          <div className="path-actions">
-            <span className="muted">{selectedCount} selected</span>
-            <button type="button" className="link-button danger" onClick={handleDelete}>
-              Delete selected
-            </button>
-          </div>
+        <h3>Analysis sensor selection</h3>
+        {sensors.length > 0 ? (
+          <span className="muted">{selectedCount} included · {sensors.length - selectedCount} excluded</span>
         ) : null}
       </div>
       <p className="muted sensor-hint">
-        Select unwanted sensors and delete them from the analysis. Raw columns are preserved;
-        re-import the datamodel to restore the full inventory.
+        Select the sensors to include in analysis. Excluded sensors are removed from the session data,
+        so Sensor Overview and subsequent stages use only this selection. Load the data file again or
+        re-import from BrightHub to restore them.
       </p>
+      <label className="sensor-group-header">
+        <input
+          type="checkbox"
+          aria-label="Select all sensors"
+          checked={selectedCount === sensors.length}
+          onChange={toggleAll}
+        />
+        <strong>Select all</strong>
+      </label>
       {types.map((type) => {
         const groupSensors = grouped[type];
         const groupNames = groupSensors.map((s) => s.name);
@@ -414,6 +436,7 @@ function SensorInventory() {
                     <td>
                       <input
                         type="checkbox"
+                        aria-label={`Include ${s.name}`}
                         checked={selected.has(s.name)}
                         onChange={() => toggle(s.name)}
                       />
@@ -433,7 +456,14 @@ function SensorInventory() {
   );
 }
 
-function SiteConfigForm() {
+interface SiteConfigFormProps {
+  applyOnSave: boolean;
+  setApplyOnSave: (value: boolean) => void;
+  excludedCount: number;
+  applySelection: () => Promise<void>;
+}
+
+function SiteConfigForm({ applyOnSave, setApplyOnSave, excludedCount, applySelection }: SiteConfigFormProps) {
   const config = useWorkspaceStore((state) => state.config);
   const updateConfigValue = useWorkspaceStore((state) => state.updateConfigValue);
   const saveConfigAndRunModel = useWorkspaceStore((state) => state.saveConfigAndRunModel);
@@ -502,7 +532,23 @@ function SiteConfigForm() {
         </label>
       </div>
       <p className="muted">Hub height is required to build and run the default model.</p>
-      <RunButton label="Save config and run model" onClick={() => saveConfigAndRunModel()} />
+      {excludedCount > 0 ? (
+        <label className="form-check apply-selection-check">
+          <input
+            type="checkbox"
+            checked={applyOnSave}
+            onChange={(e) => setApplyOnSave(e.target.checked)}
+          />
+          <span>Apply sensor selection ({excludedCount} excluded will be removed from analysis)</span>
+        </label>
+      ) : null}
+      <RunButton
+        label="Save config and run model"
+        onClick={async () => {
+          if (applyOnSave && excludedCount > 0) await applySelection();
+          void saveConfigAndRunModel();
+        }}
+      />
     </section>
   );
 }

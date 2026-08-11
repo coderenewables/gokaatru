@@ -394,6 +394,8 @@ export type PlotName =
   | "era5_measured_overlay"
   | "shear_table"
   | "shear_profile"
+  | "shear_timeseries"
+  | "era5_scatter"
   | "monthly_means"
   | "turbulence_intensity"
   | "turbulence_windrose"

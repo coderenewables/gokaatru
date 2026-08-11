@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from server.api.deps import get_session_state, to_bad_request
 from server.state.session import SessionState
+from server.tools.config import _persist_runconfig
 from server.tools.data_io import (
     _build_sensor_rows,
     _get_data_coverage,
@@ -178,13 +179,16 @@ def delete_sensors(
     body: DeleteSensorsRequest,
     state: Annotated[SessionState, Depends(get_session_state)],
 ) -> dict:
-    """Remove unwanted sensors from the session inventory and mapping.
+    """Remove unwanted sensors from the session inventory, mapping, and data.
 
-    Removes the named sensors from ``sensor_inventory`` and clears their column
-    slot from ``sensor_mapping`` (by height). If a height entry in the mapping
+    Removes the named sensors from ``sensor_inventory``, clears their column
+    slot from ``sensor_mapping`` (by height), and drops their columns from both
+    the working and raw timeseries dataframes. If a height entry in the mapping
     becomes entirely ``None`` after removal, the height is dropped from the
-    mapping. The raw timeseries columns are preserved — only the *selection* is
-    removed. A full re-import of the datamodel restores the complete inventory.
+    mapping. The exclusion is persisted to ``excluded_sensors`` in the
+    runconfig so the selection is authoritative and survives config saves and
+    datamodel-only re-imports. Loading the timeseries again or re-importing
+    from BrightHub clears the exclusion and restores the full dataset.
     """
     del session_id
     if not state.sensor_inventory:
@@ -220,6 +224,28 @@ def delete_sensors(
 
     # Re-sort the mapping descending by height (consistent with parse_datamodel).
     state.sensor_mapping = dict(sorted(state.sensor_mapping.items(), reverse=True))
+
+    if removed:
+        # The selection is authoritative: drop the excluded columns from the
+        # working and raw data so downstream analysis never sees them.
+        removed_set = set(removed)
+        for frame_attr in ("timeseries_df", "raw_timeseries_df"):
+            frame = getattr(state, frame_attr)
+            if frame is not None:
+                drop_cols = [column for column in frame.columns if column in removed_set]
+                if drop_cols:
+                    setattr(state, frame_attr, frame.drop(columns=drop_cols))
+
+        # Persist the exclusion so it survives config saves and datamodel-only
+        # re-imports. runconfig.json is the single source of truth — write through.
+        existing = state.runconfig.get("excluded_sensors")
+        excluded_list = [str(name) for name in existing] if isinstance(existing, list) else []
+        for name in removed:
+            if name not in excluded_list:
+                excluded_list.append(name)
+        state.runconfig["excluded_sensors"] = excluded_list
+        _persist_runconfig(state)
+
     state.touch()
 
     return {

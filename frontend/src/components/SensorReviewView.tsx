@@ -54,7 +54,14 @@ export function SensorReviewView() {
     let cancelled = false;
     const run = async () => {
       const next: Record<string, SensorStatistics> = {};
-      for (const sensor of sensors) {
+      // Only fetch statistics for wind-speed and wind-direction sensors — these
+      // are the analytically relevant ones. Fetching stats for every column
+      // (GPS, status flags, oceanographic channels) is wasteful and crashes on
+      // non-numeric data.
+      const relevantSensors = sensors.filter(
+        (s) => s.sensor_type === "wind_speed" || s.sensor_type === "wind_direction",
+      );
+      for (const sensor of relevantSensors) {
         try {
           next[sensor.name] = await loadSensorStatistics(sensor.name);
         } catch {

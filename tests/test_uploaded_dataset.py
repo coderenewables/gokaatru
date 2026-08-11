@@ -103,18 +103,18 @@ def test_uploaded_dataset_statistics_shear_and_extrapolation(uploaded_dataset_se
 
     assert shear["status"] == "ok"
     assert shear["records"] == 66066
-    assert shear["mean_shear"] == pytest.approx(0.06056611979501554)
-    assert shear["median_shear"] == pytest.approx(0.05103837285018659)
-    assert shear["std_shear"] == pytest.approx(0.17613917816330288)
+    assert shear["mean_shear"] == pytest.approx(0.060266093228781)
+    assert shear["median_shear"] == pytest.approx(0.051038372850187)
+    assert shear["std_shear"] == pytest.approx(0.168150096316406)
 
     table = np.asarray(shear_table["table"], dtype=float)
     assert table.shape == (12, 24)
     assert np.isfinite(table).all()
-    assert float(table.mean()) == pytest.approx(0.06175280233439187)
+    assert float(table.mean()) == pytest.approx(0.061472071995364)
 
     assert extrapolation["status"] == "ok"
     assert extrapolation["column_name"] == "Spd_150m_hub"
     assert extrapolation["method_counts"] == {"direct": 0, "interpolated": 65519, "extrapolated": 757}
-    assert hub_series.mean() == pytest.approx(9.612453740272263)
+    assert hub_series.mean() == pytest.approx(9.612443283591231)
     assert hub_series.min() == pytest.approx(0.5296561162417128)
     assert hub_series.max() == pytest.approx(31.42907866480829)

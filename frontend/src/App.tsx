@@ -13,6 +13,7 @@ import { CompareView } from "./components/CompareView";
 import { WindKitExplorerView } from "./components/WindKitExplorerView";
 import { HowToView } from "./components/HowToView";
 import { SensorReviewView } from "./components/SensorReviewView";
+import { ResultsView } from "./components/results/ResultsView";
 import { useWorkspaceStore } from "./store/useWorkspaceStore";
 
 function ViewFallback() {
@@ -50,6 +51,7 @@ export default function App() {
         {activeTab === "windkit" ? <WindKitExplorerView /> : null}
         {activeTab === "copilot" ? <CopilotView /> : null}
         {activeTab === "compare" ? <CompareView /> : null}
+        {activeTab === "results" ? <ResultsView /> : null}
         {activeTab === "howto" ? <HowToView /> : null}
         {activeTab === "sensor_review" ? <SensorReviewView /> : null}
       </Suspense>

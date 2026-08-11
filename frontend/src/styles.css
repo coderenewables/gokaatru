@@ -2355,3 +2355,20 @@ h3 {
 .link-button.danger {
   color: var(--color-error);
 }
+
+/* Apply-selection checkbox at bottom of data import */
+.apply-selection-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.apply-selection-check input {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-teal);
+}

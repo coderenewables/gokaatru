@@ -92,6 +92,31 @@ def _speed_sensor_pairs(state: SessionState) -> list[tuple[float, str]]:
     return pairs
 
 
+def _selected_sensor_columns(state: SessionState) -> list[str]:
+    """Return timeseries column names for sensors the analyst has kept in the inventory.
+
+    After the Stage-1 sensor-deletion feature removes unwanted sensors from
+    ``sensor_inventory`` / ``sensor_mapping``, this helper ensures plots that
+    scan all columns (e.g. ``_plot_data_coverage``) only show the selected set.
+    Falls back to all mapped columns when no inventory is loaded (timeseries-only
+    sessions before datamodel parse).
+    """
+    frame = state.timeseries_df
+    if frame is None:
+        return []
+    # Prefer sensor_inventory (the authoritative pruned list after deletions).
+    if state.sensor_inventory:
+        return [name for name in state.sensor_inventory if name in frame.columns]
+    # Fallback: derive from sensor_mapping column slots.
+    cols: list[str] = []
+    for mapping in state.sensor_mapping.values():
+        for key in ("speed_col", "dir_col", "temp_col", "pressure_col"):
+            col = mapping.get(key)
+            if col and col in frame.columns and col not in cols:
+                cols.append(col)
+    return cols
+
+
 def _downsample_timeseries(series: pd.Series) -> pd.Series:
     """Downsample dense time series to daily means to keep browser plots responsive."""
     return series.resample("D").mean() if len(series) > 50000 else series
@@ -684,8 +709,13 @@ def _plot_timeseries(state: SessionState, sensor_names: str) -> dict:
 
 
 def _plot_data_coverage(state: SessionState) -> dict:
-    """Plot sensor availability as a presence-absence heatmap over time for loaded measured data columns."""
+    """Plot sensor availability as a presence-absence heatmap over time for **selected** sensors only."""
     frame = _timeseries_frame(state).copy()
+    # Filter to only the sensors the analyst has kept in the inventory/mapping.
+    # This prevents deleted/unwanted sensors from appearing in the coverage plot.
+    selected_columns = _selected_sensor_columns(state)
+    if selected_columns:
+        frame = frame[selected_columns]
     plot_frame = frame.resample("D").mean() if len(frame) > 50000 else frame
     availability = plot_frame.notna().astype(int).T
     figure = go.Figure(
@@ -720,6 +750,103 @@ def _plot_shear_table(state: SessionState, table_type: str = "shear") -> dict:
     )
     figure.update_layout(title=title, xaxis_title="Hour", yaxis_title="Month")
     return _plot_result(figure, title)
+
+
+def _plot_shear_timeseries(state: SessionState) -> dict:
+    """Plot the shear coefficient (or roughness) timeseries produced by the shear stage."""
+    frame: pd.DataFrame | None = None
+    column = ""
+    label = ""
+    if state.shear_timeseries_df is not None:
+        frame = _indexed_frame(state.shear_timeseries_df)
+        column = "shear_coefficient"
+        label = "Shear coefficient (α)"
+    elif state.roughness_timeseries_df is not None:
+        frame = _indexed_frame(state.roughness_timeseries_df)
+        column = frame.columns[0] if len(frame.columns) else ""
+        label = "Roughness length (z₀)"
+    if frame is None or column not in frame.columns:
+        raise ValueError("Shear/roughness timeseries is not available. Run the shear stage first")
+    series = _downsample_timeseries(frame[column].dropna())
+    if series.empty:
+        raise ValueError("Shear/roughness timeseries contains no valid values")
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scatter(
+            x=series.index,
+            y=series.to_numpy(dtype=float),
+            mode=_scattergl_mode(len(series)),
+            name=label,
+            line=dict(color="#0b7a6f", width=2),
+        )
+    )
+    mean_value = float(series.mean())
+    figure.update_layout(
+        title=f"{label} Timeseries (mean {mean_value:.3f})",
+        xaxis_title="Time",
+        yaxis_title=label,
+    )
+    return _plot_result(figure, f"{label} Timeseries")
+
+
+def _plot_era5_scatter(state: SessionState) -> dict:
+    """Scatter measured vs ERA5 site series over the concurrent (overlap) period, with OLS fit and R²."""
+    if state.era5_interpolated_df is None:
+        raise ValueError("ERA5 interpolated site data is not available")
+    measured = _require_series(state, _preferred_measured_speed_column(state)).rename("measured")
+    era5_frame = _indexed_frame(state.era5_interpolated_df)
+    if "Spd_100m" not in era5_frame.columns:
+        raise ValueError("ERA5 interpolated site data must contain Spd_100m")
+    overlap = pd.concat([measured, era5_frame["Spd_100m"].rename("era5")], axis=1, join="inner").dropna()
+    if overlap.empty:
+        raise ValueError("Measured and ERA5 interpolated series do not overlap")
+    monthly = overlap.resample("ME").mean().dropna()
+    if monthly.empty:
+        raise ValueError("Measured and ERA5 overlap does not contain enough data for a scatter")
+    metrics = _scatter_metrics(monthly, "era5", "measured")
+    x = monthly["era5"].to_numpy(dtype=float)
+    y = monthly["measured"].to_numpy(dtype=float)
+    line_min = float(min(x.min(), y.min()))
+    line_max = float(max(x.max(), y.max()))
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scatter(
+            x=x,
+            y=y,
+            mode="markers",
+            name="Monthly concurrent",
+            marker=dict(color="#0b7a6f", size=8, opacity=0.75),
+        )
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=[line_min, line_max],
+            y=[line_min, line_max],
+            mode="lines",
+            name="1:1",
+            line=dict(color="#888888", dash="dash"),
+        )
+    )
+    fit_x = [line_min, line_max]
+    fit_y = [metrics["slope"] * line_min + metrics["intercept"], metrics["slope"] * line_max + metrics["intercept"]]
+    figure.add_trace(
+        go.Scatter(
+            x=fit_x,
+            y=fit_y,
+            mode="lines",
+            name=f"OLS fit (R²={metrics['r2']:.3f})",
+            line=dict(color="#c86a2a", width=3),
+        )
+    )
+    figure.update_layout(
+        title=(
+            f"Measured vs ERA5 (concurrent period) — R²={metrics['r2']:.3f}, "
+            f"RMSE={metrics['rmse']:.3f} m/s, slope={metrics['slope']:.3f}"
+        ),
+        xaxis_title="ERA5 site mean speed (m/s)",
+        yaxis_title="Measured mean speed (m/s)",
+    )
+    return _plot_result(figure, "Measured vs ERA5 — Scatter")
 
 
 def _plot_monthly_means(state: SessionState, sensor_names: str) -> dict:
@@ -1295,64 +1422,119 @@ def _plot_turbulence_windrose(state: SessionState, speed_sensor: str, sd_sensor:
     return _plot_result(figure, title)
 
 
+def _fit_power_law(heights: np.ndarray, speeds: np.ndarray) -> tuple[float, float] | None:
+    """Fit a power law (log-log OLS) to a height/speed profile, returning (alpha, intercept)."""
+    valid = np.isfinite(speeds) & (speeds > 0.0) & np.isfinite(heights) & (heights > 0.0)
+    if valid.sum() < 2:
+        return None
+    log_heights = np.log(heights[valid])
+    log_speeds = np.log(speeds[valid])
+    centered_x = log_heights - float(np.mean(log_heights))
+    centered_y = log_speeds - float(np.mean(log_speeds))
+    denominator = float(np.sum(centered_x**2))
+    if denominator <= 1e-12:
+        return None
+    alpha = float(np.sum(centered_x * centered_y) / denominator)
+    intercept = float(np.mean(log_speeds) - alpha * np.mean(log_heights))
+    return alpha, intercept
+
+
 def _plot_shear_profile(state: SessionState) -> dict:
-    """Plot mean measured wind-speed profile across heights with a fitted power-law curve."""
+    """Plot mean measured wind-speed profile (plus day/night splits) with fitted power-law curves from 0 m."""
     frame = _timeseries_frame(state)
     speed_pairs = [(height, column) for height, column in _speed_sensor_pairs(state) if column in frame.columns]
     if len(speed_pairs) < 2:
         raise ValueError("Shear profile plotting requires at least two mapped wind-speed sensors")
     heights = np.asarray([height for height, _ in speed_pairs], dtype=float)
-    means = np.asarray([frame[column].dropna().mean() for _, column in speed_pairs], dtype=float)
-    valid = np.isfinite(means) & (means > 0.0)
-    if valid.sum() < 2:
+
+    # Day = 06:00-18:00 local; night = everything else. Fixed-hour split is
+    # location-independent and works on already-loaded data (no solar-position
+    # computation needed).
+    hours = np.asarray(frame.index.hour)
+    day_mask = (hours >= 6) & (hours < 18)
+    subsets = {
+        "all": np.ones(len(frame), dtype=bool),
+        "day": day_mask,
+        "night": ~day_mask,
+    }
+    means_by_subset = {
+        key: np.asarray(
+            [frame.loc[mask, column].dropna().mean() for _, column in speed_pairs], dtype=float
+        )
+        for key, mask in subsets.items()
+    }
+
+    all_fit = _fit_power_law(heights, means_by_subset["all"])
+    if all_fit is None:
         raise ValueError("Shear profile plotting requires at least two sensors with positive mean wind speeds")
-    log_heights = np.log(heights[valid])
-    log_speeds = np.log(means[valid])
-    centered_x = log_heights - float(np.mean(log_heights))
-    centered_y = log_speeds - float(np.mean(log_speeds))
-    denominator = float(np.sum(centered_x**2))
-    if denominator <= 1e-12:
-        raise ValueError("Shear profile fit requires distinct measurement heights")
-    alpha = float(np.sum(centered_x * centered_y) / denominator)
-    intercept = float(np.mean(log_speeds) - alpha * np.mean(log_heights))
-    curve_heights = np.linspace(float(heights.min()), float(heights.max()), 100)
-    curve_speeds = np.exp(intercept) * np.power(curve_heights, alpha)
+
+    # Draw fitted curves from ground level (0 m) up to the tallest sensor.
+    curve_heights = np.linspace(0.0, float(heights.max()), 120)
     figure = go.Figure()
-    figure.add_trace(
-        go.Scatter(
-            x=means[valid],
-            y=heights[valid],
-            mode="markers",
-            name="Measured",
-            marker=dict(size=10, color="#0b7a6f"),
+
+    # Measured markers for each subset.
+    marker_styles = {
+        "all": dict(size=10, color="#0b7a6f", symbol="circle"),
+        "day": dict(size=9, color="#e2a13a", symbol="triangle-up"),
+        "night": dict(size=9, color="#33526b", symbol="square"),
+    }
+    for key in ("all", "day", "night"):
+        means = means_by_subset[key]
+        valid = np.isfinite(means) & (means > 0.0)
+        if valid.sum() < 2:
+            continue
+        figure.add_trace(
+            go.Scatter(
+                x=means[valid],
+                y=heights[valid],
+                mode="markers",
+                name=f"Measured ({key})",
+                marker=marker_styles[key],
+            )
         )
-    )
-    figure.add_trace(
-        go.Scatter(
-            x=curve_speeds,
-            y=curve_heights,
-            mode="lines",
-            name="Power-law fit",
-            line=dict(color="#c86a2a", width=3),
+
+    # Power-law fits from 0 m, coloured to match their markers.
+    fit_styles = {
+        "all": dict(color="#0b7a6f", width=3),
+        "day": dict(color="#e2a13a", width=2, dash="dash"),
+        "night": dict(color="#33526b", width=2, dash="dot"),
+    }
+    alphas: dict[str, float] = {}
+    for key in ("all", "day", "night"):
+        fit = _fit_power_law(heights, means_by_subset[key])
+        if fit is None:
+            continue
+        alpha, intercept = fit
+        alphas[key] = alpha
+        figure.add_trace(
+            go.Scatter(
+                x=np.exp(intercept) * np.power(curve_heights, alpha),
+                y=curve_heights,
+                mode="lines",
+                name=f"Power-law fit ({key})",
+                line=fit_styles[key],
+            )
         )
-    )
+
+    alpha_text = " | ".join(f"{key}: α = {value:.3f}" for key, value in alphas.items())
     figure.update_layout(
-        title="Shear Profile",
+        title="Shear Profile (day / night)",
         xaxis_title="Mean Wind Speed (m/s)",
         yaxis_title="Height (m)",
+        yaxis=dict(range=[0, float(heights.max()) * 1.05]),
         annotations=[
             dict(
                 xref="paper",
                 yref="paper",
                 x=0.98,
                 y=0.04,
-                text=f"α = {alpha:.3f}",
+                text=alpha_text,
                 showarrow=False,
                 bgcolor="rgba(255,250,240,0.92)",
             )
         ],
     )
-    return _plot_result(figure, "Shear Profile")
+    return _plot_result(figure, "Shear Profile (day / night)")
 
 
 @mcp.tool()

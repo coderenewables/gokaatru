@@ -15,7 +15,7 @@ from types import ModuleType
 from typing import Any, AsyncIterator, Callable, get_type_hints
 from uuid import uuid4
 
-from server.state.session import SessionState
+from server.state.session import SessionState, bind_session
 
 TOOL_MODULE_PATHS = [
     "server.tools.data_io",
@@ -386,18 +386,15 @@ class WorkflowExecutor:
         if template_id == "select-dataset":
             return {"status": "ok", "message": "Dataset selection is a canvas helper and has no backend operation"}
 
-        module, function = self._resolve_tool(template_id)
+        _module, function = self._resolve_tool(template_id)
         kwargs = self._build_kwargs(function, params)
 
-        has_session = hasattr(module, "session")
-        previous_session = getattr(module, "session", None)
-        if has_session:
-            setattr(module, "session", self.state)
-        try:
+        # Bind via ContextVar rather than mutating the module global. Tool modules
+        # import the SessionProxy, which resolves through the bound session, so this
+        # is equivalent for a single run and — unlike a module-level setattr — safe
+        # when several executors run concurrently in one process.
+        with bind_session(self.state):
             result = function(**kwargs)
-        finally:
-            if has_session:
-                setattr(module, "session", previous_session)
 
         if result is None:
             return {"status": "ok"}

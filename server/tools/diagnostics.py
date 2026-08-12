@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from server.core.validators import detect_timestep_minutes
+from server.core.validators import detect_timestep_minutes, rolling_median_mad_spike_mask
 from server.main import mcp
 from server.state.session import SessionState, session
 
@@ -143,11 +143,9 @@ def _compute_mast_effects(state: SessionState, sensor_a: str = "", sensor_b: str
     }
 
 
-def _spike_count(series: pd.Series, window: int = 6, sigma: float = 4.0) -> int:
-    """Count non-mutating rolling-sigma spikes using the cleaning-stage convention."""
-    mean = series.rolling(window=window, min_periods=2, center=True).mean()
-    std = series.rolling(window=window, min_periods=2, center=True).std(ddof=0)
-    return int((np.abs(series - mean) > sigma * std).fillna(False).sum())
+def _spike_count(series: pd.Series, window: int = 11, sigma: float = 4.0) -> int:
+    """Count spikes using robust median/MAD outlier detection (same algorithm as spike_filter)."""
+    return int(rolling_median_mad_spike_mask(series, window=window, sigma=sigma).fillna(False).sum())
 
 
 def _flatline_count(series: pd.Series, minimum_count: int = 6) -> int:

@@ -136,6 +136,13 @@ def _run_ltc_xgboost(
         column for column in [long_dir_col, "t2m", "sp"] if column and column in long_df.columns
     ]
     if reference_feature_columns:
+        # Ensure tz-awareness compatibility for the join (D8).
+        if long_df.index.tz is None:
+            long_df = long_df.copy()
+            long_df.index = long_df.index.tz_localize("UTC")
+        if concurrent.index.tz is None:
+            concurrent = concurrent.copy()
+            concurrent.index = concurrent.index.tz_localize("UTC")
         concurrent = concurrent.join(long_df[reference_feature_columns], how="left")
     concurrent_features, feature_names = _build_features(concurrent, REFERENCE_COLUMN, long_dir_col)
     target = concurrent[MEASURED_COLUMN].to_numpy(dtype=float)

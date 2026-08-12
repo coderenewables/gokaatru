@@ -76,18 +76,29 @@ def _flat_month_weights() -> np.ndarray:
 
 
 def _compute_weibull_params(state: SessionState, sensor_name: str) -> dict:
-    """Fit Weibull A and k using scipy.stats.weibull_min.fit with floc = 0 for wind-speed analysis."""
+    """Fit Weibull A and k using scipy.stats.weibull_min.fit with floc = 0 for wind-speed analysis.
+
+    Calm records (v = 0) are excluded from the MLE fit only (``weibull_min``
+    with ``floc=0`` cannot accept them), but ``mean_speed`` is computed over
+    the full series including calms so it is consistent with every other mean
+    in the application (MoMM, monthly, LTC-corrected).
+    """
     series = _require_series_from_state(state, sensor_name).dropna()
     positive = series[series > 0]
     if positive.empty:
         raise ValueError(f"Sensor '{sensor_name}' has no positive wind-speed values for Weibull fitting")
     shape_k, _, scale_a = weibull_min.fit(positive.to_numpy(), floc=0)
+    calm_count = int((series == 0).sum())
+    total_count = len(series)
     return {
         "sensor": sensor_name,
         "k": float(shape_k),
         "A": float(scale_a),
-        "mean_speed": float(positive.mean()),
+        "mean_speed": float(series.mean()),
         "record_count": int(len(positive)),
+        "record_count_total": total_count,
+        "calm_fraction": float(calm_count / total_count) if total_count > 0 else 0.0,
+        "fit_excludes_calms": True,
     }
 
 

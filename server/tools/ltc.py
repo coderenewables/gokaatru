@@ -58,6 +58,13 @@ def _concurrent_frame(
     """Build the measured, reference, and concurrent datasets used by LTC algorithms."""
     short_df, long_df = _require_ltc_inputs(state, short_col, long_col)
     prepared_short = _prepare_short_term(short_df)
+    # Ensure both indexes are tz-aware for a safe inner join (D8).
+    if prepared_short.index.tz is None:
+        prepared_short = prepared_short.copy()
+        prepared_short.index = prepared_short.index.tz_localize("UTC")
+    if long_df.index.tz is None:
+        long_df = long_df.copy()
+        long_df.index = long_df.index.tz_localize("UTC")
     concurrent = prepared_short.join(long_df, how="inner").dropna()
     if len(concurrent) < 10:
         raise ValueError(f"LTC requires at least 10 concurrent points, got {len(concurrent)}")

@@ -74,11 +74,19 @@ def _timeseries_upload_bytes(sample_timeseries_df: pd.DataFrame) -> bytes:
 def _datamodel_bytes() -> bytes:
     """Build a minimal datamodel JSON payload compatible with the browser upload flow."""
     payload = {
-        "measurement_point": [
-            {"name": "Spd_100m", "height_m": 100, "measurement_type_id": "wind_speed"},
-            {"name": "Dir_100m", "height_m": 100, "measurement_type_id": "wind_direction"},
-            {"name": "Spd_80m", "height_m": 80, "measurement_type_id": "wind_speed"},
-            {"name": "Spd_60m", "height_m": 60, "measurement_type_id": "wind_speed"},
+        "measurement_location": [
+            {
+                "name": "TestSite",
+                "latitude_ddeg": 10.0,
+                "longitude_ddeg": 20.0,
+                "logger_main_config": [{"offset_from_utc_hrs": 0}],
+                "measurement_point": [
+                    {"name": "Spd_100m", "height_m": 100, "measurement_type_id": "wind_speed"},
+                    {"name": "Dir_100m", "height_m": 100, "measurement_type_id": "wind_direction"},
+                    {"name": "Spd_80m", "height_m": 80, "measurement_type_id": "wind_speed"},
+                    {"name": "Spd_60m", "height_m": 60, "measurement_type_id": "wind_speed"},
+                ],
+            }
         ]
     }
     return json.dumps(payload).encode("utf-8")
@@ -212,10 +220,18 @@ def test_sensor_statistics_endpoint_supports_temperature_and_pressure(
     session_id = create_response.json()["session_id"]
     headers = {"X-GoKaatru-Session": session_id}
     datamodel = {
-        "measurement_point": [
-            {"name": "Spd_100m", "height_m": 100, "measurement_type_id": "wind_speed"},
-            {"name": "Temp_100m", "height_m": 100, "measurement_type_id": "temperature"},
-            {"name": "Pressure_100m", "height_m": 100, "measurement_type_id": "pressure"},
+        "measurement_location": [
+            {
+                "name": "TestSite",
+                "latitude_ddeg": 10.0,
+                "longitude_ddeg": 20.0,
+                "logger_main_config": [{"offset_from_utc_hrs": 0}],
+                "measurement_point": [
+                    {"name": "Spd_100m", "height_m": 100, "measurement_type_id": "wind_speed"},
+                    {"name": "Temp_100m", "height_m": 100, "measurement_type_id": "temperature"},
+                    {"name": "Pressure_100m", "height_m": 100, "measurement_type_id": "pressure"},
+                ],
+            }
         ]
     }
     client.post(
@@ -241,8 +257,10 @@ def test_sensor_statistics_endpoint_supports_temperature_and_pressure(
 
 def test_sensor_inventory_includes_all_datamodel_backed_uploaded_sensors(tmp_path: Path) -> None:
     """Verify inventory retains auxiliary sensor types and sensors below ground level."""
-    timeseries_path = tmp_path / "timeseries.csv"
-    datamodel_path = tmp_path / "datamodel.json"
+    uploads = (Path(session.get_data_dir()) / "uploads").resolve()
+    uploads.mkdir(parents=True, exist_ok=True)
+    timeseries_path = uploads / "timeseries.csv"
+    datamodel_path = uploads / "datamodel.json"
     pd.DataFrame(
         {
             "Timestamp": pd.date_range("2024-01-01", periods=3, freq="10min"),
@@ -257,14 +275,22 @@ def test_sensor_inventory_includes_all_datamodel_backed_uploaded_sensors(tmp_pat
     datamodel_path.write_text(
         json.dumps(
             {
-                "measurement_point": [
-                    {"name": "Spd_60m", "height_m": 60, "measurement_type_id": "wind_speed"},
-                    {"name": "Tmp_55m", "height_m": 55, "measurement_type_id": "air_temperature"},
-                    {"name": "Prs_55m", "height_m": 55, "measurement_type_id": "air_pressure"},
-                    {"name": "Hum_13m", "height_m": 13, "measurement_type_id": "relative_humidity"},
-                    {"name": "Wtr_tmp_-4m", "height_m": -4, "measurement_type_id": "water_temperature"},
-                    {"name": "Qual_Spd_60m", "height_m": 60, "measurement_type_id": "quality"},
-                    {"name": "Missing", "height_m": 20, "measurement_type_id": "air_pressure"},
+                "measurement_location": [
+                    {
+                        "name": "TestSite",
+                        "latitude_ddeg": 10.0,
+                        "longitude_ddeg": 20.0,
+                        "logger_main_config": [{"offset_from_utc_hrs": 0}],
+                        "measurement_point": [
+                            {"name": "Spd_60m", "height_m": 60, "measurement_type_id": "wind_speed"},
+                            {"name": "Tmp_55m", "height_m": 55, "measurement_type_id": "air_temperature"},
+                            {"name": "Prs_55m", "height_m": 55, "measurement_type_id": "air_pressure"},
+                            {"name": "Hum_13m", "height_m": 13, "measurement_type_id": "relative_humidity"},
+                            {"name": "Wtr_tmp_-4m", "height_m": -4, "measurement_type_id": "water_temperature"},
+                            {"name": "Qual_Spd_60m", "height_m": 60, "measurement_type_id": "quality"},
+                            {"name": "Missing", "height_m": 20, "measurement_type_id": "air_pressure"},
+                        ],
+                    }
                 ]
             }
         ),

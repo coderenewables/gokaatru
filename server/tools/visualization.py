@@ -18,8 +18,8 @@ from server.main import mcp
 from server.tools.advanced_analysis import _compute_energy_metrics, _compute_extremes, _compute_persistence, _consecutive_ramps
 from server.tools.atmosphere import _atmospheric_series
 from server.tools.diagnostics import _compute_mast_effects, _compute_mcp_readiness, _compute_qc_diagnostics, _compute_sensor_comparison
-from server.state.session import SessionState, session
 from server.tools.shear import _vertical_structure_series
+from server.state.session import SessionState, session
 
 COMPASS_16 = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
 MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -330,12 +330,23 @@ def _plot_windrose(state: SessionState, speed_sensor: str, direction_sensor: str
 
 
 def _plot_weibull(state: SessionState, sensor_name: str) -> dict:
-    """Plot the measured speed histogram with a fitted Weibull PDF using $f(v;k,A)$ from wind climatology."""
+    """Plot the measured speed histogram with a fitted Weibull PDF using $f(v;k,A)$ from wind climatology.
+
+    Routes through ``statistics._compute_weibull_params`` so the plot legend
+    always agrees with the tabulated k/A/mean — fixing the same fit in one
+    place only (see D24/D31).
+    """
     series = _require_series(state, sensor_name).dropna()
     positive = series[series > 0.0]
     if positive.empty:
         raise ValueError(f"Sensor '{sensor_name}' has no positive values for Weibull plotting")
-    shape_k, _, scale_a = weibull_min.fit(positive.to_numpy(dtype=float), floc=0)
+    # Lazy import to avoid circular dependency (visualization → statistics → main → visualization)
+    from server.tools.statistics import _compute_weibull_params
+
+    params = _compute_weibull_params(state, sensor_name)
+    shape_k = params["k"]
+    scale_a = params["A"]
+    mean_speed = params["mean_speed"]
     x_values = np.linspace(0.0, float(positive.max()), 250)
     pdf_values = weibull_min.pdf(x_values, shape_k, loc=0, scale=scale_a)
     figure = go.Figure()
@@ -345,7 +356,7 @@ def _plot_weibull(state: SessionState, sensor_name: str) -> dict:
             x=x_values,
             y=pdf_values,
             mode="lines",
-            name=f"Weibull k={shape_k:.2f}, A={scale_a:.2f}, mean={positive.mean():.2f}",
+            name=f"Weibull k={shape_k:.2f}, A={scale_a:.2f}, mean={mean_speed:.2f}",
         )
     )
     figure.update_layout(title=f"Weibull Fit — {sensor_name}", xaxis_title="Wind Speed (m/s)", yaxis_title="Density")

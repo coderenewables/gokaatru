@@ -25,8 +25,8 @@ def test_uploaded_dataset_parses_expected_metadata(uploaded_dataset_session) -> 
     assert state.coordinate.latitude == pytest.approx(52.57005)
     assert state.coordinate.longitude == pytest.approx(3.737733)
     assert len(state.timeseries_df) == 73532
-    assert state.timeseries_df.index.min().isoformat() == "2019-02-10T09:00:00"
-    assert state.timeseries_df.index.max().isoformat() == "2021-02-11T23:50:00"
+    assert state.timeseries_df.index.min().isoformat() == "2019-02-10T09:00:00+00:00"
+    assert state.timeseries_df.index.max().isoformat() == "2021-02-11T23:50:00+00:00"
     assert state.timeseries_df.columns.tolist() == [
         "Spd_80m",
         "Spd_100m",

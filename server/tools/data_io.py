@@ -5,7 +5,9 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import json
+import logging
 import re
+from datetime import timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -16,7 +18,19 @@ from server.main import mcp
 from server.schemas.common import Coordinate, SensorInfo
 from server.state.session import SessionState, session
 
-TIMESTAMP_CANDIDATES = ["Timestamp", "timestamp", "DateTime", "datetime", "Date", "date", "Time", "time"]
+logger = logging.getLogger(__name__)
+
+TIMESTAMP_CANDIDATES = [
+    "Timestamp", "timestamp", "TIMESTAMP",
+    "DateTime", "datetime", "DateTime (UTC)",
+    "Date/Time", "Date", "date",
+    "Time", "time",
+    "TmStamp",
+]
+
+# Epoch-second range for plausible wind-campaign data (1990-01-01 .. 2050-01-01).
+_EPOCH_SECOND_MIN = 631_152_000.0
+_EPOCH_SECOND_MAX = 2_524_608_000.0
 SENSOR_FIELDS = {
     "speed_col": "wind_speed",
     "dir_col": "wind_direction",
@@ -47,16 +61,39 @@ def _build_sensor_inventory(points: list[dict[str, object]]) -> dict[str, dict[s
     return inventory
 
 
-def _read_tabular_file(file_path: str) -> pd.DataFrame:
+def _confined_file_path(state: SessionState, filename: str, subdir: str = "") -> Path:
+    """Resolve *filename* within the session data directory, rejecting traversal.
+
+    Mirrors the ``windkit_file_path`` pattern: resolve the base, then join +
+    resolve the candidate and verify containment via ``is_relative_to``.
+    Absolute paths are accepted only if they resolve inside the base directory.
+    """
+    base = Path(state.get_data_dir())
+    if subdir:
+        base = (base / subdir).resolve()
+    else:
+        base = base.resolve()
+    base.mkdir(parents=True, exist_ok=True)
+    candidate = Path(filename)
+    if candidate.is_absolute():
+        path = candidate.resolve()
+    else:
+        path = (base / candidate).resolve()
+    if not path.is_relative_to(base):
+        raise ValueError("Input file is not available")
+    return path
+
+
+def _read_tabular_file(state: SessionState, file_path: str) -> pd.DataFrame:
     """Load CSV, TSV, or Excel input according to the GoKaatru Phase 1 file-ingest spec."""
     try:
-        path = Path(file_path).resolve(strict=False)
+        path = _confined_file_path(state, file_path, subdir="uploads")
     except (OSError, RuntimeError) as exc:
-        raise ValueError(f"Invalid file path: {file_path}") from exc
+        raise ValueError("Input file is not available") from exc
     if not path.exists():
-        raise ValueError(f"Input file does not exist: {file_path}")
+        raise ValueError("Input file is not available")
     if not path.is_file():
-        raise ValueError(f"Input path is not a regular file: {file_path}")
+        raise ValueError("Input file is not available")
     suffix = path.suffix.lower()
     if suffix == ".csv":
         return pd.read_csv(path)
@@ -64,22 +101,57 @@ def _read_tabular_file(file_path: str) -> pd.DataFrame:
         return pd.read_csv(path, sep="\t")
     if suffix in {".xls", ".xlsx"}:
         return pd.read_excel(path)
-    raise ValueError(f"Unsupported file type '{suffix}'. Expected CSV, TSV, TXT, XLS, or XLSX")
+    raise ValueError("Input file is not available")
 
 
 def _detect_timestamp_column(df: pd.DataFrame) -> tuple[str, pd.Series]:
-    """Select the timestamp column with the most valid parses per the Phase 1 ingestion rule."""
-    candidates = [column for column in TIMESTAMP_CANDIDATES if column in df.columns] or list(df.columns)
+    """Select the timestamp column with the most valid parses per the Phase 1 ingestion rule.
+
+    Hardening (D6): skip numeric columns unless their range is plausible for
+    epoch seconds, require valid-parse fraction >= 0.5 and a sane span
+    (> 1 day, < 100 years), and match candidate names case-insensitively.
+    """
+    # Priority 1: exact name match
+    exact = [column for column in TIMESTAMP_CANDIDATES if column in df.columns]
+    # Priority 2: case-insensitive match against candidate set
+    ci_lower = {c.lower() for c in TIMESTAMP_CANDIDATES}
+    ci_match = [col for col in df.columns if col not in exact and col.lower() in ci_lower]
+    # Priority 3: all remaining columns (scored below)
+    candidates = exact + ci_match if (exact or ci_match) else list(df.columns)
+
     best_name = ""
     best_series = pd.Series(dtype="datetime64[ns]")
     best_count = -1
+    named_candidates = set(exact + ci_match)
     for column in candidates:
+        # Skip numeric-dtype columns unless values are plausible epoch seconds.
+        if pd.api.types.is_numeric_dtype(df[column]):
+            col_min = float(df[column].min())
+            col_max = float(df[column].max())
+            if not (col_min >= _EPOCH_SECOND_MIN and col_max <= _EPOCH_SECOND_MAX):
+                continue
+
         parsed = pd.to_datetime(df[column], errors="coerce")
         valid_count = int(parsed.notna().sum())
+        n_rows = len(df[column])
+        if n_rows == 0:
+            continue
+        fraction = valid_count / n_rows
+        if fraction < 0.5:
+            continue
+        # Span check: name-matched candidates are trusted (exact or
+        # case-insensitive), but scored fallback columns must demonstrate a
+        # plausible temporal range to guard against numeric false-positives.
+        if column not in named_candidates:
+            span = parsed.max() - parsed.min()
+            if pd.isna(span) or span <= pd.Timedelta(days=1) or span > pd.Timedelta(days=36500):
+                continue
+
         if valid_count > best_count:
             best_name = str(column)
             best_series = parsed
             best_count = valid_count
+
     if best_count <= 0:
         raise ValueError("Could not detect a timestamp column with any valid datetime values")
     return best_name, best_series
@@ -182,9 +254,108 @@ def _extract_site_metadata(payload: object) -> dict[str, object]:
     return metadata
 
 
-def _build_sensor_mapping(points: list[dict[str, object]]) -> dict[float, dict[str, str | None]]:
-    """Map Task 43 measurement points to height-indexed sensor columns per the Phase 1 schema."""
-    mapping: dict[float, dict[str, str | None]] = {}
+def _extract_timezone(payload: object) -> tuple[str, object]:
+    """Extract timezone from an IEA Task 43 datamodel.
+
+    Returns ``(source_field, tz_object)``.  Supports an IANA timezone name
+    (keys ``timezone``, ``time_zone_id``, ``timezone_id``) or the Task 43
+    integer offset ``offset_from_utc_hrs`` in ``logger_main_config``.
+    Raises ``ValueError`` when no timezone is declared.
+    """
+    try:
+        import zoneinfo
+    except ImportError:
+        zoneinfo = None  # type: ignore[assignment]
+
+    locations = _extract_measurement_locations(payload)
+    for location in locations:
+        for iana_key in ("timezone", "time_zone_id", "timezone_id"):
+            iana_value = location.get(iana_key)
+            if isinstance(iana_value, str) and iana_value.strip():
+                if zoneinfo is not None:
+                    try:
+                        return iana_key, zoneinfo.ZoneInfo(iana_value.strip())
+                    except (zoneinfo.ZoneInfoNotFoundError, KeyError):
+                        continue
+        # Fall back to logger_main_config offset
+        configs = location.get("logger_main_config", [])
+        for config in configs:
+            if not isinstance(config, dict):
+                continue
+            offset_val = config.get("offset_from_utc_hrs")
+            if isinstance(offset_val, (int, float)):
+                return "offset_from_utc_hrs", timezone(timedelta(hours=float(offset_val)))
+            if isinstance(offset_val, str) and offset_val.strip():
+                try:
+                    return "offset_from_utc_hrs", timezone(timedelta(hours=float(offset_val.strip())))
+                except ValueError:
+                    continue
+    raise ValueError(
+        "Datamodel does not declare a timezone. Expected 'timezone' (IANA) "
+        "or 'offset_from_utc_hrs' in logger_main_config."
+    )
+
+
+def _apply_timezone_to_index(state: SessionState, tz: object) -> None:
+    """Convert session timeseries indexes from naive local time to tz-aware UTC."""
+    for attr in ("timeseries_df", "raw_timeseries_df"):
+        df = getattr(state, attr)
+        if df is not None and isinstance(df.index, pd.DatetimeIndex) and df.index.tz is None:
+            df.index = df.index.tz_localize(tz).tz_convert("UTC")
+
+
+def _resolve_boom_pair(
+    candidates: list[tuple[str, dict[str, object]]],
+    timeseries_df: pd.DataFrame | None = None,
+) -> tuple[str, str]:
+    """Resolve a boom-pair conflict at a single height and field.
+
+    Resolution priority:
+    1. ``is_primary`` / ``primary`` flag (exactly one must be True)
+    2. Highest non-null coverage in the timeseries DataFrame
+    3. Alphabetical sensor name (deterministic tie-break)
+
+    Returns (chosen_name, resolution_method).
+    """
+    # 1. Check for primary flag
+    primary = [name for name, meta in candidates if meta.get("is_primary") is True]
+    if len(primary) == 1:
+        return primary[0], "primary_flag"
+
+    # 2. Coverage-based fallback (requires timeseries)
+    if timeseries_df is not None:
+        best_name = ""
+        best_count = -1
+        for name, _ in candidates:
+            if name in timeseries_df.columns:
+                count = int(timeseries_df[name].notna().sum())
+            else:
+                count = -1
+            if count > best_count:
+                best_count = count
+                best_name = name
+        if best_name:
+            return best_name, "coverage"
+
+    # 3. Alphabetical name tie-break
+    sorted_names = sorted(name for name, _ in candidates)
+    return sorted_names[0], "name_alphabetical"
+
+
+def _build_sensor_mapping(
+    points: list[dict[str, object]],
+    timeseries_df: pd.DataFrame | None = None,
+) -> tuple[dict[float, dict[str, str | None]], list[dict[str, object]]]:
+    """Map Task 43 measurement points to height-indexed sensor columns per the Phase 1 schema.
+
+    Boom-pair fix (D7): all sensors per height are collected, then resolved
+    deterministically via ``_resolve_boom_pair``.  The output type remains
+    ``dict[float, dict[str, str | None]]`` for backward compatibility with
+    all consumers (shear, extrapolation, statistics, cleaning, etc.).
+
+    Returns (mapping, resolution_log) where resolution_log records any
+    boom-pair resolutions for runconfig auditability.
+    """
     type_to_field = {
         "wind_speed": "speed_col",
         "wind_direction": "dir_col",
@@ -194,27 +365,65 @@ def _build_sensor_mapping(points: list[dict[str, object]]) -> dict[float, dict[s
         "air_pressure": "pressure_col",
         "relative_humidity": "humidity_col",
     }
+
+    # Phase 1: collect ALL candidates per height (name-keyed)
+    candidates: dict[float, list[tuple[str, dict[str, object]]]] = {}
     for point in points:
         height_value = point.get("height_m")
         sensor_name = point.get("name")
         sensor_type = type_to_field.get(str(point.get("measurement_type_id", "")))
         if not isinstance(height_value, (int, float)) or not isinstance(sensor_name, str) or sensor_type is None:
             continue
-        mapping.setdefault(
-            float(height_value),
-            {
-                "speed_col": None,
-                "dir_col": None,
-                "sd_col": None,
-                "temp_col": None,
-                "pressure_col": None,
-                "humidity_col": None,
-            },
+        is_primary = point.get("is_primary") or point.get("primary")
+        candidates.setdefault(float(height_value), []).append(
+            (sensor_name, {"sensor_type": sensor_type, "is_primary": is_primary, **point})
         )
-        mapping[float(height_value)][sensor_type] = sensor_name
-        if sensor_type == "speed_col":
-            mapping[float(height_value)]["sd_col"] = f"{sensor_name}_sd"
-    return mapping
+
+    # Phase 2: build height-keyed mapping, resolving boom pairs
+    mapping: dict[float, dict[str, str | None]] = {}
+    resolution_log: list[dict[str, object]] = []
+
+    for height, sensors in candidates.items():
+        # Group sensors by field type within this height
+        by_type: dict[str, list[tuple[str, dict[str, object]]]] = {}
+        for name, meta in sensors:
+            field = meta["sensor_type"]
+            by_type.setdefault(field, []).append((name, meta))
+
+        slots: dict[str, str | None] = {
+            "speed_col": None,
+            "dir_col": None,
+            "sd_col": None,
+            "temp_col": None,
+            "pressure_col": None,
+            "humidity_col": None,
+        }
+        for field, field_sensors in by_type.items():
+            if len(field_sensors) == 1:
+                chosen_name = field_sensors[0][0]
+            else:
+                chosen_name, method = _resolve_boom_pair(field_sensors, timeseries_df)
+                resolution_log.append({
+                    "height_m": height,
+                    "field": field,
+                    "candidates": [name for name, _ in field_sensors],
+                    "chosen": chosen_name,
+                    "resolution": method,
+                })
+                if method == "name_alphabetical":
+                    logger.warning(
+                        "Boom-pair at %.1fm (%s): no primary flag and no timeseries "
+                        "coverage data; resolved alphabetically to '%s'",
+                        height,
+                        field,
+                        chosen_name,
+                    )
+            slots[field] = chosen_name
+            if field == "speed_col":
+                slots["sd_col"] = f"{chosen_name}_sd"
+        if slots.get("speed_col") is not None:
+            mapping[height] = slots
+    return mapping, resolution_log
 
 
 def _build_sensor_rows(state: SessionState, require_mapping: bool) -> list[dict[str, object]]:
@@ -351,7 +560,7 @@ def _cadence_aligned_series(series: pd.Series, timestep_minutes: int) -> pd.Seri
 
 def _parse_timeseries(state: SessionState, file_path: str) -> dict:
     """Parse a wind timeseries file into session state following the GoKaatru Phase 1 ingest spec."""
-    source_df = _read_tabular_file(file_path)
+    source_df = _read_tabular_file(state, file_path)
     timestamp_column, parsed_timestamps = _detect_timestamp_column(source_df)
     filtered_df = source_df.loc[parsed_timestamps.notna()].copy()
     filtered_df.index = pd.DatetimeIndex(parsed_timestamps.loc[parsed_timestamps.notna()])
@@ -360,6 +569,10 @@ def _parse_timeseries(state: SessionState, file_path: str) -> dict:
         raise ValueError("Parsed timeseries is empty after timestamp detection")
     state.timeseries_df = filtered_df.copy()
     state.raw_timeseries_df = filtered_df.copy(deep=True)
+    # If the datamodel was imported first and set a timezone, immediately
+    # convert the naive local-time index to tz-aware UTC (D8).
+    if state.timezone is not None:
+        _apply_timezone_to_index(state, state.timezone)
     # A new timeseries is a fresh dataset: any previously persisted sensor
     # selection no longer applies, so drop it. Importing a new dataset (or
     # re-importing from BrightHub) is how the user restores excluded sensors.
@@ -420,13 +633,23 @@ def _apply_sensor_exclusions(state: SessionState) -> None:
 
 def _parse_datamodel(state: SessionState, file_path: str) -> dict:
     """Parse an IEA Task 43 datamodel JSON file into the Phase 1 height-to-sensor mapping."""
-    path = Path(file_path)
+    try:
+        path = _confined_file_path(state, file_path, subdir="uploads")
+    except (OSError, RuntimeError) as exc:
+        raise ValueError("Input file is not available") from exc
     if not path.exists():
-        raise ValueError(f"Datamodel file does not exist: {file_path}")
+        raise ValueError("Input file is not available")
     payload = json.loads(path.read_text(encoding="utf-8"))
     site_metadata = _extract_site_metadata(payload)
+    # Extract and apply campaign timezone (D8)
+    tz_source, tz_obj = _extract_timezone(payload)
+    state.timezone = tz_obj
+    state.runconfig.setdefault("site", {})["timezone"] = str(tz_obj)
+    state.runconfig["site"]["timezone_source"] = tz_source
+    # Convert existing timeseries if already loaded (datamodel after timeseries)
+    _apply_timezone_to_index(state, tz_obj)
     points = _extract_measurement_points(payload)
-    mapping = _build_sensor_mapping(points)
+    mapping, resolution_log = _build_sensor_mapping(points, timeseries_df=state.timeseries_df)
     state.sensor_inventory = _build_sensor_inventory(points)
     if state.timeseries_df is not None:
         mapping = {
@@ -435,6 +658,9 @@ def _parse_datamodel(state: SessionState, file_path: str) -> dict:
             if sensor_map.get("speed_col") in state.timeseries_df.columns
         }
     state.sensor_mapping = dict(sorted(mapping.items(), reverse=True))
+    # Persist boom-pair resolutions to runconfig for auditability (D7)
+    if resolution_log:
+        state.runconfig.setdefault("site", {})["sensor_resolution"] = resolution_log
     # A datamodel (re)import rebuilds the full inventory; trim it back to the
     # persisted selection so excluded sensors never silently reappear.
     _apply_sensor_exclusions(state)

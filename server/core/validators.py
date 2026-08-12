@@ -4,6 +4,7 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 
@@ -28,12 +29,15 @@ def validate_timestamp_index(df: pd.DataFrame) -> pd.DataFrame:
     if "Timestamp" not in df.columns:
         raise ValueError("DataFrame must have a DatetimeIndex or a 'Timestamp' column")
     result = df.copy()
-    parsed = pd.to_datetime(result["Timestamp"], errors="coerce")
+    parsed = pd.to_datetime(result["Timestamp"], errors="coerce", utc=True)
     if parsed.isna().all():
         raise ValueError("'Timestamp' column could not be parsed as datetimes")
     result = result.loc[parsed.notna()].copy()
     result.index = pd.DatetimeIndex(parsed.loc[parsed.notna()])
     return result.drop(columns=["Timestamp"]).sort_index()
+
+
+_ACCEPTED_TIMESTEPS = {1, 2, 5, 10, 15, 30, 60}
 
 
 def detect_timestep_minutes(df: pd.DataFrame) -> int:
@@ -45,4 +49,32 @@ def detect_timestep_minutes(df: pd.DataFrame) -> int:
     positive = minutes[minutes > 0]
     if positive.empty:
         raise ValueError("Could not infer timestep from fewer than two valid timestamps")
-    return int(round(float(positive.mode().iloc[0])))
+    inferred = int(round(float(positive.mode().iloc[0])))
+    if inferred < 1 or inferred not in _ACCEPTED_TIMESTEPS:
+        raise ValueError(
+            f"Inferred timestep of {inferred} minutes is not a supported cadence "
+            f"(expected one of {sorted(_ACCEPTED_TIMESTEPS)} minutes). "
+            "This usually means the timestamp column was misidentified — "
+            "check that the time column parses as dates."
+        )
+    return inferred
+
+
+def rolling_median_mad_spike_mask(series: pd.Series, window: int = 11, sigma: float = 4.0) -> pd.Series:
+    """Return boolean mask identifying spikes using robust median/MAD outlier detection.
+
+    Median/MAD is not biased by the outlier itself, unlike mean/std where the
+    spike inflates its own window statistics.  The 1.4826 scaling factor makes MAD
+    consistent with standard deviation for Gaussian data.
+
+    Constant stretches (MAD == 0) produce a False mask — stuck-sensor detection
+    is handled separately by the ``stuck_sensor`` cleaning rule.
+
+    Both ``cleaning.py`` and ``diagnostics.py`` call this shared helper so the
+    spike algorithm cannot silently diverge between the filter and the QC panel.
+    """
+    median = series.rolling(window=window, center=True, min_periods=2).median()
+    mad = (series - median).abs().rolling(window=window, center=True, min_periods=2).median() * 1.4826
+    # Constant stretches → MAD = 0 → avoid division by zero → mask is all False
+    mad = mad.replace(0.0, np.nan)
+    return (series - median).abs() > sigma * mad

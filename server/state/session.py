@@ -52,6 +52,7 @@ class SessionState:
     latest_uncertainty: dict[str, object] | None
     scenarios: list[dict[str, object]]
     runconfig: dict[str, object]
+    timezone: object | None  # datetime.timezone or ZoneInfo — set from datamodel
     windkit_data: dict[str, object]
     workflow_execution: dict[str, object]
     workflow_runs: list[dict[str, object]]
@@ -94,6 +95,7 @@ class SessionState:
         self.latest_uncertainty = None
         self.scenarios = []
         self.runconfig = {}
+        self.timezone = None
         self.windkit_data = {}
         self.workflow_execution = {
             "run_id": None,
@@ -207,6 +209,8 @@ class SessionState:
             config["sensor_mapping"] = {
                 str(height): mapping.copy() for height, mapping in self.sensor_mapping.items()
             }
+        if self.timezone is not None:
+            config.setdefault("site", {})["timezone"] = str(self.timezone)
         excluded = self.runconfig.get("excluded_sensors")
         if isinstance(excluded, list) and excluded:
             config["excluded_sensors"] = [str(name) for name in excluded]

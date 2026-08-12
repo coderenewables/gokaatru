@@ -21,7 +21,9 @@ from server.tools.statistics import compute_weibull_params
 def test_full_wra_workflow(sample_timeseries_df: pd.DataFrame, tmp_path: Path, monkeypatch) -> None:
     """Simulate the core wind-resource workflow from ingest through config persistence."""
     monkeypatch.chdir(tmp_path)
-    csv_path = tmp_path / "test_data.csv"
+    uploads = (Path(session.get_data_dir()) / "uploads").resolve()
+    uploads.mkdir(parents=True, exist_ok=True)
+    csv_path = uploads / "test_data.csv"
     sample_timeseries_df.to_csv(csv_path)
 
     result = parse_timeseries(str(csv_path))

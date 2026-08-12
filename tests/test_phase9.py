@@ -41,10 +41,18 @@ def _timeseries_upload_bytes(sample_timeseries_df: pd.DataFrame) -> bytes:
 def _datamodel_bytes() -> bytes:
     """Build a minimal Task 43 datamodel payload for upload workflow tests."""
     payload = {
-        "measurement_point": [
-            {"name": "Spd_100m", "height_m": 100, "measurement_type_id": "wind_speed"},
-            {"name": "Dir_100m", "height_m": 100, "measurement_type_id": "wind_direction"},
-            {"name": "Spd_80m", "height_m": 80, "measurement_type_id": "wind_speed"},
+        "measurement_location": [
+            {
+                "name": "TestSite",
+                "latitude_ddeg": 10.0,
+                "longitude_ddeg": 20.0,
+                "logger_main_config": [{"offset_from_utc_hrs": 0}],
+                "measurement_point": [
+                    {"name": "Spd_100m", "height_m": 100, "measurement_type_id": "wind_speed"},
+                    {"name": "Dir_100m", "height_m": 100, "measurement_type_id": "wind_direction"},
+                    {"name": "Spd_80m", "height_m": 80, "measurement_type_id": "wind_speed"},
+                ],
+            }
         ]
     }
     return json.dumps(payload).encode("utf-8")

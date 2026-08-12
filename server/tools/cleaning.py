@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 
-from server.core.validators import detect_timestep_minutes
+from server.core.validators import detect_timestep_minutes, rolling_median_mad_spike_mask
 from server.main import mcp
 from server.state.session import SessionState, session
 
@@ -21,7 +21,7 @@ RULES = {
     "icing_filter": {"temp_threshold_c": 2.0},
     "stuck_sensor": {"consecutive_count": 6},
     "tower_shadow": {"exclude_sectors": [170, 190]},
-    "spike_filter": {"window_size": 6, "sigma_threshold": 4.0},
+    "spike_filter": {"window_size": 11, "sigma_threshold": 4.0},
     "timestamp_gap_fill": {},
     "custom_period_exclude": {"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"},
     "expression_filter": {"expression": "Spd_100m < 0 or Spd_100m > 50"},
@@ -158,12 +158,15 @@ def _apply_tower_shadow(
 
 
 def _apply_spike_filter(df: pd.DataFrame, sensor: str, mask: np.ndarray, params: dict[str, object]) -> int:
-    """Remove spikes outside rolling mean plus-minus sigma-threshold times rolling standard deviation."""
-    window = _int_param(params, "window_size", 6)
+    """Remove spikes using robust rolling median/MAD outlier detection.
+
+    Median/MAD is not biased by the outlier itself, unlike mean/std where the
+    spike inflates its own window statistics.  Constant stretches (MAD == 0)
+    are left untouched — stuck-sensor detection is a separate rule.
+    """
+    window = _int_param(params, "window_size", 11)
     sigma = _float_param(params, "sigma_threshold", 4.0)
-    mean = df[sensor].rolling(window=window, min_periods=2, center=True).mean()
-    std = df[sensor].rolling(window=window, min_periods=2, center=True).std(ddof=0)
-    spike_mask = (np.abs(df[sensor] - mean) > sigma * std).fillna(False).to_numpy()
+    spike_mask = rolling_median_mad_spike_mask(df[sensor], window=window, sigma=sigma).fillna(False).to_numpy()
     affected = mask & spike_mask
     df.loc[affected, sensor] = np.nan
     return int(affected.sum())

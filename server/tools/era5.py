@@ -245,6 +245,9 @@ def _load_cached_era5(cache_path: Path, start_date: str, end_date: str) -> tuple
     if not _cache_covers_period(cached, start_date, end_date):
         return None, False
     subset = cached.loc[pd.Timestamp(start_date) : pd.Timestamp(end_date)].copy()
+    # ERA5 is natively UTC; ensure the index is tz-aware (D8).
+    if subset.index.tz is None:
+        subset.index = subset.index.tz_localize("UTC")
     return subset.sort_index(), True
 
 
@@ -269,6 +272,9 @@ def _read_remote_era5_frame(
     elif time_coord in frame.columns and not isinstance(frame.index, pd.DatetimeIndex):
         frame = frame.set_index(time_coord)
     frame.index = pd.DatetimeIndex(frame.index, name="time")
+    # ERA5 is natively UTC; ensure the index is tz-aware (D8).
+    if frame.index.tz is None:
+        frame.index = frame.index.tz_localize("UTC")
     return frame.sort_index()
 
 
@@ -404,7 +410,14 @@ def _compute_era5_wind_speed(state: SessionState, latitude: float, longitude: fl
 
 
 def _interpolate_era5_to_site(state: SessionState) -> dict:
-    """Spatially interpolate ERA5 node data to the site using linear interpolation with IDW fallback."""
+    """Spatially interpolate ERA5 node data to the site using linear interpolation with IDW fallback.
+
+    Speed (``Spd_100m``) is interpolated as a *scalar* to avoid the
+    vector-cancellation bias that under-predicts speed where node wind
+    directions diverge across the cell.  Direction (``Dir_100m``) is
+    derived from vector-interpolated u/v components, which is the correct
+    approach for direction.
+    """
     coordinate = state.get_coordinate()
     if coordinate is None:
         raise ValueError("Site coordinate is not set. Run find_era5_nodes first")
@@ -435,6 +448,8 @@ def _interpolate_era5_to_site(state: SessionState) -> dict:
             interpolated, method = interpolate_spatial(points, values, site)
             methods_used.add(method)
             result[variable] = np.asarray(interpolated, dtype=float)
+    # Vector-interpolate u/v for direction only.  Speed was already
+    # scalar-interpolated above to avoid vector-cancellation bias.
     speed_values = np.vstack([frame.loc[common_index, "Spd_100m"].to_numpy(dtype=float) for frame in frames])
     direction_values = np.vstack([frame.loc[common_index, "Dir_100m"].to_numpy(dtype=float) for frame in frames])
     direction_rad = np.radians(direction_values)
@@ -444,8 +459,6 @@ def _interpolate_era5_to_site(state: SessionState) -> dict:
     interp_v, method_v = interpolate_spatial(points, v_values, site)
     methods_used.update({method_u, method_v})
     result["Dir_100m"] = (270.0 - np.degrees(np.arctan2(np.asarray(interp_v), np.asarray(interp_u)))) % 360.0
-    if "Spd_100m" not in result.columns:
-        result["Spd_100m"] = np.sqrt(np.asarray(interp_u) ** 2 + np.asarray(interp_v) ** 2)
     state.era5_interpolated_df = result.sort_index()
     method_name = "idw" if "idw" in methods_used else "linear"
     return {
@@ -453,6 +466,7 @@ def _interpolate_era5_to_site(state: SessionState) -> dict:
         "rows": int(len(state.era5_interpolated_df)),
         "method": method_name,
         "variables": state.era5_interpolated_df.columns.tolist(),
+        "speed_interpolation": "scalar",
     }
 
 
@@ -481,5 +495,10 @@ def compute_era5_wind_speed(latitude: float, longitude: float) -> dict:
 
 @mcp.tool()
 def interpolate_era5_to_site() -> dict:
-    """Spatially interpolate ERA5 node data to the site using linear interpolation with IDW fallback."""
+    """Spatially interpolate ERA5 node data to the site using linear interpolation with IDW fallback.
+
+    Speed is scalar-interpolated; direction is derived from vector-interpolated
+    u/v.  The response includes ``speed_interpolation`` indicating the convention
+    used.
+    """
     return _interpolate_era5_to_site(session)

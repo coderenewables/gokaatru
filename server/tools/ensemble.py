@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from server.core.validators import to_utc_index
 from server.main import mcp
 from server.state.session import SessionState, session
 
@@ -20,7 +21,7 @@ def _measured_series(state: SessionState, measured_col: str) -> pd.Series:
         raise ValueError("Measured timeseries is not loaded")
     if measured_col not in state.timeseries_df.columns:
         raise ValueError(f"Measured column '{measured_col}' not found in session.timeseries_df")
-    return state.timeseries_df[measured_col].copy()
+    return to_utc_index(state.timeseries_df[measured_col].copy())
 
 
 def _ltc_result_series(state: SessionState, algorithm: str) -> pd.Series:
@@ -34,7 +35,9 @@ def _ltc_result_series(state: SessionState, algorithm: str) -> pd.Series:
         frame = frame.dropna(subset=["Timestamp"]).set_index("Timestamp")
     if "corrected_wind_speed" not in frame.columns:
         raise ValueError(f"LTC result for '{algorithm}' does not contain 'corrected_wind_speed'")
-    return frame["corrected_wind_speed"].sort_index()
+    # LTC results are tz-aware UTC; the measured series may be naive (D8 is only
+    # enforced on the file-ingest path), so normalize before any inner join.
+    return to_utc_index(frame["corrected_wind_speed"].sort_index())
 
 
 def _overlap_metrics(observed: pd.Series, predicted: pd.Series) -> dict[str, float]:

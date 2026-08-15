@@ -92,12 +92,31 @@ class TestWeibullCalmHandling:
         assert result["record_count"] == int((series > 0).sum())
 
     def test_fit_excludes_calms_flag(self) -> None:
-        """fit_excludes_calms must be True."""
+        """fit_excludes_calms must report the basis each method actually used.
+
+        The default WAsP m1/m3 fit takes its moments over the full series
+        including calms (D25), matching the reported mean_speed (D24).  MLE
+        must drop calms because weibull_min with floc=0 cannot accept zeros.
+        """
         state = SessionState()
         series = _weibull_series_with_calms(calm_fraction=0.03)
         _load_series_into_state(state, series)
-        result = _compute_weibull_params(state, "Spd_100m")
-        assert result["fit_excludes_calms"] is True
+        assert _compute_weibull_params(state, "Spd_100m")["fit_excludes_calms"] is False
+        assert _compute_weibull_params(state, "Spd_100m", method="mle")["fit_excludes_calms"] is True
+
+    def test_wasp_moments_use_full_series(self) -> None:
+        """The WAsP fit must differ from MLE — moments on positives only make it a no-op.
+
+        Excluding calms inflates m1 and m3, which pulls the moment fit onto the
+        MLE answer and silently defeats the point of the m1/m3 method (D25).
+        """
+        state = SessionState()
+        series = _weibull_series_with_calms(calm_fraction=0.03)
+        _load_series_into_state(state, series)
+        wasp = _compute_weibull_params(state, "Spd_100m")
+        mle = _compute_weibull_params(state, "Spd_100m", method="mle")
+        assert wasp["k"] < mle["k"] - 0.05, f"WAsP k {wasp['k']:.4f} too close to MLE k {mle['k']:.4f}"
+        assert wasp["A"] < mle["A"] - 0.1, f"WAsP A {wasp['A']:.4f} too close to MLE A {mle['A']:.4f}"
 
     def test_zero_calm_fraction_series(self) -> None:
         """A series with no calms should have calm_fraction == 0.0."""

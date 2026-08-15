@@ -75,11 +75,17 @@ def _flat_month_weights() -> np.ndarray:
     return np.repeat([MEAN_DAYS_IN_MONTH[month] for month in range(1, 13)], 24)
 
 
-def _weibull_wasp_fit(positive: np.ndarray) -> tuple[float, float]:
+def _weibull_wasp_fit(speeds: np.ndarray) -> tuple[float, float]:
     """Fit Weibull A and k using WAsP m1/m3 moment method via windkit.
 
     Matches 1st and 3rd raw moments so both mean speed and energy content
     are preserved — the industry standard for wind resource assessment.
+
+    ``speeds`` must be the **full** series including calms (D25).  The moments
+    are what this method exists to preserve, so they must describe the same
+    population as the reported ``mean_speed``, which includes calms (D24).
+    Passing only the positive subset inflates both moments and makes the fit
+    collapse towards MLE.
     """
     try:
         import windkit  # noqa: F401
@@ -88,8 +94,8 @@ def _weibull_wasp_fit(positive: np.ndarray) -> tuple[float, float]:
             "windkit is required for WAsP m1/m3 Weibull fit. "
             "Install windkit extras or pass method='mle' to use scipy MLE."
         ) from exc
-    m1 = float(np.mean(positive))
-    m3 = float(np.mean(positive ** 3))
+    m1 = float(np.mean(speeds))
+    m3 = float(np.mean(speeds ** 3))
     from windkit.weibull import fit_weibull_wasp_m1_m3
 
     A, k = fit_weibull_wasp_m1_m3(m1, m3)
@@ -99,9 +105,11 @@ def _weibull_wasp_fit(positive: np.ndarray) -> tuple[float, float]:
 def _compute_weibull_params(state: SessionState, sensor_name: str, method: str = "wasp_m1_m3") -> dict:
     """Fit Weibull A and k using WAsP m1/m3 moment method (default) or scipy MLE.
 
-    Calm records (v = 0) are excluded from the fit only, but ``mean_speed``
-    is computed over the full series including calms so it is consistent with
-    every other mean in the application (MoMM, monthly, LTC-corrected).
+    ``mean_speed`` is computed over the full series including calms so it is
+    consistent with every other mean in the application (MoMM, monthly,
+    LTC-corrected).  The WAsP m1/m3 moments use that same full series (D25).
+    MLE excludes calms because ``weibull_min`` with ``floc=0`` cannot accept
+    zeros; that exclusion is reported as ``fit_excludes_calms``.
     """
     series = _require_series_from_state(state, sensor_name).dropna()
     positive = series[series > 0]
@@ -109,9 +117,11 @@ def _compute_weibull_params(state: SessionState, sensor_name: str, method: str =
         raise ValueError(f"Sensor '{sensor_name}' has no positive wind-speed values for Weibull fitting")
     if method == "mle":
         shape_k, _, scale_a = weibull_min.fit(positive.to_numpy(), floc=0)
+        fit_excludes_calms = True
     else:
-        # Default: WAsP m1/m3
-        scale_a, shape_k = _weibull_wasp_fit(positive.to_numpy())
+        # Default: WAsP m1/m3 over the full series, calms included
+        scale_a, shape_k = _weibull_wasp_fit(series.to_numpy(dtype=float))
+        fit_excludes_calms = False
     calm_count = int((series == 0).sum())
     total_count = len(series)
     return {
@@ -122,7 +132,7 @@ def _compute_weibull_params(state: SessionState, sensor_name: str, method: str =
         "record_count": int(len(positive)),
         "record_count_total": total_count,
         "calm_fraction": float(calm_count / total_count) if total_count > 0 else 0.0,
-        "fit_excludes_calms": True,
+        "fit_excludes_calms": fit_excludes_calms,
         "fit_method": method,
     }
 
@@ -193,12 +203,14 @@ def _compute_wind_climate(state: SessionState, speed_sensor: str, direction_sens
     positive = speed[speed > 0]
     if positive.empty:
         raise ValueError(f"Sensor '{speed_sensor}' has no positive wind-speed values")
-    shape_k, _, scale_a = weibull_min.fit(positive.to_numpy(dtype=float), floc=0)
-    # Use WAsP m1/m3 when available, falling back to MLE (D25).
+    # Use WAsP m1/m3 when available, falling back to MLE (D25).  The moments are
+    # taken over the full series including calms, matching _compute_weibull_params;
+    # the MLE fallback must drop zeros because floc=0 cannot accept them.
     try:
-        scale_a, shape_k = _weibull_wasp_fit(positive.to_numpy(dtype=float))
+        scale_a, shape_k = _weibull_wasp_fit(speed.to_numpy(dtype=float))
         weibull_method = "wasp_m1_m3"
     except (ImportError, ValueError):
+        shape_k, _, scale_a = weibull_min.fit(positive.to_numpy(dtype=float), floc=0)
         weibull_method = "mle"
     bin_edges = np.histogram_bin_edges(positive.to_numpy(dtype=float), bins="auto")
     observed, _ = np.histogram(positive.to_numpy(dtype=float), bins=bin_edges, density=True)

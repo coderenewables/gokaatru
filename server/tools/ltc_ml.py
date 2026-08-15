@@ -12,6 +12,7 @@ from typing import Protocol
 import numpy as np
 import pandas as pd
 
+from server.core.validators import to_utc_index
 from server.main import mcp
 from server.state.session import SessionState, session
 from server.tools.ltc import MEASURED_COLUMN, REFERENCE_COLUMN, _concurrent_frame, _regression_metrics
@@ -137,12 +138,8 @@ def _run_ltc_xgboost(
     ]
     if reference_feature_columns:
         # Ensure tz-awareness compatibility for the join (D8).
-        if long_df.index.tz is None:
-            long_df = long_df.copy()
-            long_df.index = long_df.index.tz_localize("UTC")
-        if concurrent.index.tz is None:
-            concurrent = concurrent.copy()
-            concurrent.index = concurrent.index.tz_localize("UTC")
+        long_df = to_utc_index(long_df)
+        concurrent = to_utc_index(concurrent)
         concurrent = concurrent.join(long_df[reference_feature_columns], how="left")
     concurrent_features, feature_names = _build_features(concurrent, REFERENCE_COLUMN, long_dir_col)
     target = concurrent[MEASURED_COLUMN].to_numpy(dtype=float)

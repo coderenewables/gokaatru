@@ -89,8 +89,19 @@ def total_least_squares_fit(x: np.ndarray, y: np.ndarray) -> tuple[float, float]
     sxx = float(np.sum(dx * dx))
     syy = float(np.sum(dy * dy))
     sxy = float(np.sum(dx * dy))
-    if abs(sxy) <= 1e-12:
-        raise ValueError("TLS is undefined for a degenerate (vertical) relationship")
+    # Degeneracy is judged against the magnitude of the data rather than an
+    # absolute threshold: subtracting the mean of a constant column leaves
+    # round-off of order 1e-30, not exactly zero, so a plain `syy > sxx`
+    # comparison would read that noise as real vertical spread.
+    epsilon = 1e-20 * float(x_values.size) * max(1.0, mean_x * mean_x, mean_y * mean_y)
+    if abs(sxy) <= epsilon:
+        # No covariance: the major axis lies along one of the coordinate axes.
+        # Real spread in y with none in x is a vertical line, whose slope is
+        # undefined.  Otherwise — including constant y and the fully-constant
+        # case — the orthogonal fit is the horizontal line y = mean_y.
+        if syy > epsilon and syy > sxx:
+            raise ValueError("TLS is undefined for a degenerate (vertical) relationship")
+        slope = 0.0
     else:
         term = syy - sxx
         radical = float(np.sqrt(term * term + 4.0 * sxy * sxy))

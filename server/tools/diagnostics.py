@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from server.core.validators import detect_timestep_minutes, rolling_median_mad_spike_mask
+from server.core.validators import detect_timestep_minutes, rolling_median_mad_spike_mask, to_utc_index
 from server.main import mcp
 from server.state.session import SessionState, session
 
@@ -187,8 +187,8 @@ def _compute_mcp_readiness(state: SessionState, speed_sensor: str, reference_sen
     reference = reference_sensor or "Spd_100m"
     if reference not in state.era5_interpolated_df.columns:
         raise ValueError(f"Reference column '{reference}' is not available in interpolated ERA5 data")
-    measured = frame[[speed_sensor]].resample("h").mean()
-    concurrent = measured.join(state.era5_interpolated_df[[reference]], how="inner").dropna()
+    measured = to_utc_index(frame[[speed_sensor]]).resample("h").mean()
+    concurrent = measured.join(to_utc_index(state.era5_interpolated_df[[reference]]), how="inner").dropna()
     if len(concurrent) < 10:
         raise ValueError("MCP readiness requires at least 10 concurrent hourly points")
     concurrent.columns = [speed_sensor, reference]

@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from server.core.regression import robust_huber_fit, total_least_squares_fit
-from server.core.validators import detect_timestep_minutes
+from server.core.validators import detect_timestep_minutes, to_utc_index
 from server.main import mcp
 from server.state.session import SessionState, session
 
@@ -62,13 +62,9 @@ def _concurrent_frame(
     """Build the measured, reference, and concurrent datasets used by LTC algorithms."""
     short_df, long_df = _require_ltc_inputs(state, short_col, long_col)
     prepared_short = _prepare_short_term(short_df)
-    # Ensure both indexes are tz-aware for a safe inner join (D8).
-    if prepared_short.index.tz is None:
-        prepared_short = prepared_short.copy()
-        prepared_short.index = prepared_short.index.tz_localize("UTC")
-    if long_df.index.tz is None:
-        long_df = long_df.copy()
-        long_df.index = long_df.index.tz_localize("UTC")
+    # Ensure both indexes are tz-aware UTC for a safe inner join (D8).
+    prepared_short = to_utc_index(prepared_short)
+    long_df = to_utc_index(long_df)
     concurrent = prepared_short.join(long_df, how="inner").dropna()
     if len(concurrent) < 10:
         raise ValueError(f"LTC requires at least 10 concurrent points, got {len(concurrent)}")
@@ -198,9 +194,7 @@ def _run_ltc_speedsort(
 
     # --- Directional path ---
     if long_dir_col and long_dir_col in state.era5_interpolated_df.columns:
-        era5_dir = state.era5_interpolated_df[[long_dir_col]].copy()
-        if era5_dir.index.tz is None:
-            era5_dir.index = era5_dir.index.tz_localize("UTC")
+        era5_dir = to_utc_index(state.era5_interpolated_df[[long_dir_col]].copy())
         concurrent = concurrent.join(era5_dir, how="inner").dropna(subset=[long_dir_col])
         if len(concurrent) < 10:
             raise ValueError(

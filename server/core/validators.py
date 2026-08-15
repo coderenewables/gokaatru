@@ -37,6 +37,32 @@ def validate_timestamp_index(df: pd.DataFrame) -> pd.DataFrame:
     return result.drop(columns=["Timestamp"]).sort_index()
 
 
+def to_utc_index(obj: pd.DataFrame | pd.Series) -> pd.DataFrame | pd.Series:
+    """Return ``obj`` with a tz-aware UTC DatetimeIndex, leaving values untouched.
+
+    Internal storage is tz-aware UTC (D8), but not every ingest path gets there:
+    file ingest localizes from the datamodel timezone, BrightHub import strips tz,
+    and directly-seeded session state is naive.  Joining a naive index against an
+    aware one yields an empty frame rather than an error, so every module that
+    inner-joins measured, reference and LTC-result series funnels its index
+    through this helper first.
+
+    A naive index is assumed to already be UTC — the localization decision belongs
+    to ingest, not to the join.
+    """
+    if not isinstance(obj.index, pd.DatetimeIndex):
+        return obj
+    if obj.index.tz is None:
+        result = obj.copy()
+        result.index = obj.index.tz_localize("UTC")
+        return result
+    if str(obj.index.tz) == "UTC":
+        return obj
+    result = obj.copy()
+    result.index = obj.index.tz_convert("UTC")
+    return result
+
+
 _ACCEPTED_TIMESTEPS = {1, 2, 5, 10, 15, 30, 60}
 
 

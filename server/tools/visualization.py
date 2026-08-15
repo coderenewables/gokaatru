@@ -14,6 +14,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from scipy.stats import genextreme, gumbel_r, norm, weibull_min
 
+from server.core.validators import to_utc_index
 from server.main import mcp
 from server.tools.advanced_analysis import _compute_energy_metrics, _compute_extremes, _compute_persistence, _consecutive_ramps
 from server.tools.atmosphere import _atmospheric_series
@@ -29,7 +30,7 @@ def _timeseries_frame(state: SessionState) -> pd.DataFrame:
     """Return the loaded measured dataframe required by Phase 4 visualization tools."""
     if state.timeseries_df is None:
         raise ValueError("Timeseries data is not loaded")
-    return state.timeseries_df
+    return to_utc_index(state.timeseries_df)
 
 
 def _indexed_frame(frame_like: object) -> pd.DataFrame:
@@ -40,7 +41,9 @@ def _indexed_frame(frame_like: object) -> pd.DataFrame:
         frame = frame.dropna(subset=["Timestamp"]).set_index("Timestamp")
     if not isinstance(frame.index, pd.DatetimeIndex):
         frame.index = pd.DatetimeIndex(frame.index)
-    return frame.sort_index()
+    # LTC results carry tz-aware UTC timestamps while directly-seeded measured
+    # frames can be naive; normalize both so the inner joins below actually overlap.
+    return to_utc_index(frame.sort_index())
 
 
 def _require_series(state: SessionState, sensor_name: str) -> pd.Series:
@@ -613,8 +616,8 @@ def _plot_mcp_readiness(state: SessionState, speed_sensor: str, reference_sensor
     if state.era5_interpolated_df is None or state.timeseries_df is None:
         raise ValueError("MCP readiness requires measured and interpolated ERA5 data")
     reference = str(readiness["reference_sensor"])
-    measured = state.timeseries_df[[speed_sensor]].resample("h").mean()
-    concurrent = measured.join(state.era5_interpolated_df[[reference]], how="inner").dropna()
+    measured = to_utc_index(state.timeseries_df[[speed_sensor]]).resample("h").mean()
+    concurrent = measured.join(to_utc_index(state.era5_interpolated_df[[reference]]), how="inner").dropna()
     sampled = concurrent.iloc[:: max(1, len(concurrent) // 10_000)]
     monthly = concurrent.resample("MS").mean()
     figure = make_subplots(rows=1, cols=2, subplot_titles=("Concurrent Scatter", "Monthly Mean Comparison"))

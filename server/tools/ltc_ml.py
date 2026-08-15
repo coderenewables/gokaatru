@@ -176,9 +176,19 @@ def _run_ltc_xgboost(
         verbose_eval=False,
     )
     best_iteration = int(getattr(booster, "best_iteration", 2000))
+    # Out-of-sample (validation slice) metrics — PRIMARY (D10).
+    dval_pred = np.maximum(0.0, booster.predict(dval))
+    val_metrics = _regression_metrics(y_val, dval_pred)
+    # In-sample (full concurrent) metrics — kept for diagnostics.
     dconcurrent = DMatrix(concurrent_features.to_numpy(dtype=float), feature_names=feature_names)
     concurrent_pred = np.maximum(0.0, booster.predict(dconcurrent))
-    metrics: dict[str, object] = dict(_regression_metrics(target, concurrent_pred))
+    in_sample_metrics = _regression_metrics(target, concurrent_pred)
+    metrics: dict[str, object] = {
+        **val_metrics,
+        "out_of_sample_rmse": val_metrics["rmse"],
+        "in_sample_r_squared": in_sample_metrics["r_squared"],
+        "in_sample_rmse": in_sample_metrics["rmse"],
+    }
     feature_importance = booster.get_score(importance_type="gain")
     top_features = dict(sorted(feature_importance.items(), key=lambda item: item[1], reverse=True)[:10])
     train_error = float(evals_result.get("train", {}).get("rmse", [float("nan")])[-1])
@@ -206,6 +216,7 @@ def _run_ltc_xgboost(
             "feature_importance": top_features,
             "concurrent_points": int(len(concurrent)),
             "total_corrected_points": int(len(long_df)),
+            "validation_points": int(len(y_val)),
         }
     )
     result_file = _save_xgboost_result(state, result_df, metrics)

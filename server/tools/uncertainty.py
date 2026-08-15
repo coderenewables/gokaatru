@@ -23,17 +23,26 @@ def _calculate_uncertainty(
     shear_std: float = 0.0,
     is_interpolation: bool = False,
 ) -> dict:
-    """Calculate total uncertainty by root-sum-square combination of measurement, vertical, MCP, and future terms."""
+    """Calculate total uncertainty by root-sum-square combination of measurement, vertical, MCP, and future terms.
+
+    Valid shear_method values: "calculate_shear", "simple_power_law", "log_law",
+    "power_law" (alias for simple_power_law).
+    """
+    # Normalize alias: "power_law" is accepted as synonym for "simple_power_law".
+    normalized_shear = "simple_power_law" if shear_method == "power_law" else shear_method
     u_meas = float(measurement_uncertainty_pct)
     if is_interpolation:
         u_vert = 1.0
     elif measurement_height_m <= 0.0 or hub_height_m <= 0.0:
         u_vert = 5.0
     else:
-        if shear_method == "calculate_shear" and shear_std > 0.0:
+        if normalized_shear == "calculate_shear" and shear_std > 0.0:
             k_shear = float(shear_std)
+        elif normalized_shear == "log_law":
+            k_shear = 0.05
         else:
-            k_shear = 0.03 if shear_method == "simple_power_law" else 0.01
+            # "simple_power_law" and any validated method get standard k.
+            k_shear = 0.03
         u_vert = float(k_shear * abs(math.log(hub_height_m / measurement_height_m)) * 100.0)
     concurrent_months = max(1.0, float(concurrent_hours) / 730.0)
     concurrent_months_eff = min(concurrent_months, 12.0)

@@ -346,9 +346,13 @@ def _plot_weibull(state: SessionState, sensor_name: str) -> dict:
     params = _compute_weibull_params(state, sensor_name)
     shape_k = params["k"]
     scale_a = params["A"]
-    mean_speed = params["mean_speed"]
     x_values = np.linspace(0.0, float(positive.max()), 250)
     pdf_values = weibull_min.pdf(x_values, shape_k, loc=0, scale=scale_a)
+    fit_method = params.get("fit_method", "wasp_m1_m3")
+    trace_name = (
+        f"Weibull k={shape_k:.2f}, A={scale_a:.2f}, "
+        f"mean={params.get('mean_speed', 0):.2f} ({fit_method})"
+    )
     figure = go.Figure()
     figure.add_trace(go.Histogram(x=positive, histnorm="probability density", nbinsx=40, name=sensor_name, opacity=0.7))
     figure.add_trace(
@@ -356,7 +360,7 @@ def _plot_weibull(state: SessionState, sensor_name: str) -> dict:
             x=x_values,
             y=pdf_values,
             mode="lines",
-            name=f"Weibull k={shape_k:.2f}, A={scale_a:.2f}, mean={mean_speed:.2f}",
+            name=trace_name,
         )
     )
     figure.update_layout(title=f"Weibull Fit — {sensor_name}", xaxis_title="Wind Speed (m/s)", yaxis_title="Density")

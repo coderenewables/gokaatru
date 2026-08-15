@@ -18,6 +18,10 @@ from server.state.session import SessionState, session
 MEASURED_COLUMN = "__measured__"
 REFERENCE_COLUMN = "__reference__"
 
+SPEEDSORT_NUM_SECTORS = 12
+SPEEDSORT_SECTOR_WIDTH_DEG = 30.0
+SPEEDSORT_MIN_SECTOR_RECORDS = 200
+
 
 def _require_ltc_inputs(state: SessionState, short_col: str, long_col: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Validate measured and reference datasets required for LTC algorithms."""
@@ -84,6 +88,12 @@ def _regression_metrics(observed: np.ndarray, predicted: np.ndarray) -> dict[str
         "mbe": float(np.mean(predicted - observed)),
         "std_residuals": float(np.std(residuals)),
     }
+
+
+def _speedsort_sector_index(directions: np.ndarray) -> np.ndarray:
+    """Compute sector index [0..11] for 12 sectors of 30° with boundaries shifted by half-width."""
+    half = SPEEDSORT_SECTOR_WIDTH_DEG / 2.0
+    return ((np.mod(directions, 360.0) + half) % 360.0 // SPEEDSORT_SECTOR_WIDTH_DEG).astype(int)
 
 
 def _pearson_correlation(x: np.ndarray, y: np.ndarray) -> float:
@@ -167,11 +177,134 @@ def _run_ltc_total_least_squares(state: SessionState, short_col: str, long_col: 
     return _ltc_response(state, "total_least_squares", _result_frame(long_df, corrected), metrics)
 
 
-def _run_ltc_speedsort(state: SessionState, short_col: str, long_col: str) -> dict:
-    """Run SpeedSort MCP with a dog-leg low-speed segment and TLS on the high-speed tail."""
+def _run_ltc_speedsort(
+    state: SessionState,
+    short_col: str,
+    long_col: str,
+    short_dir_col: str = "",
+    long_dir_col: str = "",
+) -> dict:
+    """Run SpeedSort LTC with a dog-leg low-speed segment and TLS on the high-speed tail.
+
+    When *long_dir_col* is provided and present in the ERA5 data the algorithm
+    performs directional binning: per-sector transfer functions are fitted for
+    sectors containing at least ``SPEEDSORT_MIN_SECTOR_RECORDS`` concurrent
+    records; sparse sectors fall back to the all-sector (direction-agnostic) fit.
+    Otherwise the original non-directional behaviour is preserved.
+    """
     _, long_df, concurrent = _concurrent_frame(state, short_col, long_col)
     measured = concurrent[MEASURED_COLUMN].to_numpy(dtype=float)
     reference = concurrent[REFERENCE_COLUMN].to_numpy(dtype=float)
+
+    # --- Directional path ---
+    if long_dir_col and long_dir_col in state.era5_interpolated_df.columns:
+        era5_dir = state.era5_interpolated_df[[long_dir_col]].copy()
+        if era5_dir.index.tz is None:
+            era5_dir.index = era5_dir.index.tz_localize("UTC")
+        concurrent = concurrent.join(era5_dir, how="inner").dropna(subset=[long_dir_col])
+        if len(concurrent) < 10:
+            raise ValueError(
+                f"SpeedSort requires at least 10 concurrent points with direction, got {len(concurrent)}"
+            )
+        measured = concurrent[MEASURED_COLUMN].to_numpy(dtype=float)
+        reference = concurrent[REFERENCE_COLUMN].to_numpy(dtype=float)
+        ref_dir = concurrent[long_dir_col].to_numpy(dtype=float)
+        sectors = _speedsort_sector_index(ref_dir)
+
+        # All-sector fallback model (for sparse sectors)
+        threshold = float(min(4.0, 0.5 * float(np.mean(reference))))
+        fallback_model: dict[str, float] | None = None
+        mask_all = reference >= threshold
+        if np.any(mask_all):
+            slope_all, intercept_all = total_least_squares_fit(reference[mask_all], measured[mask_all])
+            dog_leg_all = (
+                float((slope_all * threshold + intercept_all) / threshold) if threshold > 0 else float(slope_all)
+            )
+            fallback_model = {
+                "slope": slope_all,
+                "intercept": intercept_all,
+                "threshold": threshold,
+                "dog_leg_slope": dog_leg_all,
+            }
+
+        # Per-sector fits
+        sector_models: dict[int, dict[str, float]] = {}
+        independent_count = 0
+        for s in range(SPEEDSORT_NUM_SECTORS):
+            s_mask = sectors == s
+            n_records = int(s_mask.sum())
+            if n_records < SPEEDSORT_MIN_SECTOR_RECORDS:
+                if fallback_model is not None:
+                    sector_models[s] = dict(fallback_model)
+                continue
+            s_ref = reference[s_mask]
+            s_meas = measured[s_mask]
+            s_thresh = float(min(4.0, 0.5 * float(np.mean(s_ref))))
+            above = s_ref >= s_thresh
+            if not np.any(above):
+                if fallback_model is not None:
+                    sector_models[s] = dict(fallback_model)
+                continue
+            slope, intercept = total_least_squares_fit(s_ref[above], s_meas[above])
+            dog_leg = float((slope * s_thresh + intercept) / s_thresh) if s_thresh > 0 else float(slope)
+            sector_models[s] = {
+                "slope": slope,
+                "intercept": intercept,
+                "threshold": s_thresh,
+                "dog_leg_slope": dog_leg,
+                "count": float(n_records),
+            }
+            independent_count += 1
+
+        if not sector_models:
+            raise ValueError("SpeedSort could not build any sector model")
+
+        # Predict concurrent (for metrics)
+        predicted = np.empty_like(measured)
+        for s, model in sector_models.items():
+            s_mask = sectors == s
+            s_ref = reference[s_mask]
+            predicted[s_mask] = np.where(
+                s_ref >= model["threshold"],
+                s_ref * model["slope"] + model["intercept"],
+                s_ref * model["dog_leg_slope"],
+            )
+
+        # Correct full long-term record using direction
+        long_direction = era5_dir[long_dir_col].reindex(long_df.index).to_numpy(dtype=float)
+        long_sectors = _speedsort_sector_index(long_direction)
+        full_reference = long_df[REFERENCE_COLUMN].to_numpy(dtype=float)
+        corrected = np.empty_like(full_reference)
+        for s, model in sector_models.items():
+            s_mask = long_sectors == s
+            s_ref = full_reference[s_mask]
+            corrected[s_mask] = np.where(
+                s_ref >= model["threshold"],
+                s_ref * model["slope"] + model["intercept"],
+                s_ref * model["dog_leg_slope"],
+            )
+
+        metrics = _regression_metrics(measured, predicted)
+        metrics.update(
+            {
+                "algorithm": "speedsort",
+                "threshold": threshold,
+                "concurrent_points": int(len(concurrent)),
+                "total_corrected_points": int(len(long_df)),
+                "directional": True,
+                "num_sectors": SPEEDSORT_NUM_SECTORS,
+                "sector_width_deg": SPEEDSORT_SECTOR_WIDTH_DEG,
+                "min_sector_records": SPEEDSORT_MIN_SECTOR_RECORDS,
+                "independent_sectors": independent_count,
+                "sector_models": {
+                    str(k): {key: float(val) for key, val in v.items()}
+                    for k, v in sorted(sector_models.items())
+                },
+            }
+        )
+        return _ltc_response(state, "speedsort", _result_frame(long_df, corrected), metrics)
+
+    # --- Original non-directional SpeedSort ---
     threshold = float(min(4.0, 0.5 * long_df[REFERENCE_COLUMN].mean()))
     mask = reference >= threshold
     if not np.any(mask):
@@ -195,6 +328,7 @@ def _run_ltc_speedsort(state: SessionState, short_col: str, long_col: str) -> di
             "dog_leg_slope": dog_leg_slope,
             "concurrent_points": int(len(concurrent)),
             "total_corrected_points": int(len(long_df)),
+            "directional": False,
         }
     )
     return _ltc_response(state, "speedsort", _result_frame(long_df, corrected), metrics)
@@ -244,9 +378,21 @@ def run_ltc_total_least_squares(short_col: str, long_col: str) -> dict:
 
 
 @mcp.tool()
-def run_ltc_speedsort(short_col: str, long_col: str) -> dict:
-    """Run SpeedSort MCP with a dog-leg low-speed segment and TLS on the high-speed tail."""
-    return _run_ltc_speedsort(session, short_col, long_col)
+def run_ltc_speedsort(
+    short_col: str,
+    long_col: str,
+    short_dir_col: str = "",
+    long_dir_col: str = "",
+) -> dict:
+    """Run directional SpeedSort LTC with per-sector transfer functions and dog-leg low-speed segment.
+
+    When *long_dir_col* is supplied and present in ERA5, the algorithm bins by
+    12 direction sectors (30° each) and fits an independent transfer function
+    per sector.  Sectors with fewer than 200 concurrent records fall back to
+    the all-sector fit.  Without *long_dir_col* the original non-directional
+    behaviour is preserved.
+    """
+    return _run_ltc_speedsort(session, short_col, long_col, short_dir_col, long_dir_col)
 
 
 @mcp.tool()

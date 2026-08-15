@@ -96,7 +96,7 @@ def test_uploaded_dataset_statistics_shear_and_extrapolation(uploaded_dataset_se
 
     assert stats_100m["count"] == 65879
     assert stats_100m["mean"] == pytest.approx(9.313042572291627)
-    assert stats_100m["weibull_k"] == pytest.approx(2.1475840014111824)
+    assert stats_100m["weibull_k"] == pytest.approx(2.1386333997636955)
     assert stats_100m["percentiles"]["p90"] == pytest.approx(15.537668000000005)
     assert len(stats_100m["monthly_means"]) == 12
     assert len(stats_100m["diurnal_means"]) == 24

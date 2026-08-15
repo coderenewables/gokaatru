@@ -73,8 +73,20 @@ def _run_ensemble(state: SessionState, measured_col: str) -> dict:
     measured = _measured_series(state, measured_col)
     component_series = {algorithm: _ltc_result_series(state, algorithm) for algorithm in algorithms}
     overlap_stats = {algorithm: _overlap_metrics(measured, series) for algorithm, series in component_series.items()}
+    # Prefer out-of-sample RMSE where available (e.g. XGBoost validation slice),
+    # falling back to overlap RMSE for algorithms that do not provide it (D10).
+    effective_rmse: dict[str, float] = {}
+    for algorithm, stats in overlap_stats.items():
+        payload = state.ltc_results.get(algorithm, {})
+        stored_metrics: dict[str, object] = payload.get("metrics", {}) if isinstance(payload, dict) else {}
+        oos_rmse = stored_metrics.get("out_of_sample_rmse")
+        if isinstance(oos_rmse, (int, float)) and oos_rmse > 0.0:
+            effective_rmse[algorithm] = float(oos_rmse)
+        else:
+            effective_rmse[algorithm] = stats["rmse"]
     inverse_rmse = {
-        algorithm: 0.0 if stats["rmse"] <= 0.0 else 1.0 / stats["rmse"] for algorithm, stats in overlap_stats.items()
+        algorithm: 0.0 if rmse <= 0.0 else 1.0 / rmse
+        for algorithm, rmse in effective_rmse.items()
     }
     total_inverse_rmse = float(sum(inverse_rmse.values()))
     if total_inverse_rmse <= 0.0:

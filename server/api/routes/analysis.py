@@ -706,6 +706,8 @@ def run_ltc(
     try:
         if algorithm == "xgboost":
             result = ltc_function(state, body.short_col, body.long_col, body.short_dir_col, body.long_dir_col)
+        elif algorithm == "speedsort":
+            result = ltc_function(state, body.short_col, body.long_col, body.short_dir_col, body.long_dir_col)
         else:
             result = ltc_function(state, body.short_col, body.long_col)
     except ValueError as exc:

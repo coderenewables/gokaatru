@@ -319,8 +319,33 @@ _BRIGHTHUB_MERRA_COLUMNS = {
 }
 
 
+# BrightHub reports temperature in degC and pressure in hPa, then the column map renames
+# both to `t2m` and `sp` — the exact names EarthDataHub uses for native ERA5 Kelvin and
+# Pascals.  Without conversion the same column name carried different units depending on
+# which source the session had downloaded from, so a consumer could not know what it was
+# reading.  Converting here means `t2m` and `sp` mean one thing everywhere, and the unit
+# detection in the air-density tool becomes a backstop rather than the only defence.
+_BRIGHTHUB_UNIT_CONVERSIONS: dict[str, tuple[float, float]] = {
+    # source column -> (multiplier, offset) taking it to the native ERA5 unit
+    "Tmp_2m_degC": (1.0, 273.15),  # degC -> K
+    "Prs_0m_hPa": (100.0, 0.0),  # hPa  -> Pa
+}
+
+
+def _convert_to_native_reanalysis_units(frame: pd.DataFrame) -> pd.DataFrame:
+    """Convert BrightHub-unit columns to the native ERA5 units their names will imply."""
+    for column, (multiplier, offset) in _BRIGHTHUB_UNIT_CONVERSIONS.items():
+        if column in frame.columns:
+            frame[column] = frame[column].astype(float) * multiplier + offset
+    return frame
+
+
 def _reanalysis_frame(payload: dict, column_map: dict[str, str]) -> pd.DataFrame:
-    """Normalize a BrightHub reanalysis payload into the session dataframe format."""
+    """Normalize a BrightHub reanalysis payload into the session dataframe format.
+
+    Units are converted to the native ERA5 convention before the columns are renamed,
+    because the target names (``t2m``, ``sp``) carry Kelvin and Pascals everywhere else.
+    """
     timeseries = payload.get("timeseries_data")
     if not isinstance(timeseries, dict):
         raise ValueError("BrightHub reanalysis response did not include timeseries data")
@@ -338,6 +363,7 @@ def _reanalysis_frame(payload: dict, column_map: dict[str, str]) -> pd.DataFrame
     frame = frame.set_index(timestamp)
     frame.index = frame.index.tz_localize(None)
     frame.index.name = "time"
+    frame = _convert_to_native_reanalysis_units(frame)
     return frame.rename(columns=column_map).sort_index()
 
 

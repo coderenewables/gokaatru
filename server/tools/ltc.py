@@ -325,8 +325,10 @@ def _run_ltc_speedsort(
         if not sector_models:
             raise ValueError("SpeedSort could not build any sector model")
 
-        # Predict concurrent (for metrics)
-        predicted = np.empty_like(measured)
+        # Predict concurrent (for metrics).  NaN-filled, not `np.empty_like`: a record
+        # whose sector has no model must stay absent rather than inherit whatever was
+        # last in that memory.
+        predicted = np.full(measured.shape, np.nan, dtype=float)
         for s, model in sector_models.items():
             s_mask = sectors == s
             s_ref = reference[s_mask]
@@ -335,12 +337,20 @@ def _run_ltc_speedsort(
                 s_ref * model["slope"] + model["intercept"],
                 s_ref * model["dog_leg_slope"],
             )
+        scored = np.isfinite(predicted)
+        if not scored.any():
+            raise ValueError("SpeedSort produced no predictions for the concurrent period")
 
-        # Correct full long-term record using direction
+        # Correct full long-term record using direction.  A NaN reference direction has
+        # no sector, so those records cannot be corrected: they must come out NaN and be
+        # counted, not silently inherit uninitialised memory (a plausible-looking 0.0
+        # would pass the negative-prediction check and drag the long-term mean down).
         long_direction = era5_dir[long_dir_col].reindex(long_df.index).to_numpy(dtype=float)
-        long_sectors = _speedsort_sector_index(long_direction)
+        directionless = ~np.isfinite(long_direction)
+        long_sectors = _speedsort_sector_index(np.where(directionless, 0.0, long_direction))
+        long_sectors[directionless] = -1
         full_reference = long_df[REFERENCE_COLUMN].to_numpy(dtype=float)
-        corrected = np.empty_like(full_reference)
+        corrected = np.full(full_reference.shape, np.nan, dtype=float)
         for s, model in sector_models.items():
             s_mask = long_sectors == s
             s_ref = full_reference[s_mask]
@@ -349,25 +359,38 @@ def _run_ltc_speedsort(
                 s_ref * model["slope"] + model["intercept"],
                 s_ref * model["dog_leg_slope"],
             )
+        unmodelled = int(np.count_nonzero(~np.isfinite(corrected)))
 
-        metrics = _regression_metrics(measured, predicted)
+        metrics = _regression_metrics(measured[scored], predicted[scored])
         metrics.update(
             {
                 "algorithm": "speedsort",
                 "threshold": threshold,
                 "concurrent_points": int(len(concurrent)),
+                "concurrent_points_scored": int(scored.sum()),
                 "total_corrected_points": int(len(long_df)),
                 "directional": True,
                 "num_sectors": SPEEDSORT_NUM_SECTORS,
                 "sector_width_deg": SPEEDSORT_SECTOR_WIDTH_DEG,
                 "min_sector_records": SPEEDSORT_MIN_SECTOR_RECORDS,
                 "independent_sectors": independent_count,
+                "reference_direction_missing": int(directionless.sum()),
+                "unmodelled_records": unmodelled,
+                "unmodelled_fraction": float(unmodelled / len(long_df)) if len(long_df) else 0.0,
                 "sector_models": {
                     str(k): {key: float(val) for key, val in v.items()}
                     for k, v in sorted(sector_models.items())
                 },
             }
         )
+        if unmodelled:
+            metrics["warning"] = (
+                f"{unmodelled:,} of {len(long_df):,} long-term records "
+                f"({unmodelled / len(long_df):.1%}) could not be corrected because the reference "
+                "direction is missing or their sector has no model. They are returned as NaN, so "
+                "any downstream mean, ensemble or clipping run covers a shorter period than the "
+                "reference series."
+            )
         return _ltc_response(state, "speedsort", long_df, corrected, metrics)
 
     # --- Original non-directional SpeedSort ---

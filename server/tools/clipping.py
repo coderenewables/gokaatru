@@ -31,6 +31,12 @@ CLIMATE_SCALE = 0.01  # f2 — scale of the exponential term above the floor
 # climate" against which each candidate start year is compared.
 REFERENCE_WINDOW_YEARS = 5
 
+# Window length below which a "long-term" estimate is not normally defensible.  The
+# objective is free to select shorter windows — that trade-off is the point of the
+# method — but a selection this short is reported as a warning rather than passed off
+# as an ordinary result.
+MIN_DEFENSIBLE_WINDOW_YEARS = 10
+
 
 def _source_series(state: SessionState, speed_col: str, source: str) -> pd.Series:
     """Resolve the long-term corrected source series used for clipping analysis by annual means."""
@@ -137,22 +143,63 @@ def _run_clipping_analysis(
             }
         )
     best = min(results, key=lambda item: float(item["combined_uncertainty"]))
-    return {
-        "optimal_start_year": int(best["start_year"]),
-        "min_uncertainty": float(best["combined_uncertainty"]),
-        "iav": full_iav,
-        "analysis_data": results,
-        "years_used": [int(stamp.year) for stamp in annual_means.index],
-        "years_excluded": [entry["year"] for entry in excluded_years],
-        "excluded_reason": (
+    complete_years = [int(stamp.year) for stamp in annual_means.index]
+    selected_years = [year for year in complete_years if year >= int(best["start_year"])]
+    dropped_by_objective = [year for year in complete_years if year < int(best["start_year"])]
+    reasons: list[str] = []
+    if excluded_years:
+        reasons.append(
             f"Calendar year below the {min_year_completeness:.0%} completeness threshold; "
             "a partial year yields a seasonally-biased mean that inflates inter-annual variability."
-            if excluded_years
-            else ""
-        ),
+        )
+    if dropped_by_objective:
+        # Years the objective declined are not years the data lacked.  Reporting them
+        # under the same heading as the completeness exclusions made the two
+        # indistinguishable, so a reader assumed every listed year informed the result.
+        reasons.append(
+            f"{len(dropped_by_objective)} further complete year(s) "
+            f"({dropped_by_objective[0]}-{dropped_by_objective[-1]}) lie outside the selected "
+            "window: the representativeness objective traded their contribution to the "
+            "historic term against the climate term and excluded them."
+        )
+    payload: dict[str, object] = {
+        "optimal_start_year": int(best["start_year"]),
+        "min_uncertainty": float(best["combined_uncertainty"]),
+        # Percent-denominated mirrors of every fractional field.  The bare fractions are
+        # retained for compatibility, but a consumer that appends "%" to them understates
+        # the result a hundredfold, so the correctly-scaled value now travels with it.
+        "min_uncertainty_pct": float(best["combined_uncertainty"]) * 100.0,
+        "iav": full_iav,
+        "iav_pct": full_iav * 100.0,
+        "selected_iav": float(best["iav"]),
+        "selected_iav_pct": float(best["iav"]) * 100.0,
+        "selected_years": selected_years,
+        "selected_n_years": int(best["n_years"]),
+        "selected_mean_speed": float(best["mean_speed"]),
+        "analysis_data": results,
+        "years_used": complete_years,
+        "years_dropped_by_objective": dropped_by_objective,
+        "years_excluded": [entry["year"] for entry in excluded_years],
+        "excluded_reason": " ".join(reasons),
         "excluded_detail": excluded_years,
         "min_year_completeness": float(min_year_completeness),
+        "reference_window_years": int(REFERENCE_WINDOW_YEARS),
+        "shortest_candidate_years": int(min(int(row["n_years"]) for row in results)),
     }
+    if int(best["n_years"]) < MIN_DEFENSIBLE_WINDOW_YEARS:
+        payload["warning"] = (
+            f"The selected window is {best['n_years']} years, below the "
+            f"{MIN_DEFENSIBLE_WINDOW_YEARS}-year period normally expected of a long-term "
+            f"estimate. {len(dropped_by_objective)} complete year(s) were available and not "
+            "used. Note also that every candidate window ends at the final year and so "
+            f"contains the {REFERENCE_WINDOW_YEARS}-year reference period, which gives short "
+            "windows a structural advantage on the climate term."
+        )
+    # Persist so the measured IAV can reach the uncertainty model instead of being
+    # retyped from one tab into another (the u_future term otherwise uses a generic 6%).
+    state.clipping_result = payload
+    state.touch()
+    return payload
 
 
 @mcp.tool()

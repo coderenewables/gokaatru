@@ -8,10 +8,29 @@ import numpy as np
 from scipy.interpolate import griddata
 
 
-def _euclidean_distances(points: np.ndarray, target: np.ndarray) -> np.ndarray:
-    """Compute Euclidean distances without relying on NumPy linalg helpers."""
-    deltas = points - target
-    return np.sqrt(np.sum(deltas * deltas, axis=1))
+def _great_circle_distances_km(points: np.ndarray, target: np.ndarray) -> np.ndarray:
+    """Return great-circle distances in km from each (lat, lon) point to the target.
+
+    Vectorised haversine, matching :func:`haversine_km`.  The previous implementation
+    took a Euclidean norm over raw degrees, which treats a degree of longitude as a
+    degree of latitude.  Meridians converge, so that overweights nodes lying east or
+    west: a degree of longitude is 78.6 km at 45 deg N against 111.2 km for a degree of
+    latitude (1.41x), 2.00x at 60 deg N and 2.92x at 70 deg N.  Two nodes equidistant in
+    degrees but not on the ground were being weighted 50/50 where true distance gives the
+    nearer one over 75%.
+    """
+    radius_km = 6371.0
+    lat_rad = np.radians(points[:, 0])
+    lon_rad = np.radians(points[:, 1])
+    target_lat_rad = np.radians(target[0])
+    target_lon_rad = np.radians(target[1])
+    delta_lat = target_lat_rad - lat_rad
+    delta_lon = target_lon_rad - lon_rad
+    a_term = (
+        np.sin(delta_lat / 2.0) ** 2
+        + np.cos(lat_rad) * np.cos(target_lat_rad) * np.sin(delta_lon / 2.0) ** 2
+    )
+    return 2.0 * radius_km * np.arctan2(np.sqrt(a_term), np.sqrt(np.maximum(1.0 - a_term, 0.0)))
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -45,15 +64,20 @@ def idw_interpolate(
     target: tuple[float, float],
     power: int = 2,
 ) -> np.ndarray:
-    """Apply inverse distance weighting interpolation using Shepard's method with power weighting."""
+    """Apply inverse distance weighting using Shepard's method over great-circle distance.
+
+    Distances are in kilometres, not degrees, so nodes are weighted by how far away they
+    actually are rather than by their coordinate offset.
+    """
     points_array = np.asarray(points, dtype=float)
     values_array = np.asarray(values, dtype=float)
     target_array = np.asarray(target, dtype=float)
-    distances = _euclidean_distances(points_array, target_array)
-    zero_distance = np.where(distances < 1e-12)[0]
+    distances = _great_circle_distances_km(points_array, target_array)
+    # One metre: closer than any reanalysis grid resolves, so the target is the node.
+    zero_distance = np.where(distances < 1e-3)[0]
     if zero_distance.size:
         return np.asarray(values_array[zero_distance[0]])
-    weights = 1.0 / np.maximum(distances, 1e-12) ** power
+    weights = 1.0 / np.maximum(distances, 1e-3) ** power
     weights = weights / weights.sum()
     if values_array.ndim == 1:
         return np.asarray(np.dot(weights, values_array))

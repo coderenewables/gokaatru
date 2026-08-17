@@ -51,6 +51,7 @@ class SessionState:
     reanalysis_cache_identity: dict[str, object] | None
     ltc_results: dict[str, dict[str, object]]
     ensemble_df: pd.DataFrame | None
+    clipping_result: dict[str, object] | None
     latest_uncertainty: dict[str, object] | None
     scenarios: list[dict[str, object]]
     runconfig: dict[str, object]
@@ -95,6 +96,7 @@ class SessionState:
         self.reanalysis_cache_identity = None
         self.ltc_results = {}
         self.ensemble_df = None
+        self.clipping_result = None
         self.latest_uncertainty = None
         self.scenarios = []
         self.runconfig = {}
@@ -196,6 +198,24 @@ class SessionState:
         if isinstance(value, (int, float)):
             return float(value)
         return self.hub_height_m
+
+    def get_measured_iav_pct(self) -> float | None:
+        """Return the IAV of the clipping-selected window, when a clipping run exists.
+
+        The uncertainty model's ``u_future`` term is ``iav_pct / sqrt(20)``.  Its
+        ``iav_pct`` argument defaults to a generic 6%, and the site's measured value was
+        previously only ever displayed — an analyst had to notice it in the clipping view
+        and retype it in the ensemble view.  This lets the caller default to the measured
+        figure, and to the window actually selected rather than the full series.
+        """
+        result = self.clipping_result
+        if not isinstance(result, dict):
+            return None
+        for key in ("selected_iav_pct", "iav_pct"):
+            value = result.get(key)
+            if isinstance(value, (int, float)) and value > 0.0:
+                return float(value)
+        return None
 
     def get_shear_min_speed_mps(self, default: float) -> float:
         """Return the shear valid-record speed gate from runconfig, else ``default`` (D3)."""

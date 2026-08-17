@@ -29,6 +29,13 @@ SHEAR_ALPHA_BOUND = 1.0
 # Clamp rate above which the response carries an explicit warning.
 SHEAR_CLAMP_WARNING_FRACTION = 0.05
 
+# Last-resort fallbacks, reachable only when a table has no finite cell at all.  Named
+# rather than inlined because substituting a generic value for a site-specific one is a
+# methodology choice: 0.143 is the one-seventh power law and 0.0002 m is open-water
+# roughness.  Both are now reported via `fallback_source` so the substitution is visible.
+DEFAULT_FALLBACK_ALPHA = 0.143
+DEFAULT_FALLBACK_Z0_M = 0.0002
+
 
 def _parse_height_sensors(height_sensors: str) -> dict[float, str]:
     """Parse the height-to-column JSON mapping used by the Phase 2 shear tools."""
@@ -170,6 +177,38 @@ def _complete_table(table: pd.DataFrame, fallback: float) -> pd.DataFrame:
     return table.reindex(index=range(1, 13), columns=range(24)).fillna(fallback)
 
 
+def _table_fill_report(table: pd.DataFrame, source: pd.DataFrame) -> dict[str, object]:
+    """Report which month-hour cells the campaign never observed (D3, audit F-19).
+
+    ``_complete_table`` fills absent cells with the series mean so the lookup always
+    resolves.  That is deliberate — extrapolation applies the table to the *reanalysis*
+    series, which spans every month of the year — but it means a six-month campaign
+    produces a full 12x24 table indistinguishable from a full-year one.  The fill count
+    travels with the table so the reader knows how much of it is synthetic.
+    """
+    observed = pd.MultiIndex.from_arrays([source.index.month, source.index.hour]).unique()
+    observed_cells = {(int(month), int(hour)) for month, hour in observed}
+    total_cells = 12 * 24
+    filled = total_cells - len(observed_cells)
+    months_observed = sorted({month for month, _ in observed_cells})
+    report: dict[str, object] = {
+        "cells_observed": len(observed_cells),
+        "cells_total": total_cells,
+        "filled_cells": filled,
+        "filled_fraction": float(filled / total_cells),
+        "months_observed": months_observed,
+        "months_missing": [month for month in range(1, 13) if month not in months_observed],
+    }
+    if filled:
+        report["warning"] = (
+            f"{filled} of {total_cells} month-hour cells ({filled / total_cells:.0%}) were never "
+            f"observed and carry the series mean instead. Months absent from the campaign: "
+            f"{report['months_missing']}. Extrapolation applies this table to the full "
+            "long-term reference series, so those months are corrected with a synthetic value."
+        )
+    return report
+
+
 def _aggregate_table(df: pd.DataFrame, value_col: str, aggregation: str, fallback: float) -> pd.DataFrame:
     """Aggregate a monthly-hourly lookup table using mean, median, or Windographer MoMM."""
     if aggregation == "momm":
@@ -188,7 +227,7 @@ def _aggregate_roughness_table(df: pd.DataFrame, aggregation: str) -> pd.DataFra
     """Aggregate roughness in log-space before exponentiating back to physical z0 values."""
     working = df.copy()
     working["log_z0"] = np.log(working["roughness_length"])
-    fallback = float(np.exp(working["log_z0"].dropna().mean())) if not working["log_z0"].dropna().empty else 0.0002
+    fallback = float(np.exp(working["log_z0"].dropna().mean())) if not working["log_z0"].dropna().empty else DEFAULT_FALLBACK_Z0_M
     return np.exp(_aggregate_table(working, "log_z0", aggregation, np.log(fallback)))
 
 
@@ -225,7 +264,7 @@ def _aggr_momm_table(
             alpha, stats = _compute_pairwise_shear(speeds_at_bin.reshape(1, -1), heights, min_speed_mps)
             result.loc[month, hour] = alpha[0]
             bin_stats.append(stats)
-    fallback = float(np.nanmean(result.to_numpy())) if np.isfinite(result.to_numpy()).any() else 0.143
+    fallback = float(np.nanmean(result.to_numpy())) if np.isfinite(result.to_numpy()).any() else DEFAULT_FALLBACK_ALPHA
     return result.fillna(fallback), _merge_clamp_stats(bin_stats, min_speed_mps)
 
 
@@ -415,16 +454,24 @@ def _build_shear_table(state: SessionState, aggregation: str = "mean") -> dict:
     if state.shear_timeseries_df is None:
         raise ValueError("Shear timeseries is not available. Run calculate_shear_timeseries first")
     valid = state.shear_timeseries_df.dropna()
-    fallback = float(valid["shear_coefficient"].mean()) if not valid.empty else 0.143
+    fallback = float(valid["shear_coefficient"].mean()) if not valid.empty else DEFAULT_FALLBACK_ALPHA
+    fallback_source = "series_mean" if not valid.empty else "one_seventh_power_law_default"
     state.shear_table = _aggregate_table(valid, "shear_coefficient", aggregation, fallback)
-    return {
+    coverage = _table_fill_report(state.shear_table, valid)
+    response: dict[str, object] = {
         "method": "power_law",
         "aggregation": aggregation,
         "table": state.shear_table.values.tolist(),
         # Every shear-table response carries the clamp statistics of the series it
         # was built from, so the table is never read without them (D3).
         "shear_clamping": state.shear_clamp_stats or {},
+        "fallback_alpha": fallback,
+        "fallback_source": fallback_source,
+        "table_coverage": coverage,
     }
+    if coverage.get("warning"):
+        response["warning"] = coverage["warning"]
+    return response
 
 
 def _build_roughness_table(state: SessionState, aggregation: str = "mean") -> dict:
@@ -462,7 +509,7 @@ def _build_sector_shear_tables(
         sector_df = joined.loc[indices == sector, ["shear_coefficient"]]
         if sector_df.empty:
             continue
-        fallback = float(sector_df["shear_coefficient"].mean()) if not sector_df.empty else 0.143
+        fallback = float(sector_df["shear_coefficient"].mean()) if not sector_df.empty else DEFAULT_FALLBACK_ALPHA
         table = _aggregate_table(sector_df, "shear_coefficient", aggregation, fallback)
         sectors[_sector_label(sector, num_sectors)] = table.values.tolist()
     return {"sectors": sectors, "shear_clamping": state.shear_clamp_stats or {}}

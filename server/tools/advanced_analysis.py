@@ -22,16 +22,27 @@ def _require_speed_series(state: SessionState, speed_sensor: str) -> pd.Series:
     return state.timeseries_df[speed_sensor].astype(float)
 
 
-def _density_for_energy(state: SessionState, speed: pd.Series) -> tuple[float, str]:
-    """Use concurrent measured density where available, otherwise state the standard-density assumption."""
+ISA_SEA_LEVEL_DENSITY = 1.225
+
+
+def _density_for_energy(state: SessionState, speed: pd.Series) -> tuple[float, str, pd.Series | None]:
+    """Return (mean density, source, aligned density series) for energy calculations.
+
+    The series is returned alongside the scalar because the monthly breakdown needs it:
+    density varies by about 9% between winter and summer at a temperate site, and
+    applying a single annual mean to every month misstated monthly power density by
+    -4.3% in January and +4.5% in July while cancelling almost exactly in the annual
+    total, so the error was invisible in the headline number.
+    """
     try:
         density, _temperature, _pressure, _humidity = _atmospheric_series(state)
         concurrent = pd.concat([speed, density], axis=1, sort=False).dropna()
         if not concurrent.empty:
-            return float(concurrent.iloc[:, 1].mean()), "measured"
+            aligned = concurrent.iloc[:, 1]
+            return float(aligned.mean()), "measured", aligned
     except ValueError:
         pass
-    return 1.225, "standard"
+    return ISA_SEA_LEVEL_DENSITY, "standard", None
 
 
 def _compute_energy_metrics(state: SessionState, speed_sensor: str, direction_sensor: str = "") -> dict:
@@ -40,14 +51,32 @@ def _compute_energy_metrics(state: SessionState, speed_sensor: str, direction_se
     valid = speed[speed >= 0].dropna()
     if valid.empty:
         raise ValueError(f"Sensor '{speed_sensor}' has no non-negative values for energy analysis")
-    air_density, density_source = _density_for_energy(state, valid)
-    monthly = 0.5 * air_density * valid.pow(3).groupby(valid.index.month).mean().reindex(range(1, 13))
+    air_density, density_source, density_series = _density_for_energy(state, valid)
+    if density_series is None:
+        # No measured density: a single standard value is all there is, so the monthly
+        # profile carries no density seasonality and says so.
+        monthly = 0.5 * air_density * valid.pow(3).groupby(valid.index.month).mean().reindex(range(1, 13))
+        monthly_density_basis = "constant"
+    else:
+        # Pair each record with its own density before averaging, so the monthly profile
+        # carries the real seasonal density signal rather than an annual mean.
+        paired = pd.concat([valid.rename("speed"), density_series.rename("density")], axis=1).dropna()
+        monthly = (0.5 * paired["density"] * paired["speed"].pow(3)).groupby(
+            paired.index.month
+        ).mean().reindex(range(1, 13))
+        monthly_density_basis = "per_record"
     result: dict[str, object] = {
         "speed_sensor": speed_sensor,
         "record_count": int(valid.count()),
         "air_density_kg_m3": air_density,
         "density_source": density_source,
-        "wind_power_density_w_m2": float(0.5 * air_density * valid.pow(3).mean()),
+        "monthly_density_basis": monthly_density_basis,
+        "density_height_basis": "pressure_sensor_height",
+        "wind_power_density_w_m2": float(
+            0.5 * air_density * valid.pow(3).mean()
+            if density_series is None
+            else (0.5 * density_series.reindex(valid.index) * valid.pow(3)).dropna().mean()
+        ),
         "mean_cube_speed_m_s": float(np.cbrt(valid.pow(3).mean())),
         "monthly_power_density_w_m2": [float(value) if pd.notna(value) else None for value in monthly],
         "sectors": [],

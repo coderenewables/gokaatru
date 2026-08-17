@@ -63,6 +63,35 @@ def roughness_from_two_heights(v1: float, h1: float, v2: float, h2: float) -> tu
     return z0, was_clamped
 
 
+DRY_AIR_GAS_CONSTANT = 287.05  # J/(kg K)
+WATER_VAPOUR_GAS_CONSTANT = 461.5  # J/(kg K)
+
+
+def saturation_vapour_pressure_pa(temperature_c):
+    """Saturation vapour pressure over water, Magnus form, in Pascals.
+
+    Array-safe, and the single definition of this relation in the codebase: it was
+    previously written out three times (here, in the vectorised density tool, and in
+    the measured-atmosphere module) with two different coefficient sets, which could
+    drift independently.  Checked against Buck (1996) from -20 to +45 degC: within
+    0.8% at -20 degC and 0.15% above freezing, which is worth at most 0.004% of
+    density.
+
+    Uses the over-water coefficients at all temperatures.  Below freezing the true
+    saturation pressure over ice is lower — up to 28% lower at -25 degC — but because
+    vapour is such a small fraction of total pressure when it is that cold, the
+    resulting density error is under 0.011%.  Not worth a phase switch.
+    """
+    return 100.0 * 6.1078 * 10 ** (7.5 * temperature_c / (237.3 + temperature_c))
+
+
+def moist_air_density(pressure_pa, temperature_k, vapour_pressure_pa):
+    """Moist-air density by partial pressures, per IEC 61400-12-1 Section A.5. Array-safe."""
+    dry_air = (pressure_pa - vapour_pressure_pa) / DRY_AIR_GAS_CONSTANT
+    water_vapour = vapour_pressure_pa / WATER_VAPOUR_GAS_CONSTANT
+    return (dry_air + water_vapour) / temperature_k
+
+
 def air_density_iec(
     pressure_pa: float, temperature_k: float, dewpoint_k: float
 ) -> tuple[float, bool]:
@@ -78,9 +107,5 @@ def air_density_iec(
     was_clamped = dewpoint_k > temperature_k
     if was_clamped:
         dewpoint_k = temperature_k
-    dewpoint_c = dewpoint_k - 273.15
-    vapor_pressure_hpa = 6.1078 * 10 ** (7.5 * dewpoint_c / (237.3 + dewpoint_c))
-    vapor_pressure_pa = vapor_pressure_hpa * 100.0
-    dry_air = (pressure_pa - vapor_pressure_pa) / 287.05
-    water_vapor = vapor_pressure_pa / 461.5
-    return float((dry_air + water_vapor) / temperature_k), was_clamped
+    vapour_pressure_pa = saturation_vapour_pressure_pa(dewpoint_k - 273.15)
+    return float(moist_air_density(pressure_pa, temperature_k, vapour_pressure_pa)), was_clamped

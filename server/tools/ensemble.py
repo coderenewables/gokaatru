@@ -14,6 +14,13 @@ from server.core.validators import to_utc_index
 from server.main import mcp
 from server.state.session import SessionState, session
 
+# Inverse-RMSE weighting needs a floor so a vanishing RMSE cannot take the entire
+# blend on the strength of round-off.  The floor is relative to the worst component,
+# so it scales with the data rather than assuming a unit; the absolute minimum only
+# guards the case where every component is effectively exact.
+RMSE_FLOOR_FRACTION = 1e-6
+MIN_RMSE_FLOOR = 1e-12
+
 
 def _measured_series(state: SessionState, measured_col: str) -> pd.Series:
     """Return the measured wind-speed series for ensemble scoring using overlap-period bias and RMSE."""
@@ -60,6 +67,34 @@ def _overlap_metrics(observed: pd.Series, predicted: pd.Series) -> dict[str, flo
     }
 
 
+def _coverage_summary(
+    covered_weight: np.ndarray,
+    component_series: dict[str, pd.Series],
+    index: pd.DatetimeIndex,
+) -> dict[str, object]:
+    """Report how much of the blend weight each timestamp actually carried.
+
+    A blend built from partially overlapping components is legitimate but its basis
+    varies along the series, so the split has to travel with the result rather than
+    being inferred from the component CSV columns.
+    """
+    total = int(covered_weight.size)
+    full = int(np.count_nonzero(covered_weight >= 1.0 - 1e-9))
+    empty = int(np.count_nonzero(covered_weight <= 0.0))
+    partial = total - full - empty
+    return {
+        "total_records": total,
+        "fully_covered_records": full,
+        "partially_covered_records": partial,
+        "partially_covered_fraction": float(partial / total) if total else 0.0,
+        "uncovered_records": empty,
+        "component_records": {
+            algorithm: int(series.reindex(index).notna().sum())
+            for algorithm, series in component_series.items()
+        },
+    }
+
+
 def _ensemble_output_path(state: SessionState) -> Path:
     """Return the standard Phase 4 ensemble CSV output path under data/ltc_results."""
     output_dir = Path(state.get_data_dir()) / "ltc_results"
@@ -87,9 +122,21 @@ def _run_ensemble(state: SessionState, measured_col: str) -> dict:
             effective_rmse[algorithm] = float(oos_rmse)
         else:
             effective_rmse[algorithm] = stats["rmse"]
-    inverse_rmse = {
-        algorithm: 0.0 if rmse <= 0.0 else 1.0 / rmse
+    # A zero RMSE means a component reproduced the measured series exactly: the best
+    # possible fit, not the worst.  Guarding the reciprocal with `0.0 if rmse <= 0`
+    # inverted that — it handed a perfect component weight 0 and excluded it, while a
+    # component with RMSE 1e-9 took the whole blend.  Floor the RMSE instead, so the
+    # weighting stays monotone and continuous through zero.
+    finite_rmse = {
+        algorithm: rmse
         for algorithm, rmse in effective_rmse.items()
+        if np.isfinite(rmse) and rmse >= 0.0
+    }
+    if not finite_rmse:
+        raise ValueError("Ensemble weights are undefined because no component reported a usable RMSE")
+    rmse_floor = max(RMSE_FLOOR_FRACTION * max(finite_rmse.values()), MIN_RMSE_FLOOR)
+    inverse_rmse = {
+        algorithm: 1.0 / max(rmse, rmse_floor) for algorithm, rmse in finite_rmse.items()
     }
     total_inverse_rmse = float(sum(inverse_rmse.values()))
     if total_inverse_rmse <= 0.0:
@@ -100,23 +147,54 @@ def _run_ensemble(state: SessionState, measured_col: str) -> dict:
         all_index = all_index.union(series.index)
     aligned = pd.DataFrame(index=all_index.sort_values())
     weighted_sum = np.zeros(len(aligned), dtype=float)
+    covered_weight = np.zeros(len(aligned), dtype=float)
     for algorithm, series in component_series.items():
         corrected = series.reindex(aligned.index) - overlap_stats[algorithm]["bias"]
         aligned[algorithm] = corrected
-        weighted_sum += corrected.fillna(0.0).to_numpy(dtype=float) * weights[algorithm]
-    aligned["Ensemble_Speed"] = weighted_sum
+        values = corrected.to_numpy(dtype=float)
+        present = np.isfinite(values)
+        weighted_sum[present] += values[present] * weights[algorithm]
+        covered_weight[present] += weights[algorithm]
+    # Renormalise by the weight actually present at each timestamp.  The index is the
+    # union of the component indexes, so components rarely cover it identically:
+    # XGBoost's feature join drops rows, SpeedSort can leave records unmodelled, and
+    # two algorithms run against different reanalysis vintages disagree outright.
+    # Treating an absent component as a zero contribution while still applying only
+    # the remaining fractional weights scales the blend down by the missing weight —
+    # a two-component ensemble reports *half* the wind speed wherever one component
+    # is absent, and the result is finite, so nothing reveals it.  Dividing by the
+    # covered weight leaves a fully-covered timestamp untouched and makes a partly
+    # covered one the weighted mean of the components that actually exist.
+    ensemble = np.divide(
+        weighted_sum,
+        covered_weight,
+        out=np.full(len(aligned), np.nan, dtype=float),
+        where=covered_weight > 0.0,
+    )
+    aligned["Ensemble_Speed"] = ensemble
+    coverage = _coverage_summary(covered_weight, component_series, aligned.index)
     overlap = pd.concat([measured.rename("measured"), aligned["Ensemble_Speed"]], axis=1, join="inner").dropna()
     metrics = _overlap_metrics(overlap["measured"], overlap["Ensemble_Speed"])
     output = aligned.reset_index(names="Timestamp")
     output_path = _ensemble_output_path(state)
     output.to_csv(output_path, index=False)
     state.ensemble_df = output.copy()
-    return {
+    response: dict[str, object] = {
         "status": "ok",
         "weights": weights,
         "metrics": {"rmse": metrics["rmse"], "r2": metrics["r2"], "bias": metrics["bias"]},
+        "component_coverage": coverage,
         "result_file": str(output_path),
     }
+    if int(coverage["partially_covered_records"]) > 0:
+        response["warning"] = (
+            f"{coverage['partially_covered_records']:,} of {coverage['total_records']:,} timestamps "
+            f"({coverage['partially_covered_fraction']:.1%}) are covered by only some components. "
+            "Those records are the weighted mean of the components present, so the blend basis "
+            "varies across the series — check why the component series differ in extent before "
+            "using the ensemble for clipping or uncertainty."
+        )
+    return response
 
 
 @mcp.tool()

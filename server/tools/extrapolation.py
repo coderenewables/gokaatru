@@ -108,6 +108,73 @@ def _log_linear_interpolation(
     )
 
 
+# Ratio of hub height to the reference height above which an extrapolation stops being
+# an interpolation-grade inference.  Common practice treats roughly 1.5x the top
+# measurement height as the limit of a defensible power-law extrapolation; beyond about
+# 2x the profile assumption is doing most of the work.  Neither bound refuses here —
+# the analyst may have good reason — but both are reported, because the ratio was
+# previously invisible: a 40/60 m mast would be extrapolated to a 200 m hub silently.
+EXTRAPOLATION_RATIO_WARN = 1.5
+EXTRAPOLATION_RATIO_SEVERE = 2.0
+
+
+def _extrapolation_lever(
+    heights: np.ndarray,
+    valid_mask: np.ndarray,
+    hub_height_m: float,
+    extrap_rows: np.ndarray,
+) -> dict[str, object]:
+    """Summarize how far above its reference height each extrapolated record was carried.
+
+    The reference height is chosen per record by ``_nearest_indices``, so it drops to a
+    lower sensor whenever the top one is missing and the lever silently grows for those
+    records.  Reporting the distribution rather than a single number is what makes that
+    visible.
+    """
+    if not extrap_rows.any():
+        return {
+            "extrapolated_records": 0,
+            "reference_height_m": None,
+            "extrapolation_ratio": None,
+            "warning": None,
+        }
+    nearest = _nearest_indices(heights, valid_mask[extrap_rows], hub_height_m)
+    reference_heights = heights[nearest]
+    ratios = hub_height_m / reference_heights
+    max_ratio = float(np.max(ratios))
+    summary: dict[str, object] = {
+        "extrapolated_records": int(extrap_rows.sum()),
+        "reference_height_m": {
+            "min": float(np.min(reference_heights)),
+            "max": float(np.max(reference_heights)),
+            "most_common": float(heights[int(np.bincount(nearest, minlength=heights.size).argmax())]),
+        },
+        "extrapolation_ratio": {
+            "min": float(np.min(ratios)),
+            "max": max_ratio,
+            "mean": float(np.mean(ratios)),
+        },
+        "extrapolation_ratio_warn_threshold": EXTRAPOLATION_RATIO_WARN,
+        "records_above_warn_threshold": int(np.count_nonzero(ratios > EXTRAPOLATION_RATIO_WARN)),
+        "warning": None,
+    }
+    if max_ratio > EXTRAPOLATION_RATIO_SEVERE:
+        summary["warning"] = (
+            f"Hub height {hub_height_m:g} m is up to {max_ratio:.2f}x the reference height used "
+            f"({float(np.min(reference_heights)):g} m at the extreme). Beyond "
+            f"{EXTRAPOLATION_RATIO_SEVERE:g}x the power-law assumption, not the measurement, "
+            "determines the hub-height speed. Treat this result as indicative and do not "
+            "report it without stating the extrapolation ratio."
+        )
+    elif max_ratio > EXTRAPOLATION_RATIO_WARN:
+        summary["warning"] = (
+            f"Hub height {hub_height_m:g} m is up to {max_ratio:.2f}x the reference height used, "
+            f"above the {EXTRAPOLATION_RATIO_WARN:g}x ratio normally treated as the limit of a "
+            "defensible power-law extrapolation. Report the ratio alongside the result."
+        )
+    return summary
+
+
 def _extrapolate_to_hub_height(state: SessionState, hub_height_m: float, shear_model: str = "power_law") -> dict:
     """Create a hub-height wind-speed series using power-law or log-law shear per IEC 61400-12-1 Annex B."""
     if shear_model not in {"power_law", "log_law"}:
@@ -129,6 +196,10 @@ def _extrapolate_to_hub_height(state: SessionState, hub_height_m: float, shear_m
             "status": "ok",
             "column_name": column_name,
             "method_counts": {"direct": len(state.timeseries_df), "interpolated": 0, "extrapolated": 0},
+            "extrapolated_records": 0,
+            "reference_height_m": float(hub_height_m),
+            "extrapolation_ratio": 1.0,
+            "warning": None,
         }
     between = float(heights.min()) < hub_height_m < float(heights.max())
     if between:
@@ -164,6 +235,7 @@ def _extrapolate_to_hub_height(state: SessionState, hub_height_m: float, shear_m
     column_name = _hub_column_name(hub_height_m)
     state.timeseries_df[column_name] = result
     state.set_hub_height_m(float(hub_height_m))
+    lever = _extrapolation_lever(heights, valid_mask, hub_height_m, extrap_rows)
 
     # Also extrapolate all reanalysis nodes (ERA5 nodes, MERRA-2 nodes, and the
     # interpolated site series) to hub height using the shear table. This is a
@@ -180,7 +252,16 @@ def _extrapolate_to_hub_height(state: SessionState, hub_height_m: float, shear_m
     except (ValueError, KeyError):
         pass
 
-    return {"status": "ok", "column_name": column_name, "method_counts": counts, "reanalysis": reanalysis_result}
+    response: dict[str, object] = {
+        "status": "ok",
+        "column_name": column_name,
+        "method_counts": counts,
+        "reanalysis": reanalysis_result,
+        **lever,
+    }
+    if lever.get("warning"):
+        response["warning"] = lever["warning"]
+    return response
 
 
 def _extrapolate_reanalysis_to_hub(

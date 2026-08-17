@@ -7,6 +7,15 @@ import { useWorkspaceStore } from "../../store/useWorkspaceStore";
 import { PlotFrame } from "../common/PlotFrame";
 import { MetricTile, UnavailableSection } from "./resultsShared";
 
+// The clipping endpoint returns uncertainties and IAV as FRACTIONS (0.028, not 2.8).
+// Appending "%" to them without scaling understated every figure a hundredfold — a
+// 2.8% combined uncertainty rendered as "0.03%", which reads as near-certainty. The
+// Stepper's ClippingView already scaled correctly; this brings the read-only report,
+// which is the actual deliverable, into line with it.
+function asPercent(fraction: number): string {
+  return `${(fraction * 100).toFixed(2)}%`;
+}
+
 export function ClippingScenariosSection() {
   const clippingReport = useWorkspaceStore((state) => state.clippingReport);
   const scenarios = useWorkspaceStore((state) => state.scenarios);
@@ -36,10 +45,10 @@ export function ClippingScenariosSection() {
             />
             <MetricTile
               label="Min uncertainty"
-              value={`${clippingReport.min_uncertainty.toFixed(2)}%`}
+              value={asPercent(clippingReport.min_uncertainty)}
               highlight
             />
-            <MetricTile label="IAV" value={`${clippingReport.iav.toFixed(2)}%`} />
+            <MetricTile label="IAV" value={asPercent(clippingReport.iav)} />
           </dl>
 
           {clippingReport.analysis_data.length > 0 ? (
@@ -63,11 +72,11 @@ export function ClippingScenariosSection() {
                       <td>{row.start_year}</td>
                       <td>{row.n_years}</td>
                       <td>{row.mean_speed.toFixed(2)}</td>
-                      <td>{row.iav.toFixed(2)}</td>
+                      <td>{asPercent(row.iav)}</td>
                       <td>{row.lta_ratio.toFixed(3)}</td>
-                      <td>{row.historic_uncertainty.toFixed(2)}%</td>
-                      <td>{row.climate_uncertainty.toFixed(2)}%</td>
-                      <td>{row.combined_uncertainty.toFixed(2)}%</td>
+                      <td>{asPercent(row.historic_uncertainty)}</td>
+                      <td>{asPercent(row.climate_uncertainty)}</td>
+                      <td>{asPercent(row.combined_uncertainty)}</td>
                     </tr>
                   ))}
                 </tbody>

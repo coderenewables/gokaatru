@@ -1,11 +1,14 @@
 """Measured atmospheric-condition summaries for the Sensor Overview."""
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 
+from server.core.formulas import moist_air_density, saturation_vapour_pressure_pa
 from server.main import mcp
 from server.state.session import SessionState, session
+
+# ISA sea-level density, the reference the density correction factor is quoted against.
+ISA_SEA_LEVEL_DENSITY = 1.225
 
 
 def _require_frame(state: SessionState) -> pd.DataFrame:
@@ -55,10 +58,16 @@ def _pressure_pa(values: pd.Series) -> pd.Series:
 
 
 def _density_series(temperature: pd.Series, pressure: pd.Series, humidity: pd.Series | None) -> pd.Series:
-    """Compute moist-air density from measured temperature, pressure, and optional relative humidity."""
+    """Compute moist-air density from measured temperature, pressure, and optional relative humidity.
+
+    With no humidity sensor the air is treated as dry.  That is the only option
+    available, but it is not neutral: it overstates density by roughly 0.5% over a
+    temperate year and 0.7% over warm hours, and power density scales linearly with
+    density.  ``_compute_atmospheric_conditions`` reports the assumption so the bias
+    is attributable.
+    """
     temperature_k = _temperature_kelvin(temperature)
     pressure_pa = _pressure_pa(pressure)
-    temperature_c = temperature_k - 273.15
     valid_temperature = temperature_k.between(180.0, 340.0)
     valid_pressure = pressure_pa.between(50_000.0, 120_000.0)
     if humidity is None:
@@ -68,9 +77,10 @@ def _density_series(temperature: pd.Series, pressure: pd.Series, humidity: pd.Se
         relative_humidity = humidity.astype(float)
         valid_humidity = relative_humidity.between(0.0, 100.0)
         relative_humidity = relative_humidity.where(valid_humidity)
-        saturation_pressure = 6.112 * np.exp((17.67 * temperature_c) / (temperature_c + 243.5)) * 100.0
+        # Shared with core.formulas so this module cannot drift from the IEC path.
+        saturation_pressure = saturation_vapour_pressure_pa(temperature_k - 273.15)
         vapor_pressure = saturation_pressure * relative_humidity / 100.0
-    density = ((pressure_pa - vapor_pressure) / 287.05 + vapor_pressure / 461.5) / temperature_k
+    density = moist_air_density(pressure_pa, temperature_k, vapor_pressure)
     return density.where(valid_temperature & valid_pressure & valid_humidity).rename("air_density_kg_m3")
 
 
@@ -151,10 +161,18 @@ def _compute_atmospheric_conditions(
         "pressure": _series_summary(_clean_atmospheric_series(frame[pressure_name], "pressure")),
         "air_density": {
             **_series_summary(density),
-            "density_correction_factor": float(density.dropna().mean() / 1.225),
+            "density_correction_factor": float(density.dropna().mean() / ISA_SEA_LEVEL_DENSITY),
+            "humidity_basis": "measured" if humidity_name else "assumed_dry",
+            "height_basis": "pressure_sensor_height",
         },
         "humidity": _series_summary(_clean_atmospheric_series(frame[humidity_name], "humidity")) if humidity_name else None,
     }
+    if humidity_name is None:
+        result["air_density"]["warning"] = (
+            "No humidity sensor was available, so the air is treated as dry. That overstates "
+            "density by roughly 0.5% over a temperate year and 0.7% over warm hours, and power "
+            "density scales linearly with density."
+        )
     return result
 
 

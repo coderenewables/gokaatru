@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -289,12 +289,98 @@ def _extract_timezone(payload: object) -> tuple[str, object]:
     )
 
 
-def _apply_timezone_to_index(state: SessionState, tz: object) -> None:
-    """Convert session timeseries indexes from naive local time to tz-aware UTC."""
-    for attr in ("timeseries_df", "raw_timeseries_df"):
-        df = getattr(state, attr)
-        if df is not None and isinstance(df.index, pd.DatetimeIndex) and df.index.tz is None:
+_DST_ERROR_MARKERS = ("infer dst", "ambiguous", "nonexistent")
+
+
+def _is_dst_localization_error(exc: Exception) -> bool:
+    """Return whether a localisation ValueError is a daylight-saving transition problem."""
+    message = str(exc).lower()
+    return any(marker in message for marker in _DST_ERROR_MARKERS)
+
+
+def _standard_time_offset(tz: object) -> timezone | None:
+    """Return a zone's non-DST (standard-time) offset as a fixed-offset timezone.
+
+    Probes midwinter and midsummer and takes whichever has no DST component, so it works
+    in either hemisphere.  Returns ``None`` for a zone that never leaves DST or that
+    cannot be probed.
+    """
+    for probe in (datetime(2021, 1, 15, 12), datetime(2021, 7, 15, 12)):
+        try:
+            localized = probe.replace(tzinfo=tz)  # type: ignore[arg-type]
+            dst_offset = localized.dst()
+            utc_offset = localized.utcoffset()
+        except (TypeError, ValueError):
+            return None
+        if dst_offset is not None and dst_offset == timedelta(0) and utc_offset is not None:
+            return timezone(utc_offset)
+    return None
+
+
+def _apply_timezone_to_index(state: SessionState, tz: object) -> dict[str, object]:
+    """Convert session timeseries indexes from naive local time to tz-aware UTC.
+
+    A DST-observing IANA zone used to make the campaign unimportable: pandas defaults to
+    ``ambiguous="raise"`` and ``nonexistent="raise"``, so any record spanning either
+    transition raised — which is every campaign of useful length in Europe, most of North
+    America, Australia, New Zealand and Chile.  The message advised passing a pandas
+    keyword the analyst cannot reach from a file upload.
+
+    Strict localisation is still attempted first, because when it succeeds the timestamps
+    are unambiguous and nothing should be inferred.  When it fails, the fallback is the
+    zone's **standard-time** offset: a logger clock almost always runs on fixed local
+    standard time rather than following DST, and a campaign that *occupies* the
+    spring-forward gap is direct evidence of exactly that.  The choice is returned and
+    recorded rather than made silently, and an explicit ``offset_from_utc_hrs`` in the
+    datamodel still avoids the question entirely.
+    """
+    frames = [
+        (attr, getattr(state, attr))
+        for attr in ("timeseries_df", "raw_timeseries_df")
+    ]
+    pending = [
+        (attr, df)
+        for attr, df in frames
+        if df is not None and isinstance(df.index, pd.DatetimeIndex) and df.index.tz is None
+    ]
+    if not pending:
+        return {"timezone_resolution": "already_aware"}
+
+    try:
+        for attr, df in pending:
             df.index = df.index.tz_localize(tz).tz_convert("UTC")
+        return {"timezone_resolution": "strict"}
+    except ValueError as exc:
+        # pandas 3 raises a bare ValueError for both DST cases rather than the dedicated
+        # AmbiguousTimeError / NonExistentTimeError of earlier versions, so discriminate
+        # on the message and let anything else propagate untouched.
+        if not _is_dst_localization_error(exc):
+            raise
+        standard = _standard_time_offset(tz)
+        if standard is None:
+            raise ValueError(
+                f"Timestamps cannot be localized to '{tz}' and no standard-time offset "
+                "could be derived for it. Declare 'offset_from_utc_hrs' in "
+                "logger_main_config to state the logger's fixed offset directly."
+            ) from exc
+        for attr, df in pending:
+            # Re-read: a partially localized frame may already be tz-aware.
+            current = getattr(state, attr)
+            if isinstance(current.index, pd.DatetimeIndex) and current.index.tz is None:
+                current.index = current.index.tz_localize(standard).tz_convert("UTC")
+        offset_hours = standard.utcoffset(None).total_seconds() / 3600.0
+        return {
+            "timezone_resolution": "standard_offset",
+            "timezone_requested": str(tz),
+            "standard_offset_hours": offset_hours,
+            "warning": (
+                f"Timestamps span a daylight-saving transition in '{tz}', so they cannot be "
+                f"localized unambiguously. They have been read as fixed local standard time "
+                f"(UTC{offset_hours:+g}), which is how logger clocks normally run. If this "
+                "campaign really was recorded on a DST-shifting clock, declare "
+                "'offset_from_utc_hrs' in logger_main_config to state the intended offset."
+            ),
+        }
 
 
 def _resolve_boom_pair(
@@ -640,7 +726,10 @@ def _parse_datamodel(state: SessionState, file_path: str) -> dict:
     state.runconfig.setdefault("site", {})["timezone"] = str(tz_obj)
     state.runconfig["site"]["timezone_source"] = tz_source
     # Convert existing timeseries if already loaded (datamodel after timeseries)
-    _apply_timezone_to_index(state, tz_obj)
+    tz_resolution = _apply_timezone_to_index(state, tz_obj)
+    state.runconfig["site"]["timezone_resolution"] = tz_resolution["timezone_resolution"]
+    if "standard_offset_hours" in tz_resolution:
+        state.runconfig["site"]["standard_offset_hours"] = tz_resolution["standard_offset_hours"]
     points = _extract_measurement_points(payload)
     mapping, resolution_log = _build_sensor_mapping(points, timeseries_df=state.timeseries_df)
     state.sensor_inventory = _build_sensor_inventory(points)
@@ -670,6 +759,9 @@ def _parse_datamodel(state: SessionState, file_path: str) -> dict:
         "status": "ok",
         "heights": list(state.sensor_mapping.keys()),
         "mapping": {str(height): sensor_map.copy() for height, sensor_map in state.sensor_mapping.items()},
+        "timezone": str(tz_obj),
+        "timezone_source": tz_source,
+        **tz_resolution,
     }
     coordinate = state.get_coordinate()
     if state.get_project_name() is not None:

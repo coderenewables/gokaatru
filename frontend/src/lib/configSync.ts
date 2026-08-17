@@ -4,6 +4,36 @@
 // Backend runconfig keys of interest (verified):
 //   project_name, location {latitude, longitude, elevation_m}, measurement_type,
 //   hub_height_m, sensor_mapping, cleaning_log, brighthub_uuid.
+//
+// ---------------------------------------------------------------------------
+// The canonical/mirror contract (D20)
+// ---------------------------------------------------------------------------
+// The backend is the single source of truth. It STRIPS the keys below from the
+// persisted runconfig, and this file is what puts them back. The mapping is
+// written down once in `server/core/runconfig.py::RUNCONFIG_MIRRORS`, and
+// `tests/test_runconfig_contract.py` asserts every stripped key is reproducible
+// from a canonical one. Adding a mirrored field means editing three places —
+// emit in `to_runconfig`, list in `RUNCONFIG_MIRRORS`, rehydrate here — and
+// missing the last one fails as a Zod validation error far from its cause.
+//
+//   stripped mirror              <- canonical backend key
+//   project.name                 <- project_name
+//   project.measurementType      <- measurement_type
+//   site.latitude                <- location.latitude
+//   site.longitude               <- location.longitude
+//   site.elevationM              <- location.elevation_m
+//   site.hubHeightM              <- hub_height_m
+//   shear.targetHubHeightM       <- hub_height_m
+//   ltc.uncertainty.hubHeightM   <- hub_height_m
+//   reanalysis.searchLatitude    <- location.latitude
+//   reanalysis.searchLongitude   <- location.longitude
+//
+// Not a mirror, but note it: `shear.minSpeedMps` is a backend-owned key that
+// lives inside a section this file also writes. The section schemas are
+// non-strict, so Zod drops it from the typed model and `serializeConfigToRunconfig`
+// never writes it back. It survives only because `buildRunconfigUpdates` emits
+// updates key-by-key and cannot delete a key it never saw. Do not "fix" that by
+// replacing a section wholesale — see BACKEND_OWNED_SECTION_KEYS.
 import { createDefaultWindAnalysisConfig } from "./defaultConfig";
 import type { WindAnalysisConfig } from "../types/analysis";
 

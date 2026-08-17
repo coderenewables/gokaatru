@@ -8,6 +8,7 @@ import json
 import math
 from pathlib import Path
 
+from server.core.runconfig import strip_mirrors
 from server.main import mcp
 from server.schemas.common import Coordinate
 from server.state.session import SessionState, session
@@ -65,15 +66,21 @@ def _set_nested_value(config: dict[str, object], key: str, value: object) -> Non
 
 
 def _normalize_runconfig(config: dict[str, object]) -> dict[str, object]:
-    """Promote legacy UI aliases to canonical keys and remove duplicated values."""
+    """Promote legacy UI aliases to canonical keys and remove the mirrored duplicates.
+
+    The canonical -> mirror mapping lives in ``server/core/runconfig.py``; the
+    stripping below is driven from that table so this file and
+    ``SessionState.to_runconfig`` cannot drift apart (D20). Promotion keeps its
+    explicit type guards here: a legacy config is untrusted input, and a
+    non-string project name must be dropped rather than promoted into the
+    canonical key and written to disk.
+    """
     project = config.get("project")
     if isinstance(project, dict):
         if "project_name" not in config and isinstance(project.get("name"), str):
             config["project_name"] = project["name"]
         if "measurement_type" not in config and isinstance(project.get("measurementType"), str):
             config["measurement_type"] = project["measurementType"]
-        project.pop("name", None)
-        project.pop("measurementType", None)
 
     site = config.get("site")
     if isinstance(site, dict):
@@ -84,27 +91,10 @@ def _normalize_runconfig(config: dict[str, object]) -> dict[str, object]:
         for legacy_key, canonical_key in (("latitude", "latitude"), ("longitude", "longitude"), ("elevationM", "elevation_m")):
             if canonical_key not in location and legacy_key in site:
                 location[canonical_key] = site[legacy_key]
-            site.pop(legacy_key, None)
         if "hub_height_m" not in config and "hubHeightM" in site:
             config["hub_height_m"] = site["hubHeightM"]
-        site.pop("hubHeightM", None)
 
-    shear = config.get("shear")
-    if isinstance(shear, dict):
-        shear.pop("targetHubHeightM", None)
-
-    reanalysis = config.get("reanalysis")
-    if isinstance(reanalysis, dict):
-        reanalysis.pop("searchLatitude", None)
-        reanalysis.pop("searchLongitude", None)
-
-    ltc = config.get("ltc")
-    if isinstance(ltc, dict):
-        uncertainty = ltc.get("uncertainty")
-        if isinstance(uncertainty, dict):
-            uncertainty.pop("hubHeightM", None)
-
-    return config
+    return strip_mirrors(config)
 
 
 def _sync_state_from_runconfig(state: SessionState) -> None:

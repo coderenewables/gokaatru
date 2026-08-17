@@ -7,7 +7,7 @@ GoKaatru ships as two parts that work together:
 - **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **222 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration, and WindKit.
 - **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison. (The backend WindKit tool surface remains available via the API/MCP server, but the frontend no longer ships a dedicated WindKit tab.)
 
-State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings).
+State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The frontend's convenience fields are **derived mirrors** of canonical backend keys, not independent state — the mapping is defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
 
 ## Application workflow
 
@@ -67,13 +67,13 @@ The Stepper remains available after data import for guided review and manual ope
 | **1. Data cleaning** | Review the imported measurement inventory, choose which sensors stay in the analysis (excluded sensors are removed from the working data and recorded in `excluded_sensors`), and apply explicit cleaning filters when appropriate. |
 | **2. Reanalysis acquisition** | Review BrightHub ERA5 + MERRA-2 nodes and site interpolation; optional direct EarthDataHub ERA5 is available as a separate, credentialed fallback. |
 | **3. Measured-data exploration** | Recovery/availability, wind rose, Weibull, diurnal/annual profiles, shear profile, turbulence intensity — to refine shear sensors and LTC strategy. |
-| **4. Shear → hub (measured)** | Power-law (α) or log-law (z₀) shear + 12×24 lookup, extrapolate measured sensors to hub height. The power-law exponent is bounded to α ∈ [−1, 1] so a noisy record can't be amplified into a non-physical hub speed. |
+| **4. Shear → hub (measured)** | Power-law (α) or log-law (z₀) shear + 12×24 lookup, extrapolate measured sensors to hub height. Only records above `min_speed_mps` (default **3.0 m/s**) contribute — below that, `ln(v₂/v₁)` is anemometer noise rather than profile. α is still bounded to [−1, 1] as a backstop, and every response reports how often that clamp fired. |
 | **5. Reanalysis → hub** | Confirm long-term reference series are available at hub height using the chosen shear method. |
-| **6. Long-Term Correction** | MCP between measured (short) and reanalysis (long) across 5 algorithms (`speedsort`, `linear_least_squares`, `total_least_squares`, `variance_ratio`, `xgboost`); scatter/residual/convergence diagnostics. |
-| **7. Clipping** | Pick the representative historical window that minimizes combined historic + climate uncertainty. |
+| **6. Long-Term Correction** | MCP between measured (short) and reanalysis (long) across 5 algorithms (`speedsort` — directionally binned, `linear_least_squares`, `total_least_squares`, `variance_ratio`, `xgboost`); scatter/residual/convergence diagnostics. Requires **at least six months** of valid concurrent records; below that it raises rather than returning a number. |
+| **7. Clipping** | Pick the representative historical window that minimizes combined historic + climate uncertainty. Calendar years below **90%** completeness are excluded and reported, so a partial first or last year cannot inflate inter-annual variability. |
 | **8. Ensemble & uncertainty** | Inverse-RMSE ensemble blend, RSS total uncertainty + P50/75/90/99, and named scenarios for comparison. |
 
-Beyond the stepper, the **Canvas** tab renders the full pipeline as an editable React-Flow DAG (run auto/step, snapshots, fork branches), the **Results** tab is a read-only aggregate report of everything the session has produced (run overview, measured data, shear, reanalysis, LTC, ensemble & uncertainty, clipping/scenarios — it never triggers computation), the **Sensor Overview** tab is a measured-data validation dashboard, the **Copilot** tab is a BYOK chat that drives backend tools via natural language, and the **Compare** tab diffs saved scenarios.
+Beyond the stepper, the **Canvas** tab renders the full pipeline as an editable React-Flow DAG (run auto/step, snapshots, fork branches), the **Results** tab is a read-only aggregate report of everything the session has produced (run overview, measured data, shear, reanalysis, LTC, ensemble & uncertainty, clipping/scenarios — it never triggers computation), the **Sensor Overview** tab is a measured-data validation dashboard, the **Copilot** tab is a BYOK chat that drives backend tools via natural language (the *Allow the assistant to modify this session* setting controls whether it may write as well as read — see [Chat tool authority](#chat-tool-authority)), and the **Compare** tab diffs saved scenarios.
 
 ## Quick start
 
@@ -117,7 +117,7 @@ npm run test                         # vitest
 ```
 server/                 # Python MCP server + FastAPI web API
 ├── api/                # FastAPI routes (sessions, analysis, brighthub, workflow, windkit, …)
-├── core/               # executor, regression, spatial, formulas, validators
+├── core/               # executor, regression, spatial, formulas, validators, runconfig contract
 ├── tools/              # MCP tools: data_io, cleaning, shear, extrapolation, era5, ltc, …
 │   └── windkit/        # WindKit tools
 ├── state/              # session + dataset pool managers
@@ -165,6 +165,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/sessions/{id}/brighthub/*` | various | BrightHub login/locations/import/reanalysis |
 | `/sessions/{id}/workflow/{execute,step,status,…}` | various | Workflow canvas execution + snapshots + compare |
 | `/sessions/{id}/map/site` | GET | Site-overview GeoJSON (mast + ERA5 nodes) |
+| `/sessions/{id}/chat` | POST | BYOK LLM chat proxy with server-side tool execution (read-only by default; see [Chat tool authority](#chat-tool-authority)) |
 | `/windkit/*` | POST | ~95 WindKit endpoints (OpenAPI-documented) |
 | `/mcp/catalog` | GET | MCP tool/resource catalog for discovery |
 
@@ -201,10 +202,18 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 - `get_mast_marker`, `get_era5_node_markers`, `get_site_overview_map`
 
 ### Statistics
-- `compute_weibull_params`, `compute_windrose_data`, `compute_diurnal_profile`, `compute_monthly_stats`, `compute_turbulence_intensity`, `compute_momm`, `compute_scatter_stats`, `calculate_uncertainty`
+- `compute_weibull_params`, `compute_wind_climate`, `compute_windrose_data`, `compute_diurnal_profile`, `compute_monthly_stats`, `compute_turbulence_intensity`, `compute_turbulence_analysis`, `compute_momm`, `compute_scatter_stats`, `calculate_uncertainty`
+
+### Diagnostics (Sensor Overview)
+- `compute_qc_diagnostics`, `compute_sensor_comparison`, `compute_mast_effects`, `compute_mcp_readiness`, `compute_vertical_structure`
+
+### Advanced analysis
+- `compute_energy_metrics`, `compute_extreme_winds`, `compute_wind_persistence`, `compute_wind_ramps`
 
 ### Visualization
-- `plot_windrose`, `plot_weibull`, `plot_diurnal`, `plot_scatter`, `plot_timeseries`, `plot_data_coverage`, `plot_shear_table`, `plot_shear_profile`, `plot_shear_timeseries`, `plot_era5_scatter`, `plot_monthly_means`, `plot_ltc_comparison`, `plot_annual_means`, `plot_uncertainty_breakdown`
+- `plot_windrose`, `plot_weibull`, `plot_diurnal`, `plot_scatter`, `plot_timeseries`, `plot_data_coverage`, `plot_shear_table`, `plot_monthly_means`, `plot_ltc_comparison`, `plot_annual_means`, `plot_uncertainty_breakdown`
+
+Additional figures are reachable through `POST /sessions/{id}/plots/{name}` without being MCP tools in their own right — including `shear_profile`, `shear_timeseries`, `era5_scatter`, `mast_shadow`, `qc_flags`, `ltc_scatter`, `ltc_residuals`, `ltc_monthly`, `ltc_convergence`, and `uncertainty_tornado`.
 
 ### WindKit — Wind Functions (13 tools)
 - `windkit_wind_speed`, `windkit_wind_direction`, `windkit_wind_speed_and_direction`, `windkit_wind_vectors`, `windkit_wind_direction_difference`, `windkit_wd_to_sector`, `windkit_vinterp_wind_direction`, `windkit_vinterp_wind_speed`, `windkit_rotor_equivalent_wind_speed`, `windkit_shear_extrapolate`, `windkit_shear_exponent`, `windkit_veer_extrapolate`, `windkit_wind_veer`
@@ -243,7 +252,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 - Comparison: `windkit_are_spatially_equal` / `windkit_equal_spatial_shape` / `windkit_covers`
 
 ### WindKit — Plotting (9 tools)
-- `plot_histogram` / `plot_histogram_lines` / `plot_operational_curves` / `plot_raster` / `plot_roughness_rose` / `plot_time_series` / `plot_vertical_profile` / `plot_wind_rose` / `plot_landcover_map`
+- `windkit_plot_histogram` / `windkit_plot_histogram_lines` / `windkit_plot_operational_curves` / `windkit_plot_raster` / `windkit_plot_roughness_rose` / `windkit_plot_time_series` / `windkit_plot_vertical_profile` / `windkit_plot_wind_rose` / `windkit_plot_landcover_map`
 
 ### WindKit — Other (14 tools)
 - Tutorial: `windkit_get_tutorial_data` / `windkit_load_tutorial_data`
@@ -251,6 +260,76 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 - Coordinates: `windkit_create_sector_coords` / `windkit_create_wsbin_coords`
 - WAsP: `windkit_read_cfdres`
 - ERA5: `windkit_get_era5`
+
+## Methodology, defaults and disclosure
+
+Choices that change reported numbers are listed here, because they are the ones a
+reviewer needs in order to reconcile GoKaatru against WAsP, Windographer or an
+earlier GoKaatru run. Wherever a choice has a runtime consequence, the tool
+response carries the resolved value alongside the result, so the numbers travel
+with their basis rather than depending on a reader finding this page.
+
+### Refusals — where GoKaatru declines to produce a number
+
+These raise rather than returning a value, on the reasoning that a number
+invites use:
+
+| Condition | Why |
+|---|---|
+| Fewer than **4 380 valid concurrent records** (six months) for any LTC algorithm | A sub-six-month MCP is not defensible. Counted as valid concurrent *pairs*, not calendar span, so a gappy nine-month overlap is judged on the data it actually contains. This also rejects coarse-cadence references: a five-year monthly series is 60 pairs. |
+| Fewer than **six complete annual means** for clipping | After the completeness gate below. |
+| Inferred timestep not in `{1, 2, 5, 10, 15, 30, 60}` minutes | A silently repaired cadence propagates into gap statistics, diurnal aggregation and ERA5 alignment with no trace. |
+| Datamodel declares no timezone | A wrong assumption here is silent and corrupts every LTC. Provide `timezone` (IANA) or `offset_from_utc_hrs` in `logger_main_config`. |
+| Degenerate (vertical) relationship in total least squares | The slope is genuinely undefined; the old code returned a `1e12` sentinel. |
+
+### Defaults that affect results
+
+| Setting | Default | Notes |
+|---|---|---|
+| Weibull fit | **WAsP m1/m3** moment method | Matches the 1st and 3rd moments so mean *and* energy content are preserved — the wind-industry convention, and what WAsP/Windographer report. Moments are taken over the **full** series including calms. MLE remains available via `method="mle"`, which must exclude zeros. Expect roughly **k −0.1 and A −0.25** versus MLE on typical data. |
+| Shear valid-record gate | **3.0 m/s** (`min_speed_mps`) | Persisted to `runconfig.shear.minSpeedMps`. Raising it from the old 0.1 m/s removes near-calm records whose `ln(v₂/v₁)` is noise; on a real two-year lidar campaign this dropped 5% of records and cut shear σ from 0.168 to 0.149. |
+| Clipping year completeness | **0.9** (`min_year_completeness`) | Leap-aware, measured against the series' own cadence. |
+| SpeedSort binning | **12 sectors × 30°**, min **200** records/sector | Sparse sectors fall back to the all-sector fit; `independent_sectors` and the per-sector `sector_models` report where the fit is thin. |
+| Mast-shadow speed gate | **4.0 m/s**, min **50** records/sector | Detection is two-sided: a low ratio means `sensor_b` is shadowed, a high ratio means `sensor_a` is. Sparse sectors are reported but not flagged. |
+| `range_check` bounds | **Derived from sensor type** | wind_speed 0–50 m/s, wind_direction 0–360°, temperature −60–60 °C, pressure 80 000–110 000 Pa, humidity 0–100%. An unknown type falls back to that sensor's own data range, which makes the rule a **no-op** — an intentional fail-safe, reported as `bounds_source: "sensor_data_range"`. Explicit `min`/`max` always win. |
+| Spike detection | **median/MAD**, window 11, 4σ | Mean/σ over a centred window cannot work: a spike inflates the σ of its own window and escapes its own test. |
+| ERA5 spatial interpolation | **Scalar** for speed, **vector** for direction | Deliberately different. Vector interpolation of speed under-predicts where node directions diverge across the cell, because opposing components cancel. Reported as `speed_interpolation: "scalar"`. |
+
+### Disclosure fields — read these before trusting a number
+
+| Field | Appears in | Meaning |
+|---|---|---|
+| `records_clamped`, `clamped_fraction` | every shear response | How often α hit the [−1, 1] backstop. A clamped α = 1.0 turns 8.7 m/s at 150 m into 15.0 m/s. Above 5% the response carries an explicit `warning`. |
+| `measured_resampled_to_hourly`, `resampling_note` | every LTC response | Measured data is averaged to hourly means while the reanalysis reference is instantaneous. This removes within-hour variance from the measured side only, biasing `variance_ratio` low. Slope-based methods are far less affected. |
+| `negative_predictions_clipped` | every LTC response | Corrected speeds truncated at zero. A non-trivial count means the transfer function is bad. |
+| `n_above_training_max`, `fraction_above_training_max` | `run_ltc_xgboost` | Long-term records above the campaign maximum. Trees are piecewise-constant and cannot extrapolate, so these collapse onto the model's highest leaf. **Do not use XGBoost alone for extreme-wind estimation** — it biases GEV/Gumbel annual maxima low. |
+| `years_used`, `years_excluded`, `excluded_reason` | `run_clipping_analysis` | Which calendar years passed the completeness gate. |
+| `calm_fraction`, `fit_excludes_calms`, `fit_method` | `compute_weibull_params` | `mean_speed` is always the **full-series** mean including calms, consistent with MoMM and the monthly means. |
+| `bounds_source`, `min_applied`, `max_applied` | `apply_cleaning_rule` (`range_check`) | The bounds actually applied, recorded in the cleaning log so it cannot imply a check that did not happen. |
+| `weights` | `run_ensemble` | Inverse-RMSE component weights, using each algorithm's **out-of-sample** RMSE where it reports one (currently XGBoost only) and its overlap RMSE otherwise. The basis is therefore mixed across components — see Known limitations. |
+| `upstream_processing` | `brighthub_import_location` | BrightHub cleaning, calibration and offsets applied **before** GoKaatru saw the data. Recorded as a non-undoable entry at the head of the cleaning log: coverage and recovery figures describe the data as received, not the raw campaign. |
+
+### Known limitations
+
+- **Confidence intervals are not rigorous.** `ols_confidence_intervals` uses the
+  t-distribution but assumes independent residuals. Wind speed is strongly
+  autocorrelated, so the effective sample size is a fraction of `n` and the
+  intervals are far too narrow — treat them as a lower bound. No
+  effective-sample-size correction or block bootstrap is applied.
+- **`speedsort` is directional but not published SpeedSort.** It bins by
+  reference direction and fits per-sector dog-leg transfer functions, which
+  earns its lower MCP uncertainty coefficient, but it is not a reimplementation
+  of the windPRO/Windographer algorithm.
+- **IDW interpolation is a fallback only.** `interpolate_spatial` prefers
+  bilinear whenever the four ERA5 nodes form a 2×2 cell containing the site,
+  which is the normal case.
+- **Ensemble weights use a mixed RMSE basis.** XGBoost is weighted on its
+  held-out validation RMSE while the linear methods are weighted on their
+  concurrent-overlap RMSE, because only XGBoost reports an out-of-sample
+  metric. That is the lesser of two evils — weighting a deep boosted ensemble
+  on in-sample error would hand it a disproportionate share of the blend — but
+  it is not like-for-like, and `run_ensemble` does not currently label which
+  basis each component used.
 
 ## Deployment model — single-user-local
 
@@ -276,18 +355,36 @@ These must be addressed first:
    and ensure access logs redact it.
 2. **Expire idle sessions and their workspaces on a timer.** A workspace left on
    disk stays resurrectable by anyone who recovers its id from a log.
-3. **Re-review the chat proxy's tool authority.** `POST /sessions/{id}/chat`
-   executes MCP tools on the model's behalf. Read-only analysis and
-   visualization tools are exposed by default; session-mutating, filesystem and
-   network tools require `allow_mutating_tools=true` per request. Tool results
-   re-enter the model's context and contain user-supplied text (CSV headers,
-   sensor names, imported metadata), so a crafted column header is a
-   prompt-injection vector — locally the attacker and the user are the same
-   person, which is what makes the current default acceptable.
+3. **Re-review the chat proxy's tool authority** — see below. Locally the
+   attacker and the user are the same person, which is what makes the current
+   default acceptable; that stops being true the moment anyone else can reach
+   the API.
 4. **Review outbound request surfaces.** The chat proxy accepts only the named
    providers in `_PROVIDER_URLS`; custom endpoint URLs are rejected outright so
    a caller cannot aim the server's outbound request at an internal address.
    Keep it that way, or add resolve-then-validate before relaxing it.
+
+### Chat tool authority
+
+`POST /sessions/{id}/chat` executes MCP tools on the model's behalf, so the tool
+surface is an explicit **name allowlist**, deny-by-default. A tool in neither
+tier is not exposed at all, so adding a new MCP tool does not silently widen the
+model's authority.
+
+| Tier | Count | Exposed when |
+|---|---|---|
+| Read-only — query, compute, plot | 36 | always |
+| Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty | 26 | only with `allow_mutating_tools: true` |
+
+The authority check is repeated server-side at execution rather than trusted
+from the tool list sent upstream, because a model can name a tool it was never
+offered. Tool results are wrapped in `<untrusted-tool-output>` tags and the
+system prompt instructs the model not to follow instructions found inside them —
+that mitigates prompt injection; the allowlist is the actual control.
+
+The Copilot UI sends `allow_mutating_tools: true` by default so the assistant can
+drive the workflow, and exposes a checkbox in its BYOK settings to make the
+assistant read-only. The API default is read-only.
 
 ## Validation
 

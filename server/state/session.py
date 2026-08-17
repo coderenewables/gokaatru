@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from server.core.runconfig import strip_mirrors
 from server.schemas.common import Coordinate
 
 
@@ -240,20 +241,11 @@ class SessionState:
             config["shear_table_shape"] = list(self.shear_table.shape)
         if self.roughness_table is not None:
             config["roughness_table_shape"] = list(self.roughness_table.shape)
-        for section, fields in {
-            "project": ("name", "measurementType"),
-            "site": ("latitude", "longitude", "elevationM", "hubHeightM"),
-            "shear": ("targetHubHeightM",),
-            "reanalysis": ("searchLatitude", "searchLongitude"),
-        }.items():
-            payload = config.get(section)
-            if isinstance(payload, dict):
-                for field in fields:
-                    payload.pop(field, None)
-        ltc = config.get("ltc")
-        if isinstance(ltc, dict) and isinstance(ltc.get("uncertainty"), dict):
-            ltc["uncertainty"].pop("hubHeightM", None)
-        return config
+        # Mirrored keys are derived on the frontend from the canonical values
+        # above, so they are never persisted. The mapping lives in
+        # server/core/runconfig.py (D20) — shared with _normalize_runconfig so
+        # the two strippers cannot drift.
+        return strip_mirrors(config)
 
     def get_data_dir(self) -> str:
         """Return the runtime data directory, preferring the session workspace when configured."""

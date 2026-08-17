@@ -113,7 +113,25 @@ def ols_confidence_intervals(
     x: np.ndarray,
     y: np.ndarray,
 ) -> tuple[tuple[float, float] | None, tuple[float, float] | None]:
-    """Compute approximate 95% OLS confidence intervals using the normal approximation with z = 1.96."""
+    """Compute nominal 95% OLS confidence intervals for the slope and intercept.
+
+    Uses the t-distribution with n − 2 degrees of freedom, since the residual
+    variance is estimated from the same sample rather than known (D9.4).  The
+    normal approximation this replaces was anti-conservative at small n.
+
+    **These intervals are not rigorous for wind data and must not be presented
+    as such.** They assume independent, identically distributed residuals, but
+    wind speed is strongly autocorrelated: consecutive 10-minute or hourly
+    records carry much of the same information, so the effective sample size is
+    a small fraction of ``n``.  Because the standard errors scale as
+    ``1/sqrt(n)``, using the raw record count makes the intervals far too
+    narrow — typically by several fold at hourly resolution.  Treat them as a
+    lower bound on the true uncertainty.  Correcting this properly requires an
+    effective-sample-size adjustment (e.g. from the residual autocorrelation
+    time) or a block bootstrap, neither of which is applied here.
+    """
+    from scipy.stats import t as student_t
+
     x_values, y_values = _flatten_xy(x, y)
     if x_values.size < 3:
         return None, None
@@ -125,10 +143,13 @@ def ols_confidence_intervals(
     slope = float(np.sum((x_values - mean_x) * (y_values - mean_y)) / sxx)
     intercept = float(mean_y - slope * mean_x)
     residuals = y_values - (slope * x_values + intercept)
-    variance = float(np.sum(residuals**2) / max(1, x_values.size - 2))
+    degrees_of_freedom = max(1, x_values.size - 2)
+    variance = float(np.sum(residuals**2) / degrees_of_freedom)
     se_slope = float(np.sqrt(variance / sxx))
     se_intercept = float(np.sqrt(variance * (1.0 / x_values.size + (mean_x**2) / sxx)))
-    return (slope - 1.96 * se_slope, slope + 1.96 * se_slope), (
-        intercept - 1.96 * se_intercept,
-        intercept + 1.96 * se_intercept,
+    # t rather than z: the residual variance is estimated, not known (D9.4).
+    critical = float(student_t.ppf(0.975, degrees_of_freedom))
+    return (slope - critical * se_slope, slope + critical * se_slope), (
+        intercept - critical * se_intercept,
+        intercept + critical * se_intercept,
     )

@@ -25,7 +25,7 @@ from server.tools.ltc import (
 
 
 def _make_directional_state(
-    n: int = 3000,
+    n: int = 6000,
     seed: int = 42,
 ) -> SessionState:
     """Build a SessionState with measured + ERA5 speed/direction columns.
@@ -73,7 +73,7 @@ def _make_directional_state(
     return state
 
 
-def _make_non_directional_state(n: int = 500, seed: int = 7) -> SessionState:
+def _make_non_directional_state(n: int = 4800, seed: int = 7) -> SessionState:
     """Build a SessionState with measured + ERA5 speed columns (no direction)."""
     rng = np.random.default_rng(seed)
     dates = pd.date_range("2020-01-01", periods=n, freq="h", tz="UTC")
@@ -117,7 +117,7 @@ class TestNonDirectionalSpeedSort:
 
     def test_no_direction_falls_back(self) -> None:
         """With empty long_dir_col, should return directional=False and standard metrics."""
-        state = _make_non_directional_state(n=500)
+        state = _make_non_directional_state(n=4800)
         result = _run_ltc_speedsort(state, MEASURED_COLUMN, "ws_100m")
         metrics = result["metrics"]
 
@@ -130,7 +130,7 @@ class TestNonDirectionalSpeedSort:
 
     def test_missing_dir_col_uses_non_directional(self) -> None:
         """A long_dir_col that doesn't exist in ERA5 should fall back gracefully."""
-        state = _make_non_directional_state(n=500)
+        state = _make_non_directional_state(n=4800)
         # "wd_100m" is not in era5 columns (only "ws_100m")
         result = _run_ltc_speedsort(state, MEASURED_COLUMN, "ws_100m", long_dir_col="wd_100m")
         metrics = result["metrics"]
@@ -143,7 +143,7 @@ class TestDirectionalSpeedSort:
 
     def test_directional_produces_sector_models(self) -> None:
         """With direction data, should return directional=True and 12 sector models."""
-        state = _make_directional_state(n=3000)
+        state = _make_directional_state(n=6000)
         result = _run_ltc_speedsort(state, MEASURED_COLUMN, "ws_100m", long_dir_col="wd_100m")
         metrics = result["metrics"]
 
@@ -155,16 +155,16 @@ class TestDirectionalSpeedSort:
 
     def test_independent_sectors_detected(self) -> None:
         """At least some sectors should have enough records for independent fits."""
-        state = _make_directional_state(n=3000)
+        state = _make_directional_state(n=6000)
         result = _run_ltc_speedsort(state, MEASURED_COLUMN, "ws_100m", long_dir_col="wd_100m")
         metrics = result["metrics"]
 
-        # With 250 records per sector (>= 200 min), all should be independent
+        # With 500 records per sector (>= 200 min), all should be independent
         assert metrics["independent_sectors"] > 0
 
     def test_sector_threshold_per_sector(self) -> None:
         """Each sector model should have its own threshold."""
-        state = _make_directional_state(n=3000)
+        state = _make_directional_state(n=6000)
         result = _run_ltc_speedsort(state, MEASURED_COLUMN, "ws_100m", long_dir_col="wd_100m")
         sector_models = result["metrics"]["sector_models"]
 
@@ -174,7 +174,7 @@ class TestDirectionalSpeedSort:
 
     def test_dog_leg_continuity(self) -> None:
         """At the threshold, dog-leg and TLS predictions must match."""
-        state = _make_directional_state(n=3000)
+        state = _make_directional_state(n=6000)
         result = _run_ltc_speedsort(state, MEASURED_COLUMN, "ws_100m", long_dir_col="wd_100m")
         sector_models = result["metrics"]["sector_models"]
 
@@ -194,7 +194,7 @@ class TestDirectionalSpeedSort:
 
     def test_full_long_term_correction(self) -> None:
         """Corrected speeds should differ from raw ERA5 speeds."""
-        state = _make_directional_state(n=3000)
+        state = _make_directional_state(n=6000)
         _run_ltc_speedsort(state, MEASURED_COLUMN, "ws_100m", long_dir_col="wd_100m")
 
         # Result includes corrected_wind_speed in the saved state
@@ -211,17 +211,25 @@ class TestSparseSectorFallback:
     """Verify sectors with insufficient records fall back to the all-sector model."""
 
     def test_sparse_sector_uses_fallback(self) -> None:
-        """When one sector has < MIN_RECORDS, it should use the all-sector model."""
-        from server.tools.ltc import _run_ltc_speedsort
+        """Sectors below MIN_SECTOR_RECORDS share the all-sector fallback model.
 
-        # Create data where sector 0 has very few records
+        Every sector being sparse is no longer reachable: D9.1 requires 4380
+        concurrent records, and 12 sectors x 200 = 2400, so at least one sector
+        always clears the minimum.  The reachable case — and the one the guard
+        exists for — is a *skewed* wind rose, so the fixture concentrates most
+        records in the eastern half and leaves the western sectors thin.
+        """
+        from server.tools.ltc import SPEEDSORT_MIN_SECTOR_RECORDS, _run_ltc_speedsort
+
         rng = np.random.default_rng(99)
-        n = 1200  # 100 per sector on average
+        n_dense, n_sparse = 4600, 200
+        n = n_dense + n_sparse
         dates = pd.date_range("2020-01-01", periods=n, freq="h", tz="UTC")
 
-        # Most sectors: cluster around their center
+        # Dense: directions in [0, 180) -> ~766 per sector across 6 sectors.
+        # Sparse: directions in [180, 360) -> ~33 per sector across 6 sectors.
+        directions = np.concatenate([rng.uniform(0, 180, n_dense), rng.uniform(180, 360, n_sparse)])
         ref_speeds = rng.uniform(3, 12, n)
-        directions = rng.uniform(0, 360, n)
         meas_speeds = ref_speeds * 0.98 + rng.normal(0, 0.3, n)
 
         era5 = pd.DataFrame({"ws_100m": ref_speeds, "wd_100m": directions}, index=dates)
@@ -236,12 +244,20 @@ class TestSparseSectorFallback:
         metrics = result["metrics"]
         sector_models = metrics["sector_models"]
 
-        # With 100 per sector (all < 200), independent_sectors should be 0
-        # and all should use the fallback model
-        assert metrics["independent_sectors"] == 0
+        # Both kinds of sector must be present, or the test proves nothing.
+        assert 0 < metrics["independent_sectors"] < SPEEDSORT_NUM_SECTORS
 
-        # All sectors should have the same model (the fallback)
-        fallback = sector_models["0"]
-        for key in sector_models:
+        sector_counts = np.bincount(
+            _speedsort_sector_index(directions), minlength=SPEEDSORT_NUM_SECTORS
+        )
+        sparse_keys = [
+            str(s) for s in range(SPEEDSORT_NUM_SECTORS)
+            if sector_counts[s] < SPEEDSORT_MIN_SECTOR_RECORDS
+        ]
+        assert sparse_keys, "fixture produced no sparse sectors"
+
+        # Every sparse sector shares one model — the all-sector fallback.
+        fallback = sector_models[sparse_keys[0]]
+        for key in sparse_keys:
             assert sector_models[key]["slope"] == fallback["slope"]
             assert sector_models[key]["intercept"] == fallback["intercept"]

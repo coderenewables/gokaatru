@@ -5,6 +5,7 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -160,6 +161,38 @@ def brighthub_import_location(
         temporary_timeseries_path.unlink(missing_ok=True)
         raise
 
+    # 4b. Record what BrightHub did to the data before we saw it (D27). Without
+    # this, the cleaning log — an audit artifact for a bankable report — reads as
+    # the complete record of what was removed, and the coverage figures computed
+    # at import describe a post-BrightHub-cleaning dataset while appearing to
+    # describe the raw campaign.
+    upstream_flags = {
+        "apply_cleaning_log": bool(apply_cleaning_log),
+        "apply_cleaning_rules": bool(apply_cleaning_rules),
+        "apply_calibration": bool(apply_calibration),
+        "apply_wind_vane_deadband_offset": bool(apply_deadband_offset),
+        "apply_device_orientation_offset": bool(apply_orientation_offset),
+    }
+    provenance_entry: dict[str, object] = {
+        "rule_type": "brighthub_upstream_processing",
+        "sensor": "*",
+        "records_affected": None,
+        "applied_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "params": upstream_flags,
+        "start_date": "",
+        "end_date": "",
+        "source": "brighthub",
+        "upstream": True,
+        "undoable": False,
+        "brighthub_uuid": uuid,
+        "note": (
+            "Applied by BrightHub before import. GoKaatru did not perform this processing, cannot "
+            "reverse it, and cannot report how many records it affected. Coverage and recovery "
+            "figures below describe the data as received, not the raw campaign."
+        ),
+    }
+    staged_session.cleaning_log.insert(0, provenance_entry)
+
     # 5. Apply location metadata if not already set
     if name and staged_session.get_project_name() in {None, ""}:
         staged_session.set_project_name(name)
@@ -185,6 +218,10 @@ def brighthub_import_location(
         "datamodel_heights": dm_result.get("heights", []),
         "project_name": session.get_project_name(),
         "measurement_type": session.get_measurement_type(),
+        # Surfaced in the import response so the upstream processing is visible
+        # at the point of import, not only to whoever reads the cleaning log.
+        "upstream_processing": upstream_flags,
+        "upstream_processing_note": provenance_entry["note"],
     }
 
 

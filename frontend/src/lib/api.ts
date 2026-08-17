@@ -1001,7 +1001,15 @@ export async function compareWorkflowRuns(
 export async function chatSession(
   baseUrl: string,
   sessionId: string,
-  payload: { api_key: string; provider: string; model: string; messages: ChatMessage[] },
+  payload: {
+    api_key: string;
+    provider: string;
+    model: string;
+    messages: ChatMessage[];
+    // Opt in to session-mutating / filesystem / network tools. The backend
+    // defaults to read-only analysis and visualization (D23).
+    allow_mutating_tools?: boolean;
+  },
 ): Promise<ChatResponse> {
   return requestJson<ChatResponse>(baseUrl, `/api/sessions/${sessionId}/chat`, {
     method: "POST",

@@ -16,6 +16,8 @@ export interface CopilotSettings {
   provider: string;
   model: string;
   apiKey: string;
+  /** Allow the assistant to modify the session (ingest, cleaning, config, LTC). */
+  allowMutatingTools?: boolean;
 }
 
 export interface CopilotMessage {
@@ -38,6 +40,10 @@ export function readChatSettings(): CopilotSettings {
       provider: typeof parsed.provider === "string" ? parsed.provider : "openai",
       model: typeof parsed.model === "string" ? parsed.model : "gpt-4o",
       apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
+      // Default on: the assistant is expected to drive the workflow, and the
+      // deployment model is single-user-local. Turn it off to make the
+      // assistant read-only (D23).
+      allowMutatingTools: parsed.allowMutatingTools !== false,
     };
   } catch {
     return { provider: "openai", model: "gpt-4o", apiKey: "" };
@@ -185,6 +191,9 @@ export async function streamCopilotReply(args: {
       provider: settings.provider,
       model: settings.model,
       messages,
+      // Without this the copilot can only read and plot: ingest, cleaning,
+      // config writes, ERA5 fetches and LTC runs are all gated (D23).
+      allow_mutating_tools: settings.allowMutatingTools !== false,
     });
     text = response.reply || "(no reply)";
     callbacks.onTextDelta?.(text);

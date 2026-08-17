@@ -174,8 +174,11 @@ def test_api_workflow(
         json={"height_sensors": height_sensors},
     )
     assert shear_response.status_code == 200
-    assert shear_response.json()["records"] == 66066
-    assert shear_response.json()["mean_shear"] == pytest.approx(0.060266093228781)
+    # Re-baselined for the 3.0 m/s valid-record gate (D3).
+    assert shear_response.json()["records"] == 62570
+    assert shear_response.json()["mean_shear"] == pytest.approx(0.0630790411395217)
+    assert shear_response.json()["min_speed_mps"] == 3.0
+    assert shear_response.json()["clamped_fraction"] == pytest.approx(0.0024132971072398915)
     table_response = client.post(
         f"/api/sessions/{session_id}/shear/table",
         headers=headers,
@@ -198,7 +201,9 @@ def test_api_workflow(
     }
 
     state = manager.get_session(session_id)
-    hourly_reference = state.timeseries_df["Spd_100m"].resample("h").mean().dropna().iloc[:240]
+    # Full hourly overlap, not a 240-hour slice: LTC requires six months of
+    # concurrent records (D9.1) and this campaign has roughly two years of them.
+    hourly_reference = state.timeseries_df["Spd_100m"].resample("h").mean().dropna()
     state.era5_interpolated_df = pd.DataFrame(
         {
             "Spd_100m_hub": hourly_reference.to_numpy(dtype=float) * 0.95 + 0.4,

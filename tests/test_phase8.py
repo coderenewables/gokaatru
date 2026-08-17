@@ -27,8 +27,14 @@ from server.tools.visualization import (
 
 
 def _seed_ltc_state(state: SessionState) -> None:
-    """Populate measured and reference datasets plus deterministic LTC outputs for diagnostics tests."""
-    index = pd.date_range("2019-01-31", periods=60, freq="ME")
+    """Populate measured and reference datasets plus deterministic LTC outputs for diagnostics tests.
+
+    Three years of hourly records: LTC rejects anything under six months of
+    concurrent data (D9.1), so the monthly-cadence fixture this replaces can no
+    longer reach the algorithms.  Hourly also matches what these plots see in
+    practice, while keeping three distinct years for the annual-convergence test.
+    """
+    index = pd.date_range("2019-01-01", periods=3 * 8760, freq="h")
     reference = 8.0 + 1.4 * np.sin(np.linspace(0.0, 8.0 * np.pi, index.size)) + np.linspace(0.0, 1.0, index.size)
     measured = 0.94 * reference + 0.55 + 0.12 * np.cos(np.linspace(0.0, 6.0 * np.pi, index.size))
     state.timeseries_df = pd.DataFrame({"Spd_100m": measured, "Dir_100m": np.linspace(0.0, 359.0, index.size)}, index=index)

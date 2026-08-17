@@ -35,7 +35,14 @@ from server.state.session import SessionState
 from server.tools.cleaning import _apply_cleaning_rule, _get_cleaning_log, _undo_cleaning_rule
 from server.tools.atmosphere import _compute_atmospheric_conditions
 from server.tools.advanced_analysis import _compute_energy_metrics, _compute_extremes, _compute_persistence, _compute_ramps
-from server.tools.diagnostics import _compute_mast_effects, _compute_mcp_readiness, _compute_qc_diagnostics, _compute_sensor_comparison
+from server.tools.diagnostics import (
+    MAST_EFFECT_MIN_SECTOR_RECORDS,
+    MAST_EFFECT_MIN_SPEED_MPS,
+    _compute_mast_effects,
+    _compute_mcp_readiness,
+    _compute_qc_diagnostics,
+    _compute_sensor_comparison,
+)
 from server.tools.overview_summary import _compute_overview_summary
 from server.tools.clipping import _run_clipping_analysis
 from server.tools.ensemble import _run_ensemble
@@ -441,11 +448,15 @@ def get_mast_effects(
     sensor_a: str = "",
     sensor_b: str = "",
     direction_sensor: str = "",
+    min_speed_mps: float = MAST_EFFECT_MIN_SPEED_MPS,
+    min_sector_records: int = MAST_EFFECT_MIN_SECTOR_RECORDS,
 ) -> dict:
     """Return directional speed-ratio diagnostics for potential mast-shadow review."""
     del session_id
     try:
-        return _compute_mast_effects(state, sensor_a, sensor_b, direction_sensor)
+        return _compute_mast_effects(
+            state, sensor_a, sensor_b, direction_sensor, min_speed_mps, min_sector_records
+        )
     except ValueError as exc:
         raise to_bad_request(exc) from exc
 

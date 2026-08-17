@@ -101,20 +101,30 @@ def test_uploaded_dataset_statistics_shear_and_extrapolation(uploaded_dataset_se
     assert len(stats_100m["monthly_means"]) == 12
     assert len(stats_100m["diurnal_means"]) == 24
 
+    # Re-baselined for the 3.0 m/s valid-record gate (D3). The old 0.1 m/s gate
+    # admitted 3,496 more near-calm records whose ln(v2/v1) was noise, which is
+    # why std_shear falls from 0.168 to 0.149 here.
     assert shear["status"] == "ok"
-    assert shear["records"] == 66066
-    assert shear["mean_shear"] == pytest.approx(0.060266093228781)
-    assert shear["median_shear"] == pytest.approx(0.051038372850187)
-    assert shear["std_shear"] == pytest.approx(0.168150096316406)
+    assert shear["records"] == 62570
+    assert shear["mean_shear"] == pytest.approx(0.0630790411395217)
+    assert shear["median_shear"] == pytest.approx(0.05192515018283009)
+    assert shear["std_shear"] == pytest.approx(0.1486175404000471)
+    assert shear["min_speed_mps"] == 3.0
+    assert shear["records_used"] == 62570
+    assert shear["records_clamped"] == 151
+    assert shear["clamped_fraction"] == pytest.approx(0.0024132971072398915)
+    # Well under the 5% threshold, so no warning is raised on this dataset.
+    assert "warning" not in shear
+    assert shear_table["shear_clamping"]["records_clamped"] == 151
 
     table = np.asarray(shear_table["table"], dtype=float)
     assert table.shape == (12, 24)
     assert np.isfinite(table).all()
-    assert float(table.mean()) == pytest.approx(0.061472071995364)
+    assert float(table.mean()) == pytest.approx(0.06366868623642771)
 
     assert extrapolation["status"] == "ok"
     assert extrapolation["column_name"] == "Spd_150m_hub"
     assert extrapolation["method_counts"] == {"direct": 0, "interpolated": 65519, "extrapolated": 757}
-    assert hub_series.mean() == pytest.approx(9.612443283591231)
+    assert hub_series.mean() == pytest.approx(9.612528096642762)
     assert hub_series.min() == pytest.approx(0.5296561162417128)
     assert hub_series.max() == pytest.approx(31.42907866480829)

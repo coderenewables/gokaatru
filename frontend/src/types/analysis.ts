@@ -231,8 +231,15 @@ export interface MastEffectsSummary {
   sensor_b: string;
   direction_sensor: string;
   baseline_speed_ratio: number;
+  /** Sectors where sensor_b is shadowed (low ratio). Alias of affected_sectors_b. */
   affected_sectors: string[];
-  sectors: Array<{ label: string; speed_ratio: number; record_count: number }>;
+  /** Sectors where sensor_a is shadowed (high ratio) — invisible before D30. */
+  affected_sectors_a: string[];
+  affected_sectors_b: string[];
+  min_speed_mps: number;
+  min_sector_records: number;
+  records_used: number;
+  sectors: Array<{ label: string; speed_ratio: number; record_count: number; sufficient_records: boolean }>;
 }
 
 export interface QcDiagnosticsSummary {

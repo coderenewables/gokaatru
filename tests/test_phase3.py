@@ -24,12 +24,17 @@ from server.tools.era5 import (
     find_era5_nodes,
 )
 from server.tools.ltc import (
+    MIN_CONCURRENT_HOURS,
     run_ltc_linear_least_squares,
     run_ltc_speedsort,
     run_ltc_total_least_squares,
     run_ltc_variance_ratio,
 )
 from server.tools.ltc_ml import run_ltc_xgboost
+
+# LTC now rejects anything under six months of concurrent records (D9.1), so the
+# synthetic fixtures below must clear that floor to exercise the algorithms at all.
+_LTC_N = MIN_CONCURRENT_HOURS
 
 
 def _set_ltc_frames(measured: np.ndarray, reference: np.ndarray) -> pd.DatetimeIndex:
@@ -170,7 +175,7 @@ def test_compute_wind_speed() -> None:
 def test_ltc_linear_known_relationship() -> None:
     """Verify robust linear LTC recovers a known measured-reference relationship within tolerance."""
     np.random.seed(3)
-    reference = np.linspace(3.0, 15.0, 240)
+    reference = np.linspace(3.0, 15.0, _LTC_N)
     measured = 1.1 * reference + 0.5 + np.random.normal(0.0, 0.15, reference.size)
     _set_ltc_frames(measured, reference)
     result = run_ltc_linear_least_squares("Spd_100m", "Spd_100m_hub")
@@ -181,19 +186,19 @@ def test_ltc_linear_known_relationship() -> None:
 
 def test_ltc_same_column_names_supported() -> None:
     """Verify LTC works when measured and reference series use the same column name."""
-    index = pd.date_range("2024-01-01", periods=120, freq="h")
-    reference = np.linspace(4.0, 12.0, 120)
+    index = pd.date_range("2024-01-01", periods=_LTC_N, freq="h")
+    reference = np.linspace(4.0, 12.0, _LTC_N)
     measured = 0.92 * reference + 0.4
     session.timeseries_df = pd.DataFrame({"Spd_100m": measured}, index=index)
     session.era5_interpolated_df = pd.DataFrame({"Spd_100m": reference}, index=index)
     result = run_ltc_linear_least_squares("Spd_100m", "Spd_100m")
-    assert result["metrics"]["concurrent_points"] == 120
+    assert result["metrics"]["concurrent_points"] == _LTC_N
     assert result["metrics"]["r_squared"] > 0.99
 
 
 def test_ltc_speedsort_threshold() -> None:
     """Verify the SpeedSort threshold equals min(4.0, 0.5 × mean reference speed)."""
-    reference = np.full(120, 7.0)
+    reference = np.full(_LTC_N, 7.0)
     measured = reference * 1.05
     _set_ltc_frames(measured, reference)
     result = run_ltc_speedsort("Spd_100m", "Spd_100m_hub")
@@ -202,7 +207,7 @@ def test_ltc_speedsort_threshold() -> None:
 
 def test_ltc_variance_ratio_identity() -> None:
     """Verify variance-ratio LTC returns the reference record unchanged when measured equals reference."""
-    reference = np.linspace(2.0, 12.0, 140)
+    reference = np.linspace(2.0, 12.0, _LTC_N)
     _set_ltc_frames(reference.copy(), reference.copy())
     result = run_ltc_variance_ratio("Spd_100m", "Spd_100m_hub")
     corrected = session.ltc_results["variance_ratio"]["df"]["corrected_wind_speed"].to_numpy(dtype=float)
@@ -214,8 +219,8 @@ def test_ltc_variance_ratio_identity() -> None:
 def test_ltc_xgboost_runs() -> None:
     """Verify XGBoost LTC produces corrected output and the expected metrics keys on synthetic data."""
     np.random.seed(11)
-    reference = 7.0 + 2.0 * np.sin(np.linspace(0.0, 8.0 * np.pi, 240)) + np.random.normal(0.0, 0.2, 240)
-    measured = 0.9 * reference + 0.7 + 0.3 * np.sin(np.linspace(0.0, 4.0 * np.pi, 240))
+    reference = 7.0 + 2.0 * np.sin(np.linspace(0.0, 8.0 * np.pi, _LTC_N)) + np.random.normal(0.0, 0.2, _LTC_N)
+    measured = 0.9 * reference + 0.7 + 0.3 * np.sin(np.linspace(0.0, 4.0 * np.pi, _LTC_N))
     _set_ltc_frames(measured, reference)
     result = run_ltc_xgboost("Spd_100m", "Spd_100m_hub", "Dir_100m", "Dir_100m")
     metrics = result["metrics"]
@@ -233,7 +238,7 @@ def test_air_density_standard_atmosphere() -> None:
 
 def test_ltc_determinism() -> None:
     """Verify deterministic LTC algorithms produce identical corrected output on repeated runs."""
-    reference = np.linspace(4.0, 14.0, 160)
+    reference = np.linspace(4.0, 14.0, _LTC_N)
     measured = 1.05 * reference + 0.25
     _set_ltc_frames(measured, reference)
     first = run_ltc_total_least_squares("Spd_100m", "Spd_100m_hub")

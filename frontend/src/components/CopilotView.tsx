@@ -98,6 +98,7 @@ function SettingsDrawer({
   const [provider, setProvider] = useState(settings.provider);
   const [model, setModel] = useState(settings.model);
   const [apiKey, setApiKey] = useState(settings.apiKey);
+  const [allowMutatingTools, setAllowMutatingTools] = useState(settings.allowMutatingTools !== false);
 
   return (
     <div className="settings-drawer">
@@ -133,11 +134,23 @@ function SettingsDrawer({
             placeholder="sk-…"
           />
         </label>
+        <label className="form-field">
+          <span>Allow the assistant to modify this session</span>
+          <input
+            type="checkbox"
+            checked={allowMutatingTools}
+            onChange={(e) => setAllowMutatingTools(e.target.checked)}
+          />
+          <small className="muted">
+            Off: the assistant can only read data and generate plots. On: it may also import files,
+            apply cleaning rules, change config, fetch reanalysis data, and run long-term correction.
+          </small>
+        </label>
       </div>
       <button
         type="button"
         className="primary-button"
-        onClick={() => onSave({ provider, model, apiKey })}
+        onClick={() => onSave({ provider, model, apiKey, allowMutatingTools })}
         disabled={!apiKey}
       >
         Save

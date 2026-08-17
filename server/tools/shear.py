@@ -14,6 +14,21 @@ from server.core.momm import compute_weighted_momm_table
 from server.main import mcp
 from server.state.session import SessionState, session
 
+# Minimum speed for a record to contribute to a shear estimate (D3).  Below a few
+# m/s, ln(v2/v1) is dominated by anemometer noise rather than by the profile, and
+# that noise is what produces the extreme alpha values the clamp exists to
+# suppress.  The former 0.1 m/s gate admitted essentially every calm record.
+SHEAR_MIN_SPEED_MPS = 3.0
+
+# Physically plausible band for the power-law exponent.  Typical alpha is
+# 0.05-0.40; stable nocturnal profiles reach ~0.6.  Kept as a backstop against
+# non-physical extrapolation, but a high clamp rate is a data-quality signal, not
+# something to hide — hence the statistics below.
+SHEAR_ALPHA_BOUND = 1.0
+
+# Clamp rate above which the response carries an explicit warning.
+SHEAR_CLAMP_WARNING_FRACTION = 0.05
+
 
 def _parse_height_sensors(height_sensors: str) -> dict[float, str]:
     """Parse the height-to-column JSON mapping used by the Phase 2 shear tools."""
@@ -55,8 +70,19 @@ def _require_columns(df: pd.DataFrame, height_map: dict[float, str]) -> None:
         raise ValueError(f"Missing height sensor columns: {', '.join(missing)}")
 
 
-def _compute_pairwise_shear(speed_matrix: np.ndarray, heights: np.ndarray) -> np.ndarray:
-    """Compute row-wise weighted shear from all valid height pairs using IEC power-law geometry."""
+def _compute_pairwise_shear(
+    speed_matrix: np.ndarray,
+    heights: np.ndarray,
+    min_speed_mps: float = SHEAR_MIN_SPEED_MPS,
+) -> tuple[np.ndarray, dict[str, object]]:
+    """Compute row-wise weighted shear from all valid height pairs using IEC power-law geometry.
+
+    Returns the alpha series alongside clamping statistics (D3).  The estimator
+    itself is unchanged — it recovers alpha exactly on a clean profile — but the
+    valid-record gate and the reporting around it are not cosmetic: a clamped
+    alpha of 1.0 turns 8.7 m/s at 150 m into 15.0 m/s, a 72% overestimate, and
+    the previous implementation applied that clamp with no record of how often.
+    """
     numerator = np.zeros(speed_matrix.shape[0], dtype=float)
     denominator = np.zeros(speed_matrix.shape[0], dtype=float)
     valid_pairs = np.zeros(speed_matrix.shape[0], dtype=int)
@@ -66,7 +92,7 @@ def _compute_pairwise_shear(speed_matrix: np.ndarray, heights: np.ndarray) -> np
             weights = abs(x_term)
             v1 = speed_matrix[:, start]
             v2 = speed_matrix[:, end]
-            mask = np.isfinite(v1) & np.isfinite(v2) & (v1 > 0.1) & (v2 > 0.1)
+            mask = np.isfinite(v1) & np.isfinite(v2) & (v1 > min_speed_mps) & (v2 > min_speed_mps)
             log_ratio = np.full(speed_matrix.shape[0], np.nan, dtype=float)
             log_ratio[mask] = np.log(v2[mask] / v1[mask])
             numerator[mask] += weights * x_term * log_ratio[mask]
@@ -75,12 +101,46 @@ def _compute_pairwise_shear(speed_matrix: np.ndarray, heights: np.ndarray) -> np
     result = np.full(speed_matrix.shape[0], np.nan, dtype=float)
     usable = (valid_pairs > 0) & (denominator > 0)
     result[usable] = numerator[usable] / denominator[usable]
-    # Bound the power-law exponent to a physically plausible band. Turbulent or
-    # noisy records can otherwise produce extreme alpha (we observed up to ~7),
-    # which the power-law extrapolation amplifies into non-physical hub speeds
-    # (hundreds of m/s). Clamping to [-1, 1] keeps the shear table sane.
-    result[usable] = np.clip(result[usable], -1.0, 1.0)
-    return result
+    clamped = usable & (np.abs(result) > SHEAR_ALPHA_BOUND)
+    result[usable] = np.clip(result[usable], -SHEAR_ALPHA_BOUND, SHEAR_ALPHA_BOUND)
+    return result, _clamp_stats(int(usable.sum()), int(clamped.sum()), min_speed_mps)
+
+
+def _clamp_stats(records_used: int, records_clamped: int, min_speed_mps: float) -> dict[str, object]:
+    """Summarize shear clamping, warning when the clamp fired often enough to matter (D3)."""
+    fraction = float(records_clamped / records_used) if records_used else 0.0
+    stats: dict[str, object] = {
+        "records_used": records_used,
+        "records_clamped": records_clamped,
+        "clamped_fraction": fraction,
+        "min_speed_mps": float(min_speed_mps),
+    }
+    if fraction > SHEAR_CLAMP_WARNING_FRACTION:
+        stats["warning"] = (
+            f"{fraction:.1%} of shear records ({records_clamped:,} of {records_used:,}) were clamped to "
+            f"|alpha| = {SHEAR_ALPHA_BOUND}. A clamped exponent is non-physical and inflates "
+            f"hub-height extrapolation; treat this as a data-quality signal and check the "
+            f"anemometer pair and the {min_speed_mps:g} m/s speed gate."
+        )
+    return stats
+
+
+def _merge_clamp_stats(parts: list[dict[str, object]], min_speed_mps: float) -> dict[str, object]:
+    """Combine per-bin clamp statistics into one summary for aggregate shear tables."""
+    used = sum(int(part["records_used"]) for part in parts)
+    clamped = sum(int(part["records_clamped"]) for part in parts)
+    return _clamp_stats(used, clamped, min_speed_mps)
+
+
+def _resolve_min_speed(state: SessionState, min_speed_mps: float | None) -> float:
+    """Resolve the shear speed gate from the caller, else runconfig, else the default (D3)."""
+    if min_speed_mps is None:
+        return state.get_shear_min_speed_mps(SHEAR_MIN_SPEED_MPS)
+    resolved = float(min_speed_mps)
+    if resolved < 0.0:
+        raise ValueError(f"min_speed_mps must be non-negative, got {resolved}")
+    state.set_shear_min_speed_mps(resolved)
+    return resolved
 
 
 def _fit_rowwise_log_profile(speed_matrix: np.ndarray, heights: np.ndarray) -> np.ndarray:
@@ -138,10 +198,14 @@ def _sector_label(index: int, num_sectors: int) -> str:
     return f"{int(index * width)}-{int((index + 1) * width)}"
 
 
-def _aggr_momm_table(df: pd.DataFrame, height_map: dict[float, str]) -> pd.DataFrame:
+def _aggr_momm_table(
+    df: pd.DataFrame,
+    height_map: dict[float, str],
+    min_speed_mps: float = SHEAR_MIN_SPEED_MPS,
+) -> tuple[pd.DataFrame, dict[str, object]]:
     """Build an aggregate MoMM shear table by deriving alpha from per-height MoMM wind tables."""
     speeds = df[list(height_map.values())]
-    valid = speeds.notna().all(axis=1) & (speeds > 0.1).all(axis=1)
+    valid = speeds.notna().all(axis=1) & (speeds > min_speed_mps).all(axis=1)
     concurrent = speeds.loc[valid]
     if concurrent.empty:
         raise ValueError("Aggregate MoMM shear requires concurrent valid data across all selected heights")
@@ -154,23 +218,32 @@ def _aggr_momm_table(df: pd.DataFrame, height_map: dict[float, str]) -> pd.DataF
         for height, column in height_map.items()
     ]
     result = pd.DataFrame(np.nan, index=range(1, 13), columns=range(24), dtype=float)
+    bin_stats: list[dict[str, object]] = []
     for month in range(1, 13):
         for hour in range(24):
             speeds_at_bin = np.asarray([table.loc[month, hour] for table in tables], dtype=float)
-            result.loc[month, hour] = _compute_pairwise_shear(speeds_at_bin.reshape(1, -1), heights)[0]
+            alpha, stats = _compute_pairwise_shear(speeds_at_bin.reshape(1, -1), heights, min_speed_mps)
+            result.loc[month, hour] = alpha[0]
+            bin_stats.append(stats)
     fallback = float(np.nanmean(result.to_numpy())) if np.isfinite(result.to_numpy()).any() else 0.143
-    return result.fillna(fallback)
+    return result.fillna(fallback), _merge_clamp_stats(bin_stats, min_speed_mps)
 
 
-def _calculate_shear_timeseries(state: SessionState, height_sensors: str) -> dict:
+def _calculate_shear_timeseries(
+    state: SessionState,
+    height_sensors: str,
+    min_speed_mps: float | None = None,
+) -> dict:
     """Calculate timestamp-wise power-law shear coefficients per IEC 61400-12-1 Section B.2."""
     df = _require_timeseries(state)
     height_map = _parse_height_sensors(height_sensors)
     _require_columns(df, height_map)
+    resolved_min_speed = _resolve_min_speed(state, min_speed_mps)
     heights = np.asarray(list(height_map.keys()), dtype=float)
     speed_matrix = df[list(height_map.values())].to_numpy(dtype=float)
-    shear_values = _compute_pairwise_shear(speed_matrix, heights)
+    shear_values, clamp_stats = _compute_pairwise_shear(speed_matrix, heights, resolved_min_speed)
     state.shear_timeseries_df = pd.DataFrame({"shear_coefficient": shear_values}, index=df.index)
+    state.shear_clamp_stats = clamp_stats
     valid = state.shear_timeseries_df["shear_coefficient"].dropna()
     return {
         "status": "ok",
@@ -178,6 +251,7 @@ def _calculate_shear_timeseries(state: SessionState, height_sensors: str) -> dic
         "mean_shear": float(valid.mean()),
         "median_shear": float(valid.median()),
         "std_shear": float(valid.std(ddof=0)),
+        **clamp_stats,
     }
 
 
@@ -271,6 +345,7 @@ def _vertical_structure_series(
     state: SessionState,
     speed_sensors: str = "",
     direction_sensors: str = "",
+    min_speed_mps: float | None = None,
 ) -> tuple[pd.Series, pd.Series | None, dict[str, object]]:
     """Derive timestamp-wise alpha and optional veer series without mutating the session state."""
     df = _require_timeseries(state)
@@ -278,12 +353,14 @@ def _vertical_structure_series(
     if len(speed_map) < 2:
         raise ValueError("Vertical structure requires at least two wind-speed heights")
     _require_columns(df, speed_map)
-    heights = np.asarray(list(speed_map.keys()), dtype=float)
-    alpha = pd.Series(
-        _compute_pairwise_shear(df[list(speed_map.values())].to_numpy(dtype=float), heights),
-        index=df.index,
-        name="alpha",
+    resolved_min_speed = (
+        state.get_shear_min_speed_mps(SHEAR_MIN_SPEED_MPS) if min_speed_mps is None else float(min_speed_mps)
     )
+    heights = np.asarray(list(speed_map.keys()), dtype=float)
+    alpha_values, clamp_stats = _compute_pairwise_shear(
+        df[list(speed_map.values())].to_numpy(dtype=float), heights, resolved_min_speed
+    )
+    alpha = pd.Series(alpha_values, index=df.index, name="alpha")
     direction_map = _resolve_height_sensors(state, direction_sensors, "dir_col")
     veer: pd.Series | None = None
     if len(direction_map) >= 2:
@@ -294,12 +371,17 @@ def _vertical_structure_series(
             index=df.index,
             name="veer_deg_per_100m",
         )
-    return alpha, veer, _profile_fit_metrics(speed_map, df)
+    return alpha, veer, {**_profile_fit_metrics(speed_map, df), "shear_clamping": clamp_stats}
 
 
-def _compute_vertical_structure(state: SessionState, speed_sensors: str = "", direction_sensors: str = "") -> dict:
+def _compute_vertical_structure(
+    state: SessionState,
+    speed_sensors: str = "",
+    direction_sensors: str = "",
+    min_speed_mps: float | None = None,
+) -> dict:
     """Summarize measured profile, shear alpha, and optional wind veer for the Sensor Overview."""
-    alpha, veer, profile = _vertical_structure_series(state, speed_sensors, direction_sensors)
+    alpha, veer, profile = _vertical_structure_series(state, speed_sensors, direction_sensors, min_speed_mps)
     valid_alpha = alpha.dropna()
     if valid_alpha.empty:
         raise ValueError("No concurrent valid wind-speed records are available for shear analysis")
@@ -335,7 +417,14 @@ def _build_shear_table(state: SessionState, aggregation: str = "mean") -> dict:
     valid = state.shear_timeseries_df.dropna()
     fallback = float(valid["shear_coefficient"].mean()) if not valid.empty else 0.143
     state.shear_table = _aggregate_table(valid, "shear_coefficient", aggregation, fallback)
-    return {"method": "power_law", "aggregation": aggregation, "table": state.shear_table.values.tolist()}
+    return {
+        "method": "power_law",
+        "aggregation": aggregation,
+        "table": state.shear_table.values.tolist(),
+        # Every shear-table response carries the clamp statistics of the series it
+        # was built from, so the table is never read without them (D3).
+        "shear_clamping": state.shear_clamp_stats or {},
+    }
 
 
 def _build_roughness_table(state: SessionState, aggregation: str = "mean") -> dict:
@@ -376,22 +465,38 @@ def _build_sector_shear_tables(
         fallback = float(sector_df["shear_coefficient"].mean()) if not sector_df.empty else 0.143
         table = _aggregate_table(sector_df, "shear_coefficient", aggregation, fallback)
         sectors[_sector_label(sector, num_sectors)] = table.values.tolist()
-    return {"sectors": sectors}
+    return {"sectors": sectors, "shear_clamping": state.shear_clamp_stats or {}}
 
 
-def _build_aggr_momm_shear_table(state: SessionState, height_sensors: str) -> dict:
+def _build_aggr_momm_shear_table(
+    state: SessionState,
+    height_sensors: str,
+    min_speed_mps: float | None = None,
+) -> dict:
     """Build an aggregate MoMM shear table by deriving alpha from per-height Windographer MoMM wind tables."""
     df = _require_timeseries(state)
     height_map = _parse_height_sensors(height_sensors)
     _require_columns(df, height_map)
-    state.shear_table = _aggr_momm_table(df, height_map)
-    return {"method": "power_law", "aggregation": "aggr_momm", "table": state.shear_table.values.tolist()}
+    resolved_min_speed = _resolve_min_speed(state, min_speed_mps)
+    state.shear_table, clamp_stats = _aggr_momm_table(df, height_map, resolved_min_speed)
+    state.shear_clamp_stats = clamp_stats
+    return {
+        "method": "power_law",
+        "aggregation": "aggr_momm",
+        "table": state.shear_table.values.tolist(),
+        "shear_clamping": clamp_stats,
+    }
 
 
 @mcp.tool()
-def calculate_shear_timeseries(height_sensors: str) -> dict:
-    """Calculate timestamp-wise power-law shear coefficients per IEC 61400-12-1 Section B.2."""
-    return _calculate_shear_timeseries(session, height_sensors)
+def calculate_shear_timeseries(height_sensors: str, min_speed_mps: float | None = None) -> dict:
+    """Calculate timestamp-wise power-law shear coefficients per IEC 61400-12-1 Section B.2.
+
+    ``min_speed_mps`` gates which records contribute (default 3.0 m/s): below
+    that, ln(v2/v1) is anemometer noise rather than profile. The resolved value
+    and the clamping statistics are returned with the result.
+    """
+    return _calculate_shear_timeseries(session, height_sensors, min_speed_mps)
 
 
 @mcp.tool()
@@ -401,9 +506,13 @@ def calculate_roughness_timeseries(height_sensors: str) -> dict:
 
 
 @mcp.tool()
-def compute_vertical_structure(speed_sensors: str = "", direction_sensors: str = "") -> dict:
+def compute_vertical_structure(
+    speed_sensors: str = "",
+    direction_sensors: str = "",
+    min_speed_mps: float | None = None,
+) -> dict:
     """Summarize multi-height power-law shear, profile fit, roughness, and optional wind veer."""
-    return _compute_vertical_structure(session, speed_sensors, direction_sensors)
+    return _compute_vertical_structure(session, speed_sensors, direction_sensors, min_speed_mps)
 
 
 @mcp.tool()
@@ -425,6 +534,6 @@ def build_sector_shear_tables(direction_sensor: str, num_sectors: int = 12, aggr
 
 
 @mcp.tool()
-def build_aggr_momm_shear_table(height_sensors: str) -> dict:
+def build_aggr_momm_shear_table(height_sensors: str, min_speed_mps: float | None = None) -> dict:
     """Build an aggregate MoMM shear table by deriving alpha from per-height Windographer MoMM wind tables."""
-    return _build_aggr_momm_shear_table(session, height_sensors)
+    return _build_aggr_momm_shear_table(session, height_sensors, min_speed_mps)

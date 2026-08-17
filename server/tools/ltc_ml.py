@@ -15,7 +15,19 @@ import pandas as pd
 from server.core.validators import to_utc_index
 from server.main import mcp
 from server.state.session import SessionState, session
-from server.tools.ltc import MEASURED_COLUMN, REFERENCE_COLUMN, _concurrent_frame, _regression_metrics
+from server.tools.ltc import (
+    MEASURED_COLUMN,
+    REFERENCE_COLUMN,
+    _clip_negative_predictions,
+    _concurrent_frame,
+    _regression_metrics,
+    _resampling_disclosure,
+)
+
+# Fraction of long-term records above the campaign maximum that triggers an
+# explicit warning (D11).  Even a small fraction matters: those records are the
+# ones that drive extreme-wind and site-suitability outputs.
+TRUNCATION_WARNING_FRACTION = 0.001
 
 
 class DMatrixFactory(Protocol):
@@ -68,6 +80,43 @@ def _long_term_frame(state: SessionState, long_col: str) -> pd.DataFrame:
     if long_col not in state.era5_interpolated_df.columns:
         raise ValueError(f"Reference column '{long_col}' not found in session.era5_interpolated_df")
     return state.era5_interpolated_df.copy()
+
+
+def _truncation_disclosure(
+    training_reference: np.ndarray,
+    long_reference: np.ndarray,
+    corrected: np.ndarray,
+) -> dict[str, object]:
+    """Report long-term reference values above the campaign maximum (D11).
+
+    Gradient-boosted trees are piecewise-constant and cannot predict outside the
+    range of their training target: every reference value above the campaign
+    maximum collapses onto the model's highest leaf.  The campaign is typically
+    1-2 years while the long-term period is 20+, so windier-than-campaign events
+    are routine.  This is inherent to the method and is deliberately *not*
+    patched — it is surfaced so the analyst can see it.
+    """
+    campaign_max = float(np.max(training_reference)) if training_reference.size else float("nan")
+    total = int(long_reference.size)
+    above = int(np.count_nonzero(long_reference > campaign_max)) if np.isfinite(campaign_max) else 0
+    fraction = float(above / total) if total else 0.0
+    disclosure: dict[str, object] = {
+        "campaign_reference_max_mps": campaign_max,
+        "n_above_training_max": above,
+        "fraction_above_training_max": fraction,
+        "prediction_ceiling_mps": float(np.max(corrected)) if corrected.size else float("nan"),
+        "extreme_wind_suitability": (
+            "XGBoost truncates the upper tail and must not be used alone for extreme-wind estimation."
+        ),
+    }
+    if fraction > TRUNCATION_WARNING_FRACTION:
+        disclosure["warning"] = (
+            f"{above:,} long-term records ({fraction:.1%}) exceed the campaign maximum of "
+            f"{campaign_max:.1f} m/s and are truncated to the model's upper bound of "
+            f"{disclosure['prediction_ceiling_mps']:.1f} m/s. Do not use this algorithm for "
+            "extreme-wind estimation."
+        )
+    return disclosure
 
 
 def _build_features(df: pd.DataFrame, long_col: str, long_dir_col: str) -> tuple[pd.DataFrame, list[str]]:
@@ -127,7 +176,16 @@ def _run_ltc_xgboost(
     short_dir_col: str = "",
     long_dir_col: str = "",
 ) -> dict:
-    """Run XGBoost MCP with temporal, directional, and meteorological features and early stopping."""
+    """Run XGBoost MCP with temporal, directional, and meteorological features and early stopping.
+
+    **Not suitable alone for extreme-wind work.** Gradient-boosted trees cannot
+    predict beyond their training target range, so every long-term reference
+    value above the campaign maximum is truncated to the model's highest leaf.
+    That biases GEV/Gumbel annual maxima low and distorts the upper tail of the
+    corrected distribution. The returned metrics carry
+    ``n_above_training_max`` / ``fraction_above_training_max`` and a ``warning``
+    once the fraction is material (D11).
+    """
     DMatrix, xgb_train = _xgboost_import()
     _, _, concurrent = _concurrent_frame(state, short_col, long_col)
     if len(concurrent) < 100:
@@ -196,13 +254,22 @@ def _run_ltc_xgboost(
             f"Feature mismatch between fit and predict: {feature_names} vs {long_feature_names}"
         )
     dlong = DMatrix(long_features.to_numpy(dtype=float), feature_names=feature_names)
-    corrected = np.maximum(0.0, booster.predict(dlong))
+    corrected, clip_stats = _clip_negative_predictions(booster.predict(dlong))
     result_df = pd.DataFrame(
         {
             "Timestamp": long_df.index,
             "ERA5_original": long_df[long_col].to_numpy(dtype=float),
             "corrected_wind_speed": corrected,
         }
+    )
+    metrics.update(clip_stats)
+    metrics.update(_resampling_disclosure(state))
+    metrics.update(
+        _truncation_disclosure(
+            X_train["ref_ws"].to_numpy(dtype=float),
+            long_features["ref_ws"].to_numpy(dtype=float),
+            corrected,
+        )
     )
     metrics.update(
         {
@@ -222,5 +289,11 @@ def _run_ltc_xgboost(
 
 @mcp.tool()
 def run_ltc_xgboost(short_col: str, long_col: str, short_dir_col: str = "", long_dir_col: str = "") -> dict:
-    """Run XGBoost MCP with temporal, directional, and meteorological features and early stopping."""
+    """Run XGBoost MCP with temporal, directional, and meteorological features and early stopping.
+
+    Tree models cannot extrapolate: long-term speeds above the campaign maximum
+    are truncated to the model's upper bound, so this algorithm must not be used
+    alone for extreme-wind estimation. The extent of the truncation is reported
+    in the metrics (D11).
+    """
     return _run_ltc_xgboost(session, short_col, long_col, short_dir_col, long_dir_col)

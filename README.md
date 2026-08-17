@@ -252,6 +252,43 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 - WAsP: `windkit_read_cfdres`
 - ERA5: `windkit_get_era5`
 
+## Deployment model — single-user-local
+
+**GoKaatru is built and reviewed for a single trusted user running it on their own
+machine.** Several security properties depend on that assumption. It is recorded
+here so it is visible to whoever changes the deployment model.
+
+The web API has **no authentication layer**. The session id is the only
+credential, and it travels in the URL path (`/api/sessions/{id}/…`). Ids are
+`uuid4().hex` (122 bits, unguessable) and there is no session-listing endpoint,
+so the capability itself is sound — but a credential in a URL lands in
+web-server and proxy access logs, browser history, and `Referer` headers, and
+`SessionManager.get_session` will resurrect that session from disk long after
+the browser closed. Session workspaces currently persist indefinitely.
+
+### Before moving to team-internal, shared, or hosted deployment
+
+These must be addressed first:
+
+1. **Add authentication and scope sessions to an authenticated principal**, so a
+   leaked session id alone is not sufficient authority. Failing that, move the
+   session id out of the URL path into a header, use an opaque path segment,
+   and ensure access logs redact it.
+2. **Expire idle sessions and their workspaces on a timer.** A workspace left on
+   disk stays resurrectable by anyone who recovers its id from a log.
+3. **Re-review the chat proxy's tool authority.** `POST /sessions/{id}/chat`
+   executes MCP tools on the model's behalf. Read-only analysis and
+   visualization tools are exposed by default; session-mutating, filesystem and
+   network tools require `allow_mutating_tools=true` per request. Tool results
+   re-enter the model's context and contain user-supplied text (CSV headers,
+   sensor names, imported metadata), so a crafted column header is a
+   prompt-injection vector — locally the attacker and the user are the same
+   person, which is what makes the current default acceptable.
+4. **Review outbound request surfaces.** The chat proxy accepts only the named
+   providers in `_PROVIDER_URLS`; custom endpoint URLs are rejected outright so
+   a caller cannot aim the server's outbound request at an internal address.
+   Keep it that way, or add resolve-then-validate before relaxing it.
+
 ## Validation
 
 Backend (registered tool count changes as capabilities are added; verify it with the command below):

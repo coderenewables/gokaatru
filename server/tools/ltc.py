@@ -22,6 +22,23 @@ SPEEDSORT_NUM_SECTORS = 12
 SPEEDSORT_SECTOR_WIDTH_DEG = 30.0
 SPEEDSORT_MIN_SECTOR_RECORDS = 200
 
+# Hard floor for a defensible MCP: six months of valid concurrent hourly pairs
+# (D9.1).  Counted as records rather than calendar span, so a gappy nine-month
+# overlap is judged on the data it actually contains.
+MIN_CONCURRENT_HOURS = 4380
+
+# Measured data is resampled to hourly *means* while the reanalysis reference is
+# *instantaneous* (D9.2).  Averaging removes within-hour variance from the
+# measured side only, which biases any pure std-ratio method — variance_ratio
+# above all — low.  Disclosed in every LTC response rather than corrected: which
+# matching convention is right is a methodology decision for the analyst.
+RESAMPLING_NOTE = (
+    "Measured data is resampled to hourly means while the reanalysis reference is "
+    "instantaneous. This removes within-hour variance from the measured series only, "
+    "biasing variance-ratio (std-ratio) results low. Slope-based methods are far less "
+    "affected."
+)
+
 
 def _require_ltc_inputs(state: SessionState, short_col: str, long_col: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Validate measured and reference datasets required for LTC algorithms."""
@@ -66,9 +83,47 @@ def _concurrent_frame(
     prepared_short = to_utc_index(prepared_short)
     long_df = to_utc_index(long_df)
     concurrent = prepared_short.join(long_df, how="inner").dropna()
-    if len(concurrent) < 10:
-        raise ValueError(f"LTC requires at least 10 concurrent points, got {len(concurrent)}")
+    if len(concurrent) < MIN_CONCURRENT_HOURS:
+        raise ValueError(
+            f"LTC requires at least {MIN_CONCURRENT_HOURS} valid concurrent records "
+            f"(six months at hourly resolution), got {len(concurrent)}. "
+            "A shorter concurrent period does not support a defensible long-term "
+            "correction, so no result is produced rather than one that invites use."
+        )
     return prepared_short, long_df, concurrent
+
+
+def _resampling_disclosure(state: SessionState) -> dict[str, object]:
+    """Report whether the measured series was averaged to hourly before matching (D9.2)."""
+    frame = state.timeseries_df
+    if frame is None:
+        return {}
+    try:
+        timestep_minutes = detect_timestep_minutes(frame)
+    except ValueError:
+        return {}
+    if timestep_minutes >= 60:
+        return {"measured_resampled_to_hourly": False, "measured_timestep_minutes": int(timestep_minutes)}
+    return {
+        "measured_resampled_to_hourly": True,
+        "measured_timestep_minutes": int(timestep_minutes),
+        "resampling_note": RESAMPLING_NOTE,
+    }
+
+
+def _clip_negative_predictions(corrected: np.ndarray) -> tuple[np.ndarray, dict[str, object]]:
+    """Clip negative predicted speeds to zero and report how many were clipped (D9.3).
+
+    A non-trivial count means the transfer function is producing physically
+    impossible speeds, so the truncation is reported rather than applied silently.
+    """
+    values = np.asarray(corrected, dtype=float)
+    negative = int(np.count_nonzero(values < 0.0))
+    total = int(values.size)
+    return np.clip(values, 0.0, None), {
+        "negative_predictions_clipped": negative,
+        "negative_predictions_clipped_fraction": float(negative / total) if total else 0.0,
+    }
 
 
 def _regression_metrics(observed: np.ndarray, predicted: np.ndarray) -> dict[str, float]:
@@ -103,15 +158,18 @@ def _pearson_correlation(x: np.ndarray, y: np.ndarray) -> float:
 
 
 def _result_frame(reference_df: pd.DataFrame, corrected: np.ndarray) -> pd.DataFrame:
-    """Build the standard LTC result dataframe with timestamp and corrected wind speeds."""
-    frame = pd.DataFrame(
+    """Build the standard LTC result dataframe with timestamp and corrected wind speeds.
+
+    ``corrected`` must already be clipped by :func:`_clip_negative_predictions`
+    so the clipped count reaches the metrics instead of vanishing here.
+    """
+    return pd.DataFrame(
         {
             "Timestamp": reference_df.index,
             "ERA5_original": reference_df[REFERENCE_COLUMN].to_numpy(dtype=float),
-            "corrected_wind_speed": np.clip(corrected, 0.0, None),
+            "corrected_wind_speed": np.asarray(corrected, dtype=float),
         }
     )
-    return frame
 
 
 def _save_ltc_result(state: SessionState, algorithm: str, result_df: pd.DataFrame, metrics: dict[str, object]) -> str:
@@ -125,8 +183,22 @@ def _save_ltc_result(state: SessionState, algorithm: str, result_df: pd.DataFram
     return str(output_path)
 
 
-def _ltc_response(state: SessionState, algorithm: str, result_df: pd.DataFrame, metrics: dict[str, object]) -> dict:
-    """Save an LTC result and return the standard MCP tool response payload."""
+def _ltc_response(
+    state: SessionState,
+    algorithm: str,
+    reference_df: pd.DataFrame,
+    corrected: np.ndarray,
+    metrics: dict[str, object],
+) -> dict:
+    """Clip, disclose, save an LTC result and return the standard MCP tool response payload.
+
+    Clipping (D9.3) and the resampling disclosure (D9.2) live here so every
+    algorithm reports them identically and none can quietly omit them.
+    """
+    clipped, clip_stats = _clip_negative_predictions(corrected)
+    metrics.update(clip_stats)
+    metrics.update(_resampling_disclosure(state))
+    result_df = _result_frame(reference_df, clipped)
     result_file = _save_ltc_result(state, algorithm, result_df, metrics)
     return {"status": "ok", "algorithm": algorithm, "metrics": metrics, "result_file": result_file}
 
@@ -149,7 +221,7 @@ def _run_ltc_linear_least_squares(state: SessionState, short_col: str, long_col:
             "total_corrected_points": int(len(long_df)),
         }
     )
-    return _ltc_response(state, "linear_least_squares", _result_frame(long_df, corrected), metrics)
+    return _ltc_response(state, "linear_least_squares", long_df, corrected, metrics)
 
 
 def _run_ltc_total_least_squares(state: SessionState, short_col: str, long_col: str) -> dict:
@@ -170,7 +242,7 @@ def _run_ltc_total_least_squares(state: SessionState, short_col: str, long_col: 
             "total_corrected_points": int(len(long_df)),
         }
     )
-    return _ltc_response(state, "total_least_squares", _result_frame(long_df, corrected), metrics)
+    return _ltc_response(state, "total_least_squares", long_df, corrected, metrics)
 
 
 def _run_ltc_speedsort(
@@ -296,7 +368,7 @@ def _run_ltc_speedsort(
                 },
             }
         )
-        return _ltc_response(state, "speedsort", _result_frame(long_df, corrected), metrics)
+        return _ltc_response(state, "speedsort", long_df, corrected, metrics)
 
     # --- Original non-directional SpeedSort ---
     threshold = float(min(4.0, 0.5 * long_df[REFERENCE_COLUMN].mean()))
@@ -325,7 +397,7 @@ def _run_ltc_speedsort(
             "directional": False,
         }
     )
-    return _ltc_response(state, "speedsort", _result_frame(long_df, corrected), metrics)
+    return _ltc_response(state, "speedsort", long_df, corrected, metrics)
 
 
 def _run_ltc_variance_ratio(state: SessionState, short_col: str, long_col: str) -> dict:
@@ -356,7 +428,7 @@ def _run_ltc_variance_ratio(state: SessionState, short_col: str, long_col: str) 
             "total_corrected_points": int(len(long_df)),
         }
     )
-    return _ltc_response(state, "variance_ratio", _result_frame(long_df, corrected), metrics)
+    return _ltc_response(state, "variance_ratio", long_df, corrected, metrics)
 
 
 @mcp.tool()

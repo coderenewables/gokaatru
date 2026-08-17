@@ -8,6 +8,18 @@ import numpy as np
 import pandas as pd
 
 
+# Mapping of sensor_mapping field names to their physical sensor type.  Lives in
+# core rather than tools/data_io so modules can share it without dragging in
+# server.main and creating an import cycle.
+SENSOR_FIELDS = {
+    "speed_col": "wind_speed",
+    "dir_col": "wind_direction",
+    "temp_col": "temperature",
+    "pressure_col": "pressure",
+    "humidity_col": "humidity",
+}
+
+
 def validate_dataframe_has_columns(df: pd.DataFrame, required: list[str]) -> None:
     """Raise on missing columns per the GoKaatru Phase 1 data validation contract."""
     missing = [column for column in required if column not in df.columns]

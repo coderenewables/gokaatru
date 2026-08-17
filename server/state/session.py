@@ -37,6 +37,7 @@ class SessionState:
     sensor_inventory: dict[str, dict[str, object]]
     cleaning_log: list[dict[str, object]]
     shear_timeseries_df: pd.DataFrame | None
+    shear_clamp_stats: dict[str, object] | None
     roughness_timeseries_df: pd.DataFrame | None
     shear_table: pd.DataFrame | None
     roughness_table: pd.DataFrame | None
@@ -80,6 +81,7 @@ class SessionState:
         self.sensor_inventory = {}
         self.cleaning_log = []
         self.shear_timeseries_df = None
+        self.shear_clamp_stats = None
         self.roughness_timeseries_df = None
         self.shear_table = None
         self.roughness_table = None
@@ -193,6 +195,24 @@ class SessionState:
         if isinstance(value, (int, float)):
             return float(value)
         return self.hub_height_m
+
+    def get_shear_min_speed_mps(self, default: float) -> float:
+        """Return the shear valid-record speed gate from runconfig, else ``default`` (D3)."""
+        shear = self.runconfig.get("shear")
+        if isinstance(shear, dict):
+            value = shear.get("minSpeedMps")
+            if isinstance(value, (int, float)):
+                return float(value)
+        return float(default)
+
+    def set_shear_min_speed_mps(self, min_speed_mps: float) -> None:
+        """Persist the shear speed gate so the value used is reproducible and visible (D3)."""
+        shear = self.runconfig.get("shear")
+        if not isinstance(shear, dict):
+            shear = {}
+            self.runconfig["shear"] = shear
+        shear["minSpeedMps"] = float(min_speed_mps)
+        self.touch()
 
     def to_runconfig(self) -> dict[str, object]:
         """Serialize current state into a run configuration dictionary for GoKaatru tools."""

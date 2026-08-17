@@ -12,12 +12,25 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 
-from server.core.validators import detect_timestep_minutes, rolling_median_mad_spike_mask
+from server.core.validators import SENSOR_FIELDS, detect_timestep_minutes, rolling_median_mad_spike_mask
 from server.main import mcp
 from server.state.session import SessionState, session
 
+# Physical bounds per sensor type for range_check (D16), in the units the
+# pipeline stores: m/s, degrees, degrees Celsius, Pascals, percent.  An unknown
+# type is deliberately absent — it falls back to the sensor's own data range.
+RANGE_CHECK_BOUNDS: dict[str, tuple[float, float]] = {
+    "wind_speed": (0.0, 50.0),
+    "wind_direction": (0.0, 360.0),
+    "temperature": (-60.0, 60.0),
+    "pressure": (80000.0, 110000.0),
+    "humidity": (0.0, 100.0),
+}
+
 RULES = {
-    "range_check": {"min": 0.0, "max": 50.0},
+    # No advertised min/max: bounds come from the sensor's type (D16). Echoing
+    # 0-50 back as "the default" is what wiped direction and pressure channels.
+    "range_check": {},
     "icing_filter": {"temp_threshold_c": 2.0},
     "stuck_sensor": {"consecutive_count": 6},
     "tower_shadow": {"exclude_sectors": [170, 190]},
@@ -88,13 +101,81 @@ def _mapping_for_sensor(state: SessionState, sensor: str) -> dict[str, str | Non
     raise ValueError(f"Sensor '{sensor}' is not present in session.sensor_mapping")
 
 
-def _apply_range_check(df: pd.DataFrame, sensor: str, mask: np.ndarray, params: dict[str, object]) -> int:
-    """Apply min-max threshold cleaning to a single sensor column."""
-    min_value = _float_param(params, "min", 0.0)
-    max_value = _float_param(params, "max", 50.0)
+def _sensor_type_for(state: SessionState, sensor: str) -> str:
+    """Resolve a sensor's physical type from the inventory, else the height mapping."""
+    metadata = state.sensor_inventory.get(sensor)
+    if isinstance(metadata, dict):
+        sensor_type = str(metadata.get("sensor_type", "")).strip()
+        if sensor_type and sensor_type != "unknown":
+            return sensor_type
+    for mapping in state.sensor_mapping.values():
+        for field_name, field_type in SENSOR_FIELDS.items():
+            if mapping.get(field_name) == sensor:
+                return field_type
+    return "unknown"
+
+
+def _resolve_range_bounds(
+    state: SessionState,
+    df: pd.DataFrame,
+    sensor: str,
+    params: dict[str, object],
+) -> tuple[float, float, str, str]:
+    """Resolve range_check bounds from explicit params, the sensor type, or the data (D16).
+
+    The rule is sensor-agnostic but the old defaults (0-50) were wind-speed
+    specific: applied to a direction channel they destroyed everything above
+    50 degrees, and to pressure in Pa or temperature in K they wiped the column
+    entirely — silently, and logged as a legitimate step.
+    """
+    explicit_min = params.get("min")
+    explicit_max = params.get("max")
+    if explicit_min is not None and explicit_max is not None:
+        return _float_param(params, "min", 0.0), _float_param(params, "max", 50.0), "explicit", "explicit"
+
+    sensor_type = _sensor_type_for(state, sensor)
+    bounds = RANGE_CHECK_BOUNDS.get(sensor_type)
+    if bounds is not None:
+        table_min, table_max = bounds
+        # A partial override still wins for the side that was supplied.
+        min_value = _float_param(params, "min", table_min) if explicit_min is not None else table_min
+        max_value = _float_param(params, "max", table_max) if explicit_max is not None else table_max
+        return min_value, max_value, "sensor_type_table", sensor_type
+
+    # DECIDED: unknown type falls back to the sensor's own data range. Bounds
+    # taken from the data can never exclude any of it, so the rule is a no-op —
+    # that is the intended fail-safe (do nothing rather than destroy good
+    # records), but the response must not imply a check occurred.
+    series = df[sensor].dropna()
+    if series.empty:
+        return float("-inf"), float("inf"), "sensor_data_range", sensor_type
+    return float(series.min()), float(series.max()), "sensor_data_range", sensor_type
+
+
+def _apply_range_check(
+    state: SessionState,
+    df: pd.DataFrame,
+    sensor: str,
+    mask: np.ndarray,
+    params: dict[str, object],
+) -> tuple[int, dict[str, object]]:
+    """Apply min-max threshold cleaning to a single sensor column using type-aware bounds."""
+    min_value, max_value, bounds_source, sensor_type = _resolve_range_bounds(state, df, sensor, params)
     affected = mask & ((df[sensor] < min_value) | (df[sensor] > max_value)) & df[sensor].notna().to_numpy()
     df.loc[affected, sensor] = np.nan
-    return int(affected.sum())
+    detail: dict[str, object] = {
+        "bounds_source": bounds_source,
+        "sensor_type": sensor_type,
+        "min_applied": min_value,
+        "max_applied": max_value,
+    }
+    if bounds_source == "sensor_data_range":
+        detail["note"] = (
+            f"Sensor type for '{sensor}' is unknown, so bounds were taken from the sensor's own "
+            "data range. Bounds derived from the data cannot exclude any of it — this rule was a "
+            "no-op. Supply explicit min/max to perform a real range check."
+        )
+    return int(affected.sum()), detail
 
 
 def _apply_icing_filter(
@@ -285,27 +366,27 @@ def _apply_rule(
     params: dict[str, object],
     start_date: str,
     end_date: str,
-) -> int:
-    """Dispatch a cleaning rule implementation to the active session dataframe."""
+) -> tuple[int, dict[str, object]]:
+    """Dispatch a cleaning rule, returning records affected plus any rule-specific detail."""
     df = _require_timeseries(state)
     if rule_type != "timestamp_gap_fill" and sensor not in df.columns:
         raise ValueError(f"Sensor column '{sensor}' not found in loaded timeseries")
     mask = _date_mask(pd.DatetimeIndex(df.index), start_date, end_date)
     if rule_type == "range_check":
-        return _apply_range_check(df, sensor, mask, params)
+        return _apply_range_check(state, df, sensor, mask, params)
     if rule_type == "icing_filter":
-        return _apply_icing_filter(state, df, sensor, mask, params)
+        return _apply_icing_filter(state, df, sensor, mask, params), {}
     if rule_type == "stuck_sensor":
-        return _apply_stuck_sensor(df, sensor, mask, params)
+        return _apply_stuck_sensor(df, sensor, mask, params), {}
     if rule_type == "tower_shadow":
-        return _apply_tower_shadow(state, df, sensor, mask, params)
+        return _apply_tower_shadow(state, df, sensor, mask, params), {}
     if rule_type == "spike_filter":
-        return _apply_spike_filter(df, sensor, mask, params)
+        return _apply_spike_filter(df, sensor, mask, params), {}
     if rule_type == "expression_filter":
-        return _apply_expression_filter(df, sensor, mask, params)
+        return _apply_expression_filter(df, sensor, mask, params), {}
     if rule_type == "timestamp_gap_fill":
-        return _apply_timestamp_gap_fill(state, df, start_date, end_date)
-    return _apply_custom_period_exclude(df, sensor, mask)
+        return _apply_timestamp_gap_fill(state, df, start_date, end_date), {}
+    return _apply_custom_period_exclude(df, sensor, mask), {}
 
 
 def _list_cleaning_rules(_state: SessionState) -> dict:
@@ -329,7 +410,7 @@ def _apply_cleaning_rule(
     if rule_type not in RULES:
         raise ValueError(f"Unknown cleaning rule '{rule_type}'")
     parsed = _parse_params(params)
-    records_affected = _apply_rule(state, rule_type, sensor, parsed, start_date, end_date)
+    records_affected, detail = _apply_rule(state, rule_type, sensor, parsed, start_date, end_date)
     entry: dict[str, object] = {
         "rule_type": rule_type,
         "sensor": sensor,
@@ -338,9 +419,18 @@ def _apply_cleaning_rule(
         "params": parsed,
         "start_date": start_date,
         "end_date": end_date,
+        # The log must record the bounds actually applied, not just the params
+        # asked for, or it implies a check that may not have happened (D16).
+        **detail,
     }
     state.cleaning_log.append(entry)
-    return {"status": "ok", "rule": rule_type, "sensor": sensor, "records_affected": records_affected}
+    return {
+        "status": "ok",
+        "rule": rule_type,
+        "sensor": sensor,
+        "records_affected": records_affected,
+        **detail,
+    }
 
 
 def _get_cleaning_log(state: SessionState) -> dict:
@@ -354,13 +444,27 @@ def _undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
         raise ValueError("Raw timeseries backup is not available")
     if entry_index < 0 or entry_index >= len(state.cleaning_log):
         raise ValueError(f"Cleaning log entry_index out of range: {entry_index}")
+    target = state.cleaning_log[entry_index]
+    if not target.get("undoable", True):
+        raise ValueError(
+            f"Cleaning log entry {entry_index} ('{target.get('rule_type')}') records upstream "
+            "processing that GoKaatru did not perform and cannot reverse. Re-import without the "
+            "corresponding flag to obtain the unprocessed series."
+        )
     retained = [entry.copy() for idx, entry in enumerate(state.cleaning_log) if idx != entry_index]
+    # Provenance entries describe work done before GoKaatru saw the data; they are
+    # carried through untouched rather than replayed (D27).
+    provenance = [entry for entry in retained if not entry.get("undoable", True)]
+    replayable = [entry for entry in retained if entry.get("undoable", True)]
     replay_state = SessionState()
     replay_state.timeseries_df = state.raw_timeseries_df.copy(deep=True)
     replay_state.raw_timeseries_df = state.raw_timeseries_df.copy(deep=True)
     replay_state.sensor_mapping = copy.deepcopy(state.sensor_mapping)
+    # range_check resolves its bounds from the sensor type (D16), so the replay
+    # must see the same inventory or it would silently become a no-op.
+    replay_state.sensor_inventory = copy.deepcopy(state.sensor_inventory)
     replay_state.cleaning_log = []
-    for entry in retained:
+    for entry in replayable:
         params = json.dumps(entry.get("params", {}))
         _apply_cleaning_rule(
             replay_state,
@@ -371,8 +475,8 @@ def _undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
             str(entry.get("end_date", "")),
         )
     state.timeseries_df = replay_state.timeseries_df
-    state.cleaning_log = replay_state.cleaning_log
-    return {"status": "ok", "remaining_rules": len(state.cleaning_log)}
+    state.cleaning_log = provenance + replay_state.cleaning_log
+    return {"status": "ok", "remaining_rules": len(replay_state.cleaning_log)}
 
 
 @mcp.tool()

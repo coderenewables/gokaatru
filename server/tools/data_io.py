@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from server.core.validators import detect_timestep_minutes
+from server.core.validators import SENSOR_FIELDS, detect_timestep_minutes
 from server.main import mcp
 from server.schemas.common import Coordinate, SensorInfo
 from server.state.session import SessionState, session
@@ -31,13 +31,6 @@ TIMESTAMP_CANDIDATES = [
 # Epoch-second range for plausible wind-campaign data (1990-01-01 .. 2050-01-01).
 _EPOCH_SECOND_MIN = 631_152_000.0
 _EPOCH_SECOND_MAX = 2_524_608_000.0
-SENSOR_FIELDS = {
-    "speed_col": "wind_speed",
-    "dir_col": "wind_direction",
-    "temp_col": "temperature",
-    "pressure_col": "pressure",
-    "humidity_col": "humidity",
-}
 CANONICAL_SENSOR_TYPES = {
     "air_temperature": "temperature",
     "air_pressure": "pressure",

@@ -10,6 +10,17 @@ from server.state.session import SessionState, session
 
 COMPASS_16 = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
 
+# Speed gate for mast-effect ratios (D30), consistent with the shear gate (D3):
+# a ratio of two ~0.2 m/s readings says nothing about tower shadow.
+MAST_EFFECT_MIN_SPEED_MPS = 4.0
+
+# Sectors thinner than this are reported but never flagged — too few records to
+# separate shadow from sampling noise.
+MAST_EFFECT_MIN_SECTOR_RECORDS = 50
+
+# Fractional departure from the baseline ratio that counts as a shadow.
+MAST_EFFECT_RATIO_TOLERANCE = 0.05
+
 
 def _require_frame(state: SessionState) -> pd.DataFrame:
     """Return the loaded measured frame required by sensor diagnostics."""
@@ -110,8 +121,22 @@ def _default_direction_sensor(state: SessionState) -> str:
     return max(candidates)[1]
 
 
-def _compute_mast_effects(state: SessionState, sensor_a: str = "", sensor_b: str = "", direction_sensor: str = "") -> dict:
-    """Compare speed ratio by direction to identify potential mast-shadow sectors."""
+def _compute_mast_effects(
+    state: SessionState,
+    sensor_a: str = "",
+    sensor_b: str = "",
+    direction_sensor: str = "",
+    min_speed_mps: float = MAST_EFFECT_MIN_SPEED_MPS,
+    min_sector_records: int = MAST_EFFECT_MIN_SECTOR_RECORDS,
+) -> dict:
+    """Compare speed ratio by direction to identify potential mast-shadow sectors.
+
+    Detection is two-sided (D30).  ``ratio = B / A``, so a shadowed B depresses
+    the ratio and a shadowed A raises it; testing only the low side means the
+    sectors where A is shadowed — on an opposite-boom pair, exactly the ones that
+    matter — can never be reported, and which sensor gets checked depends on
+    nothing but argument order.
+    """
     if not (sensor_a and sensor_b):
         sensor_a, sensor_b = _default_comparison_pair(state)
     if not direction_sensor:
@@ -120,9 +145,13 @@ def _compute_mast_effects(state: SessionState, sensor_a: str = "", sensor_b: str
     if direction_sensor not in frame.columns:
         raise ValueError(f"Direction sensor '{direction_sensor}' not found in loaded timeseries")
     aligned = frame[[sensor_a, sensor_b, direction_sensor]].dropna()
-    aligned = aligned[(aligned[sensor_a] > 0.1) & (aligned[sensor_b] > 0.1)]
+    # Ratios of near-calm speeds carry no information about tower shadow, and
+    # pooling them into the sector means drags the whole comparison around (D30).
+    aligned = aligned[(aligned[sensor_a] > min_speed_mps) & (aligned[sensor_b] > min_speed_mps)]
     if aligned.empty:
-        raise ValueError("Mast-effect analysis requires concurrent positive speed records")
+        raise ValueError(
+            f"Mast-effect analysis requires concurrent records above {min_speed_mps:g} m/s on both sensors"
+        )
     sector_index = (((np.mod(aligned[direction_sensor], 360.0) + 11.25) % 360.0) // 22.5).astype(int)
     ratios = aligned[sensor_b] / aligned[sensor_a]
     sectors = []
@@ -132,13 +161,36 @@ def _compute_mast_effects(state: SessionState, sensor_a: str = "", sensor_b: str
         sectors.append({"label": COMPASS_16[index], "speed_ratio": ratio, "record_count": int(len(sector))})
     valid_ratios = [row["speed_ratio"] for row in sectors if np.isfinite(row["speed_ratio"])]
     baseline = float(np.median(valid_ratios)) if valid_ratios else 1.0
-    affected = [row["label"] for row in sectors if np.isfinite(row["speed_ratio"]) and float(row["speed_ratio"]) < baseline * 0.95]
+
+    low_threshold = baseline * (1.0 - MAST_EFFECT_RATIO_TOLERANCE)
+    high_threshold = baseline * (1.0 + MAST_EFFECT_RATIO_TOLERANCE)
+    affected_a: list[str] = []
+    affected_b: list[str] = []
+    for row in sectors:
+        ratio = float(row["speed_ratio"])
+        # Sparse sectors are reported but not flagged: a handful of records
+        # cannot distinguish shadow from sampling noise.
+        sufficient = int(row["record_count"]) >= min_sector_records
+        row["sufficient_records"] = sufficient
+        if not (np.isfinite(ratio) and sufficient):
+            continue
+        if ratio < low_threshold:
+            affected_b.append(str(row["label"]))
+        elif ratio > high_threshold:
+            affected_a.append(str(row["label"]))
     return {
         "sensor_a": sensor_a,
         "sensor_b": sensor_b,
         "direction_sensor": direction_sensor,
         "baseline_speed_ratio": baseline,
-        "affected_sectors": affected,
+        "affected_sectors_a": affected_a,
+        "affected_sectors_b": affected_b,
+        # Retained for existing consumers: the low-side list is what this key
+        # has always meant (sectors where sensor_b is shadowed).
+        "affected_sectors": affected_b,
+        "min_speed_mps": float(min_speed_mps),
+        "min_sector_records": int(min_sector_records),
+        "records_used": int(len(aligned)),
         "sectors": sectors,
     }
 
@@ -211,9 +263,21 @@ def compute_sensor_comparison(sensor_a: str = "", sensor_b: str = "") -> dict:
 
 
 @mcp.tool()
-def compute_mast_effects(sensor_a: str = "", sensor_b: str = "", direction_sensor: str = "") -> dict:
-    """Identify potential mast-shadow sectors from directional speed-ratio diagnostics."""
-    return _compute_mast_effects(session, sensor_a, sensor_b, direction_sensor)
+def compute_mast_effects(
+    sensor_a: str = "",
+    sensor_b: str = "",
+    direction_sensor: str = "",
+    min_speed_mps: float = MAST_EFFECT_MIN_SPEED_MPS,
+    min_sector_records: int = MAST_EFFECT_MIN_SECTOR_RECORDS,
+) -> dict:
+    """Identify potential mast-shadow sectors from directional speed-ratio diagnostics.
+
+    Reports ``affected_sectors_a`` and ``affected_sectors_b`` separately: which
+    sensor is shadowed determines whether the ratio runs high or low.
+    """
+    return _compute_mast_effects(
+        session, sensor_a, sensor_b, direction_sensor, min_speed_mps, min_sector_records
+    )
 
 
 @mcp.tool()

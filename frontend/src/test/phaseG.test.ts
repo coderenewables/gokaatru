@@ -50,7 +50,24 @@ describe("copilotAgent settings", () => {
   it("writeChatSettings round-trips through readChatSettings", () => {
     writeChatSettings({ provider: "anthropic", model: "claude-x", apiKey: "sk-test" });
     const s = readChatSettings();
-    expect(s).toEqual({ provider: "anthropic", model: "claude-x", apiKey: "sk-test" });
+    // allowMutatingTools defaults on for settings written before it existed (D23).
+    expect(s).toEqual({
+      provider: "anthropic",
+      model: "claude-x",
+      apiKey: "sk-test",
+      allowMutatingTools: true,
+    });
+    window.localStorage.clear();
+  });
+
+  it("readChatSettings honours an explicit read-only assistant", () => {
+    writeChatSettings({
+      provider: "openai",
+      model: "gpt-4o",
+      apiKey: "sk-test",
+      allowMutatingTools: false,
+    });
+    expect(readChatSettings().allowMutatingTools).toBe(false);
     window.localStorage.clear();
   });
 });

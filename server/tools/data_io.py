@@ -648,6 +648,7 @@ def _parse_timeseries(state: SessionState, file_path: str) -> dict:
         raise ValueError("Parsed timeseries is empty after timestamp detection")
     state.timeseries_df = filtered_df.copy()
     state.raw_timeseries_df = filtered_df.copy(deep=True)
+    state.bump_data_version()
     # If the datamodel was imported first and set a timezone, immediately
     # convert the naive local-time index to tz-aware UTC (D8).
     if state.timezone is not None:

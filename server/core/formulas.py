@@ -92,6 +92,27 @@ def moist_air_density(pressure_pa, temperature_k, vapour_pressure_pa):
     return (dry_air + water_vapour) / temperature_k
 
 
+STANDARD_GRAVITY = 9.80665  # m/s2
+
+
+def adjust_density_to_height(density, temperature_k, from_height_m: float, to_height_m: float):
+    """Scale a density from the height it was measured at to another height. Array-safe.
+
+    Pressure falls with height as ``p(z2) = p(z1) * exp(-g*dz/(R*T))`` and, at a fixed
+    temperature, density follows pressure. Air thins by roughly 1.2% per 100 m, so using a
+    density derived from a 2 m pressure sensor at a 150 m hub overstates it by about 1.8% —
+    and power density scales linearly with density, so that is a direct overstatement of
+    the resource.
+
+    The isothermal form is used deliberately: the exact hypsometric equation needs the mean
+    temperature of the layer, and over the 100-200 m that separates a pressure sensor from
+    a hub the difference between that and the measured temperature is far below the 1.2%
+    the correction itself is worth.
+    """
+    delta_z = float(to_height_m) - float(from_height_m)
+    return density * np.exp(-STANDARD_GRAVITY * delta_z / (DRY_AIR_GAS_CONSTANT * temperature_k))
+
+
 def air_density_iec(
     pressure_pa: float, temperature_k: float, dewpoint_k: float
 ) -> tuple[float, bool]:

@@ -437,15 +437,53 @@ def compute_turbulence_intensity(speed_sensor: str, sd_sensor: str) -> dict:
 
 @mcp.tool()
 def compute_momm(sensor_name: str) -> dict:
-    """Compute Windographer-style MoMM using completeness and month-length weighting from TR6."""
+    """Compute Windographer-style MoMM using completeness and month-length weighting from TR6.
+
+    Absent month-hour cells are filled with the series mean so the 12x24 table always
+    resolves, but that fill is not free: a six-month winter campaign had its six unobserved
+    summer months synthesised from winter data and reported a "MoMM" indistinguishable from
+    a full-year one.  The fill count, the observed months and the missing months now travel
+    with the result, and a table missing whole months carries a warning — MoMM is a
+    seasonal-weighting statistic, so a partial year is exactly the case where it misleads.
+    """
     series = _require_series(sensor_name)
     table = compute_weighted_momm_table(series.to_frame(name=sensor_name), sensor_name)
-    fallback = float(series.dropna().mean()) if not series.dropna().empty else 0.0
+    valid = series.dropna()
+    fallback = float(valid.mean()) if not valid.empty else 0.0
+    filled_mask = table.isna()
     filled = table.fillna(fallback)
     flat_values = filled.to_numpy(dtype=float).reshape(-1)
     weights = _flat_month_weights()
     momm_speed = float(np.sum(flat_values * weights) / np.sum(weights))
-    return {"sensor": sensor_name, "momm_speed": momm_speed, "table": filled.values.tolist()}
+
+    filled_cells = int(filled_mask.to_numpy().sum())
+    months_observed = sorted(int(month) for month in table.index[~filled_mask.all(axis=1)])
+    months_missing = [month for month in range(1, 13) if month not in months_observed]
+    result: dict = {
+        "sensor": sensor_name,
+        "momm_speed": momm_speed,
+        "table": filled.values.tolist(),
+        "cells_observed": int(filled_mask.size - filled_cells),
+        "cells_total": int(filled_mask.size),
+        "filled_cells": filled_cells,
+        "filled_fraction": float(filled_cells / filled_mask.size) if filled_mask.size else 0.0,
+        "months_observed": months_observed,
+        "months_missing": months_missing,
+        "fill_value": fallback,
+    }
+    if months_missing:
+        result["warning"] = (
+            f"{len(months_missing)} calendar month(s) {months_missing} were never observed and "
+            f"carry the series mean ({fallback:.3f} m/s) instead. MoMM weights months by "
+            "length to represent a full year, so a result built on a partial year is not "
+            "comparable with one from a complete campaign."
+        )
+    elif filled_cells:
+        result["warning"] = (
+            f"{filled_cells} of {filled_mask.size} month-hour cells were never observed and "
+            "carry the series mean instead."
+        )
+    return result
 
 
 @mcp.tool()

@@ -6,6 +6,16 @@ from __future__ import annotations
 
 import math
 
+import pandas as pd
+
+from server.core.powercurve import (
+    GENERIC_CURVE_NAME,
+    GENERIC_RATED_KW,
+    GENERIC_ROTOR_DIAMETER_M,
+    conversion_guidance,
+    energy_sensitivity_factor,
+    indicative_capacity_factor,
+)
 from server.main import mcp
 from server.state.session import SessionState, session
 
@@ -17,6 +27,79 @@ DEFAULT_IAV_PCT = 6.0
 # Assumed operating life over which inter-annual variability averages out.  Promoted
 # from an inline sqrt(20) so it is visible and can become a parameter.
 PROJECT_LIFE_YEARS = 20.0
+
+
+def _long_term_speed_series(state: SessionState) -> tuple["pd.Series | None", str]:
+    """Return the best available long-term corrected speed series, and where it came from.
+
+    Preference order matches the pipeline: the ensemble blend, then any single LTC result,
+    then the measured hub-height column.  The sensitivity factor should describe the
+    distribution the P-values will actually be quoted against.
+    """
+    if state.ensemble_df is not None:
+        frame = pd.DataFrame(state.ensemble_df)
+        if "Ensemble_Speed" in frame.columns:
+            series = frame["Ensemble_Speed"].dropna()
+            if not series.empty:
+                return series, "ensemble"
+    for algorithm in sorted(state.ltc_results):
+        payload = state.ltc_results.get(algorithm)
+        if isinstance(payload, dict) and "df" in payload:
+            frame = pd.DataFrame(payload["df"])
+            if "corrected_wind_speed" in frame.columns:
+                series = frame["corrected_wind_speed"].dropna()
+                if not series.empty:
+                    return series, f"ltc:{algorithm}"
+    hub_height = state.get_hub_height_m()
+    if state.timeseries_df is not None and hub_height is not None:
+        column = f"Spd_{int(hub_height) if float(hub_height).is_integer() else hub_height}m_hub"
+        if column in state.timeseries_df.columns:
+            series = state.timeseries_df[column].dropna()
+            if not series.empty:
+                return series, f"measured:{column}"
+    return None, "unavailable"
+
+
+def _energy_sensitivity_block(state: SessionState, u_total: float) -> dict[str, object]:
+    """Return the energy sensitivity factor and how to use it, or say why it is unavailable.
+
+    The uncertainty this tool reports is a wind-speed uncertainty, and every component of
+    it is a percentage of wind speed.  P50/P75/P90 in wind resource assessment normally
+    name *energy* exceedances, so the conversion has to be stated rather than left to the
+    reader to guess at.  The factor is measured on the session's own long-term
+    distribution against a generic power curve; no energy uncertainty is published here,
+    because a defensible one needs loss and power-curve terms this application does not
+    model.
+    """
+    series, source = _long_term_speed_series(state)
+    if series is None:
+        return {
+            "available": False,
+            "reason": (
+                "No long-term corrected series is available yet, so the energy sensitivity "
+                "factor cannot be measured. Run the LTC and ensemble stages first; until "
+                "then the reported uncertainty is wind speed only and must not be applied "
+                "to an energy yield."
+            ),
+        }
+    values = series.to_numpy(dtype=float)
+    sensitivity = energy_sensitivity_factor(values)
+    return {
+        "available": True,
+        "factor": round(sensitivity, 4),
+        "definition": "S = d(ln AEP) / d(ln U), by central difference at +/-1% on the series below",
+        "measured_on": source,
+        "records": int(values.size),
+        "mean_speed_mps": round(float(values.mean()), 4),
+        "power_curve": {
+            "name": GENERIC_CURVE_NAME,
+            "rated_kw": GENERIC_RATED_KW,
+            "rotor_diameter_m": GENERIC_ROTOR_DIAMETER_M,
+            "basis": "generic",
+            "indicative_capacity_factor": round(float(indicative_capacity_factor(values)), 4),
+        },
+        "how_to_convert": conversion_guidance(sensitivity, u_total),
+    }
 
 
 def _calculate_uncertainty(
@@ -94,8 +177,9 @@ def _calculate_uncertainty(
             "p99": round(1.0 - (2.326 * u_total / 100.0), 4),
             "note": (
                 "Wind-speed exceedance factors. Multiply a mean wind speed, not an energy "
-                "yield: converting to energy requires this site's energy sensitivity factor "
-                "applied to the total uncertainty first."
+                "yield. To convert, see `energy_sensitivity` in this response: multiply the "
+                "total uncertainty by that factor first, then apply the exceedance "
+                "quantiles to the energy figure."
             ),
         },
         "inputs": {
@@ -116,7 +200,10 @@ def _calculate_uncertainty(
             "is_interpolation": bool(is_interpolation),
         },
     }
+    result["energy_sensitivity"] = _energy_sensitivity_block(state, u_total)
+    result.update(state.staleness_report())
     state.latest_uncertainty = result
+    state.stamp_derived("uncertainty")
     return result
 
 
@@ -147,3 +234,30 @@ def calculate_uncertainty(
         shear_std,
         is_interpolation,
     )
+
+
+def _compute_energy_sensitivity(state: SessionState, speed_uncertainty_pct: float = 0.0) -> dict:
+    """Measure the wind-speed-to-energy sensitivity factor on the session's long-term series."""
+    block = _energy_sensitivity_block(state, float(speed_uncertainty_pct))
+    if not block.get("available"):
+        raise ValueError(str(block.get("reason")))
+    stored = state.latest_uncertainty
+    if speed_uncertainty_pct <= 0.0 and isinstance(stored, dict):
+        total = stored.get("total_uncertainty_pct")
+        if isinstance(total, (int, float)) and total > 0:
+            block = _energy_sensitivity_block(state, float(total))
+            block["speed_uncertainty_source"] = "latest_uncertainty"
+    return {"status": "ok", **block, **state.staleness_report()}
+
+
+@mcp.tool()
+def compute_energy_sensitivity(speed_uncertainty_pct: float = 0.0) -> dict:
+    """Measure S = d(lnAEP)/d(lnU) on the long-term series and explain the energy conversion.
+
+    GoKaatru reports uncertainty on a wind-speed basis. This returns the factor needed to
+    express it as an energy uncertainty, measured on the session's own long-term
+    distribution against a generic power curve, together with the arithmetic and the
+    caveats. Pass ``speed_uncertainty_pct`` to work the conversion for a specific figure;
+    omitted, it uses the session's latest uncertainty result.
+    """
+    return _compute_energy_sensitivity(session, speed_uncertainty_pct)

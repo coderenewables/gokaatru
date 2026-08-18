@@ -197,7 +197,9 @@ def _run_clipping_analysis(
         )
     # Persist so the measured IAV can reach the uncertainty model instead of being
     # retyped from one tab into another (the u_future term otherwise uses a generic 6%).
+    payload.update(state.staleness_report())
     state.clipping_result = payload
+    state.stamp_derived("clipping")
     state.touch()
     return payload
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from server.core.validators import detect_timestep_minutes, rolling_median_mad_spike_mask, to_utc_index
+from server.core.validators import detect_timestep_minutes, to_utc_index
 from server.main import mcp
 from server.state.session import SessionState, session
 
@@ -195,11 +195,6 @@ def _compute_mast_effects(
     }
 
 
-def _spike_count(series: pd.Series, window: int = 11, sigma: float = 4.0) -> int:
-    """Count spikes using robust median/MAD outlier detection (same algorithm as spike_filter)."""
-    return int(rolling_median_mad_spike_mask(series, window=window, sigma=sigma).fillna(False).sum())
-
-
 def _flatline_count(series: pd.Series, minimum_count: int = 6) -> int:
     """Count repeated-value records in flat-line runs using the cleaning-stage convention."""
     groups = series.ne(series.shift()) | series.isna()
@@ -208,7 +203,7 @@ def _flatline_count(series: pd.Series, minimum_count: int = 6) -> int:
 
 
 def _compute_qc_diagnostics(state: SessionState) -> dict:
-    """Report non-mutating range, spike, flat-line, and existing-cleaning diagnostics per speed sensor."""
+    """Report non-mutating range, flat-line, and existing-cleaning diagnostics per speed sensor."""
     frame = _require_frame(state)
     raw = state.raw_timeseries_df if state.raw_timeseries_df is not None else frame
     rows = []
@@ -219,7 +214,6 @@ def _compute_qc_diagnostics(state: SessionState) -> dict:
             {
                 "sensor": sensor,
                 "range_failures": int(((values < 0) | (values > 50)).fillna(False).sum()),
-                "spike_failures": _spike_count(values),
                 "flatline_records": _flatline_count(values),
                 "removed_after_cleaning": removed,
             }
@@ -282,7 +276,7 @@ def compute_mast_effects(
 
 @mcp.tool()
 def compute_qc_diagnostics() -> dict:
-    """Report non-mutating range, spike, flat-line, and cleaning-removal diagnostics."""
+    """Report non-mutating range, flat-line, and cleaning-removal diagnostics."""
     return _compute_qc_diagnostics(session)
 
 

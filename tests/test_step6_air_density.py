@@ -18,6 +18,7 @@ import pytest
 
 import server.main  # noqa: F401 — establishes tool-module import order
 from server.core.formulas import (
+    adjust_density_to_height,
     air_density_iec,
     moist_air_density,
     saturation_vapour_pressure_pa,
@@ -210,37 +211,54 @@ def test_vectorised_density_refuses_an_unrecognisable_unit():
 # ---------------------------------------------------------------------------
 
 
-def test_density_is_never_corrected_from_sensor_height_to_hub_height():
-    """FINDING F-54 (HIGH): density applies at the pressure sensor, and is used at hub height.
+def test_density_height_correction_matches_the_speed_sensor():
+    """F-54 (HIGH) — FIXED. Regression test: density must match the height it is used at.
 
-    No barometric or hypsometric correction exists anywhere in the codebase. Pressure is
-    measured at 2-10 m, density is derived from it, and that density is then used for
-    power density alongside wind speed at hub height. Air thins by roughly 1.2% per 100 m,
-    so density — and therefore power density, which scales linearly with it — is
-    overstated:
+    The bug: no barometric or hypsometric correction existed anywhere. Pressure is measured
+    at 2-10 m, density derived from it, and that density then multiplied a hub-height wind
+    speed. Air thins by roughly 1.2% per 100 m, so density — and power density, which scales
+    linearly with it — was overstated:
 
         2 m  -> 100 m hub : +1.17%
         2 m  -> 150 m hub : +1.77%
-        10 m -> 150 m hub : +1.67%
         3 m  -> 200 m hub : +2.36%
 
-    The responses now carry `height_basis` so the assumption is attributable, but the
-    correction itself is not applied.
+    The fix applies the isothermal hypsometric relation using the campaign's own mean
+    temperature, matched to the height of the **speed series it multiplies** rather than to
+    hub height, since the speed sensor is not always at hub.
     """
-    for sensor_height, hub_height, expected in ((2, 100, 0.0117), (2, 150, 0.0177), (3, 200, 0.0236)):
-        ratio = float(np.exp(-9.80665 * (hub_height - sensor_height) / (287.05 * 288.15)))
-        assert 1.0 / ratio - 1.0 == pytest.approx(expected, abs=0.0005)
+    # The arithmetic itself.
+    for sensor_height, target_height, expected in ((2, 100, -0.0116), (2, 150, -0.0174), (3, 200, -0.0231)):
+        ratio = float(adjust_density_to_height(1.0, 288.15, sensor_height, target_height))
+        assert ratio - 1.0 == pytest.approx(expected, abs=0.0005)
 
-    index = pd.date_range("2021-01-01", periods=100, freq="h", tz="UTC")
+    index = pd.date_range("2021-01-01", "2021-12-31 23:00", freq="h", tz="UTC")
+    rng = np.random.default_rng(3)
+    speed = 7.0 + rng.weibull(2.0, len(index)) * 3.0
     state = _atmos_state(
-        np.full(100, 15.0), np.full(100, ISA_PRESSURE_PA), np.full(100, 70.0), index
+        np.full(len(index), 15.0),
+        np.full(len(index), ISA_PRESSURE_PA),
+        np.full(len(index), 70.0),
+        index,
+        speed=speed,
     )
-    result = _compute_atmospheric_conditions(state)
+    state.sensor_inventory["Spd_80m"]["height_m"] = 150.0
+    state.sensor_inventory["Press"]["height_m"] = 2.0
 
-    # The basis is disclosed, but no corrected-to-hub value is offered.
-    assert result["air_density"]["height_basis"] == "pressure_sensor_height"
-    assert "density_at_hub_height" not in result["air_density"]
-    assert "pressure_height_m" not in result
+    metrics = _compute_energy_metrics(state, "Spd_80m")
+
+    assert metrics["density_height_basis"] == "corrected_to_speed_sensor_height"
+    assert metrics["pressure_sensor_height_m"] == pytest.approx(2.0)
+    assert metrics["speed_sensor_height_m"] == pytest.approx(150.0)
+    assert metrics["density_height_adjustment"] == pytest.approx(0.9826, abs=0.001)
+
+    # A speed sensor at the pressure sensor's own height needs no adjustment.
+    state.sensor_inventory["Spd_80m"]["height_m"] = 2.0
+    same_height = _compute_energy_metrics(state, "Spd_80m")
+    assert same_height["density_height_adjustment"] == pytest.approx(1.0, abs=1e-9)
+    assert metrics["wind_power_density_w_m2"] / same_height["wind_power_density_w_m2"] == pytest.approx(
+        0.9826, abs=0.001
+    )
 
 
 def test_missing_humidity_sensor_assumes_dry_air_and_says_so():

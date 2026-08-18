@@ -248,7 +248,6 @@ export interface QcDiagnosticsSummary {
   sensors: Array<{
     sensor: string;
     range_failures: number;
-    spike_failures: number;
     flatline_records: number;
     removed_after_cleaning: number;
   }>;

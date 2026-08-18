@@ -180,6 +180,7 @@ def _save_ltc_result(state: SessionState, algorithm: str, result_df: pd.DataFram
     output_path = output_dir / f"ltc_{algorithm}_{timestamp}.csv"
     result_df.to_csv(output_path, index=False)
     state.ltc_results[algorithm] = {"df": result_df.copy(), "metrics": metrics.copy(), "file": str(output_path)}
+    state.stamp_derived(f"ltc:{algorithm}")
     return str(output_path)
 
 

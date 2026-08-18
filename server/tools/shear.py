@@ -283,6 +283,7 @@ def _calculate_shear_timeseries(
     shear_values, clamp_stats = _compute_pairwise_shear(speed_matrix, heights, resolved_min_speed)
     state.shear_timeseries_df = pd.DataFrame({"shear_coefficient": shear_values}, index=df.index)
     state.shear_clamp_stats = clamp_stats
+    state.stamp_derived("shear_timeseries")
     valid = state.shear_timeseries_df["shear_coefficient"].dropna()
     return {
         "status": "ok",
@@ -303,6 +304,7 @@ def _calculate_roughness_timeseries(state: SessionState, height_sensors: str) ->
     speed_matrix = df[list(height_map.values())].to_numpy(dtype=float)
     roughness = _fit_rowwise_log_profile(speed_matrix, heights)
     state.roughness_timeseries_df = pd.DataFrame({"roughness_length": roughness}, index=df.index)
+    state.stamp_derived("roughness_timeseries")
     valid = state.roughness_timeseries_df["roughness_length"].dropna()
     return {
         "status": "ok",
@@ -354,9 +356,28 @@ def _compute_veer(direction_matrix: np.ndarray, heights: np.ndarray) -> np.ndarr
 
 
 def _profile_fit_metrics(height_map: dict[float, str], df: pd.DataFrame) -> dict[str, object]:
-    """Fit mean vertical wind profile in power-law and log-law coordinates for overview metrics."""
+    """Fit mean vertical wind profile in power-law and log-law coordinates for overview metrics.
+
+    The means are taken over records where **every** selected height is valid.  Averaging
+    each column over its own records instead lets the heights describe different periods:
+    on a site with 0.10 summer and 0.32 winter shear whose 100 m sensor was lost for one
+    summer, the per-column fit returned alpha 0.244 against a concurrent-record answer of
+    0.320 — an error of -0.076, worth -3.0% on hub-height speed at 150 m.  Losing a top
+    sensor for a season is ordinary (icing, lightning, maintenance), so this is the normal
+    case rather than an edge one.
+
+    ``records_used`` and ``records_available`` report how much the concurrency requirement
+    cost, so a profile fitted on a thin overlap is visible as such.
+    """
     heights = np.asarray(list(height_map.keys()), dtype=float)
-    mean_speeds = np.asarray([df[column].mean() for column in height_map.values()], dtype=float)
+    columns = list(height_map.values())
+    concurrent = df[columns].dropna()
+    if concurrent.empty:
+        raise ValueError(
+            "Vertical profile requires records where every selected height is valid; the "
+            "selected sensors have no concurrent coverage."
+        )
+    mean_speeds = np.asarray([concurrent[column].mean() for column in columns], dtype=float)
     valid = np.isfinite(mean_speeds) & (mean_speeds > 0)
     if valid.sum() < 2:
         raise ValueError("Vertical profile requires valid mean wind speeds at two or more heights")
@@ -375,8 +396,12 @@ def _profile_fit_metrics(height_map: dict[float, str], df: pd.DataFrame) -> dict
             for height, speed in zip(heights[valid], mean_speeds[valid], strict=True)
         ],
         "power_law_alpha": float(alpha),
+        "power_law_alpha_basis": "log_log_fit_to_concurrent_mean_profile",
         "power_law_r_squared": power_r_squared,
         "roughness_length_m": roughness_length,
+        "records_used": int(len(concurrent)),
+        "records_available": int(len(df)),
+        "concurrent_fraction": float(len(concurrent) / len(df)) if len(df) else 0.0,
     }
 
 
@@ -457,6 +482,7 @@ def _build_shear_table(state: SessionState, aggregation: str = "mean") -> dict:
     fallback = float(valid["shear_coefficient"].mean()) if not valid.empty else DEFAULT_FALLBACK_ALPHA
     fallback_source = "series_mean" if not valid.empty else "one_seventh_power_law_default"
     state.shear_table = _aggregate_table(valid, "shear_coefficient", aggregation, fallback)
+    state.stamp_derived("shear_table")
     coverage = _table_fill_report(state.shear_table, valid)
     response: dict[str, object] = {
         "method": "power_law",
@@ -482,6 +508,7 @@ def _build_roughness_table(state: SessionState, aggregation: str = "mean") -> di
         raise ValueError("Roughness timeseries is not available. Run calculate_roughness_timeseries first")
     valid = state.roughness_timeseries_df.dropna()
     state.roughness_table = _aggregate_roughness_table(valid, aggregation)
+    state.stamp_derived("roughness_table")
     return {"method": "log_law", "aggregation": aggregation, "table": state.roughness_table.values.tolist()}
 
 
@@ -527,6 +554,7 @@ def _build_aggr_momm_shear_table(
     resolved_min_speed = _resolve_min_speed(state, min_speed_mps)
     state.shear_table, clamp_stats = _aggr_momm_table(df, height_map, resolved_min_speed)
     state.shear_clamp_stats = clamp_stats
+    state.stamp_derived("shear_table")
     return {
         "method": "power_law",
         "aggregation": "aggr_momm",

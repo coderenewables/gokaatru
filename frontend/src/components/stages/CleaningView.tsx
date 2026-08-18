@@ -5,7 +5,7 @@
 //     wind roses per height, a combined diurnal profile of all speed sensors,
 //     the temperature diurnal profile, and the measured shear profile.
 //  2. "Cleaning rules" — standard wind filters (range, icing, stuck sensor,
-//     tower shadow, spike) plus a custom Windographer-style expression builder
+//     tower shadow) plus a custom Windographer-style expression builder
 //     supporting AND/OR combinations, applied as flag-and-remove (→ NA) rules.
 import { useEffect, useMemo, useState } from "react";
 
@@ -55,13 +55,6 @@ const STANDARD_FILTERS: StandardFilter[] = [
     description: "Flag readings from the tower-shadow sector.",
     ruleType: "tower_shadow",
     buildParams: () => ({ exclude_sectors: [170, 190] }),
-  },
-  {
-    id: "spike",
-    label: "Spike filter",
-    description: "Flag spikes beyond 4σ of the rolling mean.",
-    ruleType: "spike_filter",
-    buildParams: () => ({ window_size: 6, sigma_threshold: 4 }),
   },
 ];
 

@@ -8,7 +8,8 @@ from scipy.stats import genextreme, gumbel_r
 from server.core.validators import detect_timestep_minutes
 from server.main import mcp
 from server.state.session import SessionState, session
-from server.tools.atmosphere import _atmospheric_series
+from server.core.formulas import adjust_density_to_height
+from server.tools.atmosphere import _atmospheric_series, _sensor_height
 
 COMPASS_16 = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
 
@@ -23,9 +24,30 @@ def _require_speed_series(state: SessionState, speed_sensor: str) -> pd.Series:
 
 
 ISA_SEA_LEVEL_DENSITY = 1.225
+# Layer temperature used for the density height correction when the measured temperature
+# is unavailable; the correction is worth ~1.2% per 100 m and is insensitive to this.
+ISA_SEA_LEVEL_TEMPERATURE_K = 288.15
 
 
-def _density_for_energy(state: SessionState, speed: pd.Series) -> tuple[float, str, pd.Series | None]:
+def _density_temperature_kelvin(state: SessionState) -> float:
+    """Return the campaign mean temperature in Kelvin for the density height correction."""
+    try:
+        from server.tools.atmosphere import _find_sensor, _temperature_kelvin
+
+        frame = state.timeseries_df
+        if frame is not None:
+            name = _find_sensor(state, "temperature")
+            valid = _temperature_kelvin(frame[name]).dropna()
+            if not valid.empty:
+                return float(valid.mean())
+    except (ValueError, KeyError):
+        pass
+    return ISA_SEA_LEVEL_TEMPERATURE_K
+
+
+def _density_for_energy(
+    state: SessionState, speed: pd.Series
+) -> tuple[float, str, pd.Series | None, str | None]:
     """Return (mean density, source, aligned density series) for energy calculations.
 
     The series is returned alongside the scalar because the monthly breakdown needs it:
@@ -35,14 +57,14 @@ def _density_for_energy(state: SessionState, speed: pd.Series) -> tuple[float, s
     total, so the error was invisible in the headline number.
     """
     try:
-        density, _temperature, _pressure, _humidity = _atmospheric_series(state)
+        density, _temperature, pressure_name, _humidity = _atmospheric_series(state)
         concurrent = pd.concat([speed, density], axis=1, sort=False).dropna()
         if not concurrent.empty:
             aligned = concurrent.iloc[:, 1]
-            return float(aligned.mean()), "measured", aligned
+            return float(aligned.mean()), "measured", aligned, pressure_name
     except ValueError:
         pass
-    return ISA_SEA_LEVEL_DENSITY, "standard", None
+    return ISA_SEA_LEVEL_DENSITY, "standard", None, None
 
 
 def _compute_energy_metrics(state: SessionState, speed_sensor: str, direction_sensor: str = "") -> dict:
@@ -51,7 +73,25 @@ def _compute_energy_metrics(state: SessionState, speed_sensor: str, direction_se
     valid = speed[speed >= 0].dropna()
     if valid.empty:
         raise ValueError(f"Sensor '{speed_sensor}' has no non-negative values for energy analysis")
-    air_density, density_source, density_series = _density_for_energy(state, valid)
+    air_density, density_source, density_series, pressure_name = _density_for_energy(state, valid)
+
+    # Match the density to the height of the speed series it multiplies.  Density derived
+    # from a 2 m pressure sensor and applied at a 150 m hub overstates it by about 1.8%, and
+    # power density scales linearly with density, so that was a direct overstatement of the
+    # resource.  Both heights are reported so the adjustment is auditable.
+    speed_height = _sensor_height(state, speed_sensor)
+    pressure_height = _sensor_height(state, pressure_name) if pressure_name else None
+    height_adjustment = 1.0
+    height_basis = "uncorrected_pressure_sensor_height"
+    if speed_height is not None and pressure_height is not None and density_series is not None:
+        temperatures = _density_temperature_kelvin(state)
+        height_adjustment = float(
+            adjust_density_to_height(1.0, temperatures, pressure_height, speed_height)
+        )
+        density_series = density_series * height_adjustment
+        air_density = float(density_series.mean())
+        height_basis = "corrected_to_speed_sensor_height"
+
     if density_series is None:
         # No measured density: a single standard value is all there is, so the monthly
         # profile carries no density seasonality and says so.
@@ -71,7 +111,10 @@ def _compute_energy_metrics(state: SessionState, speed_sensor: str, direction_se
         "air_density_kg_m3": air_density,
         "density_source": density_source,
         "monthly_density_basis": monthly_density_basis,
-        "density_height_basis": "pressure_sensor_height",
+        "density_height_basis": height_basis,
+        "density_height_adjustment": height_adjustment,
+        "pressure_sensor_height_m": pressure_height,
+        "speed_sensor_height_m": speed_height,
         "wind_power_density_w_m2": float(
             0.5 * air_density * valid.pow(3).mean()
             if density_series is None

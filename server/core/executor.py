@@ -442,9 +442,28 @@ class WorkflowExecutor:
         return self._run_operation(template_id, node.config)
 
     def _seed_runtime(self, ordered_nodes: list[WorkflowExecutionNode]) -> str:
-        """Initialize the session execution runtime before a run starts."""
+        """Initialize the session execution runtime before a run starts.
+
+        Node statuses arrive in the request body, and ``execute_auto`` skips anything
+        already ``done`` or ``skipped``.  Trusting that outright let the browser decide
+        which stages had run: a graph could report success for a node that never executed,
+        and the server kept no record of what it had actually computed.
+
+        Stepping still needs the client to say where it got to, so the fix is corroboration
+        rather than refusal — a ``done`` is honoured only for nodes this session actually
+        executed.  Anything else is reset to pending and re-run, which is the safe
+        direction: worst case a node is computed twice.
+        """
         run_id = uuid4().hex
-        node_statuses = {node.id: _as_status(node.status, fallback="pending") for node in ordered_nodes}
+        executed = self._executed_node_ids()
+        node_statuses: dict[str, str] = {}
+        unverified: list[str] = []
+        for node in ordered_nodes:
+            claimed = _as_status(node.status, fallback="pending")
+            if claimed in {"done", "skipped"} and node.id not in executed:
+                unverified.append(node.id)
+                claimed = "pending"
+            node_statuses[node.id] = claimed
         self.state.workflow_execution = {
             "run_id": run_id,
             "started_at": _utcnow().isoformat(),
@@ -453,6 +472,8 @@ class WorkflowExecutor:
             "node_statuses": node_statuses,
             "node_results": {},
             "events": [],
+            "executed_nodes": sorted(executed),
+            "unverified_completions": unverified,
         }
         self.state.touch()
         return run_id
@@ -465,6 +486,17 @@ class WorkflowExecutor:
             events = []
         events.append(event)
         runtime["events"] = events[-400:]
+
+    def _executed_node_ids(self) -> set[str]:
+        """Return the node ids this session has actually executed, across runs."""
+        recorded = self.state.executed_nodes
+        return set(recorded) if isinstance(recorded, (set, list, tuple)) else set()
+
+    def _record_execution(self, node_id: str) -> None:
+        """Record that the server itself ran this node, so a later `done` claim is verifiable."""
+        recorded = self._executed_node_ids()
+        recorded.add(node_id)
+        self.state.executed_nodes = recorded
 
     def _set_node_status(self, node_id: str, status: str) -> None:
         """Set one node execution status in the session runtime map."""
@@ -594,6 +626,7 @@ class WorkflowExecutor:
 
             try:
                 message = await self._execute_node(node)
+                self._record_execution(node.id)
                 self._set_node_status(node.id, "done")
                 self._set_node_result(node.id, message)
                 node_finished = _as_event(run_id, "node_finished", node.id, "done", message)
@@ -654,6 +687,7 @@ class WorkflowExecutor:
 
         try:
             message = await self._execute_node(next_node)
+            self._record_execution(next_node.id)
             self._set_node_status(next_node.id, "done")
             self._set_node_result(next_node.id, message)
             node_finished = _as_event(run_id, "node_finished", next_node.id, "done", message)

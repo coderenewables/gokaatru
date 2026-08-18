@@ -166,6 +166,7 @@ def _save_xgboost_result(state: SessionState, result_df: pd.DataFrame, metrics: 
     output_path = output_dir / f"ltc_xgboost_{timestamp}.csv"
     result_df.to_csv(output_path, index=False)
     state.ltc_results["xgboost"] = {"df": result_df.copy(), "metrics": dict(metrics), "file": str(output_path)}
+    state.stamp_derived("ltc:xgboost")
     return str(output_path)
 
 

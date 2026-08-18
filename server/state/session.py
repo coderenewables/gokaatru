@@ -52,11 +52,14 @@ class SessionState:
     ltc_results: dict[str, dict[str, object]]
     ensemble_df: pd.DataFrame | None
     clipping_result: dict[str, object] | None
+    data_version: int
+    derived_versions: dict[str, int]
     latest_uncertainty: dict[str, object] | None
     scenarios: list[dict[str, object]]
     runconfig: dict[str, object]
     timezone: object | None  # datetime.timezone or ZoneInfo — set from datamodel
     windkit_data: dict[str, object]
+    executed_nodes: set[str]
     workflow_execution: dict[str, object]
     workflow_runs: list[dict[str, object]]
 
@@ -97,11 +100,16 @@ class SessionState:
         self.ltc_results = {}
         self.ensemble_df = None
         self.clipping_result = None
+        self.data_version = 0
+        self.derived_versions = {}
         self.latest_uncertainty = None
         self.scenarios = []
         self.runconfig = {}
         self.timezone = None
         self.windkit_data = {}
+        # Node ids this session actually executed, so a client-supplied "done" can be
+        # corroborated instead of taken on trust (F-10).
+        self.executed_nodes = set()
         self.workflow_execution = {
             "run_id": None,
             "is_running": False,
@@ -198,6 +206,56 @@ class SessionState:
         if isinstance(value, (int, float)):
             return float(value)
         return self.hub_height_m
+
+    def bump_data_version(self) -> int:
+        """Record that the measured working data changed, invalidating anything derived from it.
+
+        Session state is long-lived and mutable: cleaning rewrites ``timeseries_df`` in place,
+        undo rebuilds it from raw, and a sensor-selection change removes columns outright.
+        Every derived artifact — the shear timeseries and table, the hub-height column, the
+        LTC results, the ensemble, the uncertainty — was left untouched and unmarked by all
+        three, so a session could report a long-term mean derived from data that no longer
+        existed.  Recomputing after the same cleaning gives a different answer, so the stale
+        value was materially wrong rather than merely old.
+
+        A monotonic counter is enough to make that visible: derived artifacts record the
+        version they were built from, and any consumer can compare.
+        """
+        self.data_version += 1
+        self.touch()
+        return self.data_version
+
+    def stamp_derived(self, name: str) -> None:
+        """Record which version of the measured data a derived artifact was built from."""
+        self.derived_versions[name] = self.data_version
+
+    def derived_is_stale(self, name: str) -> bool:
+        """Return whether a derived artifact predates the current measured data."""
+        stamped = self.derived_versions.get(name)
+        return stamped is not None and stamped < self.data_version
+
+    def stale_artifacts(self) -> list[str]:
+        """List every derived artifact built from an older version of the measured data."""
+        return sorted(name for name in self.derived_versions if self.derived_is_stale(name))
+
+    def staleness_report(self) -> dict[str, object]:
+        """Summarize derived artifacts that no longer match the measured data.
+
+        Included in the responses of the tools that consume derived artifacts, so a stale
+        input is visible at the point it is used rather than inferred later.
+        """
+        stale = self.stale_artifacts()
+        report: dict[str, object] = {
+            "data_version": self.data_version,
+            "stale_artifacts": stale,
+        }
+        if stale:
+            report["warning"] = (
+                f"{len(stale)} derived artifact(s) were built from an earlier version of the "
+                f"measured data and no longer match it: {', '.join(stale)}. Re-run those stages "
+                "before trusting any number that depends on them."
+            )
+        return report
 
     def get_measured_iav_pct(self) -> float | None:
         """Return the IAV of the clipping-selected window, when a clipping run exists.

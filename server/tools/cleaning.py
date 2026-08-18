@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 
-from server.core.validators import SENSOR_FIELDS, detect_timestep_minutes, rolling_median_mad_spike_mask
+from server.core.validators import SENSOR_FIELDS, detect_timestep_minutes
 from server.main import mcp
 from server.state.session import SessionState, session
 
@@ -27,14 +27,18 @@ RANGE_CHECK_BOUNDS: dict[str, tuple[float, float]] = {
     "humidity": (0.0, 100.0),
 }
 
+# A run at or below this speed may be a genuine dead calm rather than a frozen channel,
+# so it is only deleted when another anemometer shows the site was actually windy.
+CALM_THRESHOLD_MPS = 0.5
+CALM_CORROBORATION_MPS = 1.0
+
 RULES = {
     # No advertised min/max: bounds come from the sensor's type (D16). Echoing
     # 0-50 back as "the default" is what wiped direction and pressure channels.
     "range_check": {},
     "icing_filter": {"temp_threshold_c": 2.0},
-    "stuck_sensor": {"consecutive_count": 6},
+    "stuck_sensor": {"consecutive_count": 6, "calm_threshold_mps": CALM_THRESHOLD_MPS},
     "tower_shadow": {"exclude_sectors": [170, 190]},
-    "spike_filter": {"window_size": 11, "sigma_threshold": 4.0},
     "timestamp_gap_fill": {},
     "custom_period_exclude": {"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"},
     "expression_filter": {"expression": "Spd_100m < 0 or Spd_100m > 50"},
@@ -83,13 +87,32 @@ def _parse_params(params: str) -> dict[str, object]:
     return payload
 
 
+def _bound_timestamp(value: str, index: pd.DatetimeIndex) -> pd.Timestamp:
+    """Parse a cleaning date bound onto the same timezone as the series index.
+
+    Session timeseries are tz-aware UTC (D8), while a bound typed by an analyst is naive.
+    Comparing the two raises ``TypeError: Invalid comparison between dtype=datetime64[us,
+    UTC] and Timestamp``, which made every date-bounded rule unusable on real data —
+    ``custom_period_exclude`` could not run at all, and every other rule silently lost its
+    optional ``start_date`` / ``end_date`` narrowing.
+
+    A naive bound is interpreted in the index's own timezone, which is what an analyst
+    reading dates off the campaign means. An already-aware bound is converted rather than
+    reinterpreted.
+    """
+    stamp = pd.Timestamp(value)
+    if index.tz is None:
+        return stamp.tz_localize(None) if stamp.tzinfo is not None else stamp
+    return stamp.tz_localize(index.tz) if stamp.tzinfo is None else stamp.tz_convert(index.tz)
+
+
 def _date_mask(index: pd.DatetimeIndex, start_date: str, end_date: str) -> np.ndarray:
     """Build an inclusive timestamp mask for optional cleaning date constraints."""
     mask = np.ones(len(index), dtype=bool)
     if start_date:
-        mask &= index >= pd.Timestamp(start_date)
+        mask &= index >= _bound_timestamp(start_date, index)
     if end_date:
-        mask &= index <= pd.Timestamp(end_date)
+        mask &= index <= _bound_timestamp(end_date, index)
     return mask
 
 
@@ -202,16 +225,79 @@ def _apply_icing_filter(
     return int(affected.sum())
 
 
-def _apply_stuck_sensor(df: pd.DataFrame, sensor: str, mask: np.ndarray, params: dict[str, object]) -> int:
-    """Remove runs of repeated identical values using a minimum consecutive-count threshold."""
+def _other_speed_columns(state: SessionState, df: pd.DataFrame, sensor: str) -> list[str]:
+    """Return the other mapped wind-speed columns available for corroboration."""
+    columns: list[str] = []
+    for sensor_map in state.sensor_mapping.values():
+        candidate = sensor_map.get("speed_col")
+        if isinstance(candidate, str) and candidate != sensor and candidate in df.columns:
+            columns.append(candidate)
+    return columns
+
+
+def _apply_stuck_sensor(
+    state: SessionState,
+    df: pd.DataFrame,
+    sensor: str,
+    mask: np.ndarray,
+    params: dict[str, object],
+) -> tuple[int, dict[str, object]]:
+    """Remove runs of repeated identical values using a minimum consecutive-count threshold.
+
+    A genuine dead calm reads exactly 0.0 for as long as it lasts, so by run length alone it
+    is indistinguishable from a frozen channel — and deleting it was measurably destructive:
+    a two-hour calm removed raised the mean 2.04% and took the reported ``calm_fraction``
+    from 0.0200 to **zero**, which is the very quantity the calm-inclusive WAsP m1/m3
+    Weibull fit (D25) depends on.
+
+    The two *are* separable. A frozen cup holds one value while the other anemometers keep
+    moving; a real calm shows near-zero speed across every height at once.  So a run at or
+    below ``calm_threshold_mps`` is only removed when another mapped speed sensor was
+    reading above ``corroboration_speed_mps`` at the same timestamps.  With no other speed
+    sensor to compare against, the calm is preserved — the fail-safe is to keep a
+    measurement that cannot be disproved rather than delete it.
+
+    Runs above the calm threshold are unambiguous (a sensor pinned at 12 m/s is stuck) and
+    are removed as before.
+    """
     threshold = _int_param(params, "consecutive_count", 6)
+    calm_threshold = _float_param(params, "calm_threshold_mps", CALM_THRESHOLD_MPS)
+    corroboration_speed = _float_param(params, "corroboration_speed_mps", CALM_CORROBORATION_MPS)
+
     series = df[sensor]
     groups = series.ne(series.shift()) | series.isna()
     run_ids = groups.cumsum()
     run_lengths = series.groupby(run_ids).transform("size")
-    affected = mask & series.notna().to_numpy() & (run_lengths >= threshold).to_numpy()
+    long_runs = mask & series.notna().to_numpy() & (run_lengths >= threshold).to_numpy()
+
+    calm_runs = long_runs & (series <= calm_threshold).fillna(False).to_numpy()
+    others = _other_speed_columns(state, df, sensor)
+    if others:
+        # Windy elsewhere at the same moment => this channel really is stuck.
+        elsewhere_windy = (df[others] > corroboration_speed).any(axis=1).to_numpy()
+        preserved = calm_runs & ~elsewhere_windy
+        corroboration = "cross_sensor"
+    else:
+        preserved = calm_runs
+        corroboration = "unavailable_no_other_speed_sensor"
+
+    affected = long_runs & ~preserved
     df.loc[affected, sensor] = np.nan
-    return int(affected.sum())
+    detail: dict[str, object] = {
+        "consecutive_count": int(threshold),
+        "calm_threshold_mps": float(calm_threshold),
+        "calms_preserved": int(preserved.sum()),
+        "calm_corroboration": corroboration,
+        "corroborating_sensors": others,
+    }
+    if int(preserved.sum()) and corroboration == "unavailable_no_other_speed_sensor":
+        detail["warning"] = (
+            f"{int(preserved.sum()):,} records in long runs at or below "
+            f"{calm_threshold:g} m/s were preserved as possible calms because no other "
+            "wind-speed sensor was available to confirm the channel was stuck. Map a second "
+            "speed sensor to let this rule tell a frozen anemometer from a real calm."
+        )
+    return int(affected.sum()), detail
 
 
 def _apply_tower_shadow(
@@ -234,21 +320,6 @@ def _apply_tower_shadow(
         else (directions >= start_deg) | (directions <= end_deg)
     )
     affected = mask & sector_mask & df[sensor].notna().to_numpy()
-    df.loc[affected, sensor] = np.nan
-    return int(affected.sum())
-
-
-def _apply_spike_filter(df: pd.DataFrame, sensor: str, mask: np.ndarray, params: dict[str, object]) -> int:
-    """Remove spikes using robust rolling median/MAD outlier detection.
-
-    Median/MAD is not biased by the outlier itself, unlike mean/std where the
-    spike inflates its own window statistics.  Constant stretches (MAD == 0)
-    are left untouched — stuck-sensor detection is a separate rule.
-    """
-    window = _int_param(params, "window_size", 11)
-    sigma = _float_param(params, "sigma_threshold", 4.0)
-    spike_mask = rolling_median_mad_spike_mask(df[sensor], window=window, sigma=sigma).fillna(False).to_numpy()
-    affected = mask & spike_mask
     df.loc[affected, sensor] = np.nan
     return int(affected.sum())
 
@@ -377,11 +448,9 @@ def _apply_rule(
     if rule_type == "icing_filter":
         return _apply_icing_filter(state, df, sensor, mask, params), {}
     if rule_type == "stuck_sensor":
-        return _apply_stuck_sensor(df, sensor, mask, params), {}
+        return _apply_stuck_sensor(state, df, sensor, mask, params)
     if rule_type == "tower_shadow":
         return _apply_tower_shadow(state, df, sensor, mask, params), {}
-    if rule_type == "spike_filter":
-        return _apply_spike_filter(df, sensor, mask, params), {}
     if rule_type == "expression_filter":
         return _apply_expression_filter(df, sensor, mask, params), {}
     if rule_type == "timestamp_gap_fill":
@@ -411,6 +480,8 @@ def _apply_cleaning_rule(
         raise ValueError(f"Unknown cleaning rule '{rule_type}'")
     parsed = _parse_params(params)
     records_affected, detail = _apply_rule(state, rule_type, sensor, parsed, start_date, end_date)
+    # The working data just changed, so anything already derived from it is stale (F-11).
+    state.bump_data_version()
     entry: dict[str, object] = {
         "rule_type": rule_type,
         "sensor": sensor,
@@ -474,9 +545,33 @@ def _undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
             str(entry.get("start_date", "")),
             str(entry.get("end_date", "")),
         )
+    # Undo rebuilds the working frame from raw, which drops any column a later stage wrote
+    # into it — the hub-height series and shear_coefficient among them (F-12).  Bumping the
+    # data version marks everything derived from the old frame as stale, so an LTC or
+    # ensemble that depended on a now-deleted column is flagged rather than left looking
+    # current.
+    dropped_columns = [
+        str(column)
+        for column in state.timeseries_df.columns
+        if column not in replay_state.timeseries_df.columns
+    ] if state.timeseries_df is not None else []
     state.timeseries_df = replay_state.timeseries_df
     state.cleaning_log = provenance + replay_state.cleaning_log
-    return {"status": "ok", "remaining_rules": len(replay_state.cleaning_log)}
+    state.bump_data_version()
+    result: dict[str, object] = {
+        "status": "ok",
+        "remaining_rules": len(replay_state.cleaning_log),
+        "dropped_columns": dropped_columns,
+        **state.staleness_report(),
+    }
+    if dropped_columns:
+        result["warning"] = (
+            f"Undo rebuilt the working data from the raw import, which removed "
+            f"{len(dropped_columns)} derived column(s): {', '.join(dropped_columns)}. "
+            "Anything computed from them — hub-height extrapolation, LTC, ensemble, "
+            "uncertainty — must be re-run."
+        )
+    return result
 
 
 @mcp.tool()

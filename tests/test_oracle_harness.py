@@ -432,14 +432,18 @@ def test_momm_infers_samples_per_hour_only_down_to_hourly():
     assert _infer_samples_per_hour(daily) == pytest.approx(1.0)
 
 
-def test_momm_scalar_fills_absent_months_with_the_series_mean():
-    """FINDING (Step 4 lead): compute_momm back-fills empty month-hour cells with the overall mean.
+def test_momm_reports_the_month_hour_cells_it_synthesised():
+    """F-14 — FIXED. Regression test: a partial-year MoMM must declare what it invented.
 
-    ``compute_momm`` does ``table.fillna(series.mean())``, so a campaign that
-    never observed a month still reports a 12-month MoMM. A six-month winter
-    campaign gets its six missing summer months synthesised from the winter mean
-    and reports a number indistinguishable from a full-year MoMM. The fill count
-    is not returned.
+    The bug: ``compute_momm`` did ``table.fillna(series.mean())``, so a campaign that never
+    observed a month still reported a 12-month MoMM. A six-month winter campaign had its
+    six missing summer months synthesised from the winter mean and reported a number
+    indistinguishable from a full-year one, with no fill count returned.
+
+    The fill is kept — the 12x24 table must resolve — but `filled_cells`,
+    `months_observed`, `months_missing` and `fill_value` now travel with the result, and a
+    table missing whole months carries a warning. MoMM weights months by length to
+    represent a full year, so a partial year is exactly where it misleads.
     """
     from server.tools.statistics import compute_momm
     from server.state.session import bind_session
@@ -455,9 +459,13 @@ def test_momm_scalar_fills_absent_months_with_the_series_mean():
 
     table = np.asarray(result["table"], dtype=float)
     assert table.shape == (12, 24)
-    # Jul-Dec were never measured, yet they carry the Jan-Jun mean.
+    # Jul-Dec were never measured and still carry the Jan-Jun mean...
     assert np.allclose(table[6:, :], 6.0)
     assert result["momm_speed"] == pytest.approx(6.0)
-    # Nothing in the response says half the table is synthetic.
-    assert "filled_cells" not in result
-    assert "months_observed" not in result
+    # ...but the response now says so.
+    assert result["filled_cells"] == 144
+    assert result["filled_fraction"] == pytest.approx(0.5)
+    assert result["months_observed"] == [1, 2, 3, 4, 5, 6]
+    assert result["months_missing"] == [7, 8, 9, 10, 11, 12]
+    assert result["fill_value"] == pytest.approx(6.0)
+    assert "warning" in result

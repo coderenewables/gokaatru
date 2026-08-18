@@ -57,6 +57,17 @@ def _pressure_pa(values: pd.Series) -> pd.Series:
     return values.astype(float) * 100.0 if float(valid.median()) < 2000.0 else values.astype(float)
 
 
+def _sensor_height(state: SessionState, sensor_name: str) -> float | None:
+    """Return a sensor's measurement height from the inventory, else the height mapping."""
+    metadata = state.sensor_inventory.get(sensor_name)
+    if isinstance(metadata, dict) and isinstance(metadata.get("height_m"), (int, float)):
+        return float(metadata["height_m"])
+    for height, sensor_map in state.sensor_mapping.items():
+        if sensor_name in sensor_map.values():
+            return float(height)
+    return None
+
+
 def _density_series(temperature: pd.Series, pressure: pd.Series, humidity: pd.Series | None) -> pd.Series:
     """Compute moist-air density from measured temperature, pressure, and optional relative humidity.
 

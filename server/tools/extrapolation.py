@@ -235,6 +235,7 @@ def _extrapolate_to_hub_height(state: SessionState, hub_height_m: float, shear_m
     column_name = _hub_column_name(hub_height_m)
     state.timeseries_df[column_name] = result
     state.set_hub_height_m(float(hub_height_m))
+    state.stamp_derived("hub_height_series")
     lever = _extrapolation_lever(heights, valid_mask, hub_height_m, extrap_rows)
 
     # Also extrapolate all reanalysis nodes (ERA5 nodes, MERRA-2 nodes, and the
@@ -258,6 +259,7 @@ def _extrapolate_to_hub_height(state: SessionState, hub_height_m: float, shear_m
         "method_counts": counts,
         "reanalysis": reanalysis_result,
         **lever,
+        **state.staleness_report(),
     }
     if lever.get("warning"):
         response["warning"] = lever["warning"]

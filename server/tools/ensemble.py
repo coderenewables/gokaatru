@@ -179,12 +179,14 @@ def _run_ensemble(state: SessionState, measured_col: str) -> dict:
     output_path = _ensemble_output_path(state)
     output.to_csv(output_path, index=False)
     state.ensemble_df = output.copy()
+    state.stamp_derived("ensemble")
     response: dict[str, object] = {
         "status": "ok",
         "weights": weights,
         "metrics": {"rmse": metrics["rmse"], "r2": metrics["r2"], "bias": metrics["bias"]},
         "component_coverage": coverage,
         "result_file": str(output_path),
+        **state.staleness_report(),
     }
     if int(coverage["partially_covered_records"]) > 0:
         response["warning"] = (

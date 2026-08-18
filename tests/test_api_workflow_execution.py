@@ -146,7 +146,16 @@ def test_workflow_execute_and_status(execution_client: tuple[TestClient, Session
 
 
 def test_workflow_step_respects_input_status(execution_client: tuple[TestClient, SessionManager]) -> None:
-    """Run manual step mode and ensure the next pending node completes."""
+    """Manual step mode: an unverified `done` is re-run, a verified one is skipped (F-10).
+
+    Node statuses arrive in the request body, and the executor used to trust them outright —
+    so a graph could report success for a stage that never ran. The server now records what
+    it actually executed and honours a `done` only for those nodes.
+
+    In a fresh session nothing has been executed, so op-1's claimed `done` cannot be
+    corroborated and is re-run; stepping again then verifies it and moves on to op-2. That
+    is the safe direction: worst case a node is computed twice.
+    """
     client, _manager = execution_client
     session_id, headers = _create_session(client)
 
@@ -173,12 +182,21 @@ def test_workflow_step_respects_input_status(execution_client: tuple[TestClient,
         "edges": [{"source": "op-1", "target": "op-2"}],
     }
 
-    step_response = client.post(f"/api/sessions/{session_id}/workflow/execute/step", headers=headers, json=payload)
-    assert step_response.status_code == 200
-    step_payload = step_response.json()
-    assert step_payload["status"] == "ok"
-    assert step_payload["node_statuses"]["op-1"] == "done"
-    assert step_payload["node_statuses"]["op-2"] == "done"
+    # First step: op-1's unverifiable "done" is reset and executed.
+    first = client.post(f"/api/sessions/{session_id}/workflow/execute/step", headers=headers, json=payload)
+    assert first.status_code == 200
+    first_payload = first.json()
+    assert first_payload["status"] == "ok"
+    assert first_payload["node_statuses"]["op-1"] == "done"
+    assert first_payload["node_statuses"]["op-2"] == "pending"
+
+    # Second step: op-1 is now corroborated by the server, so it is skipped and op-2 runs.
+    second = client.post(f"/api/sessions/{session_id}/workflow/execute/step", headers=headers, json=payload)
+    assert second.status_code == 200
+    second_payload = second.json()
+    assert second_payload["status"] == "ok"
+    assert second_payload["node_statuses"]["op-1"] == "done"
+    assert second_payload["node_statuses"]["op-2"] == "done"
 
 
 def test_workflow_stream_endpoint_emits_events(execution_client: tuple[TestClient, SessionManager]) -> None:

@@ -113,30 +113,46 @@ def test_edges_are_not_validated_against_the_data_dependency():
     assert [node.id for node in executor._ordered_nodes()] == ["a_consumer", "z_producer"]
 
 
-def test_client_supplied_node_status_can_skip_execution():
-    """FINDING (Step 1): the browser decides which nodes are already done.
+def test_client_supplied_node_status_cannot_fabricate_completion():
+    """F-10 (HIGH) — FIXED. Regression test: only the server can certify a node as done.
 
-    ``_seed_runtime`` seeds ``node_statuses`` from ``node.status``, which the API
-    route copies straight out of the request body, and ``execute_auto`` skips any
-    node already ``done`` or ``skipped``. A node marked ``done`` by the client is
-    never executed, so a run can report success for a stage that never ran. The
-    server keeps no authoritative record of what it actually computed.
+    The bug: ``_seed_runtime`` seeded ``node_statuses`` straight from the request body, and
+    ``execute_auto`` skipped anything already ``done`` or ``skipped``. A node marked ``done``
+    by the client was never executed, so a run could report success for a stage that never
+    ran, and the server kept no authoritative record of what it had computed.
+
+    The fix corroborates rather than refuses — stepping still needs the client to say where
+    it got to, so a ``done`` is honoured only for nodes this session actually executed.
+    Anything else is reset to pending and re-run, which is the safe direction.
     """
     state = SessionState()
     state.reset()
-    # This tool raises without loaded data, so executing it would fail loudly.
-    would_fail = _node(
+    # This tool raises without loaded data, so executing it fails loudly rather than
+    # being silently skipped.
+    claimed = _node(
         "shear",
         "calculate_shear_timeseries",
         status="done",
         height_sensors=json.dumps({"60": "Spd_60m", "100": "Spd_100m"}),
     )
-    events = _drive(WorkflowExecutor(state, [would_fail], []))
+    events = _drive(WorkflowExecutor(state, [claimed], []))
 
-    assert not any(event["event_type"] == "node_failed" for event in events)
-    assert events[-1]["status"] == "ok"
-    assert state.shear_timeseries_df is None  # nothing was computed
-    assert state.workflow_execution["node_statuses"]["shear"] == "done"
+    assert any(event["event_type"] == "node_failed" for event in events)
+    assert events[-1]["status"] == "error"
+    assert state.workflow_execution["unverified_completions"] == ["shear"]
+
+
+def test_a_verified_completion_is_still_skipped():
+    """The counterpart: once the server has run a node, a later `done` claim is trusted."""
+    state = SessionState()
+    state.reset()
+    node = _node("rules", "list_cleaning_rules")
+    _drive(WorkflowExecutor(state, [node], []))
+    assert state.executed_nodes == {"rules"}
+
+    events = _drive(WorkflowExecutor(state, [_node("rules", "list_cleaning_rules", status="done")], []))
+    assert not any(event["event_type"] == "node_started" for event in events)
+    assert state.workflow_execution["unverified_completions"] == []
 
 
 def test_a_node_that_actually_runs_without_its_input_fails_loudly():
@@ -181,9 +197,15 @@ def test_cleaning_does_not_invalidate_a_shear_result_computed_before_it():
     assert int(result["records_affected"]) > 0
 
     after = state.shear_timeseries_df
-    assert after is before  # same object, never recomputed or invalidated
+    assert after is before  # still not silently recomputed...
     assert int(len(after.dropna())) == records_before
     assert float(after.iloc[:, 0].dropna().mean()) == pytest.approx(mean_alpha_before)
+
+    # ...but it is now flagged as no longer matching the measured data.
+    assert state.derived_is_stale("shear_timeseries")
+    report = state.staleness_report()
+    assert "shear_timeseries" in report["stale_artifacts"]
+    assert "warning" in report
 
     # Recomputing on the cleaned data gives a different answer, so the stale value mattered.
     _calculate_shear_timeseries(state, height_sensors)
@@ -191,9 +213,9 @@ def test_cleaning_does_not_invalidate_a_shear_result_computed_before_it():
     assert recomputed is not None
     assert int(len(recomputed.dropna())) < records_before
 
-    # And no cache-identity field exists that a consumer could check.
-    assert not hasattr(state, "shear_data_version")
-    assert "data_version" not in {str(key) for key in state.runconfig}
+    # Recomputing on the current data clears the flag.
+    state.stamp_derived("shear_timeseries")
+    assert not state.derived_is_stale("shear_timeseries")
 
 
 def test_undoing_a_cleaning_rule_silently_deletes_the_hub_height_column():
@@ -205,10 +227,12 @@ def test_undoing_a_cleaning_rule_silently_deletes_the_hub_height_column():
     ever writes and which therefore never holds those derived columns. So undoing
     any cleaning rule deletes the hub-height series.
 
-    The dangerous part is the asymmetry: ``ltc_results``, ``ensemble_df`` and
-    ``latest_uncertainty`` survive untouched, so the session keeps reporting
-    long-term numbers derived from a hub-height column that no longer exists and
-    can no longer be reproduced or checked.
+    The dangerous part was the asymmetry: ``ltc_results``, ``ensemble_df`` and
+    ``latest_uncertainty`` survived untouched, so the session kept reporting long-term
+    numbers derived from a hub-height column that no longer existed.
+
+    Undo still rebuilds from raw — that is its job — but it now reports the derived columns
+    it removed and bumps the data version, so everything downstream is flagged stale.
     """
     from server.tools.extrapolation import _extrapolate_to_hub_height
     from server.tools.cleaning import _undo_cleaning_rule
@@ -231,24 +255,51 @@ def test_undoing_a_cleaning_rule_silently_deletes_the_hub_height_column():
     # Stand in for downstream long-term results that were derived from the hub column.
     state.ltc_results["linear_least_squares"] = {"metrics": {"r_squared": 0.91}, "df": pd.DataFrame()}
 
-    _undo_cleaning_rule(state, 0)
+    result = _undo_cleaning_rule(state, 0)
 
-    assert hub_column not in state.timeseries_df.columns  # silently gone
-    assert "shear_coefficient" not in state.timeseries_df.columns
-    # ...while everything derived from it is still presented as current.
+    assert hub_column not in state.timeseries_df.columns  # still removed...
+    # ...but no longer silently: the response names it.
+    assert hub_column in result["dropped_columns"]
+    assert "warning" in result
+
+    # Everything derived from it survives in state, and is flagged as stale.
     assert "linear_least_squares" in state.ltc_results
     assert state.shear_timeseries_df is not None
+    assert "hub_height_series" in result["stale_artifacts"]
 
 
-def test_reanalysis_is_the_only_stage_with_a_cache_identity_guard():
-    """Establish the baseline: exactly one derived artifact tracks what it was built from.
+def test_every_derived_artifact_now_tracks_the_data_version_it_was_built_from():
+    """F-11 — FIXED. Regression test: derived artifacts must be stamped and comparable.
 
-    ``reanalysis_cache_identity`` exists for reanalysis. Shear tables, LTC results,
-    the ensemble and the uncertainty result have no equivalent, which is why the
-    staleness above goes undetected. Recorded so a fix can extend the existing
-    pattern rather than invent a new one.
+    Before the fix, ``reanalysis_cache_identity`` was the *only* artifact that tracked what
+    it was built from. Shear tables, LTC results, the ensemble and the uncertainty result
+    had no equivalent, which is why cleaning could silently invalidate all of them.
+
+    A monotonic ``data_version`` on the session is bumped by every mutation of the measured
+    working data, and each derived artifact records the version it was built from, so any
+    consumer can compare.
     """
     state = SessionState()
     state.reset()
-    identity_fields = [name for name in vars(state) if "cache_identity" in name or name.endswith("_version")]
-    assert identity_fields == ["reanalysis_cache_identity"]
+
+    assert state.data_version == 0
+    assert state.derived_versions == {}
+    assert state.stale_artifacts() == []
+
+    state.stamp_derived("shear_table")
+    assert not state.derived_is_stale("shear_table")
+
+    state.bump_data_version()
+    assert state.data_version == 1
+    assert state.derived_is_stale("shear_table")
+    assert state.stale_artifacts() == ["shear_table"]
+
+    report = state.staleness_report()
+    assert report["data_version"] == 1
+    assert report["stale_artifacts"] == ["shear_table"]
+    assert "warning" in report
+
+    # Recomputing clears it.
+    state.stamp_derived("shear_table")
+    assert state.stale_artifacts() == []
+    assert "warning" not in state.staleness_report()

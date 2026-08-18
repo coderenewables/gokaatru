@@ -224,21 +224,18 @@ def test_hub_extrapolation_within_the_defensible_ratio_raises_no_warning():
     assert result["warning"] is None
 
 
-def test_profile_fit_alpha_uses_per_column_means_not_concurrent_records():
-    """FINDING F-18 (HIGH): the reported profile alpha averages each height over its own records.
+def test_profile_fit_alpha_uses_concurrent_records():
+    """F-18 (HIGH) — FIXED. Regression test: the mean profile must come from concurrent records.
 
-    ``_profile_fit_metrics`` builds the mean profile as ``df[col].mean()`` per
-    column, so when the top sensor has a seasonal gap the two means describe
-    different periods. Measured on a site with 0.10 summer / 0.32 winter shear
-    whose 100 m sensor is lost for one summer: the reported alpha is 0.244 where
-    the concurrent-record answer is 0.320 — an error of -0.076 in alpha, worth
-    -3.0% on hub-height speed at 150 m.
+    The bug: `_profile_fit_metrics` built the mean profile as ``df[col].mean()`` per column,
+    so when the top sensor had a gap the two means described different periods. Measured on
+    a site with 0.10 summer / 0.32 winter shear whose 100 m sensor was lost for one summer,
+    the reported alpha was **0.244** against a concurrent-record answer of **0.320** — an
+    error of -0.076, worth **-3.0%** on hub-height speed at 150 m. Losing a top sensor for a
+    season is ordinary, so this was the normal case rather than an edge one.
 
-    Scope: this is the *reporting* path (`compute_vertical_structure`, Sensor
-    Overview). Extrapolation itself uses ``_compute_pairwise_shear``, which does
-    require both heights valid per record, so AEP is not affected — but this is
-    the alpha an analyst reads to sanity-check the site or to configure a manual
-    extrapolation.
+    The fix drops to records where every selected height is valid, and reports
+    `records_used` / `concurrent_fraction` so a profile fitted on a thin overlap is visible.
     """
     rng = np.random.default_rng(11)
     index = pd.date_range(*YEAR, freq="10min", tz="UTC")
@@ -252,15 +249,27 @@ def test_profile_fit_alpha_uses_per_column_means_not_concurrent_records():
     gappy = frame.copy()
     gappy.loc[summer, "Spd_100m"] = np.nan
 
-    from_code = _profile_fit_metrics(height_map, gappy)["power_law_alpha"]
-    from_concurrent = _profile_fit_metrics(height_map, gappy.dropna())["power_law_alpha"]
+    result = _profile_fit_metrics(height_map, gappy)
 
-    assert from_concurrent == pytest.approx(0.32, abs=1e-6)
-    assert from_code == pytest.approx(0.244, abs=0.005)
-    assert from_code - from_concurrent < -0.05
+    # The winter-only overlap has alpha 0.32, and that is now what is reported.
+    assert result["power_law_alpha"] == pytest.approx(0.32, abs=1e-6)
+    assert result["power_law_alpha_basis"] == "log_log_fit_to_concurrent_mean_profile"
 
-    hub_error = (150 / 100.0) ** from_code / (150 / 100.0) ** from_concurrent - 1.0
-    assert hub_error < -0.02  # 3% low
+    # Hub-height error against the truth is now nil, where it was -3.0%.
+    hub_error = (150 / 100.0) ** result["power_law_alpha"] / (150 / 100.0) ** 0.32 - 1.0
+    assert abs(hub_error) < 1e-6
+
+    # The cost of the concurrency requirement is reported.
+    assert result["records_used"] == int((~summer).sum())
+    assert result["records_available"] == len(index)
+    assert 0.6 < result["concurrent_fraction"] < 0.7
+
+    # No concurrent coverage at all is refused rather than silently fitted.
+    disjoint = frame.copy()
+    disjoint.loc[summer, "Spd_100m"] = np.nan
+    disjoint.loc[~summer, "Spd_60m"] = np.nan
+    with pytest.raises(ValueError, match="no concurrent coverage"):
+        _profile_fit_metrics(height_map, disjoint)
 
 
 def test_vertical_structure_reports_two_unlabelled_alphas():
@@ -286,8 +295,11 @@ def test_vertical_structure_reports_two_unlabelled_alphas():
     }
     result = _compute_vertical_structure(state)
 
+    # They remain different estimators of different quantities...
     assert result["power_law_alpha"] != pytest.approx(result["alpha"]["mean"], abs=1e-6)
-    assert "power_law_alpha_basis" not in result
+    # ...but the profile alpha now declares its basis (F-18b, partly addressed).
+    assert result["power_law_alpha_basis"] == "log_log_fit_to_concurrent_mean_profile"
+    # The per-record alpha block still carries no basis label of its own.
     assert "basis" not in result["alpha"]
 
 

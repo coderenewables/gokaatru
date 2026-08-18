@@ -405,7 +405,7 @@ def test_ensemble_weights_do_not_label_their_rmse_basis(reconciled_run: dict) ->
     was held out or in sample, so the blend cannot be audited from its output.
     """
     ensemble = reconciled_run["ensemble"]
-    assert set(ensemble) == {"status", "weights", "metrics", "component_coverage", "result_file"}
+    assert {"status", "weights", "metrics", "component_coverage", "result_file"} <= set(ensemble)
     assert "weight_basis" not in ensemble
     for payload in ensemble["metrics"].values():
         if isinstance(payload, dict):

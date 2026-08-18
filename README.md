@@ -4,7 +4,7 @@
 
 GoKaatru ships as two parts that work together:
 
-- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **222 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration, and WindKit.
+- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **223 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration, and WindKit.
 - **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison. (The backend WindKit tool surface remains available via the API/MCP server, but the frontend no longer ships a dedicated WindKit tab.)
 
 State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The frontend's convenience fields are **derived mirrors** of canonical backend keys, not independent state — the mapping is defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
@@ -202,7 +202,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 - `get_mast_marker`, `get_era5_node_markers`, `get_site_overview_map`
 
 ### Statistics
-- `compute_weibull_params`, `compute_wind_climate`, `compute_windrose_data`, `compute_diurnal_profile`, `compute_monthly_stats`, `compute_turbulence_intensity`, `compute_turbulence_analysis`, `compute_momm`, `compute_scatter_stats`, `calculate_uncertainty`
+- `compute_weibull_params`, `compute_wind_climate`, `compute_windrose_data`, `compute_diurnal_profile`, `compute_monthly_stats`, `compute_turbulence_intensity`, `compute_turbulence_analysis`, `compute_momm`, `compute_scatter_stats`, `calculate_uncertainty`, `compute_energy_sensitivity`
 
 ### Diagnostics (Sensor Overview)
 - `compute_qc_diagnostics`, `compute_sensor_comparison`, `compute_mast_effects`, `compute_mcp_readiness`, `compute_vertical_structure`
@@ -292,7 +292,6 @@ invites use:
 | SpeedSort binning | **12 sectors × 30°**, min **200** records/sector | Sparse sectors fall back to the all-sector fit; `independent_sectors` and the per-sector `sector_models` report where the fit is thin. |
 | Mast-shadow speed gate | **4.0 m/s**, min **50** records/sector | Detection is two-sided: a low ratio means `sensor_b` is shadowed, a high ratio means `sensor_a` is. Sparse sectors are reported but not flagged. |
 | `range_check` bounds | **Derived from sensor type** | wind_speed 0–50 m/s, wind_direction 0–360°, temperature −60–60 °C, pressure 80 000–110 000 Pa, humidity 0–100%. An unknown type falls back to that sensor's own data range, which makes the rule a **no-op** — an intentional fail-safe, reported as `bounds_source: "sensor_data_range"`. Explicit `min`/`max` always win. |
-| Spike detection | **median/MAD**, window 11, 4σ | Mean/σ over a centred window cannot work: a spike inflates the σ of its own window and escapes its own test. |
 | ERA5 spatial interpolation | **Scalar** for speed, **vector** for direction | Deliberately different. Vector interpolation of speed under-predicts where node directions diverge across the cell, because opposing components cancel. Reported as `speed_interpolation: "scalar"`. |
 
 ### Disclosure fields — read these before trusting a number
@@ -309,8 +308,68 @@ invites use:
 | `weights` | `run_ensemble` | Inverse-RMSE component weights, using each algorithm's **out-of-sample** RMSE where it reports one (currently XGBoost only) and its overlap RMSE otherwise. The basis is therefore mixed across components — see Known limitations. |
 | `upstream_processing` | `brighthub_import_location` | BrightHub cleaning, calibration and offsets applied **before** GoKaatru saw the data. Recorded as a non-undoable entry at the head of the cleaning log: coverage and recovery figures describe the data as received, not the raw campaign. |
 
+### Uncertainty is reported on a wind-speed basis — converting it to energy
+
+Every component of the uncertainty model is a **percentage of wind speed**: measurement,
+vertical extrapolation, MCP and future variability. So `total_uncertainty_pct` and the
+`p_factors` beside it are **wind-speed** exceedances, and the response says so
+(`basis: "wind_speed"`).
+
+In wind resource assessment P50/P75/P90 normally name **energy** exceedances. The two are
+not the same number, and the gap is the site's energy sensitivity factor:
+
+```
+S = d(ln AEP) / d(ln U)
+```
+
+`calculate_uncertainty` measures S on the session's own long-term series and returns it
+under `energy_sensitivity`, together with the arithmetic. `compute_energy_sensitivity`
+does the same on demand for any figure you pass it.
+
+**To convert:**
+
+| step | |
+|---|---|
+| 1 | Take the reported wind-speed uncertainty, e.g. **5.66%** |
+| 2 | Multiply by this site's S, e.g. **1.22** |
+| 3 | That gives **6.90%** — the energy uncertainty implied by the wind-speed uncertainty |
+| 4 | Apply the exceedance quantiles to the *energy* figure: `P90 = AEP × (1 − 1.282 × 6.90/100) = AEP × 0.9116` |
+
+**Do not** apply the wind-speed `p_factors` to an energy yield. They are speed
+exceedances; using them directly on AEP understates the energy band by a factor of S.
+
+**S is not a constant.** It falls as a site sits higher on the power curve, because more
+hours at rated power means extra wind speed buys no extra energy. Measured against the
+generic curve GoKaatru ships:
+
+| site mean speed | gross CF | S |
+|---|---|---|
+| 5.5 m/s | 27% | **2.12** |
+| 6.5 m/s | 37% | 1.70 |
+| 7.5 m/s | 46% | 1.37 |
+| 8.5 m/s | 54% | 1.10 |
+| 10.5 m/s | 65% | **0.64** |
+
+The gap between the two bases is therefore **widest at marginal sites** — exactly where
+the P90 decides whether a project is financeable. A fixed multiplier would be wrong in
+both directions.
+
+**Two caveats that matter.**
+
+The power curve is **generic** — a 4.2 MW, 150 m rotor machine at 238 W/m², roughly IEC
+class IIA — chosen to give the right shape and order, not to represent a specific turbine.
+S is turbine-specific, so recompute it with the project machine before publishing.
+
+And the converted figure is a **floor, not an estimate**. It propagates the wind-speed
+uncertainty only. A bankable energy uncertainty must also carry power-curve, wake,
+availability, electrical-loss and flow-modelling terms — none of which GoKaatru models.
+
 ### Known limitations
 
+- **No energy yield is computed.** GoKaatru characterises the wind *resource* and stops
+  short of the *yield*: there is no project AEP, no capacity factor and no loss model.
+  The energy sensitivity factor above exists to make the speed-to-energy conversion
+  explicit, not to substitute for an energy assessment.
 - **Confidence intervals are not rigorous.** `ols_confidence_intervals` uses the
   t-distribution but assumes independent residuals. Wind speed is strongly
   autocorrelated, so the effective sample size is a fraction of `n` and the

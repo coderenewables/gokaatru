@@ -601,7 +601,6 @@ def _plot_qc_flags(state: SessionState) -> dict:
     figure = go.Figure()
     for key, label in [
         ("range_failures", "Range"),
-        ("spike_failures", "Spikes"),
         ("flatline_records", "Flat-line records"),
         ("removed_after_cleaning", "Removed by cleaning"),
     ]:

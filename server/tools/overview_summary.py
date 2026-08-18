@@ -110,7 +110,6 @@ def _compute_overview_summary(state: SessionState, speed_sensor: str = "", direc
     ]))
     _add_optional(items, lambda: _compute_qc_diagnostics(state), lambda result: items.extend([
         _entry("QC", "Range failures", sum(int(row["range_failures"]) for row in result["sensors"])),
-        _entry("QC", "Spike failures", sum(int(row["spike_failures"]) for row in result["sensors"])),
     ]))
     _add_optional(items, lambda: _compute_mcp_readiness(state, speed), lambda result: items.extend([
         _entry("MCP readiness", "Concurrent hours", int(result["concurrent_hours"])),

@@ -96,23 +96,3 @@ def detect_timestep_minutes(df: pd.DataFrame) -> int:
             "check that the time column parses as dates."
         )
     return inferred
-
-
-def rolling_median_mad_spike_mask(series: pd.Series, window: int = 11, sigma: float = 4.0) -> pd.Series:
-    """Return boolean mask identifying spikes using robust median/MAD outlier detection.
-
-    Median/MAD is not biased by the outlier itself, unlike mean/std where the
-    spike inflates its own window statistics.  The 1.4826 scaling factor makes MAD
-    consistent with standard deviation for Gaussian data.
-
-    Constant stretches (MAD == 0) produce a False mask — stuck-sensor detection
-    is handled separately by the ``stuck_sensor`` cleaning rule.
-
-    Both ``cleaning.py`` and ``diagnostics.py`` call this shared helper so the
-    spike algorithm cannot silently diverge between the filter and the QC panel.
-    """
-    median = series.rolling(window=window, center=True, min_periods=2).median()
-    mad = (series - median).abs().rolling(window=window, center=True, min_periods=2).median() * 1.4826
-    # Constant stretches → MAD = 0 → avoid division by zero → mask is all False
-    mad = mad.replace(0.0, np.nan)
-    return (series - median).abs() > sigma * mad

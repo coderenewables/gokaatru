@@ -691,11 +691,16 @@ def extract_era5(
 def interpolate_era5(
     session_id: str,
     state: Annotated[SessionState, Depends(get_session_state)],
+    source: str = "era5",
 ) -> dict:
-    """Interpolate loaded ERA5 node datasets to the site location for the current session."""
+    """Interpolate loaded reanalysis node datasets to the site location for the current session.
+
+    ``source`` is ``"era5"`` (default) or ``"merra2"`` and selects which downloaded
+    reanalysis becomes the long-term reference (F-58).
+    """
     del session_id
     try:
-        result = _interpolate_era5_to_site(state)
+        result = _interpolate_era5_to_site(state, source)
     except ValueError as exc:
         raise to_bad_request(exc) from exc
     state.touch()
@@ -752,7 +757,13 @@ def run_clipping(
     """Run clipping analysis for one corrected source series in the current session."""
     del session_id
     try:
-        return _run_clipping_analysis(state, body.speed_col, body.source)
+        return _run_clipping_analysis(
+            state,
+            body.speed_col,
+            body.source,
+            min_window_years=body.min_window_years,
+            climate_deviation_exponent=body.climate_deviation_exponent,
+        )
     except ValueError as exc:
         raise to_bad_request(exc) from exc
 
@@ -832,6 +843,9 @@ def calculate_uncertainty(
             body.iav_pct,
             body.shear_std,
             body.is_interpolation,
+            body.project_life_years,
+            body.concurrent_months_cap,
+            body.component_correlation,
         )
     except ValueError as exc:
         raise to_bad_request(exc) from exc

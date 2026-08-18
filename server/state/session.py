@@ -52,6 +52,9 @@ class SessionState:
     ltc_results: dict[str, dict[str, object]]
     ensemble_df: pd.DataFrame | None
     clipping_result: dict[str, object] | None
+    # How the measured series was aligned and resampled for the most recent LTC match
+    # (F-07 interval labelling, F-66 hourly coverage gate).
+    ltc_matching_disclosure: dict[str, object]
     data_version: int
     derived_versions: dict[str, int]
     latest_uncertainty: dict[str, object] | None
@@ -100,6 +103,7 @@ class SessionState:
         self.ltc_results = {}
         self.ensemble_df = None
         self.clipping_result = None
+        self.ltc_matching_disclosure = {}
         self.data_version = 0
         self.derived_versions = {}
         self.latest_uncertainty = None
@@ -274,6 +278,68 @@ class SessionState:
             if isinstance(value, (int, float)) and value > 0.0:
                 return float(value)
         return None
+
+    def clock_disclosure(self) -> dict[str, object]:
+        """Describe which clock hour-of-day bins are counted on, and the site offset (F-02).
+
+        Ingest converts every index to UTC (D8) and nothing converts back, so all
+        hour-of-day binning — diurnal profiles, the 12x24 shear and roughness tables, MoMM —
+        counts UTC hours.  That is physically self-consistent, because a table and its
+        lookup share the clock, and it is why the binning is left alone.  What was wrong is
+        that the hours are analyst-facing: a 14:00 local peak at UTC+5:30 was reported at
+        08:00 or 09:00 with nothing saying so.
+
+        The offset is reported when the datamodel declared a timezone, so a reader can map
+        the reported hour onto site local time.  Where the zone observes DST the offset is
+        the standard-time one, which is the clock a logger runs on.
+        """
+        disclosure: dict[str, object] = {
+            "hour_basis": "utc",
+            "hour_note": (
+                "Hour-of-day bins count UTC hours, not site local time. Bins and lookups "
+                "share this clock so the physics is self-consistent, but a diurnal peak "
+                "appears at its UTC hour."
+            ),
+        }
+        offset = self.site_utc_offset_hours()
+        if offset is not None:
+            disclosure["site_utc_offset_hours"] = offset
+            disclosure["local_hour_note"] = (
+                f"Add {offset:+g} h to a reported hour to read it as site local time."
+            )
+        else:
+            disclosure["site_utc_offset_hours"] = None
+            disclosure["local_hour_note"] = (
+                "No timezone was declared in the datamodel, so the UTC hours cannot be "
+                "mapped to site local time. Declare offset_from_utc_hrs or an IANA zone."
+            )
+        return disclosure
+
+    def site_utc_offset_hours(self) -> float | None:
+        """Return the site's standard-time UTC offset in hours, when a timezone is known."""
+        if self.timezone is None:
+            return None
+        # Midwinter in either hemisphere: probing both and taking the smaller magnitude
+        # yields standard time rather than whichever season happens to be summer.
+        probes = [datetime(2021, 1, 15, 12), datetime(2021, 7, 15, 12)]
+        offsets = []
+        for probe in probes:
+            try:
+                delta = probe.replace(tzinfo=self.timezone).utcoffset()  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                return None
+            if delta is not None:
+                offsets.append(delta.total_seconds() / 3600.0)
+        if not offsets:
+            return None
+        return float(min(offsets, key=abs))
+
+    def local_hours_for(self, hours: list[int]) -> list[int] | None:
+        """Map UTC hour-of-day bins onto site local hours, when the offset is known."""
+        offset = self.site_utc_offset_hours()
+        if offset is None:
+            return None
+        return [int((hour + offset) % 24) for hour in hours]
 
     def get_shear_min_speed_mps(self, default: float) -> float:
         """Return the shear valid-record speed gate from runconfig, else ``default`` (D3)."""

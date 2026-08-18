@@ -141,11 +141,18 @@ def _compute_diurnal_profile(state: SessionState, sensor_name: str) -> dict:
     """Compute hour-of-day mean wind speed using the Phase 1 diurnal profile convention."""
     series = _require_series_from_state(state, sensor_name)
     hourly = series.groupby(series.index.hour).mean().reindex(range(24))
-    return {
+    hours = list(range(24))
+    result: dict[str, object] = {
         "sensor": sensor_name,
-        "hours": list(range(24)),
+        "hours": hours,
         "mean_speeds": [float(value) if pd.notna(value) else float("nan") for value in hourly.tolist()],
+        # The bins are UTC hours and always have been; only now do they say so (F-02).
+        **state.clock_disclosure(),
     }
+    local_hours = state.local_hours_for(hours)
+    if local_hours is not None:
+        result["hours_local"] = local_hours
+    return result
 
 
 def _compute_monthly_stats(state: SessionState, sensor_name: str) -> dict:
@@ -249,10 +256,29 @@ def _compute_wind_climate(state: SessionState, speed_sensor: str, direction_sens
             "prevailing_sector": max(sectors, key=lambda sector: float(sector["occurrence_pct"]))["label"],
         }
     exceedance = {f"p{level}": float(positive.quantile(1.0 - level / 100.0)) for level in (50, 75, 90, 95)}
+    calm_records = int(len(speed) - len(positive))
+    # F-03.  `mean_speed` had two definitions under one key: `compute_weibull_params`
+    # reported the calm-inclusive mean, matching the documented contract, while this tool
+    # reported `positive.mean()` and neither response said which. The documented contract
+    # wins, so `mean_speed` is now calm-inclusive here too; the calm-exclusive figure and
+    # its record count are kept under names that say what they are, because the
+    # exceedance block and the histogram genuinely are computed on the positive subset.
     return {
         "speed_sensor": speed_sensor,
-        "record_count": int(len(positive)),
-        "mean_speed": float(positive.mean()),
+        "record_count": int(len(speed)),
+        "mean_speed": float(speed.mean()),
+        "mean_speed_basis": "calm_inclusive",
+        "mean_speed_excluding_calms": float(positive.mean()),
+        "calm_records": calm_records,
+        "calm_fraction": float(calm_records / len(speed)) if len(speed) else 0.0,
+        "positive_record_count": int(len(positive)),
+        "exceedance_basis": "calm_exclusive",
+        "basis_note": (
+            "mean_speed and record_count include calms, matching compute_weibull_params and "
+            "the documented contract. The exceedance quantiles and the Weibull fit histogram "
+            "are computed on the positive subset only, so they are labelled calm-exclusive; "
+            f"{calm_records:,} record(s) read zero or below."
+        ),
         "cube_mean_speed": float(np.cbrt(np.mean(positive.to_numpy(dtype=float) ** 3))),
         "weibull_k": float(shape_k),
         "weibull_A": float(scale_a),

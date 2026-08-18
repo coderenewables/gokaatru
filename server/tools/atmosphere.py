@@ -164,6 +164,13 @@ def _compute_atmospheric_conditions(
         pressure_sensor,
         humidity_sensor,
     )
+    mean_density = float(density.dropna().mean())
+    # F-57: the correction factor used to be computed here, displayed, and applied to
+    # nothing. Persisting the mean density is what lets the energy-sensitivity path
+    # normalise speed to the power curve's reference density, per IEC 61400-12-1.
+    if mean_density > 0.0:
+        state.runconfig["mean_air_density_kgm3"] = mean_density
+        state.touch()
     result: dict[str, object] = {
         "temperature_sensor": temperature_name,
         "pressure_sensor": pressure_name,
@@ -172,7 +179,13 @@ def _compute_atmospheric_conditions(
         "pressure": _series_summary(_clean_atmospheric_series(frame[pressure_name], "pressure")),
         "air_density": {
             **_series_summary(density),
-            "density_correction_factor": float(density.dropna().mean() / ISA_SEA_LEVEL_DENSITY),
+            "density_correction_factor": float(mean_density / ISA_SEA_LEVEL_DENSITY),
+            "density_correction_is_applied_to": (
+                "the energy sensitivity factor, as the IEC speed normalisation "
+                "U*(rho/rho0)^(1/3). It is not applied to reported wind speeds, which stay "
+                "as measured, nor to wind power density, which correctly uses actual "
+                "density with actual speed."
+            ),
             "humidity_basis": "measured" if humidity_name else "assumed_dry",
             "height_basis": "pressure_sensor_height",
         },

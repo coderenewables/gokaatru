@@ -43,12 +43,30 @@ def test_ensemble_weights_sum_to_one(sample_timeseries_df: pd.DataFrame) -> None
 
 
 def test_clipping_returns_optimal_year() -> None:
-    """Verify clipping analysis prefers the post-shift stable period when early years are biased low."""
+    """Verify clipping prefers the post-shift period once the minimum-window floor allows it.
+
+    The default ``min_window_years`` floor of 10 (F-50) interacts with a regime shift: on
+    this 21-year series the post-shift period is only 11 years, and the objective's climate
+    term penalises it heavily because a near-constant window has almost no spread against
+    which to judge its deviation from the recent-climate reference. With the floor lifted to
+    the pre-fix behaviour the post-shift period is chosen as before.
+
+    A 33% step change is a homogeneity failure, not a window-selection problem —
+    ``analyze_homogeneity`` is the tool that detects it, and the clipping objective should
+    not be relied on to route around one.
+    """
     index = pd.date_range("2000-01-01", "2020-12-31", freq="ME")
     values = np.where(index.year < 2010, 6.0, 8.0) + 0.05 * np.sin(np.arange(len(index)))
     session.ensemble_df = pd.DataFrame({"Timestamp": index, "Ensemble_Speed": values})
-    result = run_clipping_analysis("Ensemble_Speed")
-    assert result["optimal_start_year"] >= 2010
+
+    unconstrained = run_clipping_analysis("Ensemble_Speed", min_window_years=1)
+    assert unconstrained["optimal_start_year"] >= 2010
+
+    floored = run_clipping_analysis("Ensemble_Speed")
+    assert floored["min_window_years"] == 10
+    assert floored["selected_n_years"] >= 10
+    # The unconstrained answer travels with the result either way.
+    assert floored["unconstrained_optimal_start_year"] >= 2010
 
 
 def test_pettitt_detects_shift() -> None:

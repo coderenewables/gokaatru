@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 
 from server.core.formulas import (
+    ROUGHNESS_MAX_M,
     air_density_iec,
     log_law_extrapolate,
     power_law_extrapolate,
@@ -121,23 +122,40 @@ def test_log_law_extrapolation_round_trips():
     assert predicted == pytest.approx(speeds[2], rel=1e-9)
 
 
-def test_roughness_clamp_ceiling_excludes_forest_and_urban():
-    """FINDING (Step 5 lead): the 1.5 m z0 ceiling silently truncates forest/urban roughness.
+def test_roughness_ceiling_covers_forest_and_urban():
+    """F-05 (MEDIUM) — FIXED. The z0 ceiling no longer truncates forest and urban terrain.
 
-    WAsP roughness class 3 and dense forest/urban terrain reach z0 of 1.5-2.0 m.
-    A site whose profile genuinely implies z0 = 1.8 m is clamped to 1.5 m, which
-    *raises* the log-law extrapolation to hub height. The clamp flag is returned,
-    but the number is still produced.
+    The bug: the ceiling was 1.5 m, while WAsP roughness class 3 and dense forest or urban
+    terrain reach 1.5–2.0 m. A site whose profile genuinely implied z0 = 1.8 m was clamped
+    to 1.5 m, and the clamp *raises* the log-law extrapolation to hub height — so it was not
+    a conservative backstop, it made the site look windier than its own profile said. The
+    flag was returned, but the number was still produced.
+
+    The ceiling is now 2.0 m, which covers the standard classes. It is still a clamp: above
+    that, a value is far more likely a bad fit than real terrain, and it still reports itself.
     """
     heights = np.array([60.0, 100.0])
+
+    # Forest-class roughness is now recovered exactly rather than truncated.
     speeds = log_law_profile(heights, z0_m=1.8)
     recovered, was_clamped = roughness_from_two_heights(speeds[0], heights[0], speeds[1], heights[1])
-    assert was_clamped is True
-    assert recovered == pytest.approx(1.5)
-    # And the clamp biases hub-height speed upward, so it is not a safe backstop.
+    assert was_clamped is False
+    assert recovered == pytest.approx(1.8, rel=1e-9)
     truth = log_law_extrapolate(speeds[1], 100.0, 150.0, 1.8)
-    clamped = log_law_extrapolate(speeds[1], 100.0, 150.0, recovered)
-    assert clamped < truth
+    assert log_law_extrapolate(speeds[1], 100.0, 150.0, recovered) == pytest.approx(truth, rel=1e-9)
+
+    # The clamp still exists above the plausible band, and still says so.
+    implausible = log_law_profile(heights, z0_m=6.0)
+    clamped_value, clamped_flag = roughness_from_two_heights(
+        implausible[0], heights[0], implausible[1], heights[1]
+    )
+    assert clamped_flag is True
+    assert clamped_value == pytest.approx(ROUGHNESS_MAX_M) == pytest.approx(2.0)
+    # And when it does bite, it still biases hub speed upward — which is why the band
+    # matters rather than the clamp being removed outright.
+    assert log_law_extrapolate(implausible[1], 100.0, 150.0, clamped_value) < log_law_extrapolate(
+        implausible[1], 100.0, 150.0, 6.0
+    )
 
 
 def test_rowwise_log_fit_recovers_roughness_from_three_heights():
@@ -358,16 +376,19 @@ def test_weibull_wasp_fit_recovers_known_distribution():
     assert result["fit_excludes_calms"] is False
 
 
-def test_mean_speed_is_calm_inclusive_in_weibull_but_calm_exclusive_in_wind_climate():
-    """FINDING (Step 1, confirmed): two tools report `mean_speed` under one key with two definitions.
+def test_mean_speed_is_calm_inclusive_in_both_tools():
+    """F-03 (MEDIUM) — FIXED. One key, one definition, and every basis labelled.
 
-    The documented contract is that ``mean_speed`` is always the full-series mean
-    including calms, "consistent with MoMM and the monthly means".
-    ``_compute_weibull_params`` honours that. ``_compute_wind_climate`` computes
-    ``positive.mean()`` — calms excluded — and also draws ``record_count`` and the
-    whole ``exceedance`` block from the positive subset only. For a site with a
-    real calm fraction the two tools disagree about the same sensor's mean wind
-    speed, and nothing in either response says which basis was used.
+    The documented contract is that ``mean_speed`` is always the full-series mean including
+    calms, "consistent with MoMM and the monthly means". ``_compute_weibull_params`` honoured
+    it; ``_compute_wind_climate`` computed ``positive.mean()`` — calms excluded — and also
+    drew ``record_count`` and the whole ``exceedance`` block from the positive subset. For a
+    site with a real calm fraction the two tools disagreed about the same sensor's mean wind
+    speed, and nothing in either response said which basis was used.
+
+    The documented contract wins. The calm-exclusive figures are still available, under names
+    that say what they are, because the exceedance quantiles and the fit histogram genuinely
+    are computed on the positive subset.
     """
     pytest.importorskip("windkit")
     index = timestamp_index("2021-01-01", periods=20_000, step_minutes=10)
@@ -385,12 +406,19 @@ def test_mean_speed_is_calm_inclusive_in_weibull_but_calm_exclusive_in_wind_clim
     full_series_mean = float(np.mean(speeds))
     positive_only_mean = float(np.mean(speeds[speeds > 0]))
 
+    # The two tools now agree, on the documented basis.
     assert weibull["mean_speed"] == pytest.approx(full_series_mean, rel=1e-12)
-    assert climate["mean_speed"] == pytest.approx(positive_only_mean, rel=1e-12)
-    assert climate["mean_speed"] > weibull["mean_speed"]
-    # Neither response labels its basis, so the disagreement is undetectable downstream.
-    assert "calm_fraction" not in climate
-    assert "mean_speed_basis" not in climate
+    assert climate["mean_speed"] == pytest.approx(full_series_mean, rel=1e-12)
+    assert climate["mean_speed_basis"] == "calm_inclusive"
+    assert climate["record_count"] == len(index)
+
+    # The calm-exclusive quantities are still reported, named for what they are.
+    assert climate["mean_speed_excluding_calms"] == pytest.approx(positive_only_mean, rel=1e-12)
+    assert climate["calm_fraction"] == pytest.approx(calm_fraction, rel=1e-12)
+    assert climate["calm_records"] == int((speeds == 0).sum())
+    assert climate["positive_record_count"] == int((speeds > 0).sum())
+    assert climate["exceedance_basis"] == "calm_exclusive"
+    assert "calm-exclusive" in climate["basis_note"]
 
 
 def test_momm_of_a_complete_constant_year_equals_that_constant():

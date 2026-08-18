@@ -47,19 +47,29 @@ def shear_from_two_heights(v1: float, h1: float, v2: float, h2: float) -> float:
     return float(math.log(v2 / v1) / math.log(h2 / h1))
 
 
+# Physically plausible roughness-length band (F-05).  The ceiling used to be 1.5 m, which
+# truncates forest and dense-urban terrain: WAsP roughness class 3 and above reach 1.5-2.0 m
+# and city centres go higher still.  The clamp *raises* log-law hub-height speed, so a
+# ceiling that bites is not a conservative backstop - it makes the site look windier than
+# the profile says.  2.0 m covers the standard classes; anything above that is far more
+# likely a bad fit than real terrain, so the clamp still exists and still reports itself.
+ROUGHNESS_MIN_M = 1e-6
+ROUGHNESS_MAX_M = 2.0
+
+
 def roughness_from_two_heights(v1: float, h1: float, v2: float, h2: float) -> tuple[float, bool]:
     """Compute roughness length from two heights using the IEC logarithmic profile relationship.
 
-    Returns (z0, was_clamped).  The raw z0 is clamped to the physically
-    plausible range [1e-6, 1.5] metres, matching the guard already applied in
+    Returns (z0, was_clamped).  The raw z0 is clamped to the physically plausible range
+    ``[ROUGHNESS_MIN_M, ROUGHNESS_MAX_M]`` metres, matching the guard applied in
     ``_fit_rowwise_log_profile`` (shear.py) and the extrapolation tool.
     """
     if min(v1, v2) <= 0 or min(h1, h2) <= 0 or h1 == h2 or v1 == v2:
         return float(np.nan), False
     exponent = (v2 * math.log(h1) - v1 * math.log(h2)) / (v2 - v1)
     z0 = float(math.exp(exponent))
-    was_clamped = z0 < 1e-6 or z0 > 1.5
-    z0 = float(np.clip(z0, 1e-6, 1.5))
+    was_clamped = z0 < ROUGHNESS_MIN_M or z0 > ROUGHNESS_MAX_M
+    z0 = float(np.clip(z0, ROUGHNESS_MIN_M, ROUGHNESS_MAX_M))
     return z0, was_clamped
 
 

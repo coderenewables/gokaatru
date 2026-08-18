@@ -17,6 +17,7 @@ import pytest
 import server.main  # noqa: F401 — establishes tool-module import order
 from server.state.session import SessionState
 from server.tools.clipping import (
+    CLIMATE_DEVIATION_EXPONENT,
     CLIMATE_FLOOR,
     CLIMATE_MAX,
     CLIMATE_SCALE,
@@ -201,7 +202,9 @@ def test_years_dropped_by_the_objective_are_reported_separately():
     distinct cause from the completeness gate.
     """
     state = _annual_series_state(10)
-    result = _run_clipping_analysis(state, "Ensemble_Speed", "ensemble")
+    # Unconstrained: the F-50 minimum-window floor would select the whole record and there
+    # would be no dropped years left to report on. The disclosure is what is under test.
+    result = _run_clipping_analysis(state, "Ensemble_Speed", "ensemble", min_window_years=1)
     selected = _selected(result)
 
     assert len(result["years_used"]) == 10
@@ -230,7 +233,7 @@ def test_selected_window_iav_is_reported_alongside_the_full_series_iav():
     prefers them, so the uncertainty term now describes the period actually chosen.
     """
     state = _annual_series_state(10)
-    result = _run_clipping_analysis(state, "Ensemble_Speed", "ensemble")
+    result = _run_clipping_analysis(state, "Ensemble_Speed", "ensemble", min_window_years=1)
     selected = _selected(result)
 
     # The two remain genuinely different quantities; both are now reported.
@@ -244,35 +247,59 @@ def test_selected_window_iav_is_reported_alongside_the_full_series_iav():
 # ---------------------------------------------------------------------------
 
 
-def test_objective_can_select_a_window_far_shorter_than_the_record():
-    """FINDING F-50: on a 10-year record the objective selected 6 years, and 5 is permitted.
+def test_objective_respects_a_minimum_window_and_reports_the_bias():
+    """F-50 (MEDIUM) — FIXED. Five-year windows are no longer selected by default.
 
     Candidate start years run to ``[:-(REFERENCE_WINDOW_YEARS - 1)]``, so the shortest
-    candidate window is 5 years — not a long-term period by any published standard.
+    candidate window was 5 years — not a long-term period by any published standard. And
+    there was a structural bias underneath: every candidate ends at the final year, so every
+    candidate *contains* the 5-year reference window and the shortest candidate **is** that
+    window. Its ``lta_ratio`` is exactly 1.0, its deviation exactly 0, and its climate term
+    pinned at the exact minimum — an advantage no other candidate can beat and none earned
+    from the data. Measured: a 10-year record selected 6 years.
 
-    There is also a structural bias. Every candidate ends at the final year, so every
-    candidate *contains* the 5-year reference window, and the shortest candidate **is**
-    that window: its ``lta_ratio`` is exactly 1.0, its deviation exactly 0, and its
-    climate term pinned at the exact minimum. Short windows therefore start with an
-    advantage on the climate term that they did not earn from the data.
+    The candidate set is now floored at 10 years, the default matching common practice, and
+    the unconstrained optimum is still reported so the constraint is visible rather than
+    hidden. The floor is a parameter, not a wall.
     """
     state = _annual_series_state(10)
     result = _run_clipping_analysis(state, "Ensemble_Speed", "ensemble")
-    selected = _selected(result)
 
-    assert selected["n_years"] <= 6
-    assert selected["n_years"] < 10
+    assert result["min_window_years"] == 10
+    assert result["min_window_years_applied"] is True
+    assert result["selected_n_years"] >= 10
 
-    shortest = result["analysis_data"][-1]
+    # What the objective wanted, and why it should not have had it.
+    assert result["unconstrained_n_years"] < 10
+    assert result["unconstrained_min_uncertainty"] < result["min_uncertainty"]
+    assert "structural bias" in result["window_floor_warning"]
+    assert "no other candidate can beat" in result["structural_bias_note"]
+
+    # The bias itself is unchanged — it is a property of the formulation, not a bug to
+    # patch out — and the floor is what stops it choosing the window.
+    unconstrained = _run_clipping_analysis(
+        state, "Ensemble_Speed", "ensemble", min_window_years=1
+    )
+    shortest = unconstrained["analysis_data"][-1]
     assert shortest["n_years"] == REFERENCE_WINDOW_YEARS
     assert float(shortest["lta_ratio"]) == pytest.approx(1.0, abs=1e-12)
     floor_value = CLIMATE_FLOOR + CLIMATE_SCALE * float(np.exp(-1.0))
     assert float(shortest["climate_uncertainty"]) == pytest.approx(floor_value, rel=1e-9)
-    # No candidate can beat it on the climate term.
     assert float(shortest["climate_uncertainty"]) == pytest.approx(
-        min(float(row["climate_uncertainty"]) for row in result["analysis_data"]), rel=1e-9
+        min(float(row["climate_uncertainty"]) for row in unconstrained["analysis_data"]), rel=1e-9
     )
-    assert "min_window_years" not in result
+    assert unconstrained["selected_n_years"] <= 6
+
+
+def test_a_record_too_short_for_the_floor_still_runs_and_says_so():
+    """The floor cannot invent years: a 7-year record is analysed and warned about."""
+    state = _annual_series_state(7)
+    result = _run_clipping_analysis(state, "Ensemble_Speed", "ensemble")
+
+    assert result["min_window_years"] == 10
+    assert result["min_window_years_applied"] is False
+    assert result["selected_n_years"] < 10
+    assert "no 10-year window exists to select" in result["warning"]
 
 
 def test_climate_term_is_a_near_step_function_of_deviation():
@@ -303,6 +330,31 @@ def test_climate_term_is_a_near_step_function_of_deviation():
     # And most of the rise concentrated in the top decile.
     rise_above_0_9 = (ceiling - climate(0.9)) / (ceiling - floor_value)
     assert rise_above_0_9 > 0.6
+
+    # F-51 — FIXED as far as it can be. The shape is a property of the formulation, not a
+    # bug: what was missing was that the exponent driving it was an unnamed literal with no
+    # provenance. It is now a named, overridable parameter and every response carries a
+    # sweep showing which window each plausible value would have selected.
+    state = _annual_series_state(12, iav=0.05, trend=0.10, seed=5)
+    result = _run_clipping_analysis(state, "Ensemble_Speed", "ensemble", min_window_years=1)
+
+    assert result["climate_deviation_exponent"] == CLIMATE_DEVIATION_EXPONENT == 5.0
+    sensitivity = result["exponent_sensitivity"]
+    assert set(sensitivity["selection_by_exponent"]) == {"1", "2", "3", "5", "8"}
+    assert sensitivity["selection_by_exponent"]["5"]["start_year"] == result["optimal_start_year"]
+    assert "no stated provenance" in sensitivity["note"]
+
+    # Lowering the exponent flattens the penalty less abruptly and is honoured.
+    linear = _run_clipping_analysis(
+        state, "Ensemble_Speed", "ensemble", min_window_years=1, climate_deviation_exponent=1.0
+    )
+    assert linear["climate_deviation_exponent"] == 1.0
+    assert linear["optimal_start_year"] == sensitivity["selection_by_exponent"]["1"]["start_year"]
+
+    with pytest.raises(ValueError, match="climate_deviation_exponent must be positive"):
+        _run_clipping_analysis(
+            state, "Ensemble_Speed", "ensemble", climate_deviation_exponent=0.0
+        )
 
 
 def test_inverse_rmse_weighting_is_monotone_through_zero_rmse():
@@ -350,23 +402,24 @@ def test_inverse_rmse_weighting_is_monotone_through_zero_rmse():
         assert sum(weights.values()) == pytest.approx(1.0)
 
 
-def test_inter_component_spread_is_never_computed():
-    """FINDING F-53: the free model-uncertainty signal in the ensemble is discarded.
+def test_inter_component_spread_is_reported():
+    """F-53 (MEDIUM) — FIXED. The free model-uncertainty signal is now measured and reported.
 
-    The disagreement between LTC algorithms over the long-term period is a direct
-    empirical estimate of MCP model uncertainty, and the uncertainty model carries no
-    LTC-method term at all. ``_run_ensemble`` returns weights, blended metrics and now
-    coverage — but no spread, standard deviation or range across components, even
-    though it has every component series aligned on one index at that moment.
+    Disagreement between LTC algorithms over the long-term period is a direct empirical
+    estimate of MCP model uncertainty, and the uncertainty model carries no LTC-method term
+    at all (Step 10's F-34). ``_run_ensemble`` returned weights, blended metrics and
+    coverage but no spread, even though every component series is aligned on one index at
+    that moment.
 
-    Note what the bias correction already does: each component is shifted by its own
-    mean error against the measured overlap, so a pure *level* disagreement between
-    components is absorbed and contributes no spread. What survives is the **shape**
-    disagreement — exactly the part a slope method and a variance-ratio method differ
-    on (Step 8's F-38). Measured here with components of slope 1.15 and 0.90: a
-    per-timestamp spread of **0.20 m/s, about 2.6% of the blended mean**. That is
-    comparable to the whole MCP term the uncertainty model currently carries (0.9–1.5%),
-    and it is discarded.
+    The bias correction already shifts each component by its own mean error against the
+    measured overlap, so pure *level* disagreement is absorbed and contributes no spread.
+    What survives is the **shape** disagreement — exactly the part a slope method and a
+    variance-ratio method differ on (Step 8's F-38). Measured here with components of slope
+    1.15 and 0.90: about 0.20 m/s, roughly 2.6% of the blended mean, comparable to the whole
+    MCP term the uncertainty model carries (0.9–1.5%).
+
+    Reported, not folded into the total: combining an empirical spread with the parametric
+    ``u_mcp`` term is a methodology decision.
     """
     rng = np.random.default_rng(4)
     index = pd.date_range("2021-01-01", periods=3000, freq="h", tz="UTC")
@@ -381,13 +434,68 @@ def test_inter_component_spread_is_never_computed():
     }
     result = _run_ensemble(state, "Spd_hub")
 
-    assert set(result["metrics"]) == {"rmse", "r2", "bias"}
-    for absent in ("component_spread", "spread_std", "component_range", "model_uncertainty_pct"):
-        assert absent not in result
-        assert absent not in result["metrics"]
+    spread = result["component_spread"]
+    assert spread["available"] is True
+    assert spread["records_with_all_components"] == 3000
+    assert sorted(spread["components"]) == ["shallow", "steep"]
+    assert spread["mean_std_pct_of_blend"] > 2.0
+    assert "shape disagreement" in spread["note"]
 
-    # The signal is sitting in the saved frame, unused.
+    # It matches the signal that was previously sitting unused in the saved frame.
     frame = pd.DataFrame(state.ensemble_df)
-    spread = frame[["steep", "shallow"]].std(axis=1, ddof=0)
-    assert spread.mean() > 0.15
-    assert spread.mean() / frame["Ensemble_Speed"].mean() > 0.02
+    direct = frame[["steep", "shallow"]].std(axis=1, ddof=1)
+    assert spread["mean_std_mps"] == pytest.approx(float(direct.mean()), abs=1e-6)
+    assert spread["mean_std_mps"] > 0.15
+
+    # A single component has nothing to disagree with, and the response says so rather
+    # than reporting a spread of zero as though it were agreement.
+    state.ltc_results.pop("shallow")
+    state.ltc_results["copy"] = {
+        "df": pd.DataFrame({"Timestamp": index, "corrected_wind_speed": 1.15 * truth}),
+        "metrics": {},
+    }
+    identical = _run_ensemble(state, "Spd_hub")
+    assert identical["component_spread"]["mean_std_mps"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_ensemble_labels_the_rmse_basis_of_every_weight():
+    """F-45 (MEDIUM) — FIXED. A mixed-basis blend now declares the mixture.
+
+    ``_run_ensemble`` prefers ``out_of_sample_rmse`` where a component reports one and falls
+    back to concurrent-overlap RMSE otherwise. Only XGBoost reports the former, so its
+    weight rested on held-out error while every linear method's rested on in-sample error —
+    which is systematically lower, tilting the blend for reasons unrelated to skill. No
+    ``weight_basis`` field existed, so it could not be audited from the output.
+    """
+    rng = np.random.default_rng(11)
+    index = pd.date_range("2021-01-01", periods=3000, freq="h", tz="UTC")
+    truth = 7.5 + rng.normal(0, 2.0, 3000)
+
+    state = SessionState()
+    state.reset()
+    state.timeseries_df = pd.DataFrame({"Spd_hub": truth}, index=index)
+    state.ltc_results = {
+        "xgboost": {
+            "df": pd.DataFrame({"Timestamp": index, "corrected_wind_speed": truth + rng.normal(0, 0.6, 3000)}),
+            "metrics": {"out_of_sample_rmse": 0.9, "out_of_sample_basis": "blocked_cross_validation"},
+        },
+        "linear_least_squares": {
+            "df": pd.DataFrame({"Timestamp": index, "corrected_wind_speed": truth + rng.normal(0, 0.6, 3000)}),
+            "metrics": {},
+        },
+    }
+    result = _run_ensemble(state, "Spd_hub")
+
+    assert result["weight_basis"]["xgboost"] == "blocked_cross_validation"
+    assert result["weight_basis"]["linear_least_squares"] == "concurrent_overlap_in_sample"
+    assert result["weight_basis_is_mixed"] is True
+    assert "held-out error" in result["weight_basis_warning"]
+    assert result["weight_rmse"]["xgboost"] == 0.9
+
+    # A uniform-basis blend reports the basis without the warning.
+    state.ltc_results["xgboost"]["metrics"] = {}
+    uniform = _run_ensemble(state, "Spd_hub")
+    assert set(uniform["weight_basis"].values()) == {"concurrent_overlap_in_sample"}
+    assert uniform["weight_basis_is_mixed"] is False
+    assert "weight_basis_warning" not in uniform
+

@@ -10,6 +10,7 @@ import re
 import numpy as np
 import pandas as pd
 
+from server.core.formulas import ROUGHNESS_MAX_M, ROUGHNESS_MIN_M
 from server.core.momm import compute_weighted_momm_table
 from server.main import mcp
 from server.state.session import SessionState, session
@@ -35,6 +36,13 @@ SHEAR_CLAMP_WARNING_FRACTION = 0.05
 # roughness.  Both are now reported via `fallback_source` so the substitution is visible.
 DEFAULT_FALLBACK_ALPHA = 0.143
 DEFAULT_FALLBACK_Z0_M = 0.0002
+
+# F-20.  Directional shear drives hub-height speed, and the sector tables had no
+# record gate at all: 20 records in one sector produced a full 288-cell table of which
+# 285 cells were that sector's own mean.  SpeedSort already requires 200 records before
+# it trusts a sector fit and mast-shadow detection requires 50; this matches SpeedSort,
+# which is the closer analogue.  Overridable per run via runconfig["shear"].
+SECTOR_SHEAR_MIN_RECORDS = 200
 
 
 def _parse_height_sensors(height_sensors: str) -> dict[float, str]:
@@ -168,7 +176,7 @@ def _fit_rowwise_log_profile(speed_matrix: np.ndarray, heights: np.ndarray) -> n
     z0 = np.exp(-intercepts / slopes)
     valid_rows = (counts >= 2) & np.isfinite(slopes) & (slopes > 0.1)
     result = np.full(speed_matrix.shape[0], np.nan, dtype=float)
-    result[valid_rows] = np.clip(z0[valid_rows], 1e-6, 1.5)
+    result[valid_rows] = np.clip(z0[valid_rows], ROUGHNESS_MIN_M, ROUGHNESS_MAX_M)
     return result
 
 
@@ -494,6 +502,9 @@ def _build_shear_table(state: SessionState, aggregation: str = "mean") -> dict:
         "fallback_alpha": fallback,
         "fallback_source": fallback_source,
         "table_coverage": coverage,
+        # The 24 columns are UTC hours, and the extrapolation lookup uses the same clock,
+        # so the physics is self-consistent — but the column labels are not local (F-02).
+        **state.clock_disclosure(),
     }
     if coverage.get("warning"):
         response["warning"] = coverage["warning"]
@@ -509,7 +520,24 @@ def _build_roughness_table(state: SessionState, aggregation: str = "mean") -> di
     valid = state.roughness_timeseries_df.dropna()
     state.roughness_table = _aggregate_roughness_table(valid, aggregation)
     state.stamp_derived("roughness_table")
-    return {"method": "log_law", "aggregation": aggregation, "table": state.roughness_table.values.tolist()}
+    return {
+        "method": "log_law",
+        "aggregation": aggregation,
+        "table": state.roughness_table.values.tolist(),
+        **state.clock_disclosure(),
+    }
+
+
+def _resolve_sector_minimum(state: SessionState, requested: int | None) -> int:
+    """Return the per-sector record minimum, from the caller, the runconfig, or the default."""
+    if requested is not None:
+        return max(0, int(requested))
+    shear = state.runconfig.get("shear")
+    if isinstance(shear, dict):
+        value = shear.get("minSectorRecords")
+        if isinstance(value, (int, float)):
+            return max(0, int(value))
+    return SECTOR_SHEAR_MIN_RECORDS
 
 
 def _build_sector_shear_tables(
@@ -517,6 +545,7 @@ def _build_sector_shear_tables(
     direction_sensor: str,
     num_sectors: int = 12,
     aggregation: str = "mean",
+    min_sector_records: int | None = None,
 ) -> dict:
     """Build direction-sector-specific 12x24 shear tables using IEC directional binning and chosen aggregation."""
     if aggregation not in {"mean", "median", "momm"}:
@@ -530,16 +559,57 @@ def _build_sector_shear_tables(
         raise ValueError("Shear timeseries is not available. Run calculate_shear_timeseries first")
     joined = state.shear_timeseries_df.join(df[[direction_sensor]], how="inner").dropna()
     width = 360.0 / num_sectors
+    minimum = _resolve_sector_minimum(state, min_sector_records)
     sectors: dict[str, list[list[float]]] = {}
+    sector_records: dict[str, int] = {}
+    sector_coverage: dict[str, dict[str, object]] = {}
+    excluded: list[dict[str, object]] = []
     indices = (((joined[direction_sensor] + width / 2.0) % 360.0) // width).astype(int)
     for sector in range(num_sectors):
+        label = _sector_label(sector, num_sectors)
         sector_df = joined.loc[indices == sector, ["shear_coefficient"]]
-        if sector_df.empty:
+        count = int(len(sector_df))
+        sector_records[label] = count
+        if count < minimum:
+            # A bare ``continue`` used to drop these silently, so a sector absent for want
+            # of data was indistinguishable from a sector the wind never came from (F-20).
+            excluded.append({
+                "sector": label,
+                "records": count,
+                "reason": "empty" if count == 0 else "below_minimum_records",
+            })
             continue
-        fallback = float(sector_df["shear_coefficient"].mean()) if not sector_df.empty else DEFAULT_FALLBACK_ALPHA
+        fallback = float(sector_df["shear_coefficient"].mean())
         table = _aggregate_table(sector_df, "shear_coefficient", aggregation, fallback)
-        sectors[_sector_label(sector, num_sectors)] = table.values.tolist()
-    return {"sectors": sectors, "shear_clamping": state.shear_clamp_stats or {}}
+        sectors[label] = table.values.tolist()
+        sector_coverage[label] = _table_fill_report(table, sector_df)
+    response: dict[str, object] = {
+        "sectors": sectors,
+        "shear_clamping": state.shear_clamp_stats or {},
+        "min_sector_records": int(minimum),
+        "sector_record_counts": sector_records,
+        "sectors_excluded": excluded,
+        "sector_coverage": sector_coverage,
+        **state.clock_disclosure(),
+    }
+    thin = [
+        label
+        for label, report in sector_coverage.items()
+        if float(report.get("filled_fraction", 0.0)) > 0.5
+    ]
+    if excluded:
+        response["warning"] = (
+            f"{len(excluded)} of {num_sectors} sectors were not tabulated because they hold "
+            f"fewer than {minimum} records. Directional shear drives hub-height speed, and "
+            "SpeedSort already requires 200 records per sector before trusting a sector fit."
+        )
+    if thin:
+        response["coverage_warning"] = (
+            f"Sectors {thin} produced a full 12x24 table from a partial month-hour coverage; "
+            "more than half of each of those tables is that sector's own mean rather than an "
+            "observation."
+        )
+    return response
 
 
 def _build_aggr_momm_shear_table(
@@ -603,9 +673,16 @@ def build_roughness_table(aggregation: str = "mean") -> dict:
 
 
 @mcp.tool()
-def build_sector_shear_tables(direction_sensor: str, num_sectors: int = 12, aggregation: str = "mean") -> dict:
+def build_sector_shear_tables(
+    direction_sensor: str,
+    num_sectors: int = 12,
+    aggregation: str = "mean",
+    min_sector_records: int | None = None,
+) -> dict:
     """Build direction-sector-specific 12x24 shear tables using IEC directional binning and chosen aggregation."""
-    return _build_sector_shear_tables(session, direction_sensor, num_sectors, aggregation)
+    return _build_sector_shear_tables(
+        session, direction_sensor, num_sectors, aggregation, min_sector_records
+    )
 
 
 @mcp.tool()

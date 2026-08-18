@@ -138,6 +138,11 @@ class ClippingRequest(BaseModel):
 
     speed_col: str
     source: str = "ensemble"
+    # F-50: floors the candidate window length. Every candidate ends at the final year and
+    # so contains the reference period, which hands short windows an unearned advantage.
+    min_window_years: int = Field(10, ge=1)
+    # F-51: the exponent on the normalised deviation in the climate term.
+    climate_deviation_exponent: float = Field(5.0, gt=0)
 
 
 class HomogeneityAnalyzeRequest(BaseModel):
@@ -165,6 +170,12 @@ class CalculateUncertaintyRequest(BaseModel):
     iav_pct: float = Field(6.0, ge=0)
     shear_std: float = Field(0.0, ge=0)
     is_interpolation: bool = False
+    # F-32: u_future = iav / sqrt(life); 15 years gives 1.55% where 20 gives 1.34%.
+    project_life_years: float = Field(20.0, gt=0)
+    # F-31: the 3/sqrt(months) sampling term stops improving at the cap.
+    concurrent_months_cap: float = Field(12.0, ge=1)
+    # F-33: correlation between the three components derived from the same measured series.
+    component_correlation: float = Field(0.0, ge=-1.0, le=1.0)
 
 
 class SaveScenarioRequest(BaseModel):

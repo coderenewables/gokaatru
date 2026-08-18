@@ -176,41 +176,64 @@ def test_bearing_compass_is_correct_at_the_octant_boundaries():
 # ---------------------------------------------------------------------------
 
 
-def test_merra2_is_downloaded_but_never_reaches_the_long_term_correction():
-    """FINDING F-58 (M): MERRA-2 is acquired, cached, extrapolated — and used for nothing.
+def test_merra2_can_be_selected_as_the_long_term_reference():
+    """F-58 (MEDIUM) — FIXED. MERRA-2 is now a selectable LTC reference.
 
-    ``_interpolate_era5_to_site`` reads ``state.era5_data`` only, and ``_require_ltc_inputs``
-    reads ``state.era5_interpolated_df`` only, so nothing in ``state.merra_data`` can ever
-    become an LTC reference. Its only consumers are the hub-height extrapolation
-    side-effect (which writes a column nothing reads) and a map marker.
+    The bug: ``_interpolate_era5_to_site`` read ``state.era5_data`` only and
+    ``_require_ltc_inputs`` read ``state.era5_interpolated_df`` only, so nothing in
+    ``state.merra_data`` could ever become an LTC reference. Its only consumers were the
+    hub-height extrapolation side-effect — which wrote a column nothing read — and a map
+    marker. The README advertises "BrightHub ERA5 and MERRA-2" and the default plan downloads
+    both, so the cost was paid and the benefit was not collected.
 
-    A second independent long-term source is the standard way to test whether an LTC
-    result depends on the reference chosen. The README advertises "BrightHub ERA5 and
-    MERRA-2" and the default plan downloads both, so the cost is paid and the benefit is
-    not collected.
+    A second independent long-term source is the standard way to test whether an LTC result
+    depends on the reference chosen, and both sources now write the same interpolated series
+    every LTC algorithm reads.
     """
-    import inspect
+    index = pd.date_range("2015-01-01", periods=500, freq="h", tz="UTC")
+    rng = np.random.default_rng(3)
 
-    from server.tools import era5 as era5_module
-    from server.tools import ltc as ltc_module
+    def _node_frame(offset: float) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "Spd_100m": 7.0 + offset + rng.normal(0, 1.0, len(index)),
+                "Dir_100m": np.full(len(index), 220.0),
+            },
+            index=index,
+        )
 
-    interpolation_source = inspect.getsource(era5_module._interpolate_era5_to_site)
-    assert "era5_data" in interpolation_source
-    assert "merra_data" not in interpolation_source
-
-    ltc_source = inspect.getsource(ltc_module._require_ltc_inputs)
-    assert "era5_interpolated_df" in ltc_source
-    assert "merra" not in ltc_source.lower()
-
-    # And a session holding only MERRA data cannot interpolate at all.
     state = SessionState()
     state.reset()
-    state.set_coordinate(Coordinate(latitude=10.1, longitude=20.1, elevation_m=0.0))
-    state.merra_data = {"10.0_20.0": pd.DataFrame({"Spd_100m": [8.0]})}
-    with pytest.raises(ValueError, match="ERA5 nodes are not available"):
-        _interpolate_era5_to_site(state)
+    state.set_coordinate(Coordinate(latitude=52.13, longitude=4.62))
+    corners = [(52.0, 4.5), (52.0, 4.75), (52.25, 4.5), (52.25, 4.75)]
+    state.merra_nodes = [{"latitude": lat, "longitude": lon} for lat, lon in corners]
+    state.merra_data = {
+        f"{lat}_{lon}": _node_frame(index_offset)
+        for index_offset, (lat, lon) in enumerate(corners)
+    }
 
+    result = _interpolate_era5_to_site(state, source="merra2")
 
+    assert result["status"] == "ok"
+    assert result["reference_source"] == "merra2"
+    assert result["nodes_used"] == 4
+    assert "Spd_100m" in result["variables"]
+    # The LTC reads exactly this series, so MERRA-2 has genuinely reached the correction.
+    assert state.era5_interpolated_df is not None
+    assert "Spd_100m" in state.era5_interpolated_df.columns
+    assert state.runconfig["reference_source"] == "merra2"
+    assert "dependence on the reference is tested" in result["reference_source_note"]
+
+    # An unknown source is refused rather than silently falling back to ERA5.
+    with pytest.raises(ValueError, match="source must be one of"):
+        _interpolate_era5_to_site(state, source="cfsr")
+
+    # And asking for a source that was never downloaded says which one is missing.
+    empty = SessionState()
+    empty.reset()
+    empty.set_coordinate(Coordinate(latitude=52.13, longitude=4.62))
+    with pytest.raises(ValueError, match="MERRA-2 nodes are not available"):
+        _interpolate_era5_to_site(empty, source="merra2")
 def test_antimeridian_cell_falls_back_to_idw_instead_of_bilinear():
     """FINDING F-59 (L after the F-60 fix): a cell across 180 deg still skips bilinear.
 

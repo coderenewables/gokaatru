@@ -13,7 +13,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from server.core.validators import SENSOR_FIELDS, detect_timestep_minutes
+from server.core.validators import (
+    SENSOR_FIELDS,
+    TIMESTAMP_LABEL_CONVENTION,
+    TIMESTAMP_LABEL_NOTE,
+    detect_timestep_minutes,
+)
 from server.main import mcp
 from server.schemas.common import Coordinate, SensorInfo
 from server.state.session import SessionState, session
@@ -38,6 +43,71 @@ CANONICAL_SENSOR_TYPES = {
 }
 
 
+def _resolve_duplicate_timestamps(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, object]]:
+    """Collapse repeated timestamps to one record each, and report what was collapsed.
+
+    Loggers produce duplicates routinely - a restart, an overlapping export, a manual file
+    concatenation - and ingest sorted the index without ever checking for them (F-65). The
+    duplicate survived into ``timeseries_df``, so every downstream ``groupby`` over the
+    index (MoMM, diurnal profiles, monthly statistics, coverage) counted that interval
+    twice. The cadence detector could not catch it either, because zero diffs are filtered
+    out before the modal spacing is taken.
+
+    Duplicates are averaged rather than dropped: where the repeats disagree, neither copy
+    has a better claim than the other, and the mean is the only choice that does not depend
+    on file order. Identical repeats are unaffected by that either way.
+    """
+    index = pd.DatetimeIndex(frame.index)
+    duplicated = index.duplicated(keep=False)
+    if not bool(duplicated.any()):
+        return frame, {"duplicate_timestamps": 0}
+    affected_index = index[duplicated]
+    distinct = int(pd.Index(affected_index).nunique())
+    collapsed = frame.groupby(level=0).mean(numeric_only=True)
+    # Non-numeric columns cannot be averaged; keep the first record for those.
+    non_numeric = [column for column in frame.columns if column not in collapsed.columns]
+    if non_numeric:
+        collapsed = collapsed.join(frame[non_numeric].groupby(level=0).first())
+        collapsed = collapsed[[column for column in frame.columns if column in collapsed.columns]]
+    removed = int(len(frame) - len(collapsed))
+    return collapsed.sort_index(), {
+        "duplicate_timestamps": removed,
+        "duplicate_timestamps_distinct": distinct,
+        "duplicate_resolution": "averaged",
+        "warning": (
+            f"{removed:,} duplicate timestamp record(s) across {distinct:,} distinct "
+            "timestamps were collapsed by averaging. Duplicates usually mean a logger "
+            "restart or an overlapping export; left in place they would have been counted "
+            "twice by every month-hour grouping downstream."
+        ),
+    }
+
+
+def _extract_boom_orientation(point: dict[str, object]) -> float | None:
+    """Read the boom bearing from a Task 43 measurement point, if it declares one.
+
+    Task 43 records this under ``mounting_arrangement``; some exports flatten it onto the
+    point itself.  Both are accepted.  The value matters because the tower sits opposite
+    the boom, so it is the only recorded geometry that says where the shadow actually
+    falls — previously nothing read it and the tower-shadow rule fell back to a fixed
+    20-degree guess (F-71).
+    """
+    direct = _first_numeric(point, ["boom_orientation_deg", "boom_orientation"])
+    if direct is not None:
+        return direct % 360.0
+    arrangements = point.get("mounting_arrangement")
+    if isinstance(arrangements, dict):
+        arrangements = [arrangements]
+    if isinstance(arrangements, list):
+        for arrangement in arrangements:
+            if not isinstance(arrangement, dict):
+                continue
+            value = _first_numeric(arrangement, ["boom_orientation_deg", "boom_orientation"])
+            if value is not None:
+                return value % 360.0
+    return None
+
+
 def _build_sensor_inventory(points: list[dict[str, object]]) -> dict[str, dict[str, object]]:
     """Capture every named Task 43 measurement point for inventory presentation."""
     inventory: dict[str, dict[str, object]] = {}
@@ -47,10 +117,14 @@ def _build_sensor_inventory(points: list[dict[str, object]]) -> dict[str, dict[s
         sensor_type = str(point.get("measurement_type_id", "")).strip()
         if not isinstance(sensor_name, str) or not sensor_name.strip() or height_m is None:
             continue
-        inventory[sensor_name] = {
+        entry: dict[str, object] = {
             "height_m": height_m,
             "sensor_type": CANONICAL_SENSOR_TYPES.get(sensor_type, sensor_type or "unknown"),
         }
+        boom_orientation = _extract_boom_orientation(point)
+        if boom_orientation is not None:
+            entry["boom_orientation_deg"] = boom_orientation
+        inventory[sensor_name] = entry
     return inventory
 
 
@@ -646,6 +720,7 @@ def _parse_timeseries(state: SessionState, file_path: str) -> dict:
     filtered_df = filtered_df.drop(columns=[timestamp_column]).sort_index()
     if filtered_df.empty:
         raise ValueError("Parsed timeseries is empty after timestamp detection")
+    filtered_df, duplicate_report = _resolve_duplicate_timestamps(filtered_df)
     state.timeseries_df = filtered_df.copy()
     state.raw_timeseries_df = filtered_df.copy(deep=True)
     state.bump_data_version()
@@ -665,6 +740,12 @@ def _parse_timeseries(state: SessionState, file_path: str) -> dict:
         "start": _format_timestamp(filtered_df.index.min()),
         "end": _format_timestamp(filtered_df.index.max()),
         "timestep_minutes": timestep_minutes,
+        **duplicate_report,
+        # F-07: interval-labelling is a convention the file does not carry and the
+        # pipeline cannot infer, so it is declared rather than assumed silently.
+        "timestamp_label": TIMESTAMP_LABEL_CONVENTION,
+        "timestamp_label_basis": "assumed",
+        "timestamp_label_note": TIMESTAMP_LABEL_NOTE,
     }
 
 

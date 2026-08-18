@@ -111,11 +111,17 @@ class TestXGBoostOOSMetrics:
         mock_booster = MagicMock()
         mock_booster.best_iteration = 10
         mock_booster.get_score = MagicMock(return_value={"ref_ws": 1.0})
-        # split_index = int(0.8 * 500) = 400, so val slice is rows [400:500] = 100 elements.
+        # Blocked cross-validation (F-39/F-40): 500 records in 4 contiguous blocks of 125,
+        # each predicted by its own fold model, then the full concurrent frame and the
+        # long-term frame by the model retrained on everything.
+        target = concurrent[MEASURED_COLUMN].to_numpy(dtype=float)
         mock_booster.predict.side_effect = [
-            concurrent[MEASURED_COLUMN].iloc[400:].to_numpy(dtype=float),  # dval prediction (shape 100)
-            concurrent[MEASURED_COLUMN].to_numpy(dtype=float),             # dconcurrent prediction (shape 500)
-            long_df["ref"].to_numpy(dtype=float),                           # dlong prediction (shape 2000)
+            target[0:125],
+            target[125:250],
+            target[250:375],
+            target[375:500],
+            target,                                # dconcurrent prediction (shape 500)
+            long_df["ref"].to_numpy(dtype=float),  # dlong prediction (shape 2000)
         ]
         mock_xgb_import.return_value = (mock_dmatrix, MagicMock(return_value=mock_booster))
 
@@ -128,7 +134,10 @@ class TestXGBoostOOSMetrics:
         assert "in_sample_r_squared" in metrics
         assert "in_sample_rmse" in metrics
         assert "validation_points" in metrics
-        assert metrics["validation_points"] == 100  # 20% of 500
+        # Every record is now scored out-of-fold, not just a terminal 20% slice.
+        assert metrics["validation_points"] == 500
+        assert metrics["out_of_sample_basis"] == "blocked_cross_validation"
+        assert metrics["cv_folds"] == 4
         # out_of_sample_rmse should equal the val-slice RMSE (which equals rmse
         # because we mocked predict to return the exact target values on val).
         assert isinstance(metrics["out_of_sample_rmse"], float)
@@ -172,10 +181,13 @@ class TestXGBoostOOSMetrics:
         mock_booster.best_iteration = 5
         mock_booster.get_score = MagicMock(return_value={"ref_ws": 0.5})
 
-        y_val_expected = concurrent[MEASURED_COLUMN].iloc[400:].to_numpy(dtype=float)
-        y_full_expected = concurrent[MEASURED_COLUMN].to_numpy(dtype=float) * 2  # bad prediction (same shape as target)
+        target = concurrent[MEASURED_COLUMN].to_numpy(dtype=float)
+        y_full_expected = target * 2  # bad prediction (same shape as target)
         mock_booster.predict.side_effect = [
-            y_val_expected,      # dval prediction (perfect on val, shape=100)
+            target[0:125],       # each fold predicts its own block perfectly
+            target[125:250],
+            target[250:375],
+            target[375:500],
             y_full_expected,     # dconcurrent prediction (bad on train, shape=500)
             long_df["ref"].to_numpy(dtype=float),
         ]

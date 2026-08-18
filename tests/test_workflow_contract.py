@@ -78,22 +78,42 @@ def test_topological_order_is_respected_for_an_acyclic_graph():
     assert [node.id for node in executor._ordered_nodes()] == ["a", "b", "c"]
 
 
-def test_cyclic_graph_executes_anyway_in_id_order():
-    """FINDING (Step 1): a dependency cycle does not stop the run — it silently reorders it.
+def test_cyclic_graph_is_refused_rather_than_reordered():
+    """F-08 (MEDIUM) — FIXED. A dependency cycle now stops the run instead of reordering it.
 
-    ``_ordered_nodes`` falls back to "continue execution in id order" when the
-    topological sort cannot consume every node. A cycle means the analyst declared
-    an order that cannot be satisfied, so the numbers a run produces afterwards
-    are keyed to an order nobody chose. The run reports ``ok`` and the archived
-    artifact records no cycle. This should refuse.
+    The bug: ``_ordered_nodes`` fell back to "continue execution in id order" when the
+    topological sort could not consume every node. A cycle means the analyst declared an
+    order that cannot be satisfied, so the numbers a run produced afterwards were keyed to an
+    order nobody chose — and the run reported ``ok`` with the archived artifact recording no
+    cycle at all.
+
+    The sort still returns a deterministic order (callers inspect it), but the nodes caught
+    in the cycle are recorded, and both ``execute_auto`` and ``execute_step`` refuse.
     """
     nodes = [_node("b", "list_cleaning_rules"), _node("a", "list_cleaning_rules")]
     edges = [WorkflowExecutionEdge(source="a", target="b"), WorkflowExecutionEdge(source="b", target="a")]
     executor = WorkflowExecutor(SessionState(), nodes, edges)
 
     ordered = executor._ordered_nodes()
-    assert [node.id for node in ordered] == ["a", "b"]  # id order, not dependency order
+    assert [node.id for node in ordered] == ["a", "b"]  # deterministic, but arbitrary
+    assert executor._cycle_nodes == ["a", "b"]
 
+    with pytest.raises(ValueError, match="dependency cycle"):
+        _drive(executor)
+
+    stepper = WorkflowExecutor(SessionState(), nodes, edges)
+    with pytest.raises(ValueError, match="dependency cycle"):
+        asyncio.run(stepper.execute_step())
+
+
+def test_an_acyclic_graph_still_runs():
+    """The cycle guard must not fire on an ordinary dependency chain."""
+    nodes = [_node("b", "list_cleaning_rules"), _node("a", "list_cleaning_rules")]
+    edges = [WorkflowExecutionEdge(source="a", target="b")]
+    executor = WorkflowExecutor(SessionState(), nodes, edges)
+
+    assert [node.id for node in executor._ordered_nodes()] == ["a", "b"]
+    assert executor._cycle_nodes == []
     events = _drive(executor)
     assert events[-1]["status"] == "ok"
     assert not any(event["event_type"] == "node_failed" for event in events)

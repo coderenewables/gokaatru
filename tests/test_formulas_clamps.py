@@ -13,6 +13,7 @@ import pytest
 
 from server.core.formulas import (
     MEAN_DAYS_IN_MONTH,
+    ROUGHNESS_MAX_M,
     air_density_iec,
     roughness_from_two_heights,
 )
@@ -94,7 +95,7 @@ class TestRoughnessFromTwoHeightsClamp:
         """Typical grassland: z0 should be on the order of 0.01–1.0 m, unclamped."""
         z0, was_clamped = roughness_from_two_heights(10.0, 100.0, 9.0, 60.0)
         assert not was_clamped
-        assert 1e-6 <= z0 <= 1.5
+        assert 1e-6 <= z0 <= ROUGHNESS_MAX_M
 
     def test_clamp_below_floor(self) -> None:
         """If the computed z0 is below 1e-6, it must be clamped up."""
@@ -104,11 +105,16 @@ class TestRoughnessFromTwoHeightsClamp:
         assert z0 == 1e-6
 
     def test_clamp_above_ceiling(self) -> None:
-        """If the computed z0 exceeds 1.5, it must be clamped down."""
+        """If the computed z0 exceeds the plausible band it must be clamped down.
+
+        The ceiling is 2.0 m, not 1.5 (F-05): WAsP roughness class 3 and dense forest or
+        urban terrain reach 1.5-2.0 m, and clamping them *raised* log-law hub speed, so the
+        old ceiling was not a conservative backstop.
+        """
         # Inverted speeds: v1 > v2 despite h1 > h2 → very large z0
         z0, was_clamped = roughness_from_two_heights(5.0, 100.0, 10.0, 80.0)
         assert was_clamped is True
-        assert z0 == 1.5
+        assert z0 == ROUGHNESS_MAX_M == 2.0
 
     def test_nan_on_zero_speed(self) -> None:
         z0, was_clamped = roughness_from_two_heights(0.0, 80.0, 7.0, 60.0)

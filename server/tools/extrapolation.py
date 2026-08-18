@@ -7,6 +7,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from server.core.formulas import ROUGHNESS_MAX_M, ROUGHNESS_MIN_M
 from server.main import mcp
 from server.state.session import SessionState, session
 
@@ -88,7 +89,7 @@ def _log_extrapolate_array(
     z0: np.ndarray,
 ) -> np.ndarray:
     """Vectorize log-law extrapolation with stable clipping of roughness length and heights."""
-    z0_safe = np.clip(z0, 1e-6, 1.5)
+    z0_safe = np.clip(z0, ROUGHNESS_MIN_M, ROUGHNESS_MAX_M)
     ref_safe = np.maximum(reference_height, z0_safe + 1e-6)
     hub_safe = np.maximum(hub_height_m, z0_safe + 1e-6)
     return reference_speed * np.log(hub_safe / z0_safe) / np.log(ref_safe / z0_safe)
@@ -241,28 +242,75 @@ def _extrapolate_to_hub_height(state: SessionState, hub_height_m: float, shear_m
     # Also extrapolate all reanalysis nodes (ERA5 nodes, MERRA-2 nodes, and the
     # interpolated site series) to hub height using the shear table. This is a
     # best-effort side-effect: it runs when a shear table and reanalysis data are
-    # available, and is skipped silently otherwise. This ensures both the MCP
-    # tool (canvas executor) and the HTTP route produce identical results.
-    reanalysis_result = None
-    try:
-        if (
-            state.shear_table is not None
-            and (state.era5_data or state.era5_interpolated_df is not None)
-        ):
+    # available. It used to be wrapped in a bare `except: pass`, so a genuine failure was
+    # as silent as a legitimate skip (F-22); the reason is now reported either way.
+    reanalysis_result: dict[str, object] | None = None
+    if state.shear_table is None:
+        reanalysis_result = {
+            "status": "skipped",
+            "reason": "no_shear_table",
+            "wrote_hub_column": False,
+        }
+    elif not (state.era5_data or state.era5_interpolated_df is not None):
+        reanalysis_result = {
+            "status": "skipped",
+            "reason": "no_reanalysis_data",
+            "wrote_hub_column": False,
+        }
+    else:
+        try:
             reanalysis_result = _extrapolate_all_reanalysis_nodes(state, float(hub_height_m))
-    except (ValueError, KeyError):
-        pass
+        except (ValueError, KeyError) as exc:
+            reanalysis_result = {
+                "status": "failed",
+                "reason": str(exc),
+                "wrote_hub_column": False,
+                "warning": (
+                    "Reanalysis hub-height extrapolation failed and the measured series was "
+                    f"still written: {exc}. Any long-term correction expecting the reanalysis "
+                    "hub column will fail or reuse a stale one."
+                ),
+            }
 
     response: dict[str, object] = {
         "status": "ok",
         "column_name": column_name,
         "method_counts": counts,
+        # F-21: `method_counts` reported the split without saying the two paths use
+        # different physics, so a single hub series could silently be a blend of both.
+        "method_models": {
+            "direct": "measured at hub height, no model applied",
+            "interpolated": "linear interpolation in ln(z) between the bracketing sensors",
+            "extrapolated": (
+                f"{shear_model} using the month-hour "
+                f"{'shear' if shear_model == 'power_law' else 'roughness'} table"
+            ),
+        },
+        "method_note": (
+            "Records inside the mast range are interpolated log-linearly; records outside it "
+            "use the shear or roughness table. Both are defensible, but they are different "
+            "physical models and the divergence grows with shear - measured at hub 80 m "
+            "between 60 m and 100 m: +0.03% at alpha 0.10, +0.13% at 0.20, +0.39% at 0.35. "
+            "A hub series with counts in both rows is a blend of the two."
+        ),
+        "method_is_mixed": bool(counts["interpolated"] and counts["extrapolated"]),
         "reanalysis": reanalysis_result,
         **lever,
         **state.staleness_report(),
     }
+    if response["method_is_mixed"]:
+        response["method_warning"] = (
+            f"{counts['interpolated']:,} records were interpolated in ln(z) and "
+            f"{counts['extrapolated']:,} were extrapolated with the {shear_model} table, so "
+            "this hub series is produced by two different physical models. That happens when "
+            "the bracketing sensors drop out intermittently."
+        )
     if lever.get("warning"):
         response["warning"] = lever["warning"]
+    # Surfaced under its own key rather than competing with the lever warning: a leg that
+    # wrote nothing and an over-long lever are separate problems and both need saying.
+    if isinstance(reanalysis_result, dict) and reanalysis_result.get("warning"):
+        response["reanalysis_warning"] = reanalysis_result["warning"]
     return response
 
 
@@ -332,22 +380,47 @@ def _extrapolate_all_reanalysis_nodes(
         extrapolated_keys.append(f"merra:{key}")
 
     # --- interpolated ERA5 at site ---
+    # F-22: the interpolated series was only ever touched when the reference column was
+    # present, and it never reached `skipped_nodes` - that list collected node keys only.
+    # With ERA5 present but carrying just 10 m winds this returned status "ok" with both
+    # lists empty, having written nothing at all, and LTC then either failed on a missing
+    # column or silently reused a hub column from an earlier run.
     interp_done = False
-    if state.era5_interpolated_df is not None and ref_col in state.era5_interpolated_df.columns:
-        shear = _lookup_table_values(state.era5_interpolated_df.index, state.shear_table)
-        ref_speed = state.era5_interpolated_df[ref_col].to_numpy(dtype=float)
-        state.era5_interpolated_df[hub_col] = _power_extrapolate_array(
-            ref_speed, np.full_like(ref_speed, reference_height_m), hub_height_m, shear,
-        )
-        interp_done = True
+    if state.era5_interpolated_df is not None:
+        if ref_col in state.era5_interpolated_df.columns:
+            shear = _lookup_table_values(state.era5_interpolated_df.index, state.shear_table)
+            ref_speed = state.era5_interpolated_df[ref_col].to_numpy(dtype=float)
+            state.era5_interpolated_df[hub_col] = _power_extrapolate_array(
+                ref_speed, np.full_like(ref_speed, reference_height_m), hub_height_m, shear,
+            )
+            interp_done = True
+        else:
+            skipped_keys.append("interpolated_site_series")
 
-    return {
-        "status": "ok",
+    wrote_anything = bool(extrapolated_keys) or interp_done
+    result: dict[str, object] = {
+        "status": "ok" if wrote_anything else "no_op",
         "hub_column": hub_col,
+        "reference_column": ref_col,
         "extrapolated_nodes": extrapolated_keys,
         "skipped_nodes": skipped_keys,
         "interpolated_extrapolated": interp_done,
+        "wrote_hub_column": wrote_anything,
     }
+    if not wrote_anything:
+        result["warning"] = (
+            f"No reanalysis series was extrapolated to hub height: none of them carries the "
+            f"reference column '{ref_col}'. Nothing wrote '{hub_col}', so any long-term "
+            "correction that expects it will either fail on the missing column or reuse a "
+            "stale one from an earlier run. Check that the reanalysis download included "
+            f"{int(reference_height_m)} m winds."
+        )
+    elif skipped_keys:
+        result["warning"] = (
+            f"{len(skipped_keys)} reanalysis series were skipped for want of the reference "
+            f"column '{ref_col}': {skipped_keys}."
+        )
+    return result
 
 
 def _add_shear_to_timeseries(state: SessionState) -> bool:

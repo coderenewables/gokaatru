@@ -109,26 +109,59 @@ def total_least_squares_fit(x: np.ndarray, y: np.ndarray) -> tuple[float, float]
     return slope, float(mean_y - slope * mean_x)
 
 
+def residual_lag1_autocorrelation(residuals: np.ndarray) -> float:
+    """Return the lag-1 autocorrelation of a residual series, clipped to [0, 0.999).
+
+    Negative autocorrelation would *shrink* the interval, which is not a direction this
+    correction is willing to claim from a single lag, so it floors at zero.
+    """
+    values = np.asarray(residuals, dtype=float).ravel()
+    if values.size < 3:
+        return 0.0
+    centred = values - float(np.mean(values))
+    denominator = float(np.sum(centred**2))
+    if denominator <= 0.0:
+        return 0.0
+    phi = float(np.sum(centred[:-1] * centred[1:]) / denominator)
+    return float(min(max(phi, 0.0), 0.999))
+
+
+def effective_sample_size(n: int, phi: float) -> float:
+    """Return the AR(1) effective sample size ``n (1 - phi) / (1 + phi)``.
+
+    Consecutive hourly wind records carry much of the same information, so ``n`` records
+    are worth far fewer independent ones.  At the phi = 0.85 that is ordinary for hourly
+    wind, 20 000 records are worth about 1 620.
+    """
+    if n <= 0:
+        return 0.0
+    return float(max(2.0, n * (1.0 - phi) / (1.0 + phi)))
+
+
 def ols_confidence_intervals(
     x: np.ndarray,
     y: np.ndarray,
+    autocorrelation_corrected: bool = True,
 ) -> tuple[tuple[float, float] | None, tuple[float, float] | None]:
-    """Compute nominal 95% OLS confidence intervals for the slope and intercept.
+    """Compute 95% OLS confidence intervals for the slope and intercept.
 
-    Uses the t-distribution with n − 2 degrees of freedom, since the residual
-    variance is estimated from the same sample rather than known (D9.4).  The
-    normal approximation this replaces was anti-conservative at small n.
+    Uses the t-distribution, since the residual variance is estimated from the same sample
+    rather than known (D9.4).  The normal approximation this replaces was anti-conservative
+    at small n.
 
-    **These intervals are not rigorous for wind data and must not be presented
-    as such.** They assume independent, identically distributed residuals, but
-    wind speed is strongly autocorrelated: consecutive 10-minute or hourly
-    records carry much of the same information, so the effective sample size is
-    a small fraction of ``n``.  Because the standard errors scale as
-    ``1/sqrt(n)``, using the raw record count makes the intervals far too
-    narrow — typically by several fold at hourly resolution.  Treat them as a
-    lower bound on the true uncertainty.  Correcting this properly requires an
-    effective-sample-size adjustment (e.g. from the residual autocorrelation
-    time) or a block bootstrap, neither of which is applied here.
+    Textbook OLS intervals assume independent, identically distributed residuals, and wind
+    speed is strongly autocorrelated: consecutive 10-minute or hourly records carry much of
+    the same information, so the effective sample size is a small fraction of ``n``.
+    Because the standard errors scale as ``1/sqrt(n)``, using the raw record count made the
+    intervals far too narrow — measured at **3.47x** on n = 20 000 hourly records with AR(1)
+    residuals at phi = 0.85, where the effective sample size is 8.3% of n (F-41).
+
+    The default now applies an AR(1) effective-sample-size correction estimated from the
+    residuals' own lag-1 autocorrelation.  That is an approximation, not a rigorous
+    treatment — a block bootstrap would be better and longer-range dependence is not
+    captured — so the result is still a *lower* bound on the true uncertainty, just a far
+    less misleading one.  Pass ``autocorrelation_corrected=False`` for the raw i.i.d.
+    interval when comparing against a tool that reports one.
     """
     from scipy.stats import t as student_t
 
@@ -147,6 +180,15 @@ def ols_confidence_intervals(
     variance = float(np.sum(residuals**2) / degrees_of_freedom)
     se_slope = float(np.sqrt(variance / sxx))
     se_intercept = float(np.sqrt(variance * (1.0 / x_values.size + (mean_x**2) / sxx)))
+    if autocorrelation_corrected:
+        phi = residual_lag1_autocorrelation(residuals)
+        n_eff = effective_sample_size(int(x_values.size), phi)
+        # Standard errors scale as 1/sqrt(n); replacing n with n_eff widens both by the
+        # same factor, and the degrees of freedom follow the independent count too.
+        inflation = float(np.sqrt(x_values.size / n_eff))
+        se_slope *= inflation
+        se_intercept *= inflation
+        degrees_of_freedom = max(1, int(n_eff) - 2)
     # t rather than z: the residual variance is estimated, not known (D9.4).
     critical = float(student_t.ppf(0.975, degrees_of_freedom))
     return (slope - critical * se_slope, slope + critical * se_slope), (

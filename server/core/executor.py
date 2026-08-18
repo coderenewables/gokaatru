@@ -232,6 +232,8 @@ class WorkflowExecutor:
         self.state = state
         self.nodes = [node for node in nodes if node.kind in {"dataset", "operation"}]
         self.edges = edges
+        # Node ids caught in a dependency cycle, populated by `_ordered_nodes` (F-08).
+        self._cycle_nodes: list[str] = []
 
     def _ordered_nodes(self) -> list[WorkflowExecutionNode]:
         """Return executable nodes in topological order, with deterministic fallback for cycles."""
@@ -260,11 +262,25 @@ class WorkflowExecutor:
             ready.sort()
 
         if len(ordered_ids) == len(by_id):
+            self._cycle_nodes = []
             return [by_id[node_id] for node_id in ordered_ids]
 
-        # For cycle cases, keep deterministic behavior and continue execution in id order.
+        # A cycle has no topological order, so any order chosen for the nodes inside it is
+        # arbitrary — and id order in particular can run a node before the node that feeds
+        # it. That used to happen silently: the run reported `ok` and the archived artifact
+        # recorded no cycle (F-08). The cycle is now recorded so the caller can refuse.
         remaining = sorted(node_id for node_id in by_id if node_id not in ordered_ids)
+        self._cycle_nodes = remaining
         return [by_id[node_id] for node_id in ordered_ids + remaining]
+
+    def _describe_cycle(self) -> str:
+        """Return the message used when a dependency cycle blocks a defensible run order."""
+        return (
+            "The workflow graph contains a dependency cycle among "
+            f"{self._cycle_nodes}, so no execution order satisfies it. Running anyway would "
+            "execute at least one node before the node that feeds it, and the result would "
+            "depend on node ids rather than on the graph. Remove the cycle and re-run."
+        )
 
     def _params(self, config: dict[str, object]) -> dict[str, object]:
         """Parse params_json plus direct config keys into backend dispatch parameters."""
@@ -605,6 +621,8 @@ class WorkflowExecutor:
         ordered = self._ordered_nodes()
         if not ordered:
             raise ValueError("Workflow execution requires at least one dataset or operation node")
+        if self._cycle_nodes:
+            raise ValueError(self._describe_cycle())
 
         run_id = self._seed_runtime(ordered)
         started = _as_event(run_id, "run_started", None, "running", "Workflow execution started")
@@ -656,6 +674,8 @@ class WorkflowExecutor:
         ordered = self._ordered_nodes()
         if not ordered:
             raise ValueError("Workflow step requires at least one dataset or operation node")
+        if self._cycle_nodes:
+            raise ValueError(self._describe_cycle())
 
         run_id = self._seed_runtime(ordered)
         events: list[dict[str, object]] = []

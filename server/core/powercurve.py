@@ -129,3 +129,45 @@ def conversion_guidance(sensitivity: float, speed_uncertainty_pct: float) -> dic
             "power curve. Recompute it with the project turbine before publishing."
         ),
     }
+
+
+# IEC 61400-12-1 reference air density.  A power curve is measured at this density, so a
+# measured speed has to be normalised to it before the curve is read (F-57).
+REFERENCE_AIR_DENSITY = 1.225
+
+
+def normalise_speed_to_reference_density(
+    speed,
+    air_density,
+    regulation: str = "stall",
+):
+    """Normalise measured wind speed to the power curve's reference density (IEC 61400-12-1).
+
+    For a **stall-regulated** machine the standard treats the density difference as a speed
+    correction, ``U_n = U (rho / rho_0)^(1/3)``: the cube root is there because power scales
+    with ``rho U^3``, so an equal-power speed at the reference density is what the curve
+    should be read at.
+
+    For a **pitch-regulated** machine the standard corrects the power *curve* rather than the
+    speed, because below rated the machine tracks the same tip-speed ratio and above rated it
+    holds power flat regardless of density.  Applying the speed correction to a pitch machine
+    would move the rated knee, so this function refuses rather than quietly doing the wrong
+    thing.
+
+    Nothing in the pipeline applied any of this before: ``density_correction_factor`` was
+    computed in ``atmosphere.py``, displayed in the Sensor Overview, and applied to nothing.
+    It became live the moment an indicative AEP existed.
+    """
+    if regulation not in {"stall", "pitch"}:
+        raise ValueError(f"regulation must be 'stall' or 'pitch', got '{regulation}'")
+    if regulation == "pitch":
+        raise ValueError(
+            "IEC 61400-12-1 corrects the power curve, not the wind speed, for a "
+            "pitch-regulated machine. Normalising the speed would move the rated knee. Use "
+            "the measured density against a density-corrected power curve instead."
+        )
+    values = np.asarray(speed, dtype=float)
+    density = np.asarray(air_density, dtype=float)
+    if np.any(density[np.isfinite(density)] <= 0.0):
+        raise ValueError("air_density must be positive")
+    return values * np.cbrt(density / REFERENCE_AIR_DENSITY)

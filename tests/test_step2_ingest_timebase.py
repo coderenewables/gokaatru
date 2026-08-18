@@ -22,7 +22,11 @@ import pytest
 
 import server.main  # noqa: F401 — establishes tool-module import order
 from server.core.momm import _infer_samples_per_hour
-from server.core.validators import detect_timestep_minutes, to_utc_index
+from server.core.validators import (
+    TIMESTAMP_LABEL_CONVENTION,
+    detect_timestep_minutes,
+    to_utc_index,
+)
 from server.state.session import SessionState
 from server.tools.data_io import (
     _apply_timezone_to_index,
@@ -31,7 +35,12 @@ from server.tools.data_io import (
     _extract_timezone,
     _parse_timeseries,
 )
-from server.tools.ltc import MEASURED_COLUMN, _prepare_short_term
+from server.tools.ltc import (
+    HOURLY_COVERAGE_MINIMUM,
+    MEASURED_COLUMN,
+    _align_timestamp_label,
+    _prepare_short_term,
+)
 
 
 @pytest.fixture
@@ -204,95 +213,122 @@ def test_a_dst_observing_timezone_falls_back_to_standard_time():
     assert str(fixed.timeseries_df.index.tz) == "UTC"
 
 
-def test_duplicate_timestamps_survive_ingest_unreported(workspace: Path) -> None:
-    """FINDING F-65 (M): a repeated timestamp is kept, counted, and double-weighted.
+def test_duplicate_timestamps_are_collapsed_and_reported(workspace: Path) -> None:
+    """F-65 (MEDIUM) — FIXED. A repeated timestamp is collapsed, not double-weighted.
 
-    ``_parse_timeseries`` sorts the index but never checks for duplicates. The repeated
-    stamp is included in the reported row count and nothing in the response mentions it.
-    Every downstream ``groupby`` over the index — MoMM, diurnal profiles, monthly stats,
-    coverage — then counts that interval twice.
+    The bug: ``_parse_timeseries`` sorted the index but never checked for duplicates. The
+    repeated stamp was included in the reported row count, nothing in the response mentioned
+    it, and every downstream ``groupby`` over the index — MoMM, diurnal profiles, monthly
+    stats, coverage — then counted that interval twice. The cadence detector was immune
+    because zero diffs are filtered out before the modal spacing is taken, so nothing else
+    caught it either.
 
-    Loggers produce duplicates routinely: a restart, an overlapping export, or a manual
-    file concatenation. The cadence detector is immune (zero diffs are filtered out), so
-    nothing else catches it either.
+    The fix averages the repeats rather than dropping one: where they disagree neither copy
+    has a better claim, and the mean is the only resolution that does not depend on file
+    order. The count and a warning travel with the ingest response.
     """
     index = list(pd.date_range("2021-01-01", periods=200, freq="10min"))
     index.insert(10, index[10])
-    pd.DataFrame(
-        {"Timestamp": index, "Spd": np.arange(len(index), dtype=float)}
-    ).to_csv(workspace / "uploads" / "dup.csv", index=False)
+    values = np.arange(len(index), dtype=float)
+    pd.DataFrame({"Timestamp": index, "Spd": values}).to_csv(
+        workspace / "uploads" / "dup.csv", index=False
+    )
 
     state = SessionState()
     state.reset()
     state.workspace_dir = workspace
     result = _parse_timeseries(state, "dup.csv")
 
-    assert result["rows"] == 201  # the duplicate is counted as a record
-    assert int(state.timeseries_df.index.duplicated().sum()) == 1
-    assert "duplicate_timestamps" not in result
+    assert result["rows"] == 200  # 200 distinct intervals, reported as 200
+    assert result["duplicate_timestamps"] == 1
+    assert result["duplicate_timestamps_distinct"] == 1
+    assert result["duplicate_resolution"] == "averaged"
+    assert "counted twice by every month-hour grouping" in result["warning"]
 
-    # And it double-counts in exactly the operation every statistic uses.
+    # The duplicate is gone from the working data, and the survivor is the mean of the two.
+    assert int(state.timeseries_df.index.duplicated().sum()) == 0
     sizes = state.timeseries_df.groupby(state.timeseries_df.index).size()
-    assert int((sizes > 1).sum()) == 1
+    assert int((sizes > 1).sum()) == 0
+    assert float(state.timeseries_df["Spd"].iloc[10]) == pytest.approx((values[10] + values[11]) / 2.0)
+
+    # A clean file says so rather than staying silent about the check.
+    pd.DataFrame(
+        {"Timestamp": pd.date_range("2021-01-01", periods=200, freq="10min"), "Spd": values[:200]}
+    ).to_csv(workspace / "uploads" / "clean.csv", index=False)
+    clean_state = SessionState()
+    clean_state.reset()
+    clean_state.workspace_dir = workspace
+    clean = _parse_timeseries(clean_state, "clean.csv")
+    assert clean["duplicate_timestamps"] == 0
 
 
-def test_hourly_resampling_accepts_a_half_empty_hour(workspace: Path) -> None:
-    """FINDING F-66 (M): a 3-of-6 hour becomes an 'hourly mean' with no disclosure.
+def test_hourly_resampling_declares_its_coverage_gate(workspace: Path) -> None:
+    """F-66 (MEDIUM) — FIXED. The 50% gate is a named constant and is reported.
 
-    ``_prepare_short_term`` keeps any hour whose coverage is at least 0.5 of the expected
-    sub-hourly samples. A 1-of-6 hour is correctly dropped; a 3-of-6 hour is kept and
-    averaged as though it were a full hour.
+    ``_prepare_short_term`` keeps any hour whose coverage reaches half its expected
+    sub-hourly samples, so a 1-of-6 hour is dropped and a 3-of-6 hour is kept and averaged
+    as though it were full. 50% is a defensible threshold and the behaviour is unchanged.
 
-    50% is a defensible threshold, but it is a hardcoded literal that appears in no
-    response and no documentation, and a half-populated hour carries higher variance than
-    a full one — which feeds straight into the variance-ratio LTC that the README already
-    flags as variance-sensitive.
+    What was not defensible is that it was a bare literal (``coverage >= 0.5``) appearing in
+    no response, no constant and no documentation — while a half-populated hour carries
+    higher variance than a full one, feeding straight into the variance-ratio LTC the README
+    already flags as variance-sensitive.
     """
     index = pd.date_range("2021-01-01", periods=6 * 24 * 10, freq="10min", tz="UTC")
 
-    def prepared_with(hour: str, valid_samples: int) -> pd.DataFrame:
+    def prepared_with(hour: str, valid_samples: int) -> tuple[pd.DataFrame, dict]:
         frame = pd.DataFrame({MEASURED_COLUMN: np.full(len(index), 8.0)}, index=index)
         window = (frame.index >= f"2021-01-01 {hour}") & (frame.index < f"2021-01-01 {int(hour[:2]) + 1:02d}:00")
         frame.loc[frame.index[window][valid_samples:], MEASURED_COLUMN] = np.nan
         return _prepare_short_term(frame)
 
-    sparse = prepared_with("05:00", valid_samples=1)
-    half = prepared_with("07:00", valid_samples=3)
+    sparse, sparse_report = prepared_with("05:00", valid_samples=1)
+    half, half_report = prepared_with("07:00", valid_samples=3)
 
     assert pd.Timestamp("2021-01-01 05:00", tz="UTC") not in sparse.index  # 1 of 6 dropped
     assert pd.Timestamp("2021-01-01 07:00", tz="UTC") in half.index  # 3 of 6 kept
 
-    import inspect
+    # The threshold, the expected sample count and what it did are all in the response.
+    assert half_report["hourly_resampled"] is True
+    assert half_report["hourly_coverage_minimum"] == HOURLY_COVERAGE_MINIMUM == 0.5
+    assert half_report["hourly_expected_samples"] == 6.0
+    assert half_report["hours_kept_partially_populated"] == 1
+    assert sparse_report["hours_dropped_below_minimum"] == 1
+    assert "noisier than a full one" in half_report["hourly_coverage_note"]
 
-    from server.tools import ltc as ltc_module
 
-    source = inspect.getsource(ltc_module._prepare_short_term)
-    assert "coverage >= 0.5" in source
-    assert "MIN_HOURLY_COVERAGE" not in source  # the threshold is not even a named constant
+def test_momm_samples_per_hour_floor_is_correct_not_a_bug():
+    """F-13 — measured away to nothing. The floor of 1.0 is the right denominator.
 
+    The finding held that ``max(1.0, 3600 / spacing)`` overstates expected counts by up to
+    24x for cadences coarser than hourly. Measuring it says otherwise, and the reasoning was
+    the wrong way round.
 
-def test_momm_samples_per_hour_floor_misweights_coarse_cadences():
-    """FINDING F-13 (M, confirmed from Step 1): the floor of 1.0 breaks sub-hourly weighting.
+    MoMM groups by ``(year, month, hour-of-day)``. For any hour-aligned cadence coarser than
+    an hour, a given hour-of-day is sampled at most once per day, so a non-empty group holds
+    exactly ``days_in_month`` records — which is ``days_in_month * 1.0``. The floor is the
+    correct expected count; the "true" fractional value would understate the denominator by
+    the same 24x the finding attributed to the floor, and would report a daily series as 24x
+    complete.
 
-    ``_infer_samples_per_hour`` returns ``max(1.0, 3600 / spacing)``, so every cadence
-    coarser than hourly reports 1.0:
-
-        10-minute -> 6.0     (correct)
-        hourly    -> 1.0     (correct)
-        daily     -> 1.0     (true value 0.0417 — a **24x** overstatement of expected counts)
-        monthly   -> 1.0     (true value ~0.00137)
-
-    Expected counts are then far too high, completeness is under-estimated for every
-    month-hour cell, and the weighting stops discriminating. A long-term derived series is
-    exactly the case that hits this.
+    Measured on a full year: for 3-hourly, 6-hourly and daily data every non-empty
+    month-hour group holds exactly the number of days in the month.
     """
     def index_for(freq: str) -> pd.DatetimeIndex:
         return pd.DatetimeIndex(pd.date_range("2021-01-01", periods=60, freq=freq, tz="UTC"))
 
     assert _infer_samples_per_hour(index_for("10min")) == pytest.approx(6.0)
     assert _infer_samples_per_hour(index_for("h")) == pytest.approx(1.0)
-    assert _infer_samples_per_hour(index_for("D")) == pytest.approx(1.0)  # should be 1/24
-    assert _infer_samples_per_hour(index_for("MS")) == pytest.approx(1.0)  # should be ~1/730
+    assert _infer_samples_per_hour(index_for("D")) == pytest.approx(1.0)
+
+    # The claim under test: for coarse cadences the real records-per-group is days_in_month,
+    # so samples_per_hour = 1.0 makes expected == actual and completeness == 1.0.
+    for freq in ("3h", "6h", "D"):
+        full_year = pd.date_range("2021-01-01", "2021-12-31 23:00", freq=freq, tz="UTC")
+        january = full_year[full_year.month == 1]
+        per_group = pd.Series(1, index=january).groupby(january.hour).size().unique()
+        assert list(per_group) == [31], f"{freq}: expected 31 records per non-empty hour group"
+        assert _infer_samples_per_hour(pd.DatetimeIndex(full_year)) * 31 == 31.0
 
 
 def test_ambiguous_day_month_dates_swap_silently_but_are_caught_downstream():
@@ -322,17 +358,54 @@ def test_ambiguous_day_month_dates_swap_silently_but_are_caught_downstream():
         detect_timestep_minutes(frame)
 
 
-def test_timestamp_label_semantics_are_never_declared(workspace: Path) -> None:
-    """FINDING F-07 (M, carried from Step 1): interval-start vs interval-end is never stated.
+def test_timestamp_label_is_declared_and_applied():
+    """F-07 (MEDIUM) — FIXED. The interval convention is declared, and honoured in matching.
 
     IEA Task 43 permits a timestamp to label the start, the end or the centre of its
-    averaging interval. Nothing in the ingest path declares which convention is assumed,
-    nothing in the datamodel reader looks for it, and no response reports it.
+    averaging interval. Nothing in the ingest path declared which convention was assumed,
+    nothing in the datamodel reader looked for it, and no response reported it — while a
+    mismatch against an instantaneous reanalysis reference is a systematic half-interval
+    offset applied to every record of every LTC, a shift rather than noise, so it does not
+    average out.
 
-    A mismatch against an instantaneous reanalysis reference is a systematic half-interval
-    offset applied to every record of every LTC — 5 minutes on 10-minute data, and the
-    error is a shift rather than noise, so it does not average out.
+    The convention is a property of the logger and cannot be inferred from the data, so it
+    is declared at ingest (assumed interval-start) and overridable per run. When it is
+    overridden, the measured index is shifted onto interval-start before matching.
     """
+    index = pd.date_range("2021-01-01", periods=200, freq="10min", tz="UTC")
+    frame = pd.DataFrame({MEASURED_COLUMN: np.arange(len(index), dtype=float)}, index=index)
+
+    state = SessionState()
+    state.reset()
+
+    # The default is stated rather than silent.
+    unshifted, disclosure = _align_timestamp_label(state, frame)
+    assert disclosure["timestamp_label"] == TIMESTAMP_LABEL_CONVENTION == "interval_start"
+    assert disclosure["timestamp_shift_minutes"] == 0.0
+    assert unshifted.index[0] == index[0]
+
+    # An interval-end logger is shifted back a full interval, so a 10:10 stamp describes
+    # the flow from 10:00 to 10:10 and is matched against the 10:00 reference.
+    state.runconfig["timestamp_label"] = "interval_end"
+    shifted, end_disclosure = _align_timestamp_label(state, frame)
+    assert end_disclosure["timestamp_shift_minutes"] == 10.0
+    assert shifted.index[0] == index[0] - pd.Timedelta(minutes=10)
+    assert "shifted back 10 minutes" in end_disclosure["timestamp_shift_note"]
+
+    # Interval-centre is half of that.
+    state.runconfig["timestamp_label"] = "interval_centre"
+    centred, centre_disclosure = _align_timestamp_label(state, frame)
+    assert centre_disclosure["timestamp_shift_minutes"] == 5.0
+    assert centred.index[0] == index[0] - pd.Timedelta(minutes=5)
+
+    # An unrecognised convention is refused rather than quietly treated as the default.
+    state.runconfig["timestamp_label"] = "whenever"
+    with pytest.raises(ValueError, match="timestamp_label must be one of"):
+        _align_timestamp_label(state, frame)
+
+
+def test_ingest_declares_the_timestamp_label_it_assumed(workspace: Path) -> None:
+    """The assumption is visible at ingest, where the analyst can still correct it."""
     index = pd.date_range("2021-01-01", periods=200, freq="10min")
     pd.DataFrame(
         {"Timestamp": index, "Spd": np.arange(len(index), dtype=float)}
@@ -343,12 +416,44 @@ def test_timestamp_label_semantics_are_never_declared(workspace: Path) -> None:
     state.workspace_dir = workspace
     result = _parse_timeseries(state, "plain.csv")
 
-    for absent in ("timestamp_convention", "interval_label", "timestamp_basis"):
-        assert absent not in result
-    assert "timestamp_convention" not in state.runconfig
+    assert result["timestamp_label"] == "interval_start"
+    assert result["timestamp_label_basis"] == "assumed"
+    assert "half an interval" in result["timestamp_label_note"]
 
-    import inspect
 
-    from server.tools import data_io as data_io_module
+def test_hour_of_day_bins_declare_the_utc_clock():
+    """F-02 (MEDIUM) — FIXED. UTC-hour bins now say they are UTC, and offer the local map.
 
-    assert "interval" not in inspect.getsource(data_io_module._detect_timestamp_column).lower()
+    Ingest converts every index to UTC (D8) and nothing converts back, so all hour-of-day
+    binning counts UTC hours. The binning itself is left alone — a table and its lookup
+    share the clock, so the physics is self-consistent — but the hours are analyst-facing,
+    and a 14:00 local peak at UTC+5:30 was reported at 08:30 with nothing saying so.
+    """
+    from datetime import timedelta, timezone as dt_timezone
+
+    from server.tools.statistics import _compute_diurnal_profile
+
+    index = pd.date_range("2021-01-01", periods=24 * 90, freq="h", tz="UTC")
+    # A clean diurnal cycle peaking at 08:00 UTC, which is 13:30 at UTC+5:30.
+    speed = 8.0 + 2.0 * np.cos(2 * np.pi * (index.hour - 8) / 24)
+    state = SessionState()
+    state.reset()
+    frame = pd.DataFrame({"Spd_100m": speed}, index=index)
+    state.timeseries_df = frame
+    state.raw_timeseries_df = frame.copy()
+    state.sensor_mapping = {100.0: {"speed_col": "Spd_100m", "dir_col": None, "sd_col": None, "temp_col": None}}
+
+    # Without a declared timezone the basis is still stated, and the limitation is named.
+    profile = _compute_diurnal_profile(state, "Spd_100m")
+    assert profile["hour_basis"] == "utc"
+    assert profile["site_utc_offset_hours"] is None
+    assert "hours_local" not in profile
+    assert "cannot be mapped to site local time" in profile["local_hour_note"]
+
+    # With one, the local hours travel alongside and the peak reads correctly.
+    state.timezone = dt_timezone(timedelta(hours=5, minutes=30))
+    located = _compute_diurnal_profile(state, "Spd_100m")
+    assert located["site_utc_offset_hours"] == pytest.approx(5.5)
+    peak_utc = int(np.nanargmax(located["mean_speeds"]))
+    assert peak_utc == 8
+    assert located["hours_local"][peak_utc] == 13  # 08:00 UTC is 13:30 local

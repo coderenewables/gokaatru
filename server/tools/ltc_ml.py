@@ -29,6 +29,29 @@ from server.tools.ltc import (
 # ones that drive extreme-wind and site-suitability outputs.
 TRUNCATION_WARNING_FRACTION = 0.001
 
+# F-39 / F-40.  The holdout used to be a single terminal 20% block, so on a one-year
+# campaign it covered October to December only - a +17.7% seasonal offset reported as
+# `out_of_sample_rmse`, which is exactly the number that earns XGBoost its ensemble weight
+# (F-45).  Early stopping also selected the boosting iteration on that same slice, making
+# the figure optimistic through model selection on top of being seasonally biased.
+#
+# Blocks are contiguous rather than random: hourly wind is strongly autocorrelated, so a
+# random fold would put a record's own neighbours in the training set and score near-perfect
+# skill it does not have.  Four blocks put roughly one season in each on a one-year campaign.
+CV_FOLDS = 4
+MIN_FOLD_TRAIN_ROWS = 50
+INNER_VALIDATION_FRACTION = 0.15
+MAX_BOOST_ROUNDS = 2000
+EARLY_STOPPING_ROUNDS = 50
+
+
+def _blocked_folds(n_rows: int, folds: int) -> list[tuple[int, int]]:
+    """Split ``n_rows`` chronological records into contiguous, near-equal holdout blocks."""
+    if n_rows <= 0 or folds <= 0:
+        return []
+    edges = [int(round(index * n_rows / folds)) for index in range(folds + 1)]
+    return [(start, stop) for start, stop in zip(edges[:-1], edges[1:]) if stop > start]
+
 
 class DMatrixFactory(Protocol):
     """Typed constructor protocol for the lazily imported XGBoost DMatrix."""
@@ -202,11 +225,6 @@ def _run_ltc_xgboost(
         concurrent = concurrent.join(long_df[reference_feature_columns], how="left")
     concurrent_features, feature_names = _build_features(concurrent, REFERENCE_COLUMN, long_dir_col)
     target = concurrent[MEASURED_COLUMN].to_numpy(dtype=float)
-    split_index = int(0.8 * len(concurrent_features))
-    X_train = concurrent_features.iloc[:split_index]
-    X_val = concurrent_features.iloc[split_index:]
-    y_train = target[:split_index]
-    y_val = target[split_index:]
     params = {
         "objective": "reg:squarederror",
         "eta": 0.05,
@@ -219,36 +237,122 @@ def _run_ltc_xgboost(
         "gamma": 0.1,
         "seed": 42,
     }
-    dtrain = DMatrix(X_train.to_numpy(dtype=float), label=y_train, feature_names=feature_names)
-    dval = DMatrix(X_val.to_numpy(dtype=float), label=y_val, feature_names=feature_names)
+    folds = _blocked_folds(len(concurrent_features), CV_FOLDS)
+    oof_prediction = np.full(len(target), np.nan)
+    fold_reports: list[dict[str, object]] = []
+    fold_iterations: list[int] = []
+    for fold_number, (start, stop) in enumerate(folds, start=1):
+        train_rows = np.concatenate([np.arange(0, start), np.arange(stop, len(target))])
+        if train_rows.size < MIN_FOLD_TRAIN_ROWS:
+            continue
+        # Early stopping watches a slice carved out of THIS fold's training data, never the
+        # held-out block, so the reported error is not optimistic through model selection.
+        inner_cut = max(1, int(train_rows.size * (1.0 - INNER_VALIDATION_FRACTION)))
+        inner_fit, inner_watch = train_rows[:inner_cut], train_rows[inner_cut:]
+        if inner_watch.size == 0:
+            inner_fit, inner_watch = train_rows[:-1], train_rows[-1:]
+        fold_booster = xgb_train(
+            params,
+            DMatrix(
+                concurrent_features.iloc[inner_fit].to_numpy(dtype=float),
+                label=target[inner_fit],
+                feature_names=feature_names,
+            ),
+            num_boost_round=MAX_BOOST_ROUNDS,
+            evals=[
+                (
+                    DMatrix(
+                        concurrent_features.iloc[inner_watch].to_numpy(dtype=float),
+                        label=target[inner_watch],
+                        feature_names=feature_names,
+                    ),
+                    "inner",
+                )
+            ],
+            early_stopping_rounds=EARLY_STOPPING_ROUNDS,
+            verbose_eval=False,
+        )
+        fold_iterations.append(int(getattr(fold_booster, "best_iteration", MAX_BOOST_ROUNDS)) + 1)
+        predicted = np.maximum(
+            0.0,
+            fold_booster.predict(
+                DMatrix(
+                    concurrent_features.iloc[start:stop].to_numpy(dtype=float),
+                    feature_names=feature_names,
+                )
+            ),
+        )
+        oof_prediction[start:stop] = predicted
+        fold_metrics = _regression_metrics(target[start:stop], predicted)
+        fold_index = concurrent_features.index[start:stop]
+        fold_reports.append(
+            {
+                "fold": fold_number,
+                "records": int(stop - start),
+                "start": fold_index[0].isoformat(),
+                "end": fold_index[-1].isoformat(),
+                "months": sorted({int(month) for month in fold_index.month}),
+                "mean_measured": round(float(np.mean(target[start:stop])), 4),
+                "rmse": fold_metrics["rmse"],
+                "r_squared": fold_metrics["r_squared"],
+            }
+        )
+    scored = np.isfinite(oof_prediction)
+    if not fold_reports:
+        raise ValueError(
+            "XGBoost LTC could not build a cross-validated holdout: the concurrent period is "
+            f"too short to split into {CV_FOLDS} blocks with at least {MIN_FOLD_TRAIN_ROWS} "
+            "training records each."
+        )
+    # The reported out-of-sample error is now the out-of-fold error across the whole
+    # campaign, so it covers every season the campaign saw (F-39/F-40).
+    val_metrics = _regression_metrics(target[scored], oof_prediction[scored])
+
+    # The delivered model is retrained on everything at the boosting depth the folds agreed
+    # on, so no early stopping is fitted against data it is then scored on.
+    best_iteration = int(np.median(fold_iterations)) if fold_iterations else MAX_BOOST_ROUNDS
+    X_train = concurrent_features
+    dtrain = DMatrix(
+        concurrent_features.to_numpy(dtype=float), label=target, feature_names=feature_names
+    )
     evals_result: dict[str, dict[str, list[float]]] = {}
     booster = xgb_train(
         params,
         dtrain,
-        num_boost_round=2000,
-        evals=[(dtrain, "train"), (dval, "eval")],
-        early_stopping_rounds=50,
+        num_boost_round=max(1, best_iteration),
+        evals=[(dtrain, "train")],
         evals_result=evals_result,
         verbose_eval=False,
     )
-    best_iteration = int(getattr(booster, "best_iteration", 2000))
-    # Out-of-sample (validation slice) metrics — PRIMARY (D10).
-    dval_pred = np.maximum(0.0, booster.predict(dval))
-    val_metrics = _regression_metrics(y_val, dval_pred)
     # In-sample (full concurrent) metrics — kept for diagnostics.
     dconcurrent = DMatrix(concurrent_features.to_numpy(dtype=float), feature_names=feature_names)
     concurrent_pred = np.maximum(0.0, booster.predict(dconcurrent))
     in_sample_metrics = _regression_metrics(target, concurrent_pred)
+    fold_rmse = [float(report["rmse"]) for report in fold_reports]
     metrics: dict[str, object] = {
         **val_metrics,
         "out_of_sample_rmse": val_metrics["rmse"],
+        "out_of_sample_basis": "blocked_cross_validation",
+        "cv_folds": len(fold_reports),
+        "cv_fold_reports": fold_reports,
+        "cv_rmse_spread": round(max(fold_rmse) - min(fold_rmse), 6),
+        "cv_records_scored": int(scored.sum()),
+        "cv_note": (
+            f"out_of_sample_rmse is the out-of-fold error over {int(scored.sum()):,} records "
+            f"from {len(fold_reports)} contiguous blocks spanning the whole concurrent period, "
+            "not a single terminal holdout. Blocks are contiguous rather than random so no "
+            "neighbouring hour leaks across the boundary, and early stopping watches a slice "
+            "of each fold's own training data so the reported error is not optimistic through "
+            "model selection. cv_rmse_spread is the fold-to-fold range - a large value means "
+            "the model's skill depends on the season."
+        ),
         "in_sample_r_squared": in_sample_metrics["r_squared"],
         "in_sample_rmse": in_sample_metrics["rmse"],
     }
     feature_importance = booster.get_score(importance_type="gain")
     top_features = dict(sorted(feature_importance.items(), key=lambda item: item[1], reverse=True)[:10])
     train_error = float(evals_result.get("train", {}).get("rmse", [float("nan")])[-1])
-    val_error = float(evals_result.get("eval", {}).get("rmse", [float("nan")])[-1])
+    val_error = float(val_metrics["rmse"])
     long_features, long_feature_names = _build_features(long_df, long_col, long_dir_col)
     if long_feature_names != feature_names:
         raise ValueError(
@@ -281,7 +385,7 @@ def _run_ltc_xgboost(
             "feature_importance": top_features,
             "concurrent_points": int(len(concurrent)),
             "total_corrected_points": int(len(long_df)),
-            "validation_points": int(len(y_val)),
+            "validation_points": int(scored.sum()),
         }
     )
     result_file = _save_xgboost_result(state, result_df, metrics)

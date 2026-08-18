@@ -21,10 +21,12 @@ import server.main  # noqa: F401  — establishes tool-module import order
 from server.state.session import SessionState
 from server.tools.extrapolation import (
     _extrapolate_to_hub_height,
+    _hub_column_name,
     _log_linear_interpolation,
     _power_extrapolate_array,
 )
 from server.tools.shear import (
+    SECTOR_SHEAR_MIN_RECORDS,
     _build_sector_shear_tables,
     _build_shear_table,
     _calculate_shear_timeseries,
@@ -353,18 +355,20 @@ def test_full_year_shear_table_reports_complete_coverage():
     assert "warning" not in result
 
 
-def test_sector_shear_tables_have_no_minimum_record_count():
-    """FINDING F-20: sector shear tables silently drop empty sectors and never report thinness.
+def test_sector_shear_tables_enforce_a_minimum_record_count():
+    """F-20 (MEDIUM) — FIXED. A thin sector is refused, and every sector reports its count.
 
-    Measured: with 20 records in one direction sector and the rest in another,
-    ``_build_sector_shear_tables`` returns 2 of 12 sectors. The 10 absent ones are
-    not listed, and the 20-record sector receives a full 288-cell table in which
-    285 cells are that sector's own mean. There is no per-sector count in the
-    response and no minimum-record gate anywhere in the function.
+    The bug: with 20 records in one direction sector and the rest in another,
+    ``_build_sector_shear_tables`` returned 2 of 12 sectors. The 10 absent ones were dropped
+    by a bare ``continue`` and never listed, so a sector absent for want of data looked
+    identical to a sector the wind never came from. The 20-record sector received a full
+    288-cell table in which 285 cells were that sector's own mean, and there was no
+    per-sector count in the response and no gate anywhere in the function.
 
-    Compare the guards the same codebase applies elsewhere: SpeedSort requires 200
-    records per sector before trusting a sector fit, and mast-shadow detection
-    requires 50. Directional shear — which drives hub-height speed — requires none.
+    The contrast within this codebase was the argument: SpeedSort requires 200 records per
+    sector before trusting a sector fit and mast-shadow detection requires 50, while
+    directional shear — which drives hub-height speed — required none. The gate now matches
+    SpeedSort's 200 and is overridable.
     """
     index = pd.date_range(*YEAR, freq="10min", tz="UTC")
     state = _mast_state((40.0, 60.0), 0.20, index)
@@ -375,14 +379,27 @@ def test_sector_shear_tables_have_no_minimum_record_count():
     _calculate_shear_timeseries(state, _height_json((40.0, 60.0)))
     result = _build_sector_shear_tables(state, "Dir_60m", 12, "mean")
 
-    assert len(result["sectors"]) == 2  # 10 sectors vanish without trace
-    thin = np.asarray(result["sectors"]["270-300"], dtype=float)
-    assert thin.size == 288
-    assert np.isfinite(thin).all()
+    # The 20-record sector no longer produces a 288-cell table.
+    assert "270-300" not in result["sectors"]
+    assert list(result["sectors"]) == ["90-120"]
+    assert result["min_sector_records"] == SECTOR_SHEAR_MIN_RECORDS == 200
 
-    assert "sector_record_counts" not in result
-    assert "empty_sectors" not in result
-    assert set(result) == {"sectors", "shear_clamping"}
+    # Every sector reports its count, and the exclusions say which gate they failed.
+    assert result["sector_record_counts"]["270-300"] == 20
+    assert result["sector_record_counts"]["0-30"] == 0
+    excluded = {row["sector"]: row["reason"] for row in result["sectors_excluded"]}
+    assert excluded["270-300"] == "below_minimum_records"
+    assert excluded["0-30"] == "empty"
+    assert len(result["sectors_excluded"]) == 11
+    assert "SpeedSort already requires 200" in result["warning"]
+
+    # The gate is a choice, not a wall: lowering it restores the old behaviour explicitly.
+    permissive = _build_sector_shear_tables(state, "Dir_60m", 12, "mean", min_sector_records=10)
+    assert set(permissive["sectors"]) == {"90-120", "270-300"}
+    thin = np.asarray(permissive["sectors"]["270-300"], dtype=float)
+    assert thin.size == 288
+    assert permissive["sector_coverage"]["270-300"]["filled_fraction"] > 0.9
+    assert "more than half" in permissive["coverage_warning"]
 
 
 def test_hub_inside_the_mast_uses_a_different_physical_model():
@@ -411,6 +428,42 @@ def test_hub_inside_the_mast_uses_a_different_physical_model():
     assert divergence[0.35] == pytest.approx(0.00391, abs=5e-5)
     # Systematically positive and monotone in shear: log-linear over-reads the power law.
     assert 0 < divergence[0.10] < divergence[0.20] < divergence[0.35]
+
+
+def test_hub_series_declares_which_physical_model_produced_it():
+    """F-21 (MEDIUM) — FIXED. A hub series built from two models now says so.
+
+    Records inside the mast range are interpolated linearly in ln(z); records outside it use
+    the power law with the alpha table. Both are defensible, and the divergence is small but
+    systematic and grows with shear — +0.03% at alpha 0.10, +0.39% at 0.35. ``method_counts``
+    reported the record split but never said the two paths use different physics, and a
+    single hub series can be a blend of both, including within one timeseries when the
+    bracketing sensors drop out intermittently.
+    """
+    index = pd.date_range(*YEAR, freq="10min", tz="UTC")
+    state = _mast_state((60.0, 100.0), 0.25, index)
+    _calculate_shear_timeseries(state, _height_json((60.0, 100.0)))
+    _build_shear_table(state, "mean")
+
+    # Hub inside the mast range: every record is interpolated, and the model is named.
+    inside = _extrapolate_to_hub_height(state, 80.0, "power_law")
+    assert inside["method_counts"]["interpolated"] > 0
+    assert inside["method_counts"]["extrapolated"] == 0
+    assert "ln(z)" in inside["method_models"]["interpolated"]
+    assert "shear" in inside["method_models"]["extrapolated"]
+    assert inside["method_is_mixed"] is False
+    assert "method_warning" not in inside
+
+    # Knock the top sensor out for part of the year and the same hub height is served by
+    # both models at once — which is the case that was invisible.
+    gap = (index.month == 7)
+    state.timeseries_df.loc[gap, "Spd_100m"] = np.nan
+    mixed = _extrapolate_to_hub_height(state, 80.0, "power_law")
+    assert mixed["method_counts"]["interpolated"] > 0
+    assert mixed["method_counts"]["extrapolated"] > 0
+    assert mixed["method_is_mixed"] is True
+    assert "two different physical models" in mixed["method_warning"]
+    assert "divergence grows with shear" in mixed["method_note"]
 
 
 def test_extrapolation_ignores_the_shear_speed_gate():
@@ -454,19 +507,19 @@ def test_extrapolation_ignores_the_shear_speed_gate():
     assert int(hub.notna().sum()) > int(shear["records"])
 
 
-def test_reanalysis_hub_extrapolation_no_ops_and_reports_ok():
-    """FINDING F-22: the reanalysis leg can do nothing at all and still report success.
+def test_reanalysis_hub_extrapolation_reports_when_it_writes_nothing():
+    """F-22 (MEDIUM) — FIXED. A leg that wrote nothing no longer reports success.
 
-    ``_extrapolate_all_reanalysis_nodes`` only touches the interpolated series when
-    the reference column ``Spd_100m`` is present, and the interpolated series is
-    never added to ``skipped_nodes`` — that list only ever collects ERA5/MERRA node
-    keys. With ERA5 present but carrying only 10 m winds it returns
-    ``status: "ok"`` with empty ``extrapolated_nodes`` *and* empty ``skipped_nodes``,
-    having written nothing. The caller additionally wraps the whole leg in
-    ``except (ValueError, KeyError): pass``, so genuine failures are also silent.
+    The bug: ``_extrapolate_all_reanalysis_nodes`` only touched the interpolated series when
+    the reference column was present, and the interpolated series was never added to
+    ``skipped_nodes`` — that list only ever collected ERA5/MERRA node keys. With ERA5 present
+    but carrying only 10 m winds it returned ``status: "ok"`` with empty
+    ``extrapolated_nodes`` *and* empty ``skipped_nodes``, having written nothing. The caller
+    additionally wrapped the whole leg in ``except (ValueError, KeyError): pass``, so genuine
+    failures were silent too.
 
-    Downstream, LTC then either fails on a missing column or — with the Step 1
-    staleness gap (F-11) — silently reuses a hub column from an earlier run.
+    Downstream, LTC then either fails on a missing column or — with the staleness gap
+    (F-11) — silently reuses a hub column from an earlier run.
     """
     index = pd.date_range(*YEAR, freq="10min", tz="UTC")
     state = _mast_state((40.0, 60.0), 0.20, index)
@@ -478,14 +531,42 @@ def test_reanalysis_hub_extrapolation_no_ops_and_reports_ok():
     result = _extrapolate_to_hub_height(state, 120.0, "power_law")
     reanalysis = result["reanalysis"]
 
+    # The measured leg genuinely succeeded; the reanalysis leg genuinely did not.
     assert result["status"] == "ok"
-    assert reanalysis["status"] == "ok"
+    assert reanalysis["status"] == "no_op"
+    assert reanalysis["wrote_hub_column"] is False
     assert reanalysis["extrapolated_nodes"] == []
-    assert reanalysis["skipped_nodes"] == []  # the interpolated series is not recorded as skipped
-    assert reanalysis["interpolated_extrapolated"] is False
-    assert "Spd_120m_hub" not in state.era5_interpolated_df.columns
+    assert reanalysis["skipped_nodes"] == ["interpolated_site_series"]
+    assert reanalysis["reference_column"] == "Spd_100m"
+    assert "will either fail on the missing column or reuse a stale one" in reanalysis["warning"]
+    # And the failure surfaces on the top-level response under its own key, so it does
+    # not compete with the extrapolation-lever warning.
+    assert "reference column" in result["reanalysis_warning"]
+
+    # Nothing was written, which is what made this dangerous.
+    assert _hub_column_name(120.0) not in state.era5_interpolated_df.columns
+
+    # With the reference column present the same call succeeds and says so.
+    state.era5_interpolated_df["Spd_100m"] = np.full(len(index), 8.0)
+    ok = _extrapolate_to_hub_height(state, 120.0, "power_law")["reanalysis"]
+    assert ok["status"] == "ok"
+    assert ok["wrote_hub_column"] is True
+    assert ok["interpolated_extrapolated"] is True
+    assert _hub_column_name(120.0) in state.era5_interpolated_df.columns
 
 
+def test_reanalysis_leg_names_why_it_was_skipped():
+    """A skip for want of inputs is distinguishable from a skip for want of a column."""
+    index = pd.date_range(*YEAR, freq="10min", tz="UTC")
+    state = _mast_state((40.0, 60.0), 0.20, index)
+    _calculate_shear_timeseries(state, _height_json((40.0, 60.0)))
+    _build_shear_table(state, "mean")
+
+    # No reanalysis data at all: a legitimate skip, now named.
+    result = _extrapolate_to_hub_height(state, 120.0, "power_law")
+    assert result["reanalysis"]["status"] == "skipped"
+    assert result["reanalysis"]["reason"] == "no_reanalysis_data"
+    assert result["reanalysis"]["wrote_hub_column"] is False
 def test_month_hour_mean_alpha_smooths_the_hub_distribution():
     """FINDING F-25 (LOW, quantified): the 12x24 table is unbiased in the mean but smooths records.
 

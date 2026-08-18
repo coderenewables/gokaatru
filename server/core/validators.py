@@ -96,3 +96,20 @@ def detect_timestep_minutes(df: pd.DataFrame) -> int:
             "check that the time column parses as dates."
         )
     return inferred
+
+
+# F-07.  IEA Task 43 permits interval-start, -end and -centre labelling and GoKaatru had
+# never declared which it assumes.  Reanalysis references are instantaneous, so a mismatch
+# is a systematic half-interval offset in every long-term correction rather than noise.
+# The convention is a property of the logger and cannot be inferred from the data, so it is
+# declared at ingest and overridable per dataset via ``runconfig["timestamp_label"]``.
+TIMESTAMP_LABEL_CONVENTION = "interval_start"
+TIMESTAMP_LABEL_CHOICES = ("interval_start", "interval_end", "interval_centre")
+TIMESTAMP_LABEL_NOTE = (
+    "Timestamps are treated as the START of each averaging interval. IEA Task 43 permits "
+    "interval-start, interval-end and interval-centre labelling and the file does not say "
+    "which it uses, so this is an assumption, not a measurement. Reanalysis references are "
+    "instantaneous, so a mismatch shifts the measured series against the reference by half "
+    "an interval - five minutes on 10-minute data - in every long-term correction. Set "
+    "timestamp_label on the run configuration if the logger labelled interval ends."
+)

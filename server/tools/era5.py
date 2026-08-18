@@ -409,35 +409,73 @@ def _compute_era5_wind_speed(state: SessionState, latitude: float, longitude: fl
     }
 
 
-def _interpolate_era5_to_site(state: SessionState) -> dict:
-    """Spatially interpolate ERA5 node data to the site using linear interpolation with IDW fallback.
+REFERENCE_SOURCES = ("era5", "merra2")
+
+
+def _reference_nodes_and_data(
+    state: SessionState,
+    source: str,
+) -> tuple[list[dict[str, object]], dict[str, "pd.DataFrame"], object]:
+    """Return the node list, node frames and key function for one reanalysis source.
+
+    F-58: MERRA-2 was acquired, cached, extrapolated to hub height and used for nothing.
+    ``_interpolate_era5_to_site`` read ``state.era5_data`` only and ``_require_ltc_inputs``
+    read ``state.era5_interpolated_df`` only, so nothing in ``state.merra_data`` could ever
+    become an LTC reference — its only consumers were a hub-height column nothing read and a
+    map marker. A second independent long-term source is the standard way to test whether an
+    LTC result depends on the reference chosen, and the download cost was already being paid.
+    """
+    if source == "era5":
+        return list(state.era5_nodes or []), state.era5_data, _era5_key
+    nodes = list(state.merra_nodes or [])
+    return nodes, state.merra_data, lambda lat, lon: f"{lat}_{lon}"
+
+
+def _interpolate_era5_to_site(state: SessionState, source: str = "era5") -> dict:
+    """Spatially interpolate reanalysis node data to the site with linear interpolation and IDW fallback.
 
     Speed (``Spd_100m``) is interpolated as a *scalar* to avoid the
     vector-cancellation bias that under-predicts speed where node wind
     directions diverge across the cell.  Direction (``Dir_100m``) is
     derived from vector-interpolated u/v components, which is the correct
     approach for direction.
+
+    ``source`` selects which downloaded reanalysis becomes the LTC reference (F-58). Both
+    write ``state.era5_interpolated_df``, which is the single series every LTC algorithm
+    reads, so switching source and re-running the LTC is how a reference-dependence check is
+    made. The source actually used is recorded on the run configuration.
     """
+    if source not in REFERENCE_SOURCES:
+        raise ValueError(f"source must be one of {', '.join(REFERENCE_SOURCES)}, got '{source}'")
     coordinate = state.get_coordinate()
     if coordinate is None:
         raise ValueError("Site coordinate is not set. Run find_era5_nodes first")
-    if not state.era5_nodes or len(state.era5_nodes) < 4:
-        raise ValueError("ERA5 nodes are not available. Run find_era5_nodes first")
-    points = [(float(node["latitude"]), float(node["longitude"])) for node in state.era5_nodes]
+    nodes, node_data, key_for = _reference_nodes_and_data(state, source)
+    label = "ERA5" if source == "era5" else "MERRA-2"
+    if len(nodes) < 4:
+        raise ValueError(
+            f"{label} nodes are not available. "
+            + ("Run find_era5_nodes first" if source == "era5"
+               else "Download MERRA-2 nodes with brighthub_download_reanalysis first")
+        )
+    points = [(float(node["latitude"]), float(node["longitude"])) for node in nodes]
     frames = []
-    for node in state.era5_nodes:
-        key = _era5_key(float(node["latitude"]), float(node["longitude"]))
-        if key not in state.era5_data:
-            raise ValueError(f"ERA5 data for node '{key}' is not loaded")
-        frame = state.era5_data[key]
+    for node in nodes:
+        key = key_for(float(node["latitude"]), float(node["longitude"]))
+        if key not in node_data:
+            raise ValueError(f"{label} data for node '{key}' is not loaded")
+        frame = node_data[key]
         if "Spd_100m" not in frame.columns or "Dir_100m" not in frame.columns:
-            raise ValueError(f"ERA5 node '{key}' must have Spd_100m and Dir_100m. Run compute_era5_wind_speed first")
+            raise ValueError(
+                f"{label} node '{key}' must have Spd_100m and Dir_100m. "
+                "Run compute_era5_wind_speed first"
+            )
         frames.append(frame)
     common_index = frames[0].index
     for frame in frames[1:]:
         common_index = common_index.intersection(frame.index)
     if common_index.empty:
-        raise ValueError("ERA5 node dataframes do not share any common timestamps for interpolation")
+        raise ValueError(f"{label} node dataframes do not share any common timestamps for interpolation")
     variables = ["Spd_100m", "sp", "t2m", "d2m"]
     site = (coordinate.latitude, coordinate.longitude)
     result = pd.DataFrame(index=common_index)
@@ -460,6 +498,10 @@ def _interpolate_era5_to_site(state: SessionState) -> dict:
     methods_used.update({method_u, method_v})
     result["Dir_100m"] = (270.0 - np.degrees(np.arctan2(np.asarray(interp_v), np.asarray(interp_u)))) % 360.0
     state.era5_interpolated_df = result.sort_index()
+    # The LTC reads a single interpolated series, so the source that produced it has to be
+    # recorded or a reference-dependence check cannot be told apart from a re-run (F-58).
+    state.runconfig["reference_source"] = source
+    state.touch()
     method_name = "idw" if "idw" in methods_used else "linear"
     return {
         "status": "ok",
@@ -467,6 +509,14 @@ def _interpolate_era5_to_site(state: SessionState) -> dict:
         "method": method_name,
         "variables": state.era5_interpolated_df.columns.tolist(),
         "speed_interpolation": "scalar",
+        "reference_source": source,
+        "nodes_used": len(points),
+        "reference_source_note": (
+            "This is the series every LTC algorithm will use. Re-running the interpolation "
+            "with the other source and repeating the LTC is how a result's dependence on the "
+            "reference is tested; a large difference means the correction is being driven by "
+            "the reanalysis rather than by the site."
+        ),
     }
 
 
@@ -494,11 +544,16 @@ def compute_era5_wind_speed(latitude: float, longitude: float) -> dict:
 
 
 @mcp.tool()
-def interpolate_era5_to_site() -> dict:
-    """Spatially interpolate ERA5 node data to the site using linear interpolation with IDW fallback.
+def interpolate_era5_to_site(source: str = "era5") -> dict:
+    """Spatially interpolate reanalysis node data to the site with linear interpolation and IDW fallback.
 
     Speed is scalar-interpolated; direction is derived from vector-interpolated
     u/v.  The response includes ``speed_interpolation`` indicating the convention
     used.
+
+    ``source`` is ``"era5"`` (default) or ``"merra2"`` and selects which downloaded
+    reanalysis becomes the long-term reference. Both write the same interpolated series that
+    every LTC algorithm reads, so switching source and re-running the LTC is how a result's
+    dependence on the reference is tested.
     """
-    return _interpolate_era5_to_site(session)
+    return _interpolate_era5_to_site(session, source)

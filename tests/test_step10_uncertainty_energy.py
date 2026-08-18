@@ -310,57 +310,103 @@ def test_concurrent_months_disclosure_contradicts_the_math_it_reports():
     assert result["inputs"]["concurrent_months_cap"] == pytest.approx(12.0)
 
 
-def test_mcp_uncertainty_gives_no_credit_beyond_twelve_months():
-    """FINDING F-31: campaign length stops reducing MCP uncertainty at one year.
+def test_mcp_sampling_cap_is_visible_and_movable():
+    """F-31 (MEDIUM) — FIXED. The 12-month cap is a parameter, and reports what it withheld.
 
-    Measured with R2 = 0.95: u_mcp is 1.47% at six months, 1.12% at twelve, and
-    exactly 1.12% at eighteen, twenty-four, thirty-six and sixty months. A
-    three-year campaign earns nothing over a one-year campaign.
+    The bug: ``u_mcp`` gave no credit beyond twelve months and nothing said so. Measured at
+    R2 = 0.95, it was 1.47% at six months, 1.12% at twelve, and exactly 1.12% at eighteen,
+    twenty-four, thirty-six and sixty — a three-year campaign earned nothing over a one-year
+    campaign, with no way to tell whether that was deliberate.
+
+    The cap itself is kept as the default: beyond about a year the limit on an MCP is the
+    stability of the transfer function, not the number of concurrent pairs, so the extra
+    1/sqrt(n) credit would not be real. What changed is that the cap is now a parameter, the
+    uncapped figure is reported beside the capped one, and a campaign longer than the cap
+    gets a warning naming the difference.
     """
     state = SessionState()
     state.reset()
 
-    def u_mcp(months: float) -> float:
-        return float(
-            _calculate_uncertainty(
-                state, 3.0, 100.0, 150.0, "simple_power_law", 0.95, months * 730.0
-            )["components"]["mcp"]
+    def result_for(months: float, **kwargs: float) -> dict:
+        return _calculate_uncertainty(
+            state, 3.0, 100.0, 150.0, "simple_power_law", 0.95, months * 730.0, **kwargs
         )
 
+    def u_mcp(months: float, **kwargs: float) -> float:
+        return float(result_for(months, **kwargs)["components"]["mcp"])
+
+    # The default behaviour is unchanged.
     assert u_mcp(6) > u_mcp(12)
-    assert u_mcp(12) == u_mcp(18) == u_mcp(24) == u_mcp(36) == u_mcp(60)
+    assert u_mcp(12) == u_mcp(24) == u_mcp(60)
+
+    # What the cap withheld is now a number on the page.
+    long_campaign = result_for(36)
+    cap = long_campaign["mcp_sampling_cap"]
+    assert cap["cap_applied"] is True
+    assert cap["months_available"] == pytest.approx(36.0, abs=0.1)
+    assert cap["u_mcp_uncapped_pct"] < cap["u_mcp_pct"]
+    assert cap["credit_withheld_pct"] > 0.3
+    assert "concurrent months" in cap["note"]
+    assert "36.0 concurrent months were supplied" in cap["warning"]
+
+    # And the cap can be moved when the analyst judges the extra credit defensible.
+    assert u_mcp(36, concurrent_months_cap=36.0) < u_mcp(36)
+    assert u_mcp(36, concurrent_months_cap=36.0) == pytest.approx(
+        cap["u_mcp_uncapped_pct"], abs=0.01
+    )
+    # A one-year campaign has nothing withheld and says so.
+    assert result_for(12)["mcp_sampling_cap"]["cap_applied"] is False
+
+    with pytest.raises(ValueError, match="concurrent_months_cap must be at least 1"):
+        result_for(12, concurrent_months_cap=0.5)
 
 
-def test_future_variability_assumes_a_twenty_year_project_life():
-    """FINDING F-32 (partly addressed): the 20-year life is now disclosed but still fixed.
+def test_project_life_is_a_parameter():
+    """F-32 (MEDIUM) — FIXED. The operating life is the project's fact, not the tool's.
 
-    ``u_future = iav / sqrt(PROJECT_LIFE_YEARS)`` with the life assumed to be 20. A
-    15-year life would give 1.55% rather than 1.34% for the same 6% IAV. The constant is
-    now named and reported in ``inputs.project_life_years`` so the assumption travels
-    with the number, but it is still not a caller parameter.
+    ``u_future = iav / sqrt(project_life_years)`` hardcoded a 20-year life. A 15-year life
+    gives 1.55% for the same 6% IAV where 20 years gives 1.34%, and the constant was neither
+    a parameter nor derivable from anything the caller supplied.
 
-    Also still open: the sqrt(n) assumes annual means are independent, which ignores
-    inter-annual persistence and any climate trend.
+    Still open by design: the sqrt(n) assumes annual means are independent, which ignores
+    inter-annual persistence and any climate trend. That is a modelling choice rather than a
+    missing parameter, and it is recorded in the README's known limitations.
     """
     state = SessionState()
     state.reset()
-    result = _calculate_uncertainty(state, 3.0, 100.0, 150.0, "simple_power_law", 0.95, 8760.0, iav_pct=6.0)
 
-    assert result["components"]["future_variability"] == pytest.approx(6.0 / math.sqrt(20.0), abs=0.005)
-    assert result["inputs"]["project_life_years"] == pytest.approx(20.0)
-    # Disclosed, but not yet adjustable.
-    import inspect
+    def u_future(**kwargs: float) -> float:
+        return float(
+            _calculate_uncertainty(
+                state, 3.0, 100.0, 150.0, "simple_power_law", 0.95, 8760.0, iav_pct=6.0, **kwargs
+            )["components"]["future_variability"]
+        )
 
-    assert "project_life_years" not in inspect.signature(_calculate_uncertainty).parameters
+    assert u_future() == pytest.approx(6.0 / math.sqrt(20.0), abs=0.005)
+    assert u_future(project_life_years=15.0) == pytest.approx(6.0 / math.sqrt(15.0), abs=0.005)
+    assert u_future(project_life_years=15.0) > u_future()
+
+    reported = _calculate_uncertainty(
+        state, 3.0, 100.0, 150.0, "simple_power_law", 0.95, 8760.0,
+        iav_pct=6.0, project_life_years=15.0,
+    )
+    assert reported["inputs"]["project_life_years"] == pytest.approx(15.0)
+
+    with pytest.raises(ValueError, match="project_life_years must be positive"):
+        u_future(project_life_years=0.0)
 
 
-def test_total_uncertainty_is_pure_quadrature_assuming_zero_correlation():
-    """FINDING F-33: RSS treats all four components as independent.
+def test_total_uncertainty_reports_the_cost_of_its_independence_assumption():
+    """F-33 (MEDIUM) — FIXED. Quadrature stays the default; its optimism is quantified.
 
-    Measurement, vertical extrapolation and MCP all derive from the same measured
-    series, so they are correlated in reality. At rho = 0.5 among those three the
-    total would be about 7.3% where the model reports 5.65% — roughly 30% higher,
-    which flows straight into every P-value.
+    RSS treats all four components as independent, but measurement, vertical extrapolation
+    and MCP all derive from the same measured series — a mast that reads low reads low in
+    every one of them. At rho = 0.5 among those three the total is roughly 30% higher, and
+    that flows straight into every P-value.
+
+    Zero correlation is what published RSS practice assumes and what this model has always
+    done, so it remains the default and existing results are unchanged. What is new is that
+    the total at rho = 0.5 travels with every response, and the correlation is settable.
     """
     state = SessionState()
     state.reset()
@@ -372,14 +418,27 @@ def test_total_uncertainty_is_pure_quadrature_assuming_zero_correlation():
     quadrature = math.sqrt(sum(v**2 for v in components.values()))
     assert float(result["total_uncertainty_pct"]) == pytest.approx(quadrature, abs=0.01)
 
-    shared = ["measurement", "vertical_extrapolation", "mcp"]
-    cross = sum(
-        components[a] * components[b]
-        for i, a in enumerate(shared)
-        for b in shared[i + 1 :]
+    combination = result["combination"]
+    assert combination["method"] == "root_sum_square"
+    assert combination["component_correlation"] == 0.0
+    assert combination["correlated_components"] == ["measurement", "vertical_extrapolation", "mcp"]
+    assert combination["sensitivity_ratio"] > 1.25
+    assert "independence is optimistic" in combination["note"]
+
+    # The reported sensitivity is what setting the correlation actually produces.
+    correlated = _calculate_uncertainty(
+        state, 3.0, 100.0, 150.0, "calculate_shear", 0.95, 8760.0,
+        shear_std=0.11, component_correlation=0.5,
     )
-    correlated = math.sqrt(sum(v**2 for v in components.values()) + 2 * 0.5 * cross)
-    assert correlated / quadrature > 1.25
+    assert float(correlated["total_uncertainty_pct"]) == pytest.approx(
+        float(combination["total_at_rho_0.5_pct"]), abs=0.01
+    )
+    assert float(correlated["total_uncertainty_pct"]) > float(result["total_uncertainty_pct"])
+
+    with pytest.raises(ValueError, match="component_correlation must lie between"):
+        _calculate_uncertainty(
+            state, 3.0, 100.0, 150.0, "simple_power_law", 0.95, 8760.0, component_correlation=1.5
+        )
 
 
 def test_uncertainty_has_no_energy_specific_components(reconciled_run: dict) -> None:
@@ -397,19 +456,25 @@ def test_uncertainty_has_no_energy_specific_components(reconciled_run: dict) -> 
         assert absent not in components
 
 
-def test_ensemble_weights_do_not_label_their_rmse_basis(reconciled_run: dict) -> None:
-    """FINDING F-35: the mixed out-of-sample / in-sample RMSE basis is unlabelled.
+def test_ensemble_weights_label_their_rmse_basis(reconciled_run: dict) -> None:
+    """F-35 (MEDIUM) — FIXED. The blend now declares which error each weight rests on.
 
-    The README records this as a known limitation; this pins it. ``run_ensemble``
-    returns weights with no per-component note of whether the RMSE behind each one
-    was held out or in sample, so the blend cannot be audited from its output.
+    ``run_ensemble`` returned weights with no per-component note of whether the RMSE behind
+    each one was held out or in sample, so the documented mixed basis could not be audited
+    from the tool's own output. Only XGBoost reports an out-of-sample error, and in-sample
+    error is systematically lower, so a mixed blend tilts for reasons unrelated to skill.
     """
     ensemble = reconciled_run["ensemble"]
     assert {"status", "weights", "metrics", "component_coverage", "result_file"} <= set(ensemble)
-    assert "weight_basis" not in ensemble
-    for payload in ensemble["metrics"].values():
-        if isinstance(payload, dict):
-            assert "rmse_basis" not in payload
+
+    assert set(ensemble["weight_basis"]) == set(ensemble["weights"])
+    # This reconciliation uses two linear methods, so the basis is uniform and honest
+    # about being in-sample.
+    assert set(ensemble["weight_basis"].values()) == {"concurrent_overlap_in_sample"}
+    assert ensemble["weight_basis_is_mixed"] is False
+    assert "weight_basis_warning" not in ensemble
+    assert "systematically lower" in ensemble["weight_basis_note"]
+    assert set(ensemble["weight_rmse"]) == set(ensemble["weights"])
 
 
 # ---------------------------------------------------------------------------

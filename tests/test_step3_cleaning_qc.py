@@ -207,19 +207,17 @@ def test_stuck_sensor_preserves_corroborated_calms():
     assert stuck_result["calms_preserved"] == 0
 
 
-def test_icing_filter_has_no_direction_stationarity_condition():
-    """FINDING F-69 (M): any cold, steady period is treated as icing.
+def test_icing_filter_requires_a_stationary_direction():
+    """F-69 (MEDIUM) — FIXED. A held vane is the third signal that separates ice from calm.
 
-    `_apply_icing_filter` tests two conditions only — speed standard deviation at or below
-    `sd_threshold_mps` (default 0.01) and temperature below `temp_threshold_c` (default
-    2 degC). A frozen cup also holds its *direction* fixed, and that third signal is what
-    separates a genuinely iced sensor from a cold, steady flow.
+    The bug: `_apply_icing_filter` tested two conditions only — speed standard deviation at
+    or below `sd_threshold_mps` and temperature below `temp_threshold_c`. A cold, steady
+    flow satisfies both. Measured with 20 records at zero speed-SD and -1 degC whose
+    direction **swung randomly through the full circle** — which no frozen vane does: all 20
+    were removed as icing.
 
-    Measured with 20 records at zero speed-SD and -1 degC whose **direction swings randomly
-    through the full circle** — which no frozen vane does: all 20 are removed as icing.
-
-    The paired direction column is already resolved in `sensor_mapping` and is already used
-    by `tower_shadow`, so the signal is available and simply not consulted.
+    The fix consults the paired direction column that `sensor_mapping` already resolves and
+    `tower_shadow` already uses. A swinging vane is now retained; a held one is still removed.
     """
     rng = np.random.default_rng(4)
     n = 600
@@ -227,28 +225,49 @@ def test_icing_filter_has_no_direction_stationarity_condition():
     sd[300:320] = 0.0
     temperature = np.full(n, 10.0)
     temperature[300:320] = -1.0
-    direction = np.full(n, 180.0)
-    direction[300:320] = rng.uniform(0, 360, 20)  # emphatically not frozen
+    swinging = np.full(n, 180.0)
+    swinging[300:320] = rng.uniform(0, 360, 20)  # emphatically not frozen
 
     state = _cleaning_state(
-        6.0 + rng.weibull(2.0, n) * 3.0, sd=sd, temperature=temperature, direction=direction
+        6.0 + rng.weibull(2.0, n) * 3.0, sd=sd, temperature=temperature, direction=swinging
     )
     result = _apply_cleaning_rule(state, "icing_filter", "Spd_100m", json.dumps({}))
 
-    assert result["records_affected"] == 20
-    assert int(state.timeseries_df["Spd_100m"].iloc[300:320].isna().sum()) == 20
+    assert result["records_affected"] == 0
+    assert result["retained_by_direction_test"] == 20
+    assert result["direction_basis"] == "tested"
+    assert int(state.timeseries_df["Spd_100m"].iloc[300:320].isna().sum()) == 0
 
-    import inspect
+    # A genuinely frozen sensor holds all three signals, and is still removed.
+    frozen = np.full(n, 180.0)
+    iced_state = _cleaning_state(
+        6.0 + rng.weibull(2.0, n) * 3.0, sd=sd, temperature=temperature, direction=frozen
+    )
+    iced = _apply_cleaning_rule(iced_state, "icing_filter", "Spd_100m", json.dumps({}))
+    assert iced["records_affected"] == 20
+    assert iced["retained_by_direction_test"] == 0
 
-    from server.tools import cleaning as cleaning_module
 
-    source = inspect.getsource(cleaning_module._apply_icing_filter)
-    assert "sd_col" in source and "temp_col" in source
-    assert "dir_col" not in source  # the third signal is never read
+def test_icing_filter_declares_when_it_cannot_test_direction():
+    """With no mapped direction column the third condition is untestable, and the rule says so."""
+    n = 400
+    sd = np.full(n, 0.5)
+    sd[100:120] = 0.0
+    temperature = np.full(n, 10.0)
+    temperature[100:120] = -1.0
+    rng = np.random.default_rng(5)
+
+    state = _cleaning_state(6.0 + rng.weibull(2.0, n) * 3.0, sd=sd, temperature=temperature)
+    state.sensor_mapping[100.0]["dir_col"] = None
+    result = _apply_cleaning_rule(state, "icing_filter", "Spd_100m", "{}")
+
+    assert result["records_affected"] == 20  # the pre-fix two-condition behaviour
+    assert result["direction_basis"] == "skipped_no_direction_column"
+    assert "cold steady flow" in result["warning"]
 
 
-def test_cleaning_rules_are_order_dependent_and_nothing_says_so():
-    """FINDING F-70 (M): filters do not commute, and the response never mentions it.
+def test_cleaning_rules_are_order_dependent_and_say_so():
+    """F-70 (MEDIUM) — FIXED. Filters do not commute, and the response now says so.
 
     Rules that create NaNs change what later rules see. `stuck_sensor` measures runs of
     identical values, so any earlier rule that punches a hole in the middle of a run splits
@@ -260,10 +279,14 @@ def test_cleaning_rules_are_order_dependent_and_nothing_says_so():
         stuck_sensor then icing_filter : **10** records removed
         icing_filter then stuck_sensor : **2** records removed
 
-    A fivefold difference from rule order alone. The cleaning log records the order, so a
-    result is reproducible — that part is right. What is missing is any statement that the
-    order is *material*, so an analyst reordering the rule list has no reason to expect a
-    different answer.
+    A fivefold difference from rule order alone. The order dependence is inherent — a rule
+    that punches NaNs into a run really does change what a run-length rule can see, and
+    forcing a canonical order would substitute one arbitrary choice for another.
+
+    What was missing was any statement that the order is *material*, so an analyst
+    reordering the rule list had no reason to expect a different answer. Every apply now
+    returns an `order_dependence` block naming the rules that already touched this sensor,
+    and both `list_cleaning_rules` and `get_cleaning_log` carry the note.
     """
     rng = np.random.default_rng(7)
     speed = 6.0 + rng.weibull(2.0, 400) * 3.0
@@ -290,12 +313,30 @@ def test_cleaning_rules_are_order_dependent_and_nothing_says_so():
 
     # The order is logged, so the run is reproducible...
     state = _cleaning_state(speed.copy(), sd=sd.copy(), temperature=temperature.copy())
-    _apply_cleaning_rule(state, "stuck_sensor", "Spd_100m", json.dumps({"consecutive_count": 6}))
+    first = _apply_cleaning_rule(
+        state, "stuck_sensor", "Spd_100m", json.dumps({"consecutive_count": 6})
+    )
     result = _apply_cleaning_rule(state, "icing_filter", "Spd_100m", "{}")
     assert [entry["rule_type"] for entry in state.cleaning_log] == ["stuck_sensor", "icing_filter"]
-    # ...but nothing flags that the order changed the outcome.
-    assert "order_sensitive" not in result
-    assert "applied_after" not in result
+
+    # ...and the response now names what this rule saw and warns that order matters.
+    assert first["order_dependence"]["applied_before_on_this_sensor"] == []
+    assert "warning" not in first["order_dependence"]
+
+    order = result["order_dependence"]
+    assert order["sequence"] == 2
+    assert order["order_is_material"] is True
+    assert [item["rule_type"] for item in order["applied_before_on_this_sensor"]] == ["stuck_sensor"]
+    assert "different order can give a different result" in order["warning"]
+
+    # The catalogue and the log carry the same statement, so it is discoverable up front.
+    from server.tools.cleaning import _get_cleaning_log, _list_cleaning_rules
+
+    assert _list_cleaning_rules(state)["order_is_material"] is True
+    log = _get_cleaning_log(state)
+    assert log["order_is_material"] is True
+    assert "order-dependent" in log["order_note"]
+    assert [entry["sequence"] for entry in log["entries"]] == [1, 2]
 
 
 def test_date_bounded_cleaning_works_on_a_tz_aware_series():
@@ -342,43 +383,81 @@ def test_date_bounded_cleaning_works_on_a_tz_aware_series():
     assert aware["records_affected"] == 13
 
 
-def test_tower_shadow_uses_a_fixed_narrow_sector_ignoring_the_measured_one():
-    """FINDING F-71 (M): the shadow sector is a hardcoded 20-degree guess.
+def test_tower_shadow_prefers_the_recorded_boom_orientation():
+    """F-71 (MEDIUM) — FIXED. The shadow sector comes from geometry, not a fixed guess.
 
-    `tower_shadow` defaults to `exclude_sectors: [170, 190]` — a **20-degree** window. A
-    lattice tower shadows roughly +/-30 to 40 degrees behind the boom, so the default is
-    around a third of the affected width and centred on an arbitrary bearing.
+    The bug: `tower_shadow` defaulted to `exclude_sectors: [170, 190]` — a **20-degree**
+    window on an arbitrary bearing, where a lattice tower shadows roughly +/-35 degrees
+    behind the boom. Two better sources sat unused: IEA Task 43 records boom orientation per
+    measurement point and nothing in the ingest path read it, and `compute_mast_effects`
+    already *measures* the shadowed sectors and the rule never consulted it.
 
-    Two things are available and unused. IEA Task 43 records boom orientation per
-    measurement point, and nothing in the ingest path reads it. And `compute_mast_effects`
-    already *measures* which sectors are shadowed, two-sided, in 22.5-degree bins with a
-    50-record minimum — the same "computed, displayed, discarded" pattern as the measured
-    IAV (F-47) and the ensemble spread (F-53).
+    The tower sits opposite the boom, so a boom at 90 degrees puts the shadow at 270.
     """
-    from server.tools.cleaning import RULES
-
-    start, end = RULES["tower_shadow"]["exclude_sectors"]
-    assert end - start == 20.0  # a third of a realistic lattice-tower shadow
-
     rng = np.random.default_rng(9)
     n = 2000
     direction = rng.uniform(0, 360, n)
     state = _cleaning_state(6.0 + rng.weibull(2.0, n) * 3.0, direction=direction)
+    state.sensor_inventory["Spd_100m"]["boom_orientation_deg"] = 90.0
+
     result = _apply_cleaning_rule(state, "tower_shadow", "Spd_100m", "{}")
 
-    expected = int(((direction >= 170.0) & (direction <= 190.0)).sum())
+    assert result["sector_basis"] == "boom_orientation"
+    assert result["boom_orientation_deg"] == 90.0
+    assert result["exclude_sectors"] == [235.0, 305.0]  # 270 +/- 35
+    expected = int(((direction >= 235.0) & (direction <= 305.0)).sum())
     assert result["records_affected"] == expected
-    assert result["records_affected"] / n < 0.07  # ~20/360
+    # Roughly 70/360 of the record, against 20/360 before.
+    assert 0.15 < result["records_affected"] / n < 0.25
 
-    # The measured alternative exists and is not consulted.
-    import inspect
 
-    from server.tools import cleaning as cleaning_module
-    from server.tools import diagnostics as diagnostics_module
+def test_tower_shadow_falls_back_to_the_measured_sector():
+    """With no boom orientation, the sectors `compute_mast_effects` measured are used."""
+    rng = np.random.default_rng(21)
+    n = 6000
+    direction = rng.uniform(0, 360, n)
+    speed = 6.0 + rng.weibull(2.0, n) * 3.0
+    # Depress the upper sensor between 135 and 180 degrees: a measurable shadow on B.
+    shadowed = (direction >= 135.0) & (direction < 180.0)
+    other = speed.copy()
+    speed = np.where(shadowed, speed * 0.80, speed)
 
-    assert hasattr(diagnostics_module, "_compute_mast_effects")
-    assert "mast_effect" not in inspect.getsource(cleaning_module._apply_tower_shadow)
-    assert "boom" not in inspect.getsource(cleaning_module._apply_tower_shadow).lower()
+    state = _cleaning_state(speed, direction=direction, other_speed=other)
+    state.sensor_inventory["Spd_60m"] = {"sensor_type": "wind_speed", "height_m": 60.0}
+    state.sensor_inventory["Dir_100m"] = {"sensor_type": "wind_direction", "height_m": 100.0}
+
+    result = _apply_cleaning_rule(state, "tower_shadow", "Spd_100m", "{}")
+
+    assert result["sector_basis"] == "measured_mast_effect"
+    start, end = result["exclude_sectors"]
+    # The 22.5-degree bins covering 135-180 deg, reported as their outer bounds.
+    assert start == pytest.approx(146.25, abs=25.0)
+    assert end == pytest.approx(191.25, abs=25.0)
+    assert result["records_affected"] > 0
+
+
+def test_tower_shadow_says_when_it_is_guessing():
+    """The legacy 20-degree window is still reachable, but it now declares itself a guess."""
+    rng = np.random.default_rng(9)
+    n = 2000
+    direction = rng.uniform(0, 360, n)
+    state = _cleaning_state(6.0 + rng.weibull(2.0, n) * 3.0, direction=direction)
+
+    result = _apply_cleaning_rule(state, "tower_shadow", "Spd_100m", "{}")
+
+    assert result["sector_basis"] == "default_guess"
+    assert result["exclude_sectors"] == [170.0, 190.0]
+    assert "third of the affected width" in result["warning"]
+    assert result["records_affected"] == int(((direction >= 170.0) & (direction <= 190.0)).sum())
+
+    # An explicit caller sector still wins over every derived source.
+    explicit = _cleaning_state(6.0 + rng.weibull(2.0, n) * 3.0, direction=direction)
+    explicit.sensor_inventory["Spd_100m"]["boom_orientation_deg"] = 90.0
+    chosen = _apply_cleaning_rule(
+        explicit, "tower_shadow", "Spd_100m", json.dumps({"exclude_sectors": [10, 40]})
+    )
+    assert chosen["sector_basis"] == "caller"
+    assert chosen["exclude_sectors"] == [10.0, 40.0]
 
 
 def test_tower_shadow_wraps_correctly_through_north():

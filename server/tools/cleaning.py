@@ -32,13 +32,43 @@ RANGE_CHECK_BOUNDS: dict[str, tuple[float, float]] = {
 CALM_THRESHOLD_MPS = 0.5
 CALM_CORROBORATION_MPS = 1.0
 
+# Icing (F-69).  A frozen cup holds its speed AND its vane holds its bearing; a cold,
+# steady flow holds neither for long.  The third signal is what separates them, so the
+# direction must also be stationary over a short window before a record is called iced.
+ICING_DIRECTION_TOLERANCE_DEG = 5.0
+ICING_DIRECTION_WINDOW = 3
+
+# Tower shadow (F-71).  A lattice tower shadows roughly +/-35 degrees behind the boom.
+# The historical 20-degree default is about a third of that, so it is kept only as the
+# last resort and is reported as a guess when it is used.
+TOWER_SHADOW_DEFAULT_WIDTH_DEG = 70.0
+TOWER_SHADOW_LEGACY_SECTOR = [170.0, 190.0]
+
+# Rule order is material (F-70): a rule that punches NaNs into the middle of a run
+# changes what a later run-length rule can see.  The log records the order, which makes
+# a result reproducible; this note is what makes the order visible as a choice.
+RULE_ORDER_NOTE = (
+    "Cleaning rules are order-dependent. Rules that introduce NaNs change what later "
+    "rules observe - stuck_sensor measures runs of identical values, so an earlier rule "
+    "splitting a run into shorter pieces can take its removal count from 10 to 2 on the "
+    "same data. The sequence in the cleaning log is part of the method, not a "
+    "presentation detail; reordering it will change the result."
+)
+
 RULES = {
     # No advertised min/max: bounds come from the sensor's type (D16). Echoing
     # 0-50 back as "the default" is what wiped direction and pressure channels.
     "range_check": {},
-    "icing_filter": {"temp_threshold_c": 2.0},
+    "icing_filter": {
+        "temp_threshold_c": 2.0,
+        "sd_threshold_mps": 0.01,
+        "direction_tolerance_deg": ICING_DIRECTION_TOLERANCE_DEG,
+    },
     "stuck_sensor": {"consecutive_count": 6, "calm_threshold_mps": CALM_THRESHOLD_MPS},
-    "tower_shadow": {"exclude_sectors": [170, 190]},
+    # No advertised sector: the default is derived per sensor from boom orientation or
+    # the measured mast effect, and falls back to the legacy guess only when neither
+    # exists (F-71).
+    "tower_shadow": {"sector_width_deg": TOWER_SHADOW_DEFAULT_WIDTH_DEG},
     "timestamp_gap_fill": {},
     "custom_period_exclude": {"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"},
     "expression_filter": {"expression": "Spd_100m < 0 or Spd_100m > 50"},
@@ -201,28 +231,92 @@ def _apply_range_check(
     return int(affected.sum()), detail
 
 
+def _direction_is_stationary(
+    directions: pd.Series,
+    tolerance_deg: float,
+    window: int,
+) -> np.ndarray:
+    """Return a mask of records whose wind direction is frozen over a short window.
+
+    Bearings are circular, so successive records are compared through the shortest arc
+    (``wrap`` to +/-180) rather than by subtraction — otherwise 359 deg followed by 1 deg
+    reads as a 358-degree swing when the vane barely moved.  A record counts as stationary
+    when every step inside the surrounding window stays within *tolerance_deg*.
+
+    A missing direction leaves the question unanswerable, and the fail-safe on an
+    unanswerable question is to keep the measurement: those records return False.
+    """
+    values = directions.to_numpy(dtype=float)
+    step = np.abs((np.diff(values, prepend=values[:1]) + 180.0) % 360.0 - 180.0)
+    step[0] = 0.0
+    step[~np.isfinite(step)] = np.inf
+    within = pd.Series(step <= float(tolerance_deg))
+    span = max(int(window), 1)
+    # Centred window: a record is only frozen if its neighbourhood is frozen too, so a
+    # single coincidental repeat between two swings does not qualify.
+    sustained = within.rolling(span, center=True, min_periods=1).min().to_numpy().astype(bool)
+    return sustained & np.isfinite(values)
+
+
 def _apply_icing_filter(
     state: SessionState,
     df: pd.DataFrame,
     sensor: str,
     mask: np.ndarray,
     params: dict[str, object],
-) -> int:
-    """Apply an icing filter where near-zero standard deviation and low temperature indicate frozen instrumentation."""
+) -> tuple[int, dict[str, object]]:
+    """Remove frozen instrumentation, identified by held speed, low temperature and a held vane.
+
+    Speed standard deviation at or below ``sd_threshold_mps`` with temperature below
+    ``temp_threshold_c`` describes a cold, steady flow just as well as it describes ice.
+    What it cannot describe is a vane that has stopped moving, and that third signal is
+    the one that separates the two (F-69): 20 records at zero speed-SD and -1 degC whose
+    direction swung through the full circle were all removed as icing, which no frozen
+    vane could have produced.
+
+    The paired direction column is already resolved in ``sensor_mapping`` and already used
+    by ``tower_shadow``, so the signal costs nothing to consult.  When no direction column
+    exists the condition cannot be tested; the rule then behaves as it did before and the
+    response says the test was skipped.
+    """
     sensor_map = _mapping_for_sensor(state, sensor)
     sd_col = sensor_map.get("sd_col")
     temp_col = sensor_map.get("temp_col")
+    direction_col = sensor_map.get("dir_col")
     if sd_col not in df.columns or temp_col not in df.columns:
         raise ValueError("icing_filter requires matching sd and temperature columns in the timeseries")
     threshold = _float_param(params, "temp_threshold_c", 2.0)
     sd_threshold = _float_param(params, "sd_threshold_mps", 0.01)
-    affected = (
+    tolerance = _float_param(params, "direction_tolerance_deg", ICING_DIRECTION_TOLERANCE_DEG)
+    window = _int_param(params, "direction_window", ICING_DIRECTION_WINDOW)
+
+    frozen_speed = (
         mask
         & (df[sd_col].fillna(np.nan) <= sd_threshold).to_numpy()
         & (df[temp_col] < threshold).fillna(False).to_numpy()
     )
+    detail: dict[str, object] = {
+        "temp_threshold_c": float(threshold),
+        "sd_threshold_mps": float(sd_threshold),
+    }
+    if isinstance(direction_col, str) and direction_col in df.columns:
+        stationary = _direction_is_stationary(df[direction_col], tolerance, window)
+        affected = frozen_speed & stationary
+        detail["direction_basis"] = "tested"
+        detail["direction_sensor"] = direction_col
+        detail["direction_tolerance_deg"] = float(tolerance)
+        detail["direction_window"] = int(window)
+        detail["retained_by_direction_test"] = int((frozen_speed & ~stationary).sum())
+    else:
+        affected = frozen_speed
+        detail["direction_basis"] = "skipped_no_direction_column"
+        detail["warning"] = (
+            "No paired wind-direction column is mapped for this sensor, so the "
+            "direction-stationarity condition could not be tested. Records were removed on "
+            "held speed and low temperature alone, which a cold steady flow also satisfies."
+        )
     df.loc[affected, sensor] = np.nan
-    return int(affected.sum())
+    return int(affected.sum()), detail
 
 
 def _other_speed_columns(state: SessionState, df: pd.DataFrame, sensor: str) -> list[str]:
@@ -300,19 +394,112 @@ def _apply_stuck_sensor(
     return int(affected.sum()), detail
 
 
+def _sector_from_centre(centre_deg: float, width_deg: float) -> list[float]:
+    """Return an inclusive [start, end] bearing pair spanning *width_deg* about *centre_deg*."""
+    half = float(width_deg) / 2.0
+    return [(float(centre_deg) - half) % 360.0, (float(centre_deg) + half) % 360.0]
+
+
+def _measured_shadow_sectors(state: SessionState, sensor: str) -> list[float] | None:
+    """Return the sector the mast-effect diagnostic measured for *sensor*, if it found one.
+
+    ``compute_mast_effects`` already measures which 22.5-degree bins are shadowed, on both
+    sides of the comparison pair and with a 50-record minimum.  It was the same
+    "computed, displayed, discarded" pattern as the measured IAV until this call.  The
+    flagged bins are merged into the single contiguous span this rule can express; a
+    non-contiguous result is rejected rather than silently widened to cover the gap.
+    """
+    from server.tools.diagnostics import COMPASS_16, _compute_mast_effects
+
+    try:
+        effects = _compute_mast_effects(state)
+    except (ValueError, KeyError):
+        return None
+    labels: list[str] = []
+    if effects.get("sensor_a") == sensor:
+        labels = [str(item) for item in effects.get("affected_sectors_a", [])]
+    elif effects.get("sensor_b") == sensor:
+        labels = [str(item) for item in effects.get("affected_sectors_b", [])]
+    indices = sorted(COMPASS_16.index(label) for label in labels if label in COMPASS_16)
+    if not indices:
+        return None
+    # Merge across north by rotating so the run starts at the first gap.
+    ordered = indices
+    if len(indices) > 1:
+        gaps = [i for i in range(len(indices)) if (indices[i] - indices[i - 1]) % 16 != 1]
+        if len(gaps) > 1:
+            return None
+        if gaps:
+            ordered = indices[gaps[0]:] + indices[: gaps[0]]
+    return [(ordered[0] * 22.5 - 11.25) % 360.0, (ordered[-1] * 22.5 + 11.25) % 360.0]
+
+
+def _resolve_shadow_sector(
+    state: SessionState,
+    sensor: str,
+    params: dict[str, object],
+) -> tuple[float, float, dict[str, object]]:
+    """Choose the tower-shadow sector, preferring measured or recorded geometry over a guess.
+
+    The old default of ``[170, 190]`` is a 20-degree window on an arbitrary bearing, where a
+    lattice tower shadows roughly +/-35 degrees behind the boom — about a third of the
+    affected width, centred on nothing in particular (F-71).  Two better sources already
+    exist in the session and were simply not consulted: the boom orientation recorded per
+    measurement point in IEA Task 43, and the sectors ``compute_mast_effects`` measures.
+
+    Preference order: an explicit caller sector, then boom orientation, then the measured
+    sectors, then the legacy guess — which is still available, but now says what it is.
+    """
+    width = _float_param(params, "sector_width_deg", TOWER_SHADOW_DEFAULT_WIDTH_DEG)
+    if "exclude_sectors" in params:
+        start_deg, end_deg = _sector_bounds(params)
+        return start_deg, end_deg, {"sector_basis": "caller"}
+
+    metadata = state.sensor_inventory.get(sensor)
+    boom = metadata.get("boom_orientation_deg") if isinstance(metadata, dict) else None
+    if isinstance(boom, (int, float)):
+        # The tower sits directly opposite the boom, so the shadow is centred 180 deg away.
+        start_deg, end_deg = _sector_from_centre(float(boom) + 180.0, width)
+        return start_deg, end_deg, {
+            "sector_basis": "boom_orientation",
+            "boom_orientation_deg": float(boom),
+            "sector_width_deg": float(width),
+        }
+
+    measured = _measured_shadow_sectors(state, sensor)
+    if measured is not None:
+        return measured[0], measured[1], {
+            "sector_basis": "measured_mast_effect",
+            "sector_width_deg": round((measured[1] - measured[0]) % 360.0, 2),
+        }
+
+    start_deg, end_deg = TOWER_SHADOW_LEGACY_SECTOR
+    return start_deg, end_deg, {
+        "sector_basis": "default_guess",
+        "sector_width_deg": float(end_deg - start_deg),
+        "warning": (
+            f"No boom orientation is recorded for '{sensor}' and the mast-effect diagnostic "
+            "flagged no sector for it, so the legacy 20-degree window at 170-190 deg was used. "
+            "A lattice tower shadows roughly +/-35 degrees behind the boom, so this is about a "
+            "third of the affected width on an arbitrary bearing. Record boom_orientation_deg "
+            "in the datamodel, run compute_mast_effects, or pass exclude_sectors explicitly."
+        ),
+    }
+
+
 def _apply_tower_shadow(
     state: SessionState,
     df: pd.DataFrame,
     sensor: str,
     mask: np.ndarray,
     params: dict[str, object],
-) -> int:
+) -> tuple[int, dict[str, object]]:
     """Remove tower-shadow sectors using the paired direction sensor at the same measurement height."""
     sensor_map = _mapping_for_sensor(state, sensor)
     direction_col = sensor_map.get("dir_col")
     if direction_col not in df.columns:
         raise ValueError("tower_shadow requires a paired direction column in session.sensor_mapping")
-    start_deg, end_deg = _sector_bounds(params)
+    start_deg, end_deg, detail = _resolve_shadow_sector(state, sensor, params)
     directions = df[direction_col].to_numpy(dtype=float)
     sector_mask = (
         (directions >= start_deg) & (directions <= end_deg)
@@ -321,7 +508,8 @@ def _apply_tower_shadow(
     )
     affected = mask & sector_mask & df[sensor].notna().to_numpy()
     df.loc[affected, sensor] = np.nan
-    return int(affected.sum())
+    detail["exclude_sectors"] = [round(start_deg, 2), round(end_deg, 2)]
+    return int(affected.sum()), detail
 
 
 def _apply_timestamp_gap_fill(state: SessionState, df: pd.DataFrame, start_date: str, end_date: str) -> int:
@@ -446,11 +634,11 @@ def _apply_rule(
     if rule_type == "range_check":
         return _apply_range_check(state, df, sensor, mask, params)
     if rule_type == "icing_filter":
-        return _apply_icing_filter(state, df, sensor, mask, params), {}
+        return _apply_icing_filter(state, df, sensor, mask, params)
     if rule_type == "stuck_sensor":
         return _apply_stuck_sensor(state, df, sensor, mask, params)
     if rule_type == "tower_shadow":
-        return _apply_tower_shadow(state, df, sensor, mask, params), {}
+        return _apply_tower_shadow(state, df, sensor, mask, params)
     if rule_type == "expression_filter":
         return _apply_expression_filter(df, sensor, mask, params), {}
     if rule_type == "timestamp_gap_fill":
@@ -464,7 +652,19 @@ def _list_cleaning_rules(_state: SessionState) -> dict:
         {"name": name, "description": name.replace("_", " "), "default_params": params}
         for name, params in RULES.items()
     ]
-    return {"rules": rules}
+    return {
+        "rules": rules,
+        # F-70: the order these are applied in changes the answer, and nothing said so.
+        "order_is_material": True,
+        "order_note": RULE_ORDER_NOTE,
+        # F-72: recorded here so the absence is discoverable from the tool itself.
+        "outlier_detection": "none",
+        "outlier_note": (
+            "No outlier or spike detection exists. range_check bounds by sensor type, "
+            "stuck_sensor catches frozen channels and icing_filter catches iced ones, but a "
+            "single wild excursion inside the physical bounds passes through untouched."
+        ),
+    }
 
 
 def _apply_cleaning_rule(
@@ -479,12 +679,19 @@ def _apply_cleaning_rule(
     if rule_type not in RULES:
         raise ValueError(f"Unknown cleaning rule '{rule_type}'")
     parsed = _parse_params(params)
+    # Captured before the rule runs, so it names what this rule actually saw (F-70).
+    preceding = [
+        {"sequence": index + 1, "rule_type": str(item.get("rule_type")), "sensor": str(item.get("sensor"))}
+        for index, item in enumerate(state.cleaning_log)
+    ]
     records_affected, detail = _apply_rule(state, rule_type, sensor, parsed, start_date, end_date)
     # The working data just changed, so anything already derived from it is stale (F-11).
     state.bump_data_version()
+    sequence = len(state.cleaning_log) + 1
     entry: dict[str, object] = {
         "rule_type": rule_type,
         "sensor": sensor,
+        "sequence": sequence,
         "records_affected": records_affected,
         "applied_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "params": parsed,
@@ -495,18 +702,39 @@ def _apply_cleaning_rule(
         **detail,
     }
     state.cleaning_log.append(entry)
+    # Rules on the same sensor are the ones that can have changed what this rule saw.
+    same_sensor = [item for item in preceding if item["sensor"] == sensor]
+    order_dependence: dict[str, object] = {
+        "sequence": sequence,
+        "order_is_material": True,
+        "note": RULE_ORDER_NOTE,
+        "applied_before_on_this_sensor": same_sensor,
+    }
+    if same_sensor:
+        names = ", ".join(sorted({str(item["rule_type"]) for item in same_sensor}))
+        order_dependence["warning"] = (
+            f"'{rule_type}' saw data already modified by {names} on '{sensor}'. Applying the "
+            "same rules in a different order can give a different result."
+        )
     return {
         "status": "ok",
         "rule": rule_type,
         "sensor": sensor,
         "records_affected": records_affected,
+        "order_dependence": order_dependence,
         **detail,
     }
 
 
 def _get_cleaning_log(state: SessionState) -> dict:
     """Return the recorded cleaning operations applied to the active session timeseries."""
-    return {"entries": [entry.copy() for entry in state.cleaning_log]}
+    return {
+        "entries": [entry.copy() for entry in state.cleaning_log],
+        # The log has always been reproducible; what was missing is that the order it
+        # records is part of the method rather than a presentation detail (F-70).
+        "order_is_material": True,
+        "order_note": RULE_ORDER_NOTE,
+    }
 
 
 def _undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:

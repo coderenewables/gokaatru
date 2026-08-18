@@ -62,7 +62,7 @@ def test_exact_zero_is_caught() -> None:
     state.timeseries_df.iloc[:5, state.timeseries_df.columns.get_loc("Temp_80m")] = -5.0
     mask = np.ones(len(state.timeseries_df), dtype=bool)
 
-    n = _apply_icing_filter(state, state.timeseries_df, "Spd_80m", mask, {})
+    n, _detail = _apply_icing_filter(state, state.timeseries_df, "Spd_80m", mask, {})
     assert n == 5
 
 
@@ -73,7 +73,7 @@ def test_near_zero_sd_is_caught() -> None:
     state.timeseries_df.iloc[10:15, state.timeseries_df.columns.get_loc("Temp_80m")] = -3.0
     mask = np.ones(len(state.timeseries_df), dtype=bool)
 
-    n = _apply_icing_filter(state, state.timeseries_df, "Spd_80m", mask, {})
+    n, _detail = _apply_icing_filter(state, state.timeseries_df, "Spd_80m", mask, {})
     assert n == 5, "Near-zero sd (0.005 < 0.01 threshold) with cold temp should be flagged"
 
 
@@ -84,7 +84,7 @@ def test_above_threshold_sd_not_caught() -> None:
     state.timeseries_df.iloc[20:25, state.timeseries_df.columns.get_loc("Temp_80m")] = -3.0
     mask = np.ones(len(state.timeseries_df), dtype=bool)
 
-    n = _apply_icing_filter(state, state.timeseries_df, "Spd_80m", mask, {})
+    n, _detail = _apply_icing_filter(state, state.timeseries_df, "Spd_80m", mask, {})
     assert n == 0, "sd=0.02 is above the 0.01 threshold — should not be flagged"
 
 
@@ -101,7 +101,7 @@ def test_custom_sd_threshold() -> None:
     state.timeseries_df.iloc[40:42, state.timeseries_df.columns.get_loc("Temp_80m")] = -2.0
 
     mask = np.ones(len(state.timeseries_df), dtype=bool)
-    n = _apply_icing_filter(
+    n, _detail = _apply_icing_filter(
         state, state.timeseries_df, "Spd_80m", mask, {"sd_threshold_mps": 0.05}
     )
     assert n == 2, "Only the sd=0.03 rows (below custom threshold 0.05) should be caught"
@@ -114,5 +114,5 @@ def test_warm_temperature_not_caught() -> None:
     state.timeseries_df.iloc[50:55, state.timeseries_df.columns.get_loc("Temp_80m")] = 15.0
     mask = np.ones(len(state.timeseries_df), dtype=bool)
 
-    n = _apply_icing_filter(state, state.timeseries_df, "Spd_80m", mask, {})
+    n, _detail = _apply_icing_filter(state, state.timeseries_df, "Spd_80m", mask, {})
     assert n == 0, "Warm temperature should suppress the icing flag regardless of sd"

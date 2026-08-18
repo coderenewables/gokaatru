@@ -293,6 +293,18 @@ invites use:
 | Mast-shadow speed gate | **4.0 m/s**, min **50** records/sector | Detection is two-sided: a low ratio means `sensor_b` is shadowed, a high ratio means `sensor_a` is. Sparse sectors are reported but not flagged. |
 | `range_check` bounds | **Derived from sensor type** | wind_speed 0–50 m/s, wind_direction 0–360°, temperature −60–60 °C, pressure 80 000–110 000 Pa, humidity 0–100%. An unknown type falls back to that sensor's own data range, which makes the rule a **no-op** — an intentional fail-safe, reported as `bounds_source: "sensor_data_range"`. Explicit `min`/`max` always win. |
 | ERA5 spatial interpolation | **Scalar** for speed, **vector** for direction | Deliberately different. Vector interpolation of speed under-predicts where node directions diverge across the cell, because opposing components cancel. Reported as `speed_interpolation: "scalar"`. |
+| Long-term reference | **ERA5** (`source` on `interpolate_era5_to_site`) | `"merra2"` selects the other downloaded reanalysis. Both write the same interpolated series every LTC algorithm reads, so switching source and repeating the LTC is how a result's dependence on the reference is tested. Reported as `reference_source`. |
+| Timestamp interval label | **`interval_start`** (`runconfig.timestamp_label`) | IEA Task 43 permits start, end and centre labelling and a file does not say which it uses, so this is an assumption. Set it to `interval_end` or `interval_centre` and the measured index is shifted onto interval-start before matching — a mismatch against instantaneous reanalysis is a systematic half-interval offset in every LTC, not noise. |
+| Hourly resample coverage | **0.5** of expected sub-hourly samples | A 3-of-6 hour is kept and averaged as a full hour; a 1-of-6 hour is dropped. Reported as `hours_kept`, `hours_dropped_below_minimum` and `hours_kept_partially_populated`. |
+| Sector shear minimum | **200** records/sector | Matches the SpeedSort gate. Below it a sector is not tabulated, because 20 records produced a 288-cell table of which 285 were that sector's own mean. Every sector's count and the reason for each exclusion are reported; overridable via `min_sector_records`. |
+| Roughness band | **[1e-6, 2.0] m** | The ceiling covers WAsP class 3 and dense forest or urban terrain. It was 1.5 m, which truncated them — and the clamp *raises* log-law hub speed, so it was not a conservative backstop. |
+| Tower-shadow sector | **Derived per sensor** | Boom orientation from the datamodel (shadow centred at boom + 180 deg, width 70 deg), else the sectors `compute_mast_effects` measured, else the legacy 20-degree window at 170-190 deg — which reports `sector_basis: "default_guess"` and warns that it is about a third of a lattice tower's real shadow. |
+| Icing conditions | **Speed SD + temperature + held vane** | A cold, steady flow satisfies the first two. The paired direction column must also be stationary within 5 deg over a three-record window. With no direction column mapped the test is skipped and the response says so. |
+| MCP concurrent-months cap | **12** (`concurrent_months_cap`) | The `3/sqrt(months)` sampling term stops improving here, because beyond about a year the limit on an MCP is the stability of the transfer function rather than the number of pairs. `mcp_sampling_cap` reports the uncapped figure and the credit withheld. |
+| Project life | **20 years** (`project_life_years`) | `u_future = iav / sqrt(life)`. A 15-year life gives 1.55% where 20 years gives 1.34% for the same 6% IAV. |
+| Uncertainty combination | **Pure quadrature** (`component_correlation = 0`) | Measurement, vertical extrapolation and MCP all derive from the same measured series, so independence is optimistic. Every response reports the total at rho = 0.5 alongside — about 30% higher — so the size of the assumption is visible. |
+| Clipping window floor | **10 years** (`min_window_years`) | Every candidate window ends at the final year and so contains the 5-year reference period; the shortest candidate *is* that period, with deviation exactly zero and its climate term pinned at the minimum. Without a floor a 10-year record selected 6 years. The unconstrained optimum is still reported. |
+| Climate deviation exponent | **5** (`climate_deviation_exponent`) | Undocumented in the source methodology and dominant in the objective's shape: the term stays within 3% of its floor until deviation reaches ~0.6. Every response carries a sweep over 1, 2, 3, 5 and 8 showing which window each would have selected. |
 
 ### Disclosure fields — read these before trusting a number
 
@@ -305,7 +317,18 @@ invites use:
 | `years_used`, `years_excluded`, `excluded_reason` | `run_clipping_analysis` | Which calendar years passed the completeness gate. |
 | `calm_fraction`, `fit_excludes_calms`, `fit_method` | `compute_weibull_params` | `mean_speed` is always the **full-series** mean including calms, consistent with MoMM and the monthly means. |
 | `bounds_source`, `min_applied`, `max_applied` | `apply_cleaning_rule` (`range_check`) | The bounds actually applied, recorded in the cleaning log so it cannot imply a check that did not happen. |
-| `weights` | `run_ensemble` | Inverse-RMSE component weights, using each algorithm's **out-of-sample** RMSE where it reports one (currently XGBoost only) and its overlap RMSE otherwise. The basis is therefore mixed across components — see Known limitations. |
+| `weights`, `weight_basis` | `run_ensemble` | Inverse-RMSE component weights, using each algorithm's **out-of-sample** RMSE where it reports one (currently XGBoost only) and its overlap RMSE otherwise. `weight_basis` labels which each component used and `weight_basis_is_mixed` flags the mixture, because in-sample error is systematically lower and tilts the blend for reasons unrelated to skill. |
+| `component_spread` | `run_ensemble` | Per-timestamp disagreement between the bias-corrected components. Level disagreement is already removed by the bias correction, so this is **shape** disagreement — an empirical estimate of LTC model uncertainty, which the uncertainty model does not otherwise carry. Reported, not folded into the total. |
+| `out_of_sample_basis`, `cv_fold_reports`, `cv_rmse_spread` | `run_ltc_xgboost` | The held-out error is the out-of-fold error over four contiguous blocks spanning the whole concurrent period, not a terminal 20% slice — which on a one-year campaign covered October to December only, a +17.7% seasonal offset. A large `cv_rmse_spread` means the model's skill depends on the season. |
+| `estimator`, `huber_delta` | `run_ltc_linear_least_squares` | The fit is **Huber IRLS at δ = 1.35**, not ordinary least squares, despite the tool name. Huber is the better estimator under contamination, but the slope will not reconcile exactly against an OLS fit in WAsP, windPRO or Windographer. |
+| `error_variance_ratio_assumed` | `run_ltc_total_least_squares` | TLS assumes equal error variance in both series. Reanalysis error greatly exceeds mast error, so TLS overshoots the slope (measured 1.138 against a true 1.080) and OLS undershoots. Treat the two as bracketing the answer rather than as peers. |
+| `variance_ratio_to_reference` | every LTC response | How much of the reference's variance the transfer function retained. Slope methods attenuate it; `variance_ratio` preserves it by construction. The spread reached ~10% of IAV across algorithms, which flows into `u_future` and the clipping objective. |
+| `duplicate_timestamps` | `parse_timeseries` | Repeated timestamps found and collapsed by averaging. Left in place they were counted twice by every month-hour grouping downstream. |
+| `hour_basis`, `site_utc_offset_hours` | diurnal profile, shear/roughness/sector tables | Hour-of-day bins count **UTC** hours. Bins and lookups share the clock so the physics is self-consistent, but a 14:00 local peak at UTC+5:30 appears at 08:30. The diurnal profile also returns `hours_local`. |
+| `order_dependence` | `apply_cleaning_rule` | Which rules already touched this sensor. Rule order is material — `stuck_sensor` then `icing_filter` removed 10 records where the reverse removed 2, on the same data. |
+| `method_models`, `method_is_mixed` | `extrapolate_to_hub_height` | Which physical model produced each hub record. Inside the mast range it is linear interpolation in ln(z); outside it is the shear or roughness table. A series with counts in both rows is a blend of two models. |
+| `mcp_sampling_cap`, `combination` | `calculate_uncertainty` | What the 12-month cap withheld, and what the independence assumption costs at ρ = 0.5. |
+| `density_normalisation` | `calculate_uncertainty`, `compute_energy_sensitivity` | Whether speeds were normalised to the power curve's reference density per IEC 61400-12-1 before the sensitivity factor was measured. Requires a recorded site density; without one it reports `applied: false` rather than assuming standard conditions. |
 | `upstream_processing` | `brighthub_import_location` | BrightHub cleaning, calibration and offsets applied **before** GoKaatru saw the data. Recorded as a non-undoable entry at the head of the cleaning log: coverage and recovery figures describe the data as received, not the raw campaign. |
 
 ### Uncertainty is reported on a wind-speed basis — converting it to energy
@@ -370,11 +393,13 @@ availability, electrical-loss and flow-modelling terms — none of which GoKaatr
   short of the *yield*: there is no project AEP, no capacity factor and no loss model.
   The energy sensitivity factor above exists to make the speed-to-energy conversion
   explicit, not to substitute for an energy assessment.
-- **Confidence intervals are not rigorous.** `ols_confidence_intervals` uses the
-  t-distribution but assumes independent residuals. Wind speed is strongly
-  autocorrelated, so the effective sample size is a fraction of `n` and the
-  intervals are far too narrow — treat them as a lower bound. No
-  effective-sample-size correction or block bootstrap is applied.
+- **Confidence intervals are approximate.** `ols_confidence_intervals` applies an
+  AR(1) effective-sample-size correction estimated from the residuals' own lag-1
+  autocorrelation, which on hourly wind widens the interval by roughly 3.5×
+  against the raw i.i.d. figure. That is an approximation: a block bootstrap
+  would be better and longer-range dependence is not captured, so the result is
+  still a lower bound on the true uncertainty. Pass
+  `autocorrelation_corrected=False` for the uncorrected interval.
 - **`speedsort` is directional but not published SpeedSort.** It bins by
   reference direction and fits per-sector dog-leg transfer functions, which
   earns its lower MCP uncertainty coefficient, but it is not a reimplementation
@@ -383,12 +408,25 @@ availability, electrical-loss and flow-modelling terms — none of which GoKaatr
   bilinear whenever the four ERA5 nodes form a 2×2 cell containing the site,
   which is the normal case.
 - **Ensemble weights use a mixed RMSE basis.** XGBoost is weighted on its
-  held-out validation RMSE while the linear methods are weighted on their
+  held-out cross-validated RMSE while the linear methods are weighted on their
   concurrent-overlap RMSE, because only XGBoost reports an out-of-sample
   metric. That is the lesser of two evils — weighting a deep boosted ensemble
   on in-sample error would hand it a disproportionate share of the blend — but
-  it is not like-for-like, and `run_ensemble` does not currently label which
-  basis each component used.
+  it is not like-for-like. `run_ensemble` now labels the basis of every weight
+  and flags the mixture, so the tilt is at least auditable.
+- **Inter-annual variability is assumed independent across years.**
+  `u_future = iav / sqrt(project_life_years)` treats annual means as
+  independent draws, which ignores inter-annual persistence and any climate
+  trend. The life is a parameter; the independence assumption is not.
+- **No outlier detection of any kind.** `range_check` bounds by sensor type,
+  `stuck_sensor` catches frozen channels and `icing_filter` catches iced ones,
+  but a single wild excursion inside the physical bounds passes through
+  untouched. `list_cleaning_rules` reports this as `outlier_detection: "none"`.
+- **Cleaning rules are order-dependent.** A rule that introduces NaNs changes
+  what later rules observe, and the difference is large — 10 records against 2
+  on the same data, from order alone. The order is logged and every apply says
+  the order is material, but there is no canonical order and forcing one would
+  substitute a different arbitrary choice.
 
 ## Deployment model — single-user-local
 

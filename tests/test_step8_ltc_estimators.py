@@ -17,13 +17,16 @@ import pytest
 
 import server.main  # noqa: F401 — establishes tool-module import order
 from server.core.regression import (
+    effective_sample_size,
     ols_confidence_intervals,
+    residual_lag1_autocorrelation,
     robust_huber_fit,
     total_least_squares_fit,
 )
 from server.state.session import SessionState
 from server.tools.ensemble import _run_ensemble
 from server.tools.ltc import (
+    HUBER_DELTA,
     _run_ltc_linear_least_squares,
     _run_ltc_speedsort,
     _run_ltc_total_least_squares,
@@ -377,12 +380,16 @@ def test_linear_least_squares_is_actually_huber_robust_regression():
     huber_dirty, _, _, _ = robust_huber_fit(reference, contaminated)
     assert huber_dirty / ols_dirty - 1.0 > 0.01
 
-    # And the response still claims least squares.
+    # F-37 — FIXED. The estimator is kept (it is the better one under contamination) and
+    # the response now names it, with the delta, so a slope that will not reconcile against
+    # an OLS fit in WAsP, windPRO or Windographer is explained rather than mysterious.
     state, _, _ = _mcp_state()
     result = _run_ltc_linear_least_squares(state, "Spd_hub", "Spd_hub")
-    assert result["metrics"]["algorithm"] == "linear_least_squares"
-    assert "estimator" not in result["metrics"]
-    assert "loss" not in result["metrics"]
+    metrics = result["metrics"]
+    assert metrics["algorithm"] == "linear_least_squares"
+    assert metrics["estimator"] == "huber_irls"
+    assert metrics["huber_delta"] == HUBER_DELTA == 1.35
+    assert "not ordinary least squares" in metrics["estimator_note"]
 
 
 def test_slope_methods_attenuate_variance_and_shift_iav():
@@ -485,13 +492,18 @@ def test_total_least_squares_assumes_equal_error_variance_in_both_series():
     assert tls_mean / ols_mean - 1.0 > 0.003
 
 
-def test_ols_confidence_intervals_are_too_narrow_under_autocorrelation():
-    """FINDING F-41 (quantified): the reported interval is 3.5x too narrow on hourly wind.
+def test_ols_confidence_intervals_correct_for_autocorrelation():
+    """F-41 (MEDIUM) — FIXED. The interval is widened by the effective sample size.
 
-    ``ols_confidence_intervals`` documents this honestly but the magnitude was never
-    measured. With AR(1) residuals at phi = 0.85 — ordinary for hourly wind — on
-    n = 20 000: residual lag-1 autocorrelation 0.847, effective sample size 1 659
-    (**8.3% of n**), so the correct interval is **3.47x wider** than reported.
+    ``ols_confidence_intervals`` documented its own optimism honestly; the magnitude was
+    measured at **3.47x** on n = 20 000 with AR(1) residuals at phi = 0.85 — ordinary for
+    hourly wind — where the effective sample size is 8.3% of n. Because the standard errors
+    scale as 1/sqrt(n), using the raw record count made the interval far too narrow.
+
+    The correction is an AR(1) effective-sample-size adjustment estimated from the residuals'
+    own lag-1 autocorrelation. It is an approximation — a block bootstrap would be better and
+    longer-range dependence is not captured — so the docstring still calls the result a lower
+    bound, just a far less misleading one.
     """
     rng = np.random.default_rng(42)
     n = 20_000
@@ -501,20 +513,40 @@ def test_ols_confidence_intervals_are_too_narrow_under_autocorrelation():
         noise[i] = 0.85 * noise[i - 1] + rng.normal(0, 1.0)
     measured = TRUE_SLOPE * reference + TRUE_INTERCEPT + 0.5 * noise
 
-    interval, _ = ols_confidence_intervals(reference, measured)
-    assert interval is not None
-    half_width = (interval[1] - interval[0]) / 2.0
-
     slope, intercept = _ols(reference, measured)
     residuals = measured - (slope * reference + intercept)
     lag1 = float(np.corrcoef(residuals[:-1], residuals[1:])[0, 1])
     n_effective = n * (1 - lag1) / (1 + lag1)
+    inflation = float(np.sqrt(n / n_effective))
 
     assert lag1 > 0.8
     assert n_effective / n < 0.15
-    assert float(np.sqrt(n / n_effective)) > 3.0
-    # The reported interval is the uncorrected one.
-    assert half_width < 0.005
+    assert inflation > 3.0
+
+    corrected, _ = ols_confidence_intervals(reference, measured)
+    raw, _ = ols_confidence_intervals(reference, measured, autocorrelation_corrected=False)
+    assert corrected is not None and raw is not None
+    corrected_half = (corrected[1] - corrected[0]) / 2.0
+    raw_half = (raw[1] - raw[0]) / 2.0
+
+    # The default is the corrected interval, and it is wider by the measured factor.
+    assert raw_half < 0.005
+    assert corrected_half > 0.010
+    assert corrected_half / raw_half == pytest.approx(inflation, rel=0.05)
+
+    # The helpers agree with the independent computation above. The tolerance is loose
+    # because np.corrcoef centres the two lagged slices separately while the helper centres
+    # on the whole series; both are standard lag-1 estimators and they agree to ~1e-5 here.
+    assert residual_lag1_autocorrelation(residuals) == pytest.approx(lag1, rel=1e-3)
+    assert effective_sample_size(n, lag1) == pytest.approx(n_effective, rel=1e-9)
+
+    # Uncorrelated residuals leave the interval essentially untouched.
+    clean = TRUE_SLOPE * reference + TRUE_INTERCEPT + rng.normal(0, 0.5, n)
+    clean_corrected, _ = ols_confidence_intervals(reference, clean)
+    clean_raw, _ = ols_confidence_intervals(reference, clean, autocorrelation_corrected=False)
+    assert (clean_corrected[1] - clean_corrected[0]) == pytest.approx(
+        clean_raw[1] - clean_raw[0], rel=0.05
+    )
 
 
 def test_speedsort_threshold_basis_differs_between_its_two_paths():
@@ -605,7 +637,21 @@ def test_ensemble_mixes_out_of_sample_and_in_sample_rmse_bases():
 
     assert baseline["weights"]["algo_b"] == pytest.approx(0.5, abs=0.05)
     assert with_oos["weights"]["algo_b"] > 0.9  # the mixed basis hands it the blend
-    assert "weight_basis" not in with_oos
+
+    # F-35/F-45 — FIXED. The mixture is inherent to preferring held-out error where it
+    # exists; what is new is that the response declares which basis each weight rests on,
+    # so a blend tilted by the error definition rather than by skill is auditable.
+    assert with_oos["weight_basis"] == {
+        "algo_a": "concurrent_overlap_in_sample",
+        "algo_b": "out_of_sample",
+    }
+    assert with_oos["weight_basis_is_mixed"] is True
+    assert "held-out error" in with_oos["weight_basis_warning"]
+    assert with_oos["weight_rmse"]["algo_b"] == 0.05
+    # A uniform-basis blend says so without raising a warning.
+    assert set(baseline["weight_basis"].values()) == {"concurrent_overlap_in_sample"}
+    assert baseline["weight_basis_is_mixed"] is False
+    assert "weight_basis_warning" not in baseline
 
 
 # ---------------------------------------------------------------------------
@@ -613,25 +659,25 @@ def test_ensemble_mixes_out_of_sample_and_in_sample_rmse_bases():
 # ---------------------------------------------------------------------------
 
 
-def test_xgboost_split_is_chronological_but_the_holdout_is_one_season():
-    """FINDING F-39/F-40: the split is correctly temporal, and the holdout is seasonally biased.
+def test_xgboost_holdout_covers_every_season_and_leaks_no_selection():
+    """F-39 / F-40 (MEDIUM) — FIXED. Blocked cross-validation replaces the terminal holdout.
 
-    VERIFIED: ``iloc[:split]`` / ``iloc[split:]`` on a time-ordered frame is a block
-    split, so there is no random-split leakage — the hypothesis this test set out to
-    check is negative.
+    The split was correctly chronological — ``iloc[:split]`` / ``iloc[split:]`` on a
+    time-ordered frame is a block split, so there was never random-split leakage — but it was
+    a single **terminal** block. Measured on a one-year campaign with a seasonal cycle,
+    validation covered October to December only, mean 8.45 m/s against a training mean of
+    7.18 — a **+17.7%** offset reported as ``out_of_sample_rmse``, which is exactly the number
+    that earns XGBoost its ensemble weight (F-45). ``early_stopping_rounds`` then selected the
+    boosting iteration on that same slice, so the figure was optimistic through model
+    selection as well as seasonally biased.
 
-    FINDING: the holdout is a single terminal block. Measured on a one-year campaign
-    with a seasonal cycle, validation covers **October to December only**, mean
-    8.45 m/s against a training mean of 7.18 m/s — a **+17.7%** offset. That
-    seasonally-biased figure is reported as ``out_of_sample_rmse``, and it is exactly
-    the number that earns XGBoost its ensemble weight (F-45).
-
-    FINDING: ``early_stopping_rounds`` selects the boosting iteration on the same
-    slice then reported as out-of-sample, so the figure is additionally optimistic
-    through model selection.
+    Four contiguous blocks now span the whole concurrent period. Contiguous rather than random
+    because hourly wind is strongly autocorrelated and a random fold would put a record's own
+    neighbours in the training set. Each fold's early stopping watches a slice of that fold's
+    own training data, never the held-out block.
     """
     pytest.importorskip("xgboost")
-    from server.tools.ltc_ml import _run_ltc_xgboost
+    from server.tools.ltc_ml import CV_FOLDS, _run_ltc_xgboost
 
     rng = np.random.default_rng(7)
     long_index = pd.date_range("2015-01-01", "2022-12-31 23:00", freq="h", tz="UTC")
@@ -654,16 +700,30 @@ def test_xgboost_split_is_chronological_but_the_holdout_is_one_season():
     result = _run_ltc_xgboost(state, "Spd_hub", "Spd_hub")
     metrics = result["metrics"]
 
+    # The seasonal bias the old holdout carried is real, and is what the fix removes.
     split = int(0.8 * len(measured_index))
-    validation_months = sorted(set(measured_index[split:].month))
-    assert validation_months == [10, 11, 12]  # a single season, not a spread-out holdout
+    assert sorted(set(measured_index[split:].month)) == [10, 11, 12]
     assert measured[split:].mean() / measured[:split].mean() - 1.0 > 0.10
 
-    # The seasonally-biased holdout figure is what the ensemble consumes.
-    assert "out_of_sample_rmse" in metrics
+    # Every record is scored out-of-fold, so the reported error covers the whole year.
+    assert metrics["out_of_sample_basis"] == "blocked_cross_validation"
+    assert metrics["cv_folds"] == CV_FOLDS == 4
+    assert metrics["cv_records_scored"] == len(measured_index)
+    assert metrics["validation_points"] == len(measured_index)
     assert metrics["out_of_sample_rmse"] == pytest.approx(metrics["rmse"], rel=1e-9)
-    # No cross-validation or fold structure is reported.
-    assert not any("fold" in key or "cv_" in key for key in metrics)
+
+    # The folds are contiguous, cover the year end to end, and report their own periods.
+    folds = metrics["cv_fold_reports"]
+    assert [row["fold"] for row in folds] == [1, 2, 3, 4]
+    assert sum(int(row["records"]) for row in folds) == len(measured_index)
+    covered_months = sorted({month for row in folds for month in row["months"]})
+    assert covered_months == list(range(1, 13))
+    # Each fold reports its own mean, so a seasonally skewed fold is visible rather than
+    # averaged away into a single number.
+    fold_means = [float(row["mean_measured"]) for row in folds]
+    assert max(fold_means) / min(fold_means) - 1.0 > 0.10
+    assert metrics["cv_rmse_spread"] >= 0.0
+    assert "not a single terminal holdout" in metrics["cv_note"]
 
 
 def test_xgboost_discloses_upper_tail_truncation():

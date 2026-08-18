@@ -48,6 +48,10 @@ from server.state.manager import SessionManager
 from server.state.session import SessionState
 from server.tools.config import _save_run_config, _sync_state_from_runconfig
 
+# Sector 0 is centred ON north everywhere in this application (D1), so the Compare tab
+# uses the same convention as every analysis windrose it is meant to be read against.
+COMPARE_WINDROSE_SECTORS = 12
+
 router = APIRouter(prefix="/sessions/{session_id}/workflow", tags=["workflow-execution"])
 SNAPSHOT_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 SNAPSHOT_DIR_NAME = "workflows"
@@ -530,15 +534,22 @@ def _build_windrose_plots(states: dict[str, SessionState]) -> list[WorkflowCompa
         if speed is not None and direction is not None:
             frame = pd.DataFrame({"speed": speed, "direction": direction}).dropna()
             if not frame.empty:
-                sectors = ((frame["direction"] % 360) // 30).astype(int)
-                counts = sectors.value_counts().reindex(range(12), fill_value=0)
+                # F-01: this binned from north (`dir % 360 // 30`, labels at i*30+15) while
+                # every analysis windrose centres sector 0 ON north. Same data, two roses
+                # offset by half a sector — and the Compare tab exists to put them side by
+                # side. The convention here now matches the rest of the application.
+                sector_width = 360.0 / COMPARE_WINDROSE_SECTORS
+                sectors = (
+                    ((frame["direction"] + sector_width / 2.0) % 360.0) // sector_width
+                ).astype(int)
+                counts = sectors.value_counts().reindex(range(COMPARE_WINDROSE_SECTORS), fill_value=0)
                 total = int(counts.sum())
                 if total > 0:
                     traces.append(
                         {
                             "type": "barpolar",
                             "name": session_id,
-                            "theta": [int(index * 30 + 15) for index in counts.index],
+                            "theta": [float(index * sector_width) for index in counts.index],
                             "r": [float((value / total) * 100.0) for value in counts.values],
                         }
                     )

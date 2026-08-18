@@ -30,6 +30,13 @@ SPEEDSORT_MIN_SECTOR_RECORDS = 200
 # Huber IRLS tuning constant used by `linear_least_squares` (F-37).
 HUBER_DELTA = 1.35
 
+# SpeedSort dog-leg breakpoint: half the CONCURRENT reference mean, capped at 4 m/s.  Both
+# the directional and non-directional paths use the concurrent mean (F-42) - the threshold
+# describes the data the transfer function was fitted to, not the data it is applied to, and
+# the two paths previously disagreed by 2% on the same dataset.
+SPEEDSORT_THRESHOLD_FRACTION = 0.5
+SPEEDSORT_THRESHOLD_CEILING_MPS = 4.0
+
 # Hard floor for a defensible MCP: six months of valid concurrent hourly pairs
 # (D9.1).  Counted as records rather than calendar span, so a gappy nine-month
 # overlap is judged on the data it actually contains.
@@ -45,6 +52,24 @@ RESAMPLING_NOTE = (
     "instantaneous. This removes within-hour variance from the measured series only, "
     "biasing variance-ratio (std-ratio) results low. Slope-based methods are far less "
     "affected."
+)
+
+# The note above is correct for ERA5 single-level winds, which are instantaneous.  It is
+# NOT correct for MERRA-2, whose `tavg` collections are already time-averaged: there the
+# measured and reference series are averaged alike and the variance loss is symmetric, so
+# the disclosure would be actively misleading.  Step 7 recorded that the note was
+# "accidentally accurate" only because nothing in `merra_data` could reach the LTC; F-58
+# made MERRA-2 selectable, so the disclosure has to become dataset-specific with it.
+REFERENCE_TEMPORAL_SEMANTICS = {
+    "era5": "instantaneous",
+    "merra2": "time_averaged",
+}
+MERRA_RESAMPLING_NOTE = (
+    "Measured data is resampled to hourly means and the MERRA-2 reference is itself a "
+    "time-averaged (tavg) product, so both sides carry within-hour averaging. The one-sided "
+    "variance loss that biases variance-ratio results against an instantaneous ERA5 "
+    "reference does not apply here; any residual difference comes from the two averaging "
+    "windows not being identical rather than from one side being smoothed and the other not."
 )
 
 
@@ -189,16 +214,25 @@ def _resampling_disclosure(state: SessionState) -> dict[str, object]:
         timestep_minutes = detect_timestep_minutes(frame)
     except ValueError:
         return matching
+    source = str(state.runconfig.get("reference_source", "era5"))
+    semantics = REFERENCE_TEMPORAL_SEMANTICS.get(source, "instantaneous")
+    reference = {
+        "reference_source": source,
+        "reference_temporal_semantics": semantics,
+    }
     if timestep_minutes >= 60:
         return {
             "measured_resampled_to_hourly": False,
             "measured_timestep_minutes": int(timestep_minutes),
+            **reference,
             **matching,
         }
     return {
         "measured_resampled_to_hourly": True,
         "measured_timestep_minutes": int(timestep_minutes),
-        "resampling_note": RESAMPLING_NOTE,
+        # Dataset-specific: the two references do not share an averaging convention.
+        "resampling_note": MERRA_RESAMPLING_NOTE if semantics == "time_averaged" else RESAMPLING_NOTE,
+        **reference,
         **matching,
     }
 
@@ -445,7 +479,7 @@ def _run_ltc_speedsort(
         sectors = _speedsort_sector_index(ref_dir)
 
         # All-sector fallback model (for sparse sectors)
-        threshold = float(min(4.0, 0.5 * float(np.mean(reference))))
+        threshold = float(min(SPEEDSORT_THRESHOLD_CEILING_MPS, SPEEDSORT_THRESHOLD_FRACTION * float(np.mean(reference))))
         fallback_model: dict[str, float] | None = None
         mask_all = reference >= threshold
         if np.any(mask_all):
@@ -540,6 +574,9 @@ def _run_ltc_speedsort(
                 "num_sectors": SPEEDSORT_NUM_SECTORS,
                 "sector_width_deg": SPEEDSORT_SECTOR_WIDTH_DEG,
                 "min_sector_records": SPEEDSORT_MIN_SECTOR_RECORDS,
+                "threshold_basis": "concurrent_reference_mean",
+                "threshold_fraction": SPEEDSORT_THRESHOLD_FRACTION,
+                "threshold_ceiling_mps": SPEEDSORT_THRESHOLD_CEILING_MPS,
                 "independent_sectors": independent_count,
                 "reference_direction_missing": int(directionless.sum()),
                 "unmodelled_records": unmodelled,
@@ -561,7 +598,11 @@ def _run_ltc_speedsort(
         return _ltc_response(state, "speedsort", long_df, corrected, metrics)
 
     # --- Original non-directional SpeedSort ---
-    threshold = float(min(4.0, 0.5 * long_df[REFERENCE_COLUMN].mean()))
+    # F-42: this used the LONG-TERM reference mean while the directional path above used the
+    # CONCURRENT mean, so the same data gave two different dog-leg thresholds (3.259 against
+    # 3.191). The concurrent basis is the defensible one: the threshold characterises the
+    # data the transfer function was fitted to, not the data it is later applied to.
+    threshold = float(min(SPEEDSORT_THRESHOLD_CEILING_MPS, SPEEDSORT_THRESHOLD_FRACTION * np.mean(reference)))
     mask = reference >= threshold
     if not np.any(mask):
         raise ValueError("SpeedSort found no concurrent points above the threshold")
@@ -581,6 +622,9 @@ def _run_ltc_speedsort(
             "slope": float(slope),
             "intercept": float(intercept),
             "threshold": threshold,
+            "threshold_basis": "concurrent_reference_mean",
+            "threshold_fraction": SPEEDSORT_THRESHOLD_FRACTION,
+            "threshold_ceiling_mps": SPEEDSORT_THRESHOLD_CEILING_MPS,
             "dog_leg_slope": dog_leg_slope,
             "concurrent_points": int(len(concurrent)),
             "total_corrected_points": int(len(long_df)),

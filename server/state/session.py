@@ -279,6 +279,54 @@ class SessionState:
                 return float(value)
         return None
 
+    def long_term_speed_series(self) -> tuple["pd.Series | None", str]:
+        """Return the best available long-term corrected speed series, and where it came from.
+
+        Preference order matches the pipeline: the ensemble blend, then any single LTC
+        result, then the measured hub-height column.  Anything quoted against the long-term
+        climate — the energy sensitivity factor, the extreme wind — should describe the
+        distribution the P-values will actually be quoted against, and every consumer should
+        agree about which series that is.
+        """
+        if self.ensemble_df is not None:
+            frame = pd.DataFrame(self.ensemble_df)
+            if "Ensemble_Speed" in frame.columns:
+                series = frame["Ensemble_Speed"].dropna()
+                if not series.empty:
+                    return self._timestamped(frame, series), "ensemble"
+        for algorithm in sorted(self.ltc_results):
+            payload = self.ltc_results.get(algorithm)
+            if isinstance(payload, dict) and "df" in payload:
+                frame = pd.DataFrame(payload["df"])
+                if "corrected_wind_speed" in frame.columns:
+                    series = frame["corrected_wind_speed"].dropna()
+                    if not series.empty:
+                        return self._timestamped(frame, series), f"ltc:{algorithm}"
+        hub_height = self.get_hub_height_m()
+        if self.timeseries_df is not None and hub_height is not None:
+            column = f"Spd_{int(hub_height) if float(hub_height).is_integer() else hub_height}m_hub"
+            if column in self.timeseries_df.columns:
+                series = self.timeseries_df[column].dropna()
+                if not series.empty:
+                    return series, f"measured:{column}"
+        return None, "unavailable"
+
+    @staticmethod
+    def _timestamped(frame: pd.DataFrame, series: pd.Series) -> pd.Series:
+        """Attach the frame's Timestamp column as the series index, when it carries one.
+
+        LTC and ensemble results are stored with Timestamp as an ordinary column rather than
+        as the index.  A consumer that only needs the distribution can ignore that; one that
+        needs to group by year cannot, so the index is restored here rather than in each
+        caller.
+        """
+        if "Timestamp" not in frame.columns:
+            return series
+        stamps = pd.to_datetime(frame.loc[series.index, "Timestamp"], errors="coerce")
+        indexed = series.copy()
+        indexed.index = pd.DatetimeIndex(stamps)
+        return indexed[indexed.index.notna()]
+
     def clock_disclosure(self) -> dict[str, object]:
         """Describe which clock hour-of-day bins are counted on, and the site offset (F-02).
 

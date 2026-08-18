@@ -119,12 +119,44 @@ def bilinear_interpolate(
     return np.asarray((1.0 - lat_fraction) * lower_band + lat_fraction * upper_band)
 
 
+def unwrap_antimeridian(
+    points: list[tuple[float, float]],
+    target: tuple[float, float],
+) -> tuple[list[tuple[float, float]], tuple[float, float]]:
+    """Shift signed longitudes onto one continuous branch when a cell spans 180 degrees.
+
+    Node longitudes are stored signed, so a grid cell straddling the antimeridian holds
+    ``180.0`` and ``-179.75``.  Arithmetically that is a **359.75-degree span**, so the
+    containment test fails, bilinear interpolation is skipped, and the cell falls through to
+    IDW (F-59).
+
+    Two neighbouring nodes are never more than a fraction of a degree apart in reality, so a
+    span above 180 degrees can only mean the cell wraps.  Adding 360 to the negative
+    longitudes puts ``-179.75`` at ``180.25`` and restores a 0.25-degree cell that behaves
+    like any other.  The target is shifted onto the same branch.
+
+    A cell that does not wrap is returned untouched, so this cannot affect an ordinary site.
+    """
+    longitudes = [float(longitude) for _latitude, longitude in points]
+    if not longitudes or max(longitudes) - min(longitudes) <= 180.0:
+        return points, target
+    shifted = [
+        (float(latitude), float(longitude) + 360.0 if longitude < 0.0 else float(longitude))
+        for latitude, longitude in points
+    ]
+    target_lat, target_lon = float(target[0]), float(target[1])
+    if target_lon < 0.0:
+        target_lon += 360.0
+    return shifted, (target_lat, target_lon)
+
+
 def interpolate_spatial(
     points: list[tuple[float, float]],
     values: np.ndarray,
     target: tuple[float, float],
 ) -> tuple[np.ndarray, str]:
     """Use linear griddata first, then fall back to IDW for degenerate or NaN spatial solutions."""
+    points, target = unwrap_antimeridian(points, target)
     points_array = np.asarray(points, dtype=float)
     values_array = np.asarray(values, dtype=float)
     unique_lats = np.unique(points_array[:, 0]).size

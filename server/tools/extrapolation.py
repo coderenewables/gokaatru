@@ -68,6 +68,15 @@ def _row_values_for_heights(speed_matrix: np.ndarray, heights: np.ndarray, selec
     return speed_matrix[np.arange(speed_matrix.shape[0]), positions]
 
 
+ALPHA_CLAMP_BAND = (-1.0, 1.0)
+
+# How many re-clamped alpha values the most recent extrapolation hit.  Normally zero,
+# because the table was clamped when it was built — but the fallback fill and the aggregate
+# MoMM path can both reach this function with an unclamped value, and a clamp that fires
+# changes the hub speed without saying so (F-27).
+_alpha_reclamp_count = 0
+
+
 def _power_extrapolate_array(
     reference_speed: np.ndarray,
     reference_height: np.ndarray,
@@ -78,7 +87,12 @@ def _power_extrapolate_array(
     # Clamp the shear exponent to a physically plausible band so a corrupt or
     # extreme lookup cell cannot amplify reference speeds into non-physical hub
     # values. This mirrors the clamp applied when the shear table is built.
-    alpha_safe = np.clip(alpha, -1.0, 1.0)
+    global _alpha_reclamp_count
+    lower, upper = ALPHA_CLAMP_BAND
+    alpha_array = np.asarray(alpha, dtype=float)
+    finite = np.isfinite(alpha_array)
+    _alpha_reclamp_count = int(np.count_nonzero(finite & ((alpha_array < lower) | (alpha_array > upper))))
+    alpha_safe = np.clip(alpha_array, lower, upper)
     return reference_speed * (hub_height_m / reference_height) ** alpha_safe
 
 
@@ -294,10 +308,31 @@ def _extrapolate_to_hub_height(state: SessionState, hub_height_m: float, shear_m
             "A hub series with counts in both rows is a blend of the two."
         ),
         "method_is_mixed": bool(counts["interpolated"] and counts["extrapolated"]),
+        # F-27: the profile is neutral throughout. There is no Monin-Obukhov length, no
+        # Richardson number and no stability class anywhere in the pipeline; the 12x24
+        # month-hour table is the empirical stability proxy. That is a legitimate industry
+        # approach and arguably implicit in the table's existence, but it was never stated.
+        "stability_treatment": "neutral_profile_with_month_hour_table",
+        "stability_note": (
+            "No explicit atmospheric stability correction is applied. The profile is neutral, "
+            "and the 12x24 month-hour shear table stands in for stability by capturing its "
+            "diurnal and seasonal signature empirically. A site with strong nocturnal "
+            "stratification will have that captured only to the extent the campaign observed "
+            "it in the same month-hour cells."
+        ),
+        "alpha_reclamped_records": _alpha_reclamp_count,
+        "alpha_clamp_band": list(ALPHA_CLAMP_BAND),
         "reanalysis": reanalysis_result,
         **lever,
         **state.staleness_report(),
     }
+    if _alpha_reclamp_count:
+        response["alpha_clamp_warning"] = (
+            f"{_alpha_reclamp_count:,} records used a shear exponent outside "
+            f"{ALPHA_CLAMP_BAND} and were clamped to the band before extrapolation. The shear "
+            "table is clamped when it is built, so this can only come from a fallback fill or "
+            "the aggregate MoMM path — a clamped alpha changes the hub speed it produces."
+        )
     if response["method_is_mixed"]:
         response["method_warning"] = (
             f"{counts['interpolated']:,} records were interpolated in ln(z) and "

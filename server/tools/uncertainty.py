@@ -53,32 +53,10 @@ CORRELATED_COMPONENTS = ("measurement", "vertical_extrapolation", "mcp")
 def _long_term_speed_series(state: SessionState) -> tuple["pd.Series | None", str]:
     """Return the best available long-term corrected speed series, and where it came from.
 
-    Preference order matches the pipeline: the ensemble blend, then any single LTC result,
-    then the measured hub-height column.  The sensitivity factor should describe the
-    distribution the P-values will actually be quoted against.
+    Delegates to the session so this tool and the extreme-wind tool cannot disagree about
+    which series counts as "long term" (F-79).
     """
-    if state.ensemble_df is not None:
-        frame = pd.DataFrame(state.ensemble_df)
-        if "Ensemble_Speed" in frame.columns:
-            series = frame["Ensemble_Speed"].dropna()
-            if not series.empty:
-                return series, "ensemble"
-    for algorithm in sorted(state.ltc_results):
-        payload = state.ltc_results.get(algorithm)
-        if isinstance(payload, dict) and "df" in payload:
-            frame = pd.DataFrame(payload["df"])
-            if "corrected_wind_speed" in frame.columns:
-                series = frame["corrected_wind_speed"].dropna()
-                if not series.empty:
-                    return series, f"ltc:{algorithm}"
-    hub_height = state.get_hub_height_m()
-    if state.timeseries_df is not None and hub_height is not None:
-        column = f"Spd_{int(hub_height) if float(hub_height).is_integer() else hub_height}m_hub"
-        if column in state.timeseries_df.columns:
-            series = state.timeseries_df[column].dropna()
-            if not series.empty:
-                return series, f"measured:{column}"
-    return None, "unavailable"
+    return state.long_term_speed_series()
 
 
 def _density_normalised(

@@ -159,29 +159,52 @@ def test_p4_atmospheric_and_climatology_plots_serialize(horns_rev_dataset_sessio
 
 
 def test_p5_energy_and_advanced_metrics_use_real_mast_records(horns_rev_dataset_session) -> None:
-    """Energy, extremes, ramps, and persistence report finite diagnostics for the Horns Rev mast."""
+    """Energy, ramps, and persistence report finite diagnostics for the Horns Rev mast."""
     energy = _compute_energy_metrics(horns_rev_dataset_session, "Spd_58m", "Dir_58m")
-    extremes = _compute_extremes(horns_rev_dataset_session, "Spd_58m")
     ramps = _compute_ramps(horns_rev_dataset_session, "Spd_58m")
     persistence = _compute_persistence(horns_rev_dataset_session, "Spd_58m")
 
     assert energy["density_source"] == "measured"
     assert energy["wind_power_density_w_m2"] > 0
     assert len(energy["sectors"]) == 16
-    assert extremes["sample_years"] == 2
-    assert extremes["screening_only"] is True
-    assert extremes["gev"]["wind_100_year"] > extremes["gev"]["wind_50_year"]
     assert ramps["record_count"] > 0
     assert ramps["p95_absolute_ramp_m_s"] >= ramps["mean_absolute_ramp_m_s"]
     assert persistence["calm_period_count"] > 0
     assert persistence["max_calm_duration_minutes"] > 0
 
 
+def test_extreme_winds_refuse_a_campaign_with_no_complete_year(horns_rev_dataset_session) -> None:
+    """F-78 (HIGH) — FIXED, on the real fixture. A 10.5-month campaign has no annual maximum.
+
+    The Horns Rev mast runs 1999-05-14 to 2000-04-01. That is two *calendar* years and not
+    one complete one: 1999 covers May-December (63.6% of the calendar) and 2000 covers
+    January-April (25.1%).
+
+    ``resample("YE").max()`` called those two annual maxima and fitted a 50- and a 100-year
+    wind to them, which is exactly the defect F-78 describes — the two "annual maxima" are a
+    summer-half maximum and a winter-half maximum from a single 10.5-month campaign.
+
+    The tool now refuses and says why, rather than publishing a design value that cannot
+    exist. `_compute_overview_summary` treats extremes as optional, so the Sensor Overview
+    degrades to omitting the panel instead of failing.
+    """
+    with pytest.raises(ValueError, match="at least 2 calendar years"):
+        _compute_extremes(horns_rev_dataset_session, "Spd_58m")
+
+    # The gate is a parameter, so the old screening estimate is still reachable — but only
+    # by asking for it explicitly, which is the whole point.
+    screening = _compute_extremes(horns_rev_dataset_session, "Spd_58m", min_year_coverage=0.0)
+    assert screening["sample_years"] == 2
+    assert screening["screening_only"] is True
+    # And even then no GEV is fitted to two points.
+    assert screening["gev"]["available"] is False
+    assert "screening basis only" in screening["warning"]
+
+
 @pytest.mark.parametrize(
     ("plot", "args"),
     [
         (_plot_power_density, ("Spd_58m", "Dir_58m")),
-        (_plot_extremes_fit, ("Spd_58m",)),
         (_plot_ramp_histogram, ("Spd_58m",)),
         (_plot_duration_curve, ("Spd_58m",)),
     ],
@@ -192,6 +215,18 @@ def test_p5_plots_serialize_for_real_mast_records(horns_rev_dataset_session, plo
 
     assert result["title"]
     assert json.loads(result["plotly_json"])["data"]
+
+
+def test_extremes_plot_follows_the_same_refusal(horns_rev_dataset_session) -> None:
+    """The chart cannot draw a return-level curve the fit refused to produce.
+
+    Drawing one anyway would put the number the guard exists to suppress back on the screen,
+    so `_plot_extremes_fit` inherits the refusal rather than working around it. Where the
+    fit does run but the GEV is withheld for want of years, the chart draws Gumbel alone and
+    labels itself.
+    """
+    with pytest.raises(ValueError, match="at least 2 calendar years"):
+        _plot_extremes_fit(horns_rev_dataset_session, "Spd_58m")
 
 
 def test_p6_comparison_mast_effects_and_qc_use_real_mast_records(horns_rev_dataset_session) -> None:

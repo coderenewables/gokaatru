@@ -20,7 +20,13 @@ import pandas as pd
 import pytest
 
 import server.main  # noqa: F401 — establishes tool-module import order
-from server.core.spatial import bearing_compass, haversine_km, idw_interpolate, interpolate_spatial
+from server.core.spatial import (
+    bearing_compass,
+    haversine_km,
+    idw_interpolate,
+    interpolate_spatial,
+    unwrap_antimeridian,
+)
 from server.state.session import SessionState
 from server.tools.era5 import _bounding_pair, _compute_era5_wind_speed, _interpolate_era5_to_site
 from server.schemas.common import Coordinate
@@ -234,22 +240,23 @@ def test_merra2_can_be_selected_as_the_long_term_reference():
     empty.set_coordinate(Coordinate(latitude=52.13, longitude=4.62))
     with pytest.raises(ValueError, match="MERRA-2 nodes are not available"):
         _interpolate_era5_to_site(empty, source="merra2")
-def test_antimeridian_cell_falls_back_to_idw_instead_of_bilinear():
-    """FINDING F-59 (L after the F-60 fix): a cell across 180 deg still skips bilinear.
+def test_antimeridian_cell_uses_bilinear_like_any_other():
+    """F-59 (LOW) — FIXED. A cell across 180 degrees is unwrapped before it is assembled.
 
     Node longitudes are stored signed, so a cell spanning the antimeridian holds ``180.0``
-    and ``-179.75``. ``interpolate_spatial`` sees a 359.75-degree span, the ``inside_cell``
-    test fails, and bilinear is skipped.
+    and ``-179.75``. Arithmetically that is a **359.75-degree span**, so the containment test
+    failed, bilinear was skipped, and the cell fell through to IDW.
 
-    Before the F-60 haversine fix this was severe: IDW measured the far-side node as
-    359.9 degrees away, weighted it to nothing, and returned **12.00 m/s against a truth
-    of 8.40 (+42.9%)** on a cell with an east-west gradient. Great-circle distance sees
-    the wrap correctly, so the same case now returns **8.80 (+4.78%)** — the ordinary
-    IDW-versus-bilinear difference rather than a cell-assembly failure.
+    Before the F-60 haversine fix this was severe: IDW measured the far-side node as 359.9
+    degrees away, weighted it to nothing, and returned **12.00 m/s against a truth of 8.40
+    (+42.9%)** on a cell with an east-west gradient. Great-circle distance dropped that to
+    **8.80 (+4.78%)** — the ordinary IDW-versus-bilinear difference rather than a
+    cell-assembly failure.
 
-    What remains: the cell is still assembled as though it were 359.75 degrees wide, so
-    the exact bilinear path is unavailable and nothing in the response says why. The fix
-    is to unwrap longitudes onto a common branch before assembling the cell.
+    Unwrapping closes the rest. Two neighbouring grid nodes are never more than a fraction of
+    a degree apart, so a span above 180 degrees can only mean the cell wraps; adding 360 to
+    the negative longitudes restores a 0.25-degree cell that behaves like any other, and
+    bilinear is now exact there.
     """
     nodes = [(-10.0, 180.0), (-10.0, -179.75), (-9.75, 180.0), (-9.75, -179.75)]
     values = np.array([[8.0], [12.0], [8.0], [12.0]])
@@ -257,17 +264,23 @@ def test_antimeridian_cell_falls_back_to_idw_instead_of_bilinear():
     site_lon = 180.0 + ERA5_GRID_DEG * 0.1 - 360.0
     out, method = interpolate_spatial(nodes, values, (-9.875, site_lon))
 
-    assert method == "idw"  # bilinear still skipped
-    error = float(out[0]) / 8.4 - 1.0
-    assert 0.0 < error < 0.10  # was +42.9%, now under 5%
+    assert method == "linear"
+    assert float(out[0]) == pytest.approx(8.4, rel=1e-9)  # was 12.00, then 8.80
 
-    # Mid-cell the two sides balance, so IDW happens to be exact there.
-    mid, _ = interpolate_spatial(nodes, values, (-9.875, -179.875))
-    assert float(mid[0]) == pytest.approx(10.0, abs=0.01)
+    # Mid-cell is exact too, as it must be for a linear gradient.
+    mid, mid_method = interpolate_spatial(nodes, values, (-9.875, -179.875))
+    assert mid_method == "linear"
+    assert float(mid[0]) == pytest.approx(10.0, rel=1e-9)
 
-    # Control: the same geometry away from the antimeridian is exact and uses bilinear.
-    nodes_ok = [(-10.0, 20.0), (-10.0, 20.25), (-9.75, 20.0), (-9.75, 20.25)]
-    out_ok, method_ok = interpolate_spatial(nodes_ok, values, (-9.875, 20.0 + ERA5_GRID_DEG * 0.1))
+    # The unwrap is expressible on its own and leaves an ordinary cell untouched.
+    ordinary = [(-10.0, 20.0), (-10.0, 20.25), (-9.75, 20.0), (-9.75, 20.25)]
+    assert unwrap_antimeridian(ordinary, (-9.875, 20.1)) == (ordinary, (-9.875, 20.1))
+    wrapped_points, wrapped_target = unwrap_antimeridian(nodes, (-9.875, site_lon))
+    assert sorted({longitude for _lat, longitude in wrapped_points}) == [180.0, 180.25]
+    assert wrapped_target[1] == pytest.approx(180.025)
+
+    # Control: the same geometry away from the antimeridian is unchanged by the fix.
+    out_ok, method_ok = interpolate_spatial(ordinary, values, (-9.875, 20.0 + ERA5_GRID_DEG * 0.1))
     assert method_ok == "linear"
     assert float(out_ok[0]) == pytest.approx(8.4, rel=1e-9)
 
@@ -384,13 +397,16 @@ def test_converted_brighthub_units_are_accepted_by_the_density_tool():
     assert 1.20 < result["mean_density"] < 1.24
 
 
-def test_a_variable_missing_from_one_node_is_dropped_without_warning():
-    """FINDING F-63 (L): an incomplete variable disappears from the interpolated frame.
+def test_a_variable_missing_from_one_node_is_reported():
+    """F-63 (LOW) — FIXED. A variable dropped for want of a node is named, not silent.
 
-    ``_interpolate_era5_to_site`` only interpolates a variable when *every* node has it.
-    One node missing `d2m` silently removes dew point from the site series, which is what
-    the density calculation needs. It is visible in the returned `variables` list, but
-    nothing warns, and the failure surfaces later as a missing-column error elsewhere.
+    ``_interpolate_era5_to_site`` interpolates a variable only when *every* node carries it.
+    One node missing ``d2m`` silently removed dew point from the site series — which is what
+    the air-density calculation needs. It was visible only as an absence from the returned
+    ``variables`` list, and surfaced later as a missing-column error somewhere unrelated.
+
+    The behaviour is unchanged — a variable absent from one corner cannot be interpolated
+    across the cell — but the drop is now reported with the nodes responsible.
     """
     state = _era5_state(
         {(10.0, 20.0): 8.0, (10.0, 20.25): 8.0, (10.25, 20.0): 8.0, (10.25, 20.25): 8.0},
@@ -403,31 +419,86 @@ def test_a_variable_missing_from_one_node_is_dropped_without_warning():
     assert "d2m" not in result["variables"]
     assert "d2m" not in state.era5_interpolated_df.columns
     assert "sp" in result["variables"]  # the complete ones survive
-    assert "warning" not in result
-    assert "skipped_variables" not in result
 
+    skipped = result["skipped_variables"]
+    assert [entry["variable"] for entry in skipped] == ["d2m"]
+    assert skipped[0]["missing_from_nodes"] == ["10.25_20.25"]
+    assert "Dew point feeds the air-density calculation" in result["warning"]
 
-def test_interpolation_method_label_collapses_a_per_variable_mixture():
-    """FINDING F-62 (L): one `method` label describes what may be several methods.
-
-    `methods_used` is a set across variables and the u/v pair; the response reduces it to
-    `"idw"` if *any* member used IDW, else `"linear"`. A run where speed interpolated
-    bilinearly but direction fell back is reported wholly as IDW. Likewise
-    `speed_interpolation: "scalar"` is a hardcoded literal rather than something the
-    interpolation path reports, so it cannot detect a future change of approach.
-    """
-    import inspect
-
-    from server.tools import era5 as era5_module
-
-    source = inspect.getsource(era5_module._interpolate_era5_to_site)
-    assert 'method_name = "idw" if "idw" in methods_used else "linear"' in source
-    assert '"speed_interpolation": "scalar"' in source
-
-    state = _era5_state(
+    # A complete cell reports an empty list rather than staying silent about the check.
+    clean = _era5_state(
         {(10.0, 20.0): 8.0, (10.0, 20.25): 8.0, (10.25, 20.0): 8.0, (10.25, 20.25): 8.0},
         site=(10.125, 20.125),
     )
+    clean_result = _interpolate_era5_to_site(clean)
+    assert clean_result["skipped_variables"] == []
+    assert "warning" not in clean_result
+def test_interpolation_reports_the_method_per_variable():
+    """F-62 (LOW) — FIXED. A per-variable mixture is reported as a mixture.
+
+    ``methods_used`` was a set across the interpolated variables and the u/v pair, and the
+    response reduced it to ``"idw"`` if *any* member fell back, else ``"linear"``. A run
+    where speed interpolated bilinearly but direction fell back was reported wholly as IDW.
+
+    ``speed_interpolation: "scalar"`` was likewise a hardcoded literal rather than something
+    the interpolation path reported, so it could not have detected a future change of
+    approach — it would simply have kept asserting the old one.
+    """
+    state = _era5_state(
+        {(10.0, 20.0): 8.0, (10.0, 20.25): 9.0, (10.25, 20.0): 8.0, (10.25, 20.25): 9.0},
+        site=(10.125, 20.125),
+    )
     result = _interpolate_era5_to_site(state)
-    assert result["method"] in {"linear", "idw"}
-    assert "methods_by_variable" not in result
+
+    methods = result["method_by_variable"]
+    assert set(methods) == {"Spd_100m", "sp", "t2m", "d2m", "Dir_100m"}
+    assert set(methods.values()) == {"linear"}
+    assert result["method"] == "linear"
+    assert result["method_is_mixed"] is False
+
+    # The collapsed label is retained for existing consumers, and the map is what says
+    # which variable actually took which path.
+    assert result["speed_interpolation"] == "scalar"
+    assert methods["Spd_100m"] == "linear"
+
+
+def test_the_resampling_note_is_specific_to_the_reference_dataset():
+    """F-58 follow-up. The temporal-semantics disclosure had to move with the fix.
+
+    Every LTC response states that "the reanalysis reference is instantaneous". That is
+    correct for ERA5 single-level winds and **wrong for MERRA-2**, whose `tavg` collections
+    are already time-averaged: there both sides carry within-hour averaging and the one-sided
+    variance loss that biases variance-ratio results simply does not apply.
+
+    Step 7 recorded that the note was "accidentally accurate" only because nothing in
+    `merra_data` could reach the LTC, and said explicitly that fixing F-58 would require
+    fixing this at the same time. F-58 made MERRA-2 selectable, so this closes with it.
+    """
+    from server.tools.ltc import (
+        MERRA_RESAMPLING_NOTE,
+        REFERENCE_TEMPORAL_SEMANTICS,
+        RESAMPLING_NOTE,
+        _resampling_disclosure,
+    )
+
+    index = pd.date_range("2021-01-01", periods=6 * 24 * 30, freq="10min", tz="UTC")
+    state = SessionState()
+    state.reset()
+    state.timeseries_df = pd.DataFrame({"Spd_80m": np.full(len(index), 8.0)}, index=index)
+
+    # Default: ERA5, instantaneous, and the original note.
+    era5 = _resampling_disclosure(state)
+    assert era5["reference_source"] == "era5"
+    assert era5["reference_temporal_semantics"] == "instantaneous"
+    assert era5["resampling_note"] == RESAMPLING_NOTE
+    assert "reference is instantaneous" in era5["resampling_note"]
+
+    # MERRA-2: time-averaged, and a note that does not claim a one-sided variance loss.
+    state.runconfig["reference_source"] = "merra2"
+    merra = _resampling_disclosure(state)
+    assert merra["reference_temporal_semantics"] == "time_averaged"
+    assert merra["resampling_note"] == MERRA_RESAMPLING_NOTE
+    assert "does not apply here" in merra["resampling_note"]
+    assert "reference is instantaneous" not in merra["resampling_note"]
+
+    assert REFERENCE_TEMPORAL_SEMANTICS == {"era5": "instantaneous", "merra2": "time_averaged"}

@@ -480,12 +480,29 @@ def _interpolate_era5_to_site(state: SessionState, source: str = "era5") -> dict
     site = (coordinate.latitude, coordinate.longitude)
     result = pd.DataFrame(index=common_index)
     methods_used: set[str] = set()
+    # F-62: `methods_used` collapsed to "idw" if *any* member fell back, so a run where
+    # speed interpolated bilinearly and only direction fell back was reported wholly as IDW.
+    # The per-variable map is what a reader actually needs.
+    variable_methods: dict[str, str] = {}
+    # F-63: a variable is interpolated only when EVERY node carries it, so one node missing
+    # `d2m` silently removed dew point from the site series - which is what the density
+    # calculation needs. It was visible only as an absence from the `variables` list, and
+    # surfaced later as a missing-column error somewhere unrelated.
+    skipped_variables: list[dict[str, object]] = []
     for variable in variables:
-        if all(variable in frame.columns for frame in frames):
-            values = np.vstack([frame.loc[common_index, variable].to_numpy(dtype=float) for frame in frames])
-            interpolated, method = interpolate_spatial(points, values, site)
-            methods_used.add(method)
-            result[variable] = np.asarray(interpolated, dtype=float)
+        missing = [
+            key
+            for key, frame in zip((key_for(float(n["latitude"]), float(n["longitude"])) for n in nodes), frames)
+            if variable not in frame.columns
+        ]
+        if missing:
+            skipped_variables.append({"variable": variable, "missing_from_nodes": missing})
+            continue
+        values = np.vstack([frame.loc[common_index, variable].to_numpy(dtype=float) for frame in frames])
+        interpolated, method = interpolate_spatial(points, values, site)
+        methods_used.add(method)
+        variable_methods[variable] = method
+        result[variable] = np.asarray(interpolated, dtype=float)
     # Vector-interpolate u/v for direction only.  Speed was already
     # scalar-interpolated above to avoid vector-cancellation bias.
     speed_values = np.vstack([frame.loc[common_index, "Spd_100m"].to_numpy(dtype=float) for frame in frames])
@@ -496,6 +513,7 @@ def _interpolate_era5_to_site(state: SessionState, source: str = "era5") -> dict
     interp_u, method_u = interpolate_spatial(points, u_values, site)
     interp_v, method_v = interpolate_spatial(points, v_values, site)
     methods_used.update({method_u, method_v})
+    variable_methods["Dir_100m"] = method_u if method_u == method_v else f"{method_u}/{method_v}"
     result["Dir_100m"] = (270.0 - np.degrees(np.arctan2(np.asarray(interp_v), np.asarray(interp_u)))) % 360.0
     state.era5_interpolated_df = result.sort_index()
     # The LTC reads a single interpolated series, so the source that produced it has to be
@@ -503,12 +521,18 @@ def _interpolate_era5_to_site(state: SessionState, source: str = "era5") -> dict
     state.runconfig["reference_source"] = source
     state.touch()
     method_name = "idw" if "idw" in methods_used else "linear"
-    return {
+    payload: dict[str, object] = {
         "status": "ok",
         "rows": int(len(state.era5_interpolated_df)),
         "method": method_name,
+        # The collapsed label is retained for existing consumers; the map is the truth.
+        "method_by_variable": variable_methods,
+        "method_is_mixed": len(methods_used) > 1,
         "variables": state.era5_interpolated_df.columns.tolist(),
-        "speed_interpolation": "scalar",
+        "skipped_variables": skipped_variables,
+        # Reported by the path rather than asserted as a literal, so a future change of
+        # approach would show up here instead of silently contradicting the field (F-62).
+        "speed_interpolation": "scalar" if "Spd_100m" in variable_methods else "unavailable",
         "reference_source": source,
         "nodes_used": len(points),
         "reference_source_note": (
@@ -518,6 +542,16 @@ def _interpolate_era5_to_site(state: SessionState, source: str = "era5") -> dict
             "the reanalysis rather than by the site."
         ),
     }
+    if skipped_variables:
+        names = ", ".join(str(entry["variable"]) for entry in skipped_variables)
+        payload["warning"] = (
+            f"{len(skipped_variables)} variable(s) ({names}) were not interpolated because at "
+            "least one node does not carry them, so they are absent from the site series. "
+            "Dew point feeds the air-density calculation and temperature and pressure feed "
+            "the XGBoost features, so the absence surfaces later as a missing-column error "
+            "somewhere unrelated unless it is dealt with here."
+        )
+    return payload
 
 
 @mcp.tool()

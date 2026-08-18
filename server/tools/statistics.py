@@ -15,6 +15,22 @@ from server.state.session import SessionState, session
 
 COMPASS_16 = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
 
+# Turbulence intensity (F-74, F-75, F-76).
+#
+# IEC 61400-1 characterises a site by its representative turbulence at 15 m/s, which is the
+# number that selects the turbulence class: Iref 0.16 / 0.14 / 0.12 for class A / B / C.
+IEC_REFERENCE_SPEED_MPS = 15.0
+
+# Below cut-in, sigma/U is the ratio of two small numbers and carries no information about
+# the site.  Both TI tools default to this gate so the same key cannot mean two different
+# populations on two different screens; it was worth 13.8% on the same campaign.
+TI_MIN_SPEED_MPS = 3.0
+
+# A speed bin thinner than this cannot support a mean plus 1.28 standard deviations.  The
+# same codebase requires 200 records per sector for SpeedSort and 50 for mast-shadow
+# detection; turbulence binning required none.
+TI_MIN_BIN_RECORDS = 20
+
 
 def _require_series_from_state(state: SessionState, sensor_name: str) -> pd.Series:
     """Return a loaded sensor series using the Phase 1 timeseries access contract."""
@@ -301,30 +317,96 @@ def _find_turbulence_sd_sensor(state: SessionState, speed_sensor: str) -> str:
     raise ValueError(f"No standard-deviation channel is available for '{speed_sensor}'")
 
 
-def _compute_turbulence_analysis(state: SessionState, speed_sensor: str) -> dict:
-    """Compute IEC-style TI metrics from a speed sensor and its matching standard-deviation channel."""
+def _compute_turbulence_analysis(
+    state: SessionState,
+    speed_sensor: str,
+    min_speed_mps: float = TI_MIN_SPEED_MPS,
+) -> dict:
+    """Compute IEC-style TI metrics from a speed sensor and its matching standard-deviation channel.
+
+    The headline number is ``iec_ti_at_15ms``: representative turbulence in the 1 m/s bin
+    containing 15 m/s, which is what IEC 61400-1 characterises a site by and what selects
+    the turbulence class (Iref 0.16 / 0.14 / 0.12 for class A / B / C).
+    """
     sd_sensor = _find_turbulence_sd_sensor(state, speed_sensor)
     aligned = _align_pair_from_state(state, speed_sensor, sd_sensor)
-    valid = aligned[(aligned[speed_sensor] > 3.0) & (aligned[sd_sensor] >= 0.0)].copy()
+    valid = aligned[(aligned[speed_sensor] > min_speed_mps) & (aligned[sd_sensor] >= 0.0)].copy()
     valid["ti"] = valid[sd_sensor] / valid[speed_sensor]
     valid = valid.replace([np.inf, -np.inf], np.nan).dropna(subset=["ti"])
     if valid.empty:
-        raise ValueError("No speed > 3 m/s records with non-negative standard deviation are available for TI")
+        raise ValueError(
+            f"No speed > {min_speed_mps:g} m/s records with non-negative standard deviation "
+            "are available for TI"
+        )
     valid["speed_bin"] = np.floor(valid[speed_sensor]).astype(int)
     grouped = valid.groupby("speed_bin", observed=False)["ti"]
     representative = grouped.mean() + 1.28 * grouped.std(ddof=0).fillna(0.0)
+    counts = grouped.count()
     if representative.empty:
         raise ValueError("No wind-speed bins are available for TI analysis")
-    at_15 = representative.iloc[(representative.index.to_numpy(dtype=float) - 15.0).argmin()]
-    return {
+
+    # F-74.  This selected the bin with `(bins - 15.0).argmin()` — argmin on a *signed*
+    # difference, which always returns the most negative element and therefore the lowest
+    # bin present, never the bin nearest 15 m/s.  TI falls roughly as 1/U, so the reported
+    # figure was the 3 m/s bin and ran +94.5% high against the correct one: 0.310 where the
+    # answer was 0.160, which is the difference between "off the IEC scale" and "class A".
+    bins = representative.index.to_numpy(dtype=float)
+    nearest = int(np.abs(bins - IEC_REFERENCE_SPEED_MPS).argmin())
+    chosen_bin = int(bins[nearest])
+    chosen_records = int(counts.iloc[nearest])
+
+    # F-75.  `representative.mean()` gave a 1-record bin at 29 m/s the same weight as a
+    # 4 900-record bin at 5 m/s — 0.173 against 0.211 weighted, in a field with no stated
+    # definition.  The population-weighted figure is the defensible scalar; the unweighted
+    # one is kept so an existing consumer can see what changed.
+    weighted = float((representative * counts).sum() / counts.sum())
+
+    result: dict[str, object] = {
         "speed_sensor": speed_sensor,
         "sd_sensor": sd_sensor,
         "record_count": int(len(valid)),
+        # F-76: both TI tools now name the gate they applied, so two screens showing
+        # `mean_ti` can be compared. The gate is worth 13.8% on the same data.
+        "speed_gate_mps": float(min_speed_mps),
+        "ti_basis": f"sigma/U over records above {min_speed_mps:g} m/s",
         "mean_ti": float(valid["ti"].mean()),
         "p90_ti": float(valid["ti"].quantile(0.90)),
-        "representative_ti": float(representative.mean()),
-        "iec_ti_at_15ms": float(at_15),
+        "representative_ti": weighted,
+        "representative_ti_basis": "bin_population_weighted",
+        "representative_ti_unweighted": float(representative.mean()),
+        "iec_ti_at_15ms": float(representative.iloc[nearest]),
+        "iec_ti_bin_mps": chosen_bin,
+        "iec_ti_bin_records": chosen_records,
+        "iec_ti_reference_speed_mps": IEC_REFERENCE_SPEED_MPS,
+        "min_bin_records": TI_MIN_BIN_RECORDS,
+        "bins": [
+            {
+                "bin_center_mps": float(bin_value) + 0.5,
+                "mean_ti": float(grouped.mean().iloc[index]),
+                "representative_ti": float(representative.iloc[index]),
+                "count": int(counts.iloc[index]),
+                "sufficient_records": bool(int(counts.iloc[index]) >= TI_MIN_BIN_RECORDS),
+            }
+            for index, bin_value in enumerate(bins)
+        ],
     }
+
+    warnings: list[str] = []
+    if abs(chosen_bin - IEC_REFERENCE_SPEED_MPS) > 1.0:
+        warnings.append(
+            f"The campaign never reached {IEC_REFERENCE_SPEED_MPS:g} m/s, so the nearest "
+            f"available bin is {chosen_bin} m/s. The turbulence class cannot be selected "
+            "from this."
+        )
+    if chosen_records < TI_MIN_BIN_RECORDS:
+        warnings.append(
+            f"The {chosen_bin} m/s bin holds only {chosen_records} record(s), below the "
+            f"{TI_MIN_BIN_RECORDS} needed to characterise it. Representative TI is a mean "
+            "plus 1.28 standard deviations, and neither is meaningful on a handful of points."
+        )
+    if warnings:
+        result["warning"] = " ".join(warnings)
+    return result
 
 
 def _sensor_statistics(state: SessionState, sensor_name: str) -> dict:
@@ -398,9 +480,15 @@ def compute_wind_climate(speed_sensor: str, direction_sensor: str = "") -> dict:
 
 
 @mcp.tool()
-def compute_turbulence_analysis(speed_sensor: str) -> dict:
-    """Compute mean, P90, representative, and 15 m/s IEC turbulence intensity metrics."""
-    return _compute_turbulence_analysis(session, speed_sensor)
+def compute_turbulence_analysis(speed_sensor: str, min_speed_mps: float = TI_MIN_SPEED_MPS) -> dict:
+    """Compute mean, P90, representative, and 15 m/s IEC turbulence intensity metrics.
+
+    ``iec_ti_at_15ms`` is representative turbulence in the 1 m/s bin containing 15 m/s — the
+    number IEC 61400-1 uses to select the turbulence class. The bin actually used and how
+    many records it holds are reported beside it, because a low-wind campaign may never
+    reach 15 m/s.
+    """
+    return _compute_turbulence_analysis(session, speed_sensor, min_speed_mps)
 
 
 @mcp.tool()
@@ -439,10 +527,20 @@ def compute_monthly_stats(sensor_name: str) -> dict:
 
 
 @mcp.tool()
-def compute_turbulence_intensity(speed_sensor: str, sd_sensor: str) -> dict:
-    """Compute mean and representative TI by 1 m/s bins per IEC 61400-1 Ed.4 Section 6.3."""
+def compute_turbulence_intensity(
+    speed_sensor: str,
+    sd_sensor: str,
+    min_speed_mps: float = TI_MIN_SPEED_MPS,
+) -> dict:
+    """Compute mean and representative TI by 1 m/s bins per IEC 61400-1 Ed.4 Section 6.3.
+
+    ``min_speed_mps`` defaults to the same 3 m/s gate ``compute_turbulence_analysis`` uses.
+    Below cut-in, sigma/U is the ratio of two small numbers; the two tools previously gated
+    at 3 m/s and 0 m/s respectively and both published a TI, which differed by 13.8% on the
+    same campaign with nothing naming the difference (F-76). Pass 0 to include every record.
+    """
     aligned = _align_pair(speed_sensor, sd_sensor)
-    valid = aligned[(aligned[speed_sensor] > 0) & (aligned[sd_sensor] >= 0)].copy()
+    valid = aligned[(aligned[speed_sensor] > min_speed_mps) & (aligned[sd_sensor] >= 0)].copy()
     valid["ti"] = valid[sd_sensor] / valid[speed_sensor]
     valid = valid.replace([np.inf, -np.inf], np.nan).dropna()
     valid["speed_bin"] = np.floor(valid[speed_sensor]).astype(int)
@@ -456,9 +554,16 @@ def compute_turbulence_intensity(speed_sensor: str, sd_sensor: str) -> dict:
                 "mean_ti": mean_ti,
                 "representative_ti": representative,
                 "count": int(len(group)),
+                "sufficient_records": bool(len(group) >= TI_MIN_BIN_RECORDS),
             }
         )
-    return {"bins": bins}
+    return {
+        "bins": bins,
+        "speed_gate_mps": float(min_speed_mps),
+        "ti_basis": f"sigma/U over records above {min_speed_mps:g} m/s",
+        "min_bin_records": TI_MIN_BIN_RECORDS,
+        "record_count": int(len(valid)),
+    }
 
 
 @mcp.tool()

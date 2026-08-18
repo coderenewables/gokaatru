@@ -146,12 +146,26 @@ def test_cadence_alignment_tolerates_a_drifting_logger_clock():
     assert set(aligned.index.minute % 10) != {0}
 
 
-def test_day_first_dates_with_days_above_twelve_are_refused():
-    """VERIFIED: an unparseable date column raises rather than silently dropping most rows."""
+def test_day_first_dates_with_days_above_twelve_are_resolved_not_refused():
+    """F-67 side-effect — IMPROVED. A determinable DD/MM column is now parsed, not rejected.
+
+    This column runs 01/03 to 28/03. Under the old month-first-only parse, 16 of its 28 rows
+    coerced to NaT, the valid fraction fell below the 0.5 gate, and the column was discarded
+    with "Could not detect a timestamp column" — a confusing message for a file whose dates
+    are perfectly well determined, just not in the order pandas guessed.
+
+    Any day above 12 determines the order from the data itself, so ingest now takes whichever
+    reading parses more rows. Only a column where *neither* order parses more — every day at
+    or below 12 — is genuinely ambiguous, and that one is refused by name.
+    """
     dates = [f"{day:02d}/03/2021 00:00" for day in range(1, 29)]
     frame = pd.DataFrame({"Timestamp": dates, "Spd": np.arange(len(dates), dtype=float)})
-    with pytest.raises(ValueError, match="Could not detect a timestamp column"):
-        _detect_timestamp_column(frame)
+
+    name, parsed = _detect_timestamp_column(frame)
+    assert name == "Timestamp"
+    assert int(parsed.notna().sum()) == 28
+    assert parsed.min() == pd.Timestamp("2021-03-01")
+    assert parsed.max() == pd.Timestamp("2021-03-28")
 
 
 # ---------------------------------------------------------------------------
@@ -331,32 +345,74 @@ def test_momm_samples_per_hour_floor_is_correct_not_a_bug():
         assert _infer_samples_per_hour(pd.DatetimeIndex(full_year)) * 31 == 31.0
 
 
-def test_ambiguous_day_month_dates_swap_silently_but_are_caught_downstream():
-    """FINDING F-67 (L): DD/MM parses as MM/DD when every day is 12 or below.
+def test_ambiguous_day_month_dates_are_refused_rather_than_guessed():
+    """F-67 (LOW) — FIXED. An undeclared DD/MM column is refused instead of read either way.
 
-    ``pd.to_datetime`` is called with no ``dayfirst`` and no explicit format, so a
-    DD/MM/YYYY column whose days all fall on or below 12 parses **100% successfully** with
-    month and day transposed: a 12-day March campaign becomes a series spanning January to
-    December.
+    ``pd.to_datetime`` was called with no ``dayfirst`` and no format, so a DD/MM/YYYY column
+    whose days all fall on or below 12 parsed **100% successfully** with month and day
+    transposed: a 12-day March campaign became a series spanning January to December.
 
-    It is caught downstream, but only incidentally: the swapped series has a ~monthly
-    spacing, which the cadence whitelist refuses. So the guard exists and is not
-    deliberate, and the error message names the cadence rather than the date format.
+    The audit recorded this as caught downstream by the cadence whitelist. **Measuring it
+    shows it is not caught at all for the shape most campaigns have.** A 12-day March
+    campaign at 10-minute cadence keeps a 10-minute modal spacing after the swap, because
+    the spacing *within* each day is untouched — only the span changes, and nothing checked
+    the span. The guard worked solely on daily-or-coarser data.
+
+    The order is a property of the file, so it cannot be inferred: ingest now refuses unless
+    the run configuration declares it.
     """
-    dates = [f"{day:02d}/03/2021 00:00" for day in range(1, 13)]
-    _, parsed = _detect_timestamp_column(
-        pd.DataFrame({"Timestamp": dates, "Spd": np.arange(12.0)})
+    # The realistic case the old guard missed: sub-hourly records across 12 days in March.
+    stamps = [
+        f"{day:02d}/03/2021 {slot * 10 // 60:02d}:{slot * 10 % 60:02d}"
+        for day in range(1, 13)
+        for slot in range(144)
+    ]
+    frame = pd.DataFrame({"Timestamp": stamps, "Spd": np.arange(len(stamps), dtype=float)})
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        _detect_timestamp_column(frame)
+
+    # Declaring the order resolves it, and both readings are reachable.
+    _, day_first = _detect_timestamp_column(frame, dayfirst=True)
+    assert day_first.min() == pd.Timestamp("2021-03-01 00:00")
+    assert day_first.max() == pd.Timestamp("2021-03-12 23:50")
+
+    _, month_first = _detect_timestamp_column(frame, dayfirst=False)
+    assert month_first.min() == pd.Timestamp("2021-01-03 00:00")
+    assert month_first.max() == pd.Timestamp("2021-12-03 23:50")
+
+    # And this is why it had to be refused rather than left to a downstream guard: the
+    # swapped series has an unchanged 10-minute cadence, so the whitelist accepts it.
+    swapped = pd.DataFrame(
+        {"Spd": np.arange(len(month_first), dtype=float)},
+        index=pd.DatetimeIndex(month_first).sort_values(),
     )
+    assert detect_timestep_minutes(swapped) == 10
 
-    assert int(parsed.notna().sum()) == 12  # every row "parses"
-    assert parsed.dropna().iloc[0] == pd.Timestamp("2021-01-03")  # 01/03 -> 3 January
-    assert parsed.dropna().iloc[-1] == pd.Timestamp("2021-12-03")  # 12/03 -> 3 December
 
-    # The incidental downstream guard.
-    frame = pd.DataFrame({"Spd": np.arange(12.0)}, index=pd.DatetimeIndex(parsed)).sort_index()
-    with pytest.raises(ValueError, match="not a supported cadence"):
-        detect_timestep_minutes(frame)
+def test_an_unambiguous_date_column_is_not_refused():
+    """The guard must not fire on ISO 8601, nor on any column a day above 12 determines.
 
+    pandas honours ``dayfirst`` even on ``YYYY-MM-DD`` — it reads ``2021-01-02`` as
+    1 February — so a naive both-ways comparison would reject every ISO campaign. Year-first
+    values are excluded because ISO 8601 is unambiguous by definition.
+    """
+    iso = pd.date_range("2021-01-01", periods=400, freq="10min")
+    frame = pd.DataFrame({"Timestamp": iso.astype(str), "Spd": np.arange(400, dtype=float)})
+    name, parsed = _detect_timestamp_column(frame)
+    assert name == "Timestamp"
+    assert parsed.min() == pd.Timestamp("2021-01-01")
+
+    # A day above 12 determines the order from the data itself: one reading simply fails.
+    determined = pd.DataFrame(
+        {
+            "Timestamp": [f"{day:02d}/03/2021 00:00" for day in range(1, 26)],
+            "Spd": np.arange(25, dtype=float),
+        }
+    )
+    resolved_name, resolved = _detect_timestamp_column(determined)
+    assert resolved_name == "Timestamp"
+    assert int(resolved.notna().sum()) == 25
 
 def test_timestamp_label_is_declared_and_applied():
     """F-07 (MEDIUM) — FIXED. The interval convention is declared, and honoured in matching.

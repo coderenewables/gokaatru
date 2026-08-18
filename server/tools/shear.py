@@ -348,18 +348,36 @@ def _resolve_height_sensors(state: SessionState, sensor_names: str, field_name: 
 
 
 def _compute_veer(direction_matrix: np.ndarray, heights: np.ndarray) -> np.ndarray:
-    """Calculate signed directional veer in degrees per 100 m between outer valid heights."""
-    result = np.full(direction_matrix.shape[0], np.nan, dtype=float)
-    for row_index, row in enumerate(direction_matrix):
-        valid_indices = np.flatnonzero(np.isfinite(row))
-        if len(valid_indices) < 2:
-            continue
-        lower = valid_indices[0]
-        upper = valid_indices[-1]
-        direction_change = (row[upper] - row[lower] + 180.0) % 360.0 - 180.0
-        height_span = heights[upper] - heights[lower]
-        if height_span > 0:
-            result[row_index] = direction_change / height_span * 100.0
+    """Calculate signed directional veer in degrees per 100 m between outer valid heights.
+
+    **Sign convention:** positive is **veering** — direction turning clockwise with height,
+    the Ekman-spiral sense in the northern hemisphere. Negative is **backing**. The change is
+    wrapped to +/-180 before dividing, so a profile crossing north reports the short way
+    round rather than a spurious 350 degrees.
+
+    Vectorised over rows rather than looped: the loop ran ~105 000 Python iterations for a
+    two-year 10-minute campaign, which is performance rather than correctness but is free to
+    fix (F-27).
+    """
+    matrix = np.asarray(direction_matrix, dtype=float)
+    heights = np.asarray(heights, dtype=float)
+    valid = np.isfinite(matrix)
+    result = np.full(matrix.shape[0], np.nan, dtype=float)
+    usable = valid.sum(axis=1) >= 2
+    if not np.any(usable):
+        return result
+
+    # First and last valid column per row, without visiting rows one at a time.
+    index = np.arange(matrix.shape[1])
+    lower = np.where(valid, index, matrix.shape[1]).min(axis=1)
+    upper = np.where(valid, index, -1).max(axis=1)
+    rows = np.flatnonzero(usable)
+    lower_rows, upper_rows = lower[rows], upper[rows]
+
+    change = (matrix[rows, upper_rows] - matrix[rows, lower_rows] + 180.0) % 360.0 - 180.0
+    span = heights[upper_rows] - heights[lower_rows]
+    positive = span > 0
+    result[rows[positive]] = change[positive] / span[positive] * 100.0
     return result
 
 

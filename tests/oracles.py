@@ -195,3 +195,107 @@ def complete_year_index(year: int = 2021, step_minutes: int = 10, tz: str | None
         freq=f"{step_minutes}min",
         tz=tz,
     )
+
+
+# --- Wind statistics and distributions (Step 4) ------------------------------
+#
+# Closed forms for the quantities Step 4 audits.  As everywhere in this module, none of
+# this imports from `server`: an oracle that shares code with the thing it verifies is
+# not an oracle.
+
+
+def circular_mean_deg(directions_deg: np.ndarray, weights: np.ndarray | None = None) -> float:
+    """Return the resultant-vector mean bearing, optionally weighted.
+
+    Directions are angles, so they average through their unit vectors: a naive arithmetic
+    mean of 350 and 10 gives 180, which is the opposite of the answer.  Weighting by speed
+    gives the momentum-mean direction and by speed cubed the energy-mean direction; those
+    are different quantities from the unweighted mean, not refinements of it.
+    """
+    radians = np.deg2rad(np.asarray(directions_deg, dtype=float))
+    w = np.ones_like(radians) if weights is None else np.asarray(weights, dtype=float)
+    return float(np.rad2deg(np.arctan2(np.sum(w * np.sin(radians)), np.sum(w * np.cos(radians)))) % 360.0)
+
+
+def circular_variance(directions_deg: np.ndarray) -> float:
+    """Return 1 - R, the standard circular variance: 0 for a single bearing, 1 for uniform."""
+    radians = np.deg2rad(np.asarray(directions_deg, dtype=float))
+    resultant = float(np.hypot(np.mean(np.cos(radians)), np.mean(np.sin(radians))))
+    return 1.0 - resultant
+
+
+def weibull_moment(scale_a: float, shape_k: float, order: int) -> float:
+    """Return the n-th raw moment of a Weibull distribution, ``A^n * gamma(1 + n/k)``."""
+    from math import gamma
+
+    return float(scale_a**order * gamma(1.0 + order / shape_k))
+
+
+def weibull_m1_m3_residual(scale_a: float, shape_k: float, m1: float, m3: float) -> tuple[float, float]:
+    """Return the relative error with which (A, k) reproduce the first and third moments.
+
+    The WAsP m1/m3 method exists precisely to preserve these two moments — mean speed and
+    energy content — so a fit that does not reproduce them has not done its job.
+    """
+    return (
+        weibull_moment(scale_a, shape_k, 1) / m1 - 1.0,
+        weibull_moment(scale_a, shape_k, 3) / m3 - 1.0,
+    )
+
+
+def turbulence_intensity(sigma: np.ndarray, speed: np.ndarray) -> np.ndarray:
+    """Return sigma/U per record, the definition IEC 61400-1 bins by wind speed."""
+    return np.asarray(sigma, dtype=float) / np.asarray(speed, dtype=float)
+
+
+def representative_ti_at(
+    speed: np.ndarray,
+    sigma: np.ndarray,
+    target_speed: float = 15.0,
+    quantile_factor: float = 1.28,
+) -> float:
+    """Return representative TI in the 1 m/s bin containing *target_speed*.
+
+    IEC 61400-1 characterises a site by its representative turbulence at **15 m/s**, which
+    is the number that selects the turbulence class (Iref 0.16 / 0.14 / 0.12 for A / B / C).
+    "Representative" is the bin mean plus 1.28 standard deviations — the 90th percentile
+    under a normal assumption.
+
+    The bin is chosen by *absolute* distance from the target, which is the whole point: a
+    signed comparison picks the lowest bin in the series instead, and TI at 4 m/s is roughly
+    double TI at 15 m/s.
+    """
+    speed = np.asarray(speed, dtype=float)
+    sigma = np.asarray(sigma, dtype=float)
+    ti = turbulence_intensity(sigma, speed)
+    finite = np.isfinite(ti) & np.isfinite(speed)
+    bins = np.floor(speed[finite]).astype(int)
+    ti = ti[finite]
+    unique = np.unique(bins)
+    chosen = unique[np.abs(unique.astype(float) - target_speed).argmin()]
+    in_bin = ti[bins == chosen]
+    return float(in_bin.mean() + quantile_factor * in_bin.std(ddof=0))
+
+
+def gumbel_return_level(maxima: np.ndarray, return_period_years: float) -> float:
+    """Return the Gumbel return level from annual maxima by the method of moments.
+
+    ``scale = sd * sqrt(6) / pi``, ``loc = mean - gamma_euler * scale``, and the level for a
+    return period T is ``loc - scale * ln(-ln(1 - 1/T))``.  Method of moments rather than
+    maximum likelihood, so this is an independent check on the shape of the answer rather
+    than a reimplementation of scipy's fit.
+    """
+    values = np.asarray(maxima, dtype=float)
+    scale = float(np.std(values, ddof=1) * np.sqrt(6.0) / np.pi)
+    location = float(np.mean(values) - np.euler_gamma * scale)
+    return float(location - scale * np.log(-np.log(1.0 - 1.0 / return_period_years)))
+
+
+def annual_maxima(series: pd.Series) -> dict[int, float]:
+    """Return the maximum per calendar year, with no completeness condition.
+
+    Deliberately mirrors the naive definition so a test can compare it against one that
+    *does* apply a completeness condition and measure what the difference is worth.
+    """
+    values = series.dropna()
+    return {int(year): float(group.max()) for year, group in values.groupby(values.index.year)}

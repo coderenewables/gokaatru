@@ -298,9 +298,21 @@ def test_api_atmosphere_workflow(
     assert energy_response.status_code == 200
     assert energy_response.json()["wind_power_density_w_m2"] > 0
 
+    # This fixture is a 10.5-month campaign, so no calendar year is complete and there is no
+    # annual maximum to fit (F-78). The endpoint refuses rather than publishing a design
+    # value that cannot exist.
     extremes_response = client.get(f"/api/sessions/{session_id}/extremes/Spd_58m", headers=headers)
-    assert extremes_response.status_code == 200
-    assert extremes_response.json()["screening_only"] is True
+    assert extremes_response.status_code == 400
+    assert "at least 2 calendar years" in extremes_response.json()["detail"]
+
+    # Asking for the screening estimate explicitly still works, and still withholds the GEV.
+    screening_response = client.get(
+        f"/api/sessions/{session_id}/extremes/Spd_58m?min_year_coverage=0",
+        headers=headers,
+    )
+    assert screening_response.status_code == 200
+    assert screening_response.json()["screening_only"] is True
+    assert screening_response.json()["gev"]["available"] is False
 
     ramps_response = client.get(f"/api/sessions/{session_id}/ramps/Spd_58m", headers=headers)
     assert ramps_response.status_code == 200

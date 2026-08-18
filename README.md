@@ -304,6 +304,15 @@ invites use:
 | Project life | **20 years** (`project_life_years`) | `u_future = iav / sqrt(life)`. A 15-year life gives 1.55% where 20 years gives 1.34% for the same 6% IAV. |
 | Uncertainty combination | **Pure quadrature** (`component_correlation = 0`) | Measurement, vertical extrapolation and MCP all derive from the same measured series, so independence is optimistic. Every response reports the total at rho = 0.5 alongside — about 30% higher — so the size of the assumption is visible. |
 | Clipping window floor | **10 years** (`min_window_years`) | Every candidate window ends at the final year and so contains the 5-year reference period; the shortest candidate *is* that period, with deviation exactly zero and its climate term pinned at the minimum. Without a floor a 10-year record selected 6 years. The unconstrained optimum is still reported. |
+| Date order | **Determined from the data** (`runconfig.dayfirst`) | Whichever of DD/MM and MM/DD parses more rows wins, because any day above 12 settles it. Where every day is 12 or below neither reading parses more, ingest **refuses** rather than guessing, and `dayfirst` resolves it. ISO-8601 avoids the question. |
+| SpeedSort dog-leg threshold | **Half the concurrent reference mean**, capped at 4 m/s | Both the directional and non-directional paths use the concurrent mean; they previously disagreed by 2% on the same data. Reported as `threshold_basis`. |
+| Atmospheric stability | **Neutral profile** | No Monin-Obukhov length, Richardson number or stability class exists anywhere. The 12x24 month-hour shear table is the empirical stability proxy, capturing the diurnal and seasonal signature of stability rather than modelling it. Reported as `stability_treatment`. |
+| Turbulence speed gate | **3.0 m/s** (`min_speed_mps`) | Shared by both TI tools. Below cut-in, sigma/U is the ratio of two small numbers; the two tools previously gated at 3 and 0 m/s and published TI figures 13.8% apart under the same key. Reported as `speed_gate_mps`. |
+| Turbulence bin minimum | **20** records | A bin thinner than this cannot support a mean plus 1.28 standard deviations. Every bin reports its count and `sufficient_records`. |
+| Representative TI | **Population-weighted** across bins | An unweighted mean gave a 1-record bin at 29 m/s the same weight as a 4 900-record bin at 5 m/s — 0.173 against 0.211. `representative_ti_unweighted` is retained. |
+| Extreme-wind series | **`auto`** (`source`) | Prefers the long-term corrected series (ensemble, then any LTC result) over the measured campaign. A 50-year level from 2 annual maxima extrapolates 25x beyond its data; from 20 years, 2.5x. Reported as `series_basis`. |
+| Extreme-wind year coverage | **0.9** (`min_year_coverage`) | The fraction of a calendar year's **days** holding at least one record — not record completeness, which cannot tell a partial season from ordinary sensor downtime (85% scattered recovery scores 84.93% on completeness and 100% on day coverage). A partial year moved V50 by up to +40.9%. |
+| GEV minimum years | **10** annual maxima | Below this the three-parameter GEV is not fitted at all, because it is not identifiable: measured across twelve two-year campaigns, every fit either collapsed onto the observed data or diverged past 1e9 m/s. The two-parameter Gumbel fit is still reported. |
 | Climate deviation exponent | **5** (`climate_deviation_exponent`) | Undocumented in the source methodology and dominant in the objective's shape: the term stays within 3% of its floor until deviation reaches ~0.6. Every response carries a sweep over 1, 2, 3, 5 and 8 showing which window each would have selected. |
 
 ### Disclosure fields — read these before trusting a number
@@ -328,6 +337,12 @@ invites use:
 | `order_dependence` | `apply_cleaning_rule` | Which rules already touched this sensor. Rule order is material — `stuck_sensor` then `icing_filter` removed 10 records where the reverse removed 2, on the same data. |
 | `method_models`, `method_is_mixed` | `extrapolate_to_hub_height` | Which physical model produced each hub record. Inside the mast range it is linear interpolation in ln(z); outside it is the shear or roughness table. A series with counts in both rows is a blend of two models. |
 | `mcp_sampling_cap`, `combination` | `calculate_uncertainty` | What the 12-month cap withheld, and what the independence assumption costs at ρ = 0.5. |
+| `method_by_variable`, `skipped_variables` | `interpolate_era5_to_site` | Which interpolation each variable actually used, rather than one label collapsed to "idw" if any variable fell back; and any variable dropped because a node does not carry it, with the nodes responsible. Dew point feeds air density and temperature/pressure feed the XGBoost features, so a silent drop surfaces later as an unrelated missing-column error. |
+| `alpha_reclamped_records`, `stability_treatment` | `extrapolate_to_hub_height` | Records whose shear exponent hit the [-1, 1] clamp before extrapolation — normally zero, but reachable through the fallback fill and the aggregate MoMM path, and a clamp that fires changes the hub speed. And the standing neutral-profile assumption. |
+| `reference_temporal_semantics` | every LTC response | Whether the reference is instantaneous (ERA5) or time-averaged (MERRA-2). The resampling note differs between them: the one-sided variance loss that biases variance-ratio results applies only against an instantaneous reference. |
+| `iec_ti_at_15ms`, `iec_ti_bin_mps`, `iec_ti_bin_records` | `compute_turbulence_analysis` | Representative turbulence in the 1 m/s bin containing 15 m/s, which selects the IEC turbulence class (Iref 0.16 / 0.14 / 0.12 for A / B / C). The bin actually used and its record count travel with it, because a low-wind campaign may never reach 15 m/s — in which case the response says so and the class cannot be selected from it. |
+| `gev.available`, `plausible`, `below_largest_observed` | `compute_extreme_winds` | Whether the GEV fit was performed at all, whether each fit's return levels are usable (divergent, or collapsed so that V100 is no higher than V50), and whether V50 sits below the largest observed annual maximum. The last is a cue, not a failure: the largest of twenty maxima is roughly a twenty-year event. |
+| `years_excluded`, `min_year_coverage` | `compute_extreme_winds` | Calendar years covering too little of the calendar to hold an annual maximum, with their day coverage, months and the partial maximum they would have contributed. |
 | `density_normalisation` | `calculate_uncertainty`, `compute_energy_sensitivity` | Whether speeds were normalised to the power curve's reference density per IEC 61400-12-1 before the sensitivity factor was measured. Requires a recorded site density; without one it reports `applied: false` rather than assuming standard conditions. |
 | `upstream_processing` | `brighthub_import_location` | BrightHub cleaning, calibration and offsets applied **before** GoKaatru saw the data. Recorded as a non-undoable entry at the head of the cleaning log: coverage and recovery figures describe the data as received, not the raw campaign. |
 
@@ -418,6 +433,23 @@ availability, electrical-loss and flow-modelling terms — none of which GoKaatr
   `u_future = iav / sqrt(project_life_years)` treats annual means as
   independent draws, which ignores inter-annual persistence and any climate
   trend. The life is a parameter; the independence assumption is not.
+- **Extreme winds need a complete calendar year, and say so.** A campaign that
+  starts or ends mid-year has no annual maximum, and the tool refuses rather
+  than fitting a partial-season maximum as though it were one. The bundled
+  Horns Rev fixture is 10.5 months and is refused for exactly this reason.
+- **An all-ambiguous date column is refused, not guessed.** A DD/MM/YYYY file
+  whose days all fall on or below 12 parses equally well either way, and reading
+  it the wrong way round relabels the campaign silently — a 12-day March campaign
+  becomes a series spanning January to December, at an unchanged 10-minute
+  cadence, so nothing downstream detects it. Set `dayfirst` on the run
+  configuration or supply ISO-8601.
+- **A bimodal wind rose is reported by frequency, not energy.**
+  `mean_direction_deg` and `prevailing_sector` both describe how often the wind
+  blows from a sector, not how much energy arrives from it. On a site with a
+  frequent weak easterly and a rarer strong westerly the two headline direction
+  fields say east while essentially all the energy comes from the west.
+  `compute_windrose_data` exposes the per-sector energy split; there is no
+  energy-weighted mean direction field.
 - **No outlier detection of any kind.** `range_check` bounds by sensor type,
   `stuck_sensor` catches frozen channels and `icing_filter` catches iced ones,
   but a single wild excursion inside the physical bounds passes through

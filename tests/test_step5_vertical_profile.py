@@ -27,6 +27,7 @@ from server.tools.extrapolation import (
 )
 from server.tools.shear import (
     SECTOR_SHEAR_MIN_RECORDS,
+    _compute_veer,
     _build_sector_shear_tables,
     _build_shear_table,
     _calculate_shear_timeseries,
@@ -464,6 +465,92 @@ def test_hub_series_declares_which_physical_model_produced_it():
     assert mixed["method_is_mixed"] is True
     assert "two different physical models" in mixed["method_warning"]
     assert "divergence grows with shear" in mixed["method_note"]
+
+
+def test_veer_is_vectorised_declares_its_sign_and_wraps_through_north():
+    """F-27 (LOW) — FIXED. The veer sign convention is documented and the loop is gone.
+
+    Three separate minors sat under F-27: the sign convention was undocumented, the
+    calculation looped in Python over every row (~105 000 iterations for a two-year
+    10-minute campaign), and neither was reported.
+
+    Sign convention, now stated in the docstring and pinned here: **positive is veering** —
+    direction turning clockwise with height, the Ekman sense in the northern hemisphere.
+    Negative is backing.
+    """
+    heights = np.array([40.0, 100.0])
+
+    # Clockwise with height: 200 deg at 40 m, 220 deg at 100 m -> +20 deg over 60 m.
+    veering = _compute_veer(np.array([[200.0, 220.0]]), heights)
+    assert veering[0] == pytest.approx(20.0 / 60.0 * 100.0)
+    assert veering[0] > 0
+
+    # Anticlockwise is negative.
+    backing = _compute_veer(np.array([[220.0, 200.0]]), heights)
+    assert backing[0] == pytest.approx(-20.0 / 60.0 * 100.0)
+
+    # Crossing north takes the short way round, not 350 degrees the other way.
+    across_north = _compute_veer(np.array([[350.0, 10.0]]), heights)
+    assert across_north[0] == pytest.approx(20.0 / 60.0 * 100.0)
+
+    # A row with fewer than two valid heights has no veer to report.
+    sparse = _compute_veer(np.array([[np.nan, 220.0], [200.0, np.nan]]), heights)
+    assert np.isnan(sparse).all()
+
+    # The vectorised form reproduces the row-by-row definition exactly, including rows
+    # whose outer valid heights are not the first and last columns.
+    rng = np.random.default_rng(5)
+    three_heights = np.array([40.0, 80.0, 120.0])
+    matrix = rng.uniform(0, 360, (2000, 3))
+    matrix[rng.random(matrix.shape) < 0.25] = np.nan
+
+    expected = np.full(matrix.shape[0], np.nan)
+    for row_index, row in enumerate(matrix):
+        valid = np.flatnonzero(np.isfinite(row))
+        if len(valid) < 2:
+            continue
+        lower, upper = valid[0], valid[-1]
+        change = (row[upper] - row[lower] + 180.0) % 360.0 - 180.0
+        span = three_heights[upper] - three_heights[lower]
+        if span > 0:
+            expected[row_index] = change / span * 100.0
+
+    actual = _compute_veer(matrix, three_heights)
+    assert np.allclose(actual, expected, equal_nan=True)
+
+
+def test_hub_extrapolation_declares_the_neutral_profile_and_any_alpha_reclamp():
+    """F-27 (LOW) — FIXED. The neutral assumption and the alpha clamp are both reported.
+
+    There is no Monin-Obukhov length, Richardson number or stability class anywhere in the
+    pipeline: the profile is neutral and the 12x24 month-hour table is the empirical
+    stability proxy. That is a legitimate industry approach and arguably implicit in the
+    table's existence, but no response or document ever said "neutral profile assumed".
+
+    ``_power_extrapolate_array`` also re-clamps alpha to [-1, 1] and reported nothing.
+    Normally that is dead code because the table was clamped when it was built, but the
+    fallback fill and the aggregate MoMM path can both reach it, and a clamp that fires
+    changes the hub speed it produces.
+    """
+    index = pd.date_range(*YEAR, freq="10min", tz="UTC")
+    state = _mast_state((60.0, 100.0), 0.20, index)
+    _calculate_shear_timeseries(state, _height_json((60.0, 100.0)))
+    _build_shear_table(state, "mean")
+
+    result = _extrapolate_to_hub_height(state, 150.0, "power_law")
+
+    assert result["stability_treatment"] == "neutral_profile_with_month_hour_table"
+    assert "No explicit atmospheric stability correction" in result["stability_note"]
+    assert result["alpha_clamp_band"] == [-1.0, 1.0]
+    # A table built from real shear never leaves the band, so nothing is clamped.
+    assert result["alpha_reclamped_records"] == 0
+    assert "alpha_clamp_warning" not in result
+
+    # Force an out-of-band cell, as a fallback fill or the MoMM path can, and it is counted.
+    state.shear_table.iloc[0, 0] = 4.5
+    clamped = _extrapolate_to_hub_height(state, 150.0, "power_law")
+    assert clamped["alpha_reclamped_records"] > 0
+    assert "clamped to the band" in clamped["alpha_clamp_warning"]
 
 
 def test_extrapolation_ignores_the_shear_speed_gate():

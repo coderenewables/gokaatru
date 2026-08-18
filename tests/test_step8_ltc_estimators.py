@@ -27,6 +27,8 @@ from server.state.session import SessionState
 from server.tools.ensemble import _run_ensemble
 from server.tools.ltc import (
     HUBER_DELTA,
+    SPEEDSORT_THRESHOLD_CEILING_MPS,
+    SPEEDSORT_THRESHOLD_FRACTION,
     _run_ltc_linear_least_squares,
     _run_ltc_speedsort,
     _run_ltc_total_least_squares,
@@ -549,14 +551,16 @@ def test_ols_confidence_intervals_correct_for_autocorrelation():
     )
 
 
-def test_speedsort_threshold_basis_differs_between_its_two_paths():
-    """FINDING F-42: the dog-leg threshold is derived from different data in each path.
+def test_speedsort_threshold_uses_the_concurrent_mean_in_both_paths():
+    """F-42 (LOW) — FIXED. Both SpeedSort paths derive the dog-leg threshold the same way.
 
-    The non-directional path uses ``0.5 * long_df[REFERENCE].mean()`` — the *long-term*
-    reference mean — while the directional path uses ``0.5 * np.mean(reference)``, the
-    *concurrent* mean. Measured on one dataset: 3.259 vs 3.191. The concurrent basis
-    is the defensible one, since the threshold characterises the data the transfer
-    function was fitted to, not the data it is applied to.
+    The non-directional path used ``0.5 * long_df[REFERENCE].mean()`` — the *long-term*
+    reference mean — while the directional path used ``0.5 * np.mean(reference)``, the
+    *concurrent* mean. Measured on one dataset: 3.259 against 3.191, so the same data gave
+    two different breakpoints depending only on whether a direction column was supplied.
+
+    The concurrent basis wins: the threshold characterises the data the transfer function
+    was fitted to, not the data it is later applied to. Both paths now report the basis.
     """
     rng = np.random.default_rng(4)
     long_index = pd.date_range("2019-01-01", "2021-12-31 23:00", freq="h", tz="UTC")
@@ -587,12 +591,22 @@ def test_speedsort_threshold_basis_differs_between_its_two_paths():
     non_directional = _run_ltc_speedsort(state, "Spd_hub", "Spd_hub")
     directional = _run_ltc_speedsort(state, "Spd_hub", "Spd_hub", "", "ERA5_Direction")
 
-    assert float(non_directional["metrics"]["threshold"]) == pytest.approx(
-        min(4.0, 0.5 * float(reference.mean())), rel=1e-6
-    )
-    assert float(directional["metrics"]["threshold"]) != pytest.approx(
-        float(non_directional["metrics"]["threshold"]), rel=1e-6
-    )
+    # The concurrent reference mean is what both paths use, and the two now agree exactly.
+    concurrent_mean = float(np.mean(reference_on_measured))
+    expected = min(SPEEDSORT_THRESHOLD_CEILING_MPS, SPEEDSORT_THRESHOLD_FRACTION * concurrent_mean)
+    assert float(non_directional["metrics"]["threshold"]) == pytest.approx(expected, rel=1e-6)
+    assert float(directional["metrics"]["threshold"]) == pytest.approx(expected, rel=1e-6)
+
+    # The long-term mean is genuinely different here, which is what made the old split
+    # observable rather than academic.
+    long_term_threshold = min(4.0, 0.5 * float(reference.mean()))
+    assert abs(long_term_threshold / expected - 1.0) > 0.01
+
+    # And both responses now name the basis rather than leaving it to be inferred.
+    for result in (non_directional, directional):
+        assert result["metrics"]["threshold_basis"] == "concurrent_reference_mean"
+        assert result["metrics"]["threshold_fraction"] == SPEEDSORT_THRESHOLD_FRACTION == 0.5
+        assert result["metrics"]["threshold_ceiling_mps"] == SPEEDSORT_THRESHOLD_CEILING_MPS == 4.0
 
 
 def test_ensemble_mixes_out_of_sample_and_in_sample_rmse_bases():

@@ -524,13 +524,22 @@ def _plot_extremes_fit(state: SessionState, speed_sensor: str) -> dict:
     periods = np.array([2, 5, 10, 20, 50, 100], dtype=float)
     gev = extremes["gev"]
     gumbel = extremes["gumbel"]
-    gev_levels = genextreme.isf(1.0 / periods, float(gev["shape"]), loc=float(gev["location"]), scale=float(gev["scale"]))
-    gumbel_levels = gumbel_r.isf(1.0 / periods, loc=float(gumbel["location"]), scale=float(gumbel["scale"]))
     figure = make_subplots(rows=1, cols=2, subplot_titles=("Annual Maxima", "Return-Level Fit"))
     figure.add_trace(go.Bar(x=[row["year"] for row in maxima], y=[row["max_speed"] for row in maxima], name="Annual maxima"), row=1, col=1)
-    figure.add_trace(go.Scatter(x=periods, y=gev_levels, mode="lines+markers", name="GEV"), row=1, col=2)
+    # The GEV curve is only drawn when the fit was identifiable (F-77). Below the year
+    # threshold `_compute_extremes` does not fit it at all, and drawing a curve from absent
+    # parameters would put the very number the guard exists to suppress back on the screen.
+    if gev.get("available"):
+        gev_levels = genextreme.isf(
+            1.0 / periods, float(gev["shape"]), loc=float(gev["location"]), scale=float(gev["scale"])
+        )
+        figure.add_trace(go.Scatter(x=periods, y=gev_levels, mode="lines+markers", name="GEV"), row=1, col=2)
+    gumbel_levels = gumbel_r.isf(1.0 / periods, loc=float(gumbel["location"]), scale=float(gumbel["scale"]))
     figure.add_trace(go.Scatter(x=periods, y=gumbel_levels, mode="lines+markers", name="Gumbel", line=dict(dash="dash")), row=1, col=2)
-    figure.update_layout(title="Extreme Wind Analysis" + (" — Screening Only" if extremes["screening_only"] else ""))
+    subtitle = " — Screening Only" if extremes["screening_only"] else ""
+    if not gev.get("available"):
+        subtitle += f" — Gumbel only ({extremes['sample_years']} annual maxima)"
+    figure.update_layout(title="Extreme Wind Analysis" + subtitle)
     figure.update_xaxes(title_text="Year", row=1, col=1)
     figure.update_xaxes(title_text="Return Period (years)", type="log", row=1, col=2)
     figure.update_yaxes(title_text="Wind Speed (m/s)", row=1, col=1)

@@ -34,7 +34,13 @@ from server.api.schemas import (
 from server.state.session import SessionState
 from server.tools.cleaning import _apply_cleaning_rule, _get_cleaning_log, _undo_cleaning_rule
 from server.tools.atmosphere import _compute_atmospheric_conditions
-from server.tools.advanced_analysis import _compute_energy_metrics, _compute_extremes, _compute_persistence, _compute_ramps
+from server.tools.advanced_analysis import (
+    DEFAULT_EXTREME_YEAR_COVERAGE,
+    _compute_energy_metrics,
+    _compute_extremes,
+    _compute_persistence,
+    _compute_ramps,
+)
 from server.tools.diagnostics import (
     MAST_EFFECT_MIN_SECTOR_RECORDS,
     MAST_EFFECT_MIN_SPEED_MPS,
@@ -389,11 +395,18 @@ def get_extreme_winds(
     session_id: str,
     speed_sensor: str,
     state: Annotated[SessionState, Depends(get_session_state)],
+    source: str = "auto",
+    min_year_coverage: float = DEFAULT_EXTREME_YEAR_COVERAGE,
 ) -> dict:
-    """Return annual-maxima GEV/Gumbel extreme-wind estimates for a measured speed sensor."""
+    """Return annual-maxima Gumbel/GEV extreme-wind estimates for one speed sensor.
+
+    ``source`` defaults to ``"auto"``, preferring the long-term corrected series over the
+    measured campaign (F-79); ``min_year_completeness`` drops calendar years too sparse to
+    hold an annual maximum (F-78).
+    """
     del session_id
     try:
-        return _compute_extremes(state, speed_sensor)
+        return _compute_extremes(state, speed_sensor, source, min_year_coverage)
     except ValueError as exc:
         raise to_bad_request(exc) from exc
 

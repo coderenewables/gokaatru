@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import warnings
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -32,6 +33,9 @@ TIMESTAMP_CANDIDATES = [
     "Time", "time",
     "TmStamp",
 ]
+
+# A year-first date is ISO 8601 and unambiguous; only day/month-first formats can swap.
+_ISO_DATE_PREFIX = re.compile(r"^\d{4}-\d{1,2}-\d{1,2}")
 
 # Epoch-second range for plausible wind-campaign data (1990-01-01 .. 2050-01-01).
 _EPOCH_SECOND_MIN = 631_152_000.0
@@ -171,7 +175,84 @@ def _read_tabular_file(state: SessionState, file_path: str) -> pd.DataFrame:
     raise ValueError("Input file is not available")
 
 
-def _detect_timestamp_column(df: pd.DataFrame) -> tuple[str, pd.Series]:
+def _to_datetime(column: pd.Series, dayfirst: bool) -> pd.Series:
+    """Parse a column at one fixed day/month order, without pandas' inference warning."""
+    with warnings.catch_warnings():
+        # pandas warns when its inferred order disagrees with `dayfirst`; that disagreement
+        # is what the checks here are measuring, so it is not news.
+        warnings.simplefilter("ignore", UserWarning)
+        return pd.to_datetime(column, errors="coerce", dayfirst=dayfirst)
+
+
+def _parse_datetime_column(column: pd.Series, dayfirst: bool | None) -> pd.Series:
+    """Parse one candidate column, honouring a declared day/month order.
+
+    ``dayfirst=None`` means undeclared, in which case the order the **data determines** is
+    used: a column containing any day above 12 parses more rows one way than the other, and
+    the reading that parses more rows is the right one.  Previously the default order was
+    taken regardless, so a DD/MM column with days up to 25 lost more than half its rows to
+    coercion and was discarded as "not a timestamp column" without ever saying why.
+
+    Where neither order parses more rows the column is genuinely ambiguous, and
+    :func:`_date_order_is_ambiguous` refuses it rather than guessing.
+    """
+    if dayfirst is not None:
+        return _to_datetime(column, dayfirst)
+    month_first = _to_datetime(column, False)
+    day_first = _to_datetime(column, True)
+    if int(day_first.notna().sum()) > int(month_first.notna().sum()):
+        return day_first
+    return month_first
+
+
+def _date_order_is_ambiguous(column: pd.Series) -> bool:
+    """Return True when a column parses equally well as DD/MM and as MM/DD (F-67).
+
+    ``pd.to_datetime`` with no ``dayfirst`` and no format reads ``01/03/2021`` as 3 January.
+    A DD/MM/YYYY column whose days all fall on or below 12 therefore parses **100%
+    successfully** with day and month transposed, and a 12-day March campaign becomes a
+    series spanning January to December.
+
+    The audit recorded this as caught incidentally by the cadence whitelist. Measured, it is
+    not caught at all for the most common data shape: a 12-day March campaign at 10-minute
+    cadence keeps a 10-minute modal spacing after the swap, because the spacing *within* each
+    day is untouched. Only the span changes, from 12 days to 12 months, and nothing checks
+    the span.
+
+    Ambiguity means both readings are equally valid: they parse the same number of rows and
+    disagree about at least one of them. A column containing any day above 12 is determined
+    by the data - one reading produces more failures - and is not ambiguous.
+    """
+    # pandas 3 gives strings their own dtype, so `is_object_dtype` is not the test here.
+    # What matters is that the column is textual: a numeric or already-datetime column has
+    # no day/month order to confuse.
+    if pd.api.types.is_numeric_dtype(column) or pd.api.types.is_datetime64_any_dtype(column):
+        return False
+    month_first = _to_datetime(column, False)
+    day_first = _to_datetime(column, True)
+
+    # ISO 8601 puts the year first and is unambiguous by definition. pandas nevertheless
+    # honours `dayfirst` on it — `2021-01-02` becomes 1 February — so year-first values have
+    # to be excluded here or every ISO campaign would be refused.
+    #
+    # Only rows that actually parse are examined: a Campbell logger file carries occasional
+    # junk rows ("BAD", "NAN"), and judging the format on those would let two bad rows in a
+    # thousand defeat the check.
+    parseable = column[month_first.notna() | day_first.notna()]
+    text = parseable.dropna().astype(str).str.strip()
+    if text.empty:
+        return False
+    if bool(text.str.match(_ISO_DATE_PREFIX).all()):
+        return False
+    if int(month_first.notna().sum()) != int(day_first.notna().sum()):
+        return False
+    both_valid = month_first.notna() & day_first.notna()
+    if not bool(both_valid.any()):
+        return False
+    return bool((month_first[both_valid] != day_first[both_valid]).any())
+
+
+def _detect_timestamp_column(df: pd.DataFrame, dayfirst: bool | None = None) -> tuple[str, pd.Series]:
     """Select the timestamp column with the most valid parses per the Phase 1 ingestion rule.
 
     Hardening (D6): skip numeric columns unless their range is plausible for
@@ -198,7 +279,7 @@ def _detect_timestamp_column(df: pd.DataFrame) -> tuple[str, pd.Series]:
             if not (col_min >= _EPOCH_SECOND_MIN and col_max <= _EPOCH_SECOND_MAX):
                 continue
 
-        parsed = pd.to_datetime(df[column], errors="coerce")
+        parsed = _parse_datetime_column(df[column], dayfirst)
         valid_count = int(parsed.notna().sum())
         n_rows = len(df[column])
         if n_rows == 0:
@@ -221,6 +302,15 @@ def _detect_timestamp_column(df: pd.DataFrame) -> tuple[str, pd.Series]:
 
     if best_count <= 0:
         raise ValueError("Could not detect a timestamp column with any valid datetime values")
+    if dayfirst is None and _date_order_is_ambiguous(df[best_name]):
+        raise ValueError(
+            f"Timestamp column '{best_name}' is ambiguous: every date parses equally well as "
+            "DD/MM/YYYY and as MM/DD/YYYY, because no day exceeds 12. Reading it the wrong "
+            "way round silently relabels the campaign - a 12-day March campaign becomes a "
+            "series spanning January to December, at an unchanged 10-minute cadence, so "
+            "nothing downstream detects it. Set 'dayfirst' true or false on the run "
+            "configuration, or supply ISO-8601 timestamps."
+        )
     return best_name, best_series
 
 
@@ -714,7 +804,11 @@ def _cadence_aligned_series(series: pd.Series, timestep_minutes: int) -> pd.Seri
 def _parse_timeseries(state: SessionState, file_path: str) -> dict:
     """Parse a wind timeseries file into session state following the GoKaatru Phase 1 ingest spec."""
     source_df = _read_tabular_file(state, file_path)
-    timestamp_column, parsed_timestamps = _detect_timestamp_column(source_df)
+    # F-67: an ambiguous DD/MM column is refused unless the run configuration declares the
+    # order, because reading it the wrong way round is silent and undetectable downstream.
+    declared = state.runconfig.get("dayfirst")
+    dayfirst = bool(declared) if isinstance(declared, bool) else None
+    timestamp_column, parsed_timestamps = _detect_timestamp_column(source_df, dayfirst)
     filtered_df = source_df.loc[parsed_timestamps.notna()].copy()
     filtered_df.index = pd.DatetimeIndex(parsed_timestamps.loc[parsed_timestamps.notna()])
     filtered_df = filtered_df.drop(columns=[timestamp_column]).sort_index()
@@ -746,6 +840,9 @@ def _parse_timeseries(state: SessionState, file_path: str) -> dict:
         "timestamp_label": TIMESTAMP_LABEL_CONVENTION,
         "timestamp_label_basis": "assumed",
         "timestamp_label_note": TIMESTAMP_LABEL_NOTE,
+        "timestamp_column": timestamp_column,
+        "date_order": "day_first" if dayfirst else ("month_first" if dayfirst is False else "unambiguous"),
+        "date_order_basis": "runconfig" if dayfirst is not None else "inferred",
     }
 
 

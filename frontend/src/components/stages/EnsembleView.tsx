@@ -5,6 +5,7 @@
 import { useState } from "react";
 
 import { useWorkspaceStore } from "../../store/useWorkspaceStore";
+import { Disclosure } from "../common/Disclosure";
 import { PlotFrame } from "../common/PlotFrame";
 import { RunButton } from "../common/RunButton";
 
@@ -82,6 +83,10 @@ export function EnsembleView() {
           </p>
         ) : null}
       </section>
+
+      {ensembleSummary?.available ? (
+        <Disclosure source={ensembleSummary} title="What this blend assumes" />
+      ) : null}
 
       {ensembleSummary?.available ? (
         <section className="plot-grid">
@@ -166,6 +171,10 @@ export function EnsembleView() {
               <Tile label="P90" value={uncertaintyResult.p_factors.p90.toFixed(3)} />
               <Tile label="P99" value={uncertaintyResult.p_factors.p99.toFixed(3)} />
             </dl>
+            {/* These are WIND-SPEED exceedances, the MCP sampling cap withheld credit, and
+                the components were combined assuming independence. All of that arrives in
+                the response; none of it was ever on the screen. */}
+            <Disclosure source={uncertaintyResult} title="What this uncertainty assumes" />
           </div>
         ) : null}
       </section>

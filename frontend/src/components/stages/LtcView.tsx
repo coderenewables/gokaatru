@@ -6,6 +6,7 @@
 import { useState } from "react";
 
 import { useWorkspaceStore } from "../../store/useWorkspaceStore";
+import { Disclosure } from "../common/Disclosure";
 import { MetricsCard } from "../common/MetricsCard";
 import { PlotFrame } from "../common/PlotFrame";
 import { RunButton } from "../common/RunButton";
@@ -155,6 +156,16 @@ export function LtcView() {
               />
             ))}
           </div>
+          {/* That linear_least_squares is Huber, that TLS assumes equal error variance,
+              how much variance the fit attenuated, and which interval convention the
+              measured series was matched on — one panel per algorithm. */}
+          {ltcResults.map((r) => (
+            <Disclosure
+              key={`disclosure-${r.algorithm}`}
+              source={r.metrics}
+              title={`What ${r.algorithm} assumes`}
+            />
+          ))}
         </section>
       ) : null}
 

@@ -74,11 +74,23 @@ def geojson_to_gdf(data: dict[str, Any]) -> gpd.GeoDataFrame:
 
 
 def windkit_file_path(filename: str) -> Path:
-    """Return a session-scoped WindKit path, rejecting traversal outside its data directory."""
+    """Return a session-scoped WindKit path, rejecting traversal outside its data directory.
+
+    ``is_absolute()`` alone is not the right test on Windows: ``Path("/etc/passwd")`` is
+    *rooted* but not *absolute* there, because an absolute Windows path needs a drive. The
+    first branch therefore never fired for a POSIX-style absolute path, and the input fell
+    through to the containment check below.
+
+    Containment still rejected it — ``/etc/passwd`` resolves onto the base's drive, outside
+    the WindKit directory — so nothing was ever exposed. What was wrong is that the guard
+    behaved differently on Windows and POSIX and reported the wrong reason, which is exactly
+    the kind of divergence a traversal guard must not have. Testing root and drive as well
+    makes the two platforms agree.
+    """
     base = (Path(session.get_data_dir()) / "windkit").resolve()
     base.mkdir(parents=True, exist_ok=True)
     candidate = Path(filename)
-    if candidate.is_absolute():
+    if candidate.is_absolute() or candidate.root or candidate.drive:
         raise ValueError("filename must be relative to the session WindKit directory")
     path = (base / candidate).resolve()
     if not path.is_relative_to(base):

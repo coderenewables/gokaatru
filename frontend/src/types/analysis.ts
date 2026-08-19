@@ -183,8 +183,29 @@ export interface ExtremeWindSummary {
   minimum_recommended_years: number;
   screening_only: boolean;
   annual_maxima: Array<{ year: number; max_speed: number }>;
-  gev: { shape: number; location: number; scale: number; wind_50_year: number; wind_100_year: number };
-  gumbel: { location: number; scale: number; wind_50_year: number; wind_100_year: number };
+  // The GEV fit is withheld below the year threshold that makes its three parameters
+  // identifiable, so every field but `available` is optional. Reading `wind_50_year`
+  // unconditionally is how a withheld fit becomes a runtime crash.
+  gev: {
+    available?: boolean;
+    reason?: string;
+    shape?: number;
+    location?: number;
+    scale?: number;
+    wind_50_year?: number;
+    wind_100_year?: number;
+    plausible?: boolean;
+  };
+  gumbel: {
+    location: number;
+    scale: number;
+    wind_50_year: number;
+    wind_100_year: number;
+    plausible?: boolean;
+  };
+  series_basis?: string;
+  years_excluded?: Array<Record<string, unknown>>;
+  warning?: string;
 }
 
 export interface RampSummary {

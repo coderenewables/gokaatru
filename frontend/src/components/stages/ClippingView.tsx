@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 
 import { useWorkspaceStore } from "../../store/useWorkspaceStore";
+import { Disclosure } from "../common/Disclosure";
 import { RunButton } from "../common/RunButton";
 import type { ClippingReport } from "../../types/analysis";
 
@@ -97,6 +98,9 @@ export function ClippingView() {
               <Tile label="Min combined uncertainty" value={`${report.min_uncertainty.toFixed(3)}`} />
               <Tile label="Full-series IAV" value={`${(report.iav * 100).toFixed(1)}%`} />
             </dl>
+            {/* The minimum-window floor, the structural bias that favours short windows,
+                and which exponent selected this period all arrive in the response. */}
+            <Disclosure source={report} title="What this window selection assumes" />
             <div className="form-field">
               <span>Representative start year (EYA reporting)</span>
               <input

@@ -6,6 +6,7 @@
 import { useMemo, useState } from "react";
 
 import { useWorkspaceStore } from "../../store/useWorkspaceStore";
+import { Disclosure } from "../common/Disclosure";
 import { PlotFrame } from "../common/PlotFrame";
 import { SensorPicker } from "../common/SensorPicker";
 import { RunButton } from "../common/RunButton";
@@ -165,6 +166,10 @@ export function ShearExtrapolationView() {
               <MethodTile label="Interpolated" value={methodCounts.interpolated ?? 0} />
               <MethodTile label="Extrapolated" value={methodCounts.extrapolated ?? 0} />
             </dl>
+            {/* Which physical model produced each record, how far above its reference the
+                series was carried, whether the reanalysis leg wrote anything, and the
+                standing neutral-profile assumption. */}
+            <Disclosure source={extrapolateResult} title="What this hub series assumes" />
             {extrapolatedShare > 50 ? (
               <p className="status-warn">
                 ⚠ {extrapolatedShare.toFixed(0)}% extrapolated — flag for bankable EYAs.

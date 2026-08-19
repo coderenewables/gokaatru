@@ -102,9 +102,12 @@ def load_dataset_into_session(
     """Load a shared dataset into one workflow session's in-memory state."""
     del session_id
     try:
-        paths = manager.get_dataset_paths(dataset_id)
-        timeseries_result = _parse_timeseries(state, str(paths["timeseries"]))
-        datamodel_result = _parse_datamodel(state, str(paths["datamodel"]))
+        # Copy into the session's own uploads directory first: the ingest loader is
+        # confined to the session workspace, and every later operation on this session
+        # expects the source file to be where an uploaded one would be.
+        names = manager.copy_into_session(dataset_id, state)
+        timeseries_result = _parse_timeseries(state, names["timeseries"])
+        datamodel_result = _parse_datamodel(state, names["datamodel"])
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValueError as exc:

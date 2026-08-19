@@ -2428,3 +2428,68 @@ h3 {
   height: 16px;
   accent-color: var(--color-teal);
 }
+
+/* Disclosure panel — the caveats a response carries about its own numbers.
+   Warnings read as things to act on; methodology notes sit behind a toggle so a clean
+   result stays quiet and a qualified one cannot be missed. */
+.disclosure {
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  padding: 0.75rem 0.9rem;
+  margin: 1rem 0;
+}
+
+.disclosure-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  color: var(--color-teal-dark);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.disclosure-count {
+  background: var(--color-accent);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.disclosure-item {
+  margin: 0.4rem 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--color-text);
+}
+
+.disclosure-item strong {
+  color: var(--color-teal-dark);
+  margin-right: 0.3rem;
+}
+
+.disclosure-warning strong {
+  color: var(--color-error);
+}
+
+.disclosure-flag strong {
+  color: var(--color-accent);
+}
+
+.disclosure-note,
+.disclosure-basis {
+  color: var(--color-muted);
+}
+
+.disclosure-toggle {
+  background: none;
+  border: none;
+  padding: 0.25rem 0;
+  color: var(--color-teal);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-decoration: underline;
+}

@@ -16,6 +16,19 @@ from server.state.session import SessionState
 from server.tools.data_io import _list_sensors, _parse_datamodel, _parse_timeseries
 
 
+# The ingest loader resolves every file inside `<workspace>/uploads` and refuses anything
+# that escapes it — a deliberate traversal guard.  The dataset pool stored its files flat in
+# the dataset directory and handed the loader an absolute path, which the guard correctly
+# rejected: `create_dataset` returned 400 "Input file is not available" on every upload, so
+# the shared-dataset feature has been entirely non-functional.
+#
+# The fix is to give the pool the same layout the loader expects rather than to loosen the
+# guard: files live under `<dataset_dir>/uploads`, and the throwaway session used for
+# parsing has its workspace pointed at `<dataset_dir>`, so the resolved path is inside the
+# boundary by construction.
+UPLOADS_SUBDIR = "uploads"
+
+
 def _safe_name(value: str | None, fallback: str) -> str:
     """Return a cleaned display name for a dataset entry."""
     if value is None:
@@ -43,13 +56,35 @@ class DatasetPoolManager:
     def _metadata_path(self, dataset_id: str) -> Path:
         return self._dataset_dir(dataset_id) / "metadata.json"
 
+    def _uploads_dir(self, dataset_id: str) -> Path:
+        return self._dataset_dir(dataset_id) / UPLOADS_SUBDIR
+
+    def _resolve_stored_file(self, dataset_id: str, filename: str) -> Path:
+        """Return the stored path for one dataset file, tolerating the pre-uploads layout."""
+        current = self._uploads_dir(dataset_id) / filename
+        if current.exists():
+            return current
+        # A directory written before the uploads subdirectory existed. Nothing could be
+        # created through the API back then, but a hand-placed fixture may still be flat.
+        return self._dataset_dir(dataset_id) / filename
+
     def _paths_from_metadata(self, metadata: dict[str, object]) -> dict[str, Path]:
         dataset_id = str(metadata["id"])
-        dataset_dir = self._dataset_dir(dataset_id)
         return {
-            "timeseries": dataset_dir / str(metadata["timeseries_file"]),
-            "datamodel": dataset_dir / str(metadata["datamodel_file"]),
+            "timeseries": self._resolve_stored_file(dataset_id, str(metadata["timeseries_file"])),
+            "datamodel": self._resolve_stored_file(dataset_id, str(metadata["datamodel_file"])),
         }
+
+    def _parsing_session(self, dataset_id: str) -> SessionState:
+        """Return a throwaway session whose workspace is this dataset's own directory.
+
+        Parsing runs through the ordinary ingest path so a pooled dataset is validated
+        exactly as an uploaded one is — including the traversal guard, which now passes
+        because the file genuinely sits inside the workspace it is resolved against.
+        """
+        state = SessionState()
+        state.workspace_dir = self._dataset_dir(dataset_id)
+        return state
 
     def _build_metadata(
         self,
@@ -58,13 +93,9 @@ class DatasetPoolManager:
         timeseries_file: str,
         datamodel_file: str,
     ) -> dict[str, object]:
-        paths = {
-            "timeseries": self._dataset_dir(dataset_id) / timeseries_file,
-            "datamodel": self._dataset_dir(dataset_id) / datamodel_file,
-        }
-        state = SessionState()
-        timeseries_result = _parse_timeseries(state, str(paths["timeseries"]))
-        _parse_datamodel(state, str(paths["datamodel"]))
+        state = self._parsing_session(dataset_id)
+        timeseries_result = _parse_timeseries(state, timeseries_file)
+        _parse_datamodel(state, datamodel_file)
         sensors = _list_sensors(state).get("sensors", [])
 
         coverage_summary: dict[str, float] = {}
@@ -117,12 +148,12 @@ class DatasetPoolManager:
         dataset_dir = self._dataset_dir(dataset_id)
         dataset_dir.mkdir(parents=True, exist_ok=False)
 
+        uploads_dir = self._uploads_dir(dataset_id)
+        uploads_dir.mkdir(parents=True, exist_ok=True)
         timeseries_file = f"timeseries{_safe_suffix(timeseries_filename, '.csv')}"
         datamodel_file = f"datamodel{_safe_suffix(datamodel_filename, '.json')}"
-        timeseries_path = dataset_dir / timeseries_file
-        datamodel_path = dataset_dir / datamodel_file
-        timeseries_path.write_bytes(timeseries_bytes)
-        datamodel_path.write_bytes(datamodel_bytes)
+        (uploads_dir / timeseries_file).write_bytes(timeseries_bytes)
+        (uploads_dir / datamodel_file).write_bytes(datamodel_bytes)
 
         try:
             metadata = self._build_metadata(
@@ -171,6 +202,25 @@ class DatasetPoolManager:
             raise ValueError(f"Dataset '{dataset_id}' is missing one or more stored files")
         return paths
 
+    def copy_into_session(self, dataset_id: str, state: SessionState) -> dict[str, str]:
+        """Copy one pooled dataset into a session's uploads directory and return the filenames.
+
+        Loading a shared dataset gives the session its own copy rather than pointing it at
+        the pool. Two reasons: the ingest loader resolves files inside the session workspace
+        and refuses anything outside it, and every later operation on that session — cleaning,
+        undo, re-parse — expects the source file to be where an uploaded one would be. A
+        session reading straight out of the pool would also let one session's cleaning surprise
+        another.
+        """
+        paths = self.get_dataset_paths(dataset_id)
+        destination = Path(state.get_data_dir()) / UPLOADS_SUBDIR
+        destination.mkdir(parents=True, exist_ok=True)
+        names: dict[str, str] = {}
+        for key, source in paths.items():
+            shutil.copy2(source, destination / source.name)
+            names[key] = source.name
+        return names
+
     def delete_dataset(self, dataset_id: str) -> None:
         """Remove one dataset directory and all stored files."""
         dataset_dir = self._dataset_dir(dataset_id)
@@ -184,9 +234,10 @@ class DatasetPoolManager:
             raise ValueError("Preview limit must be a positive integer")
         safe_limit = min(limit, 200)
 
-        paths = self.get_dataset_paths(dataset_id)
-        state = SessionState()
-        parse_result = _parse_timeseries(state, str(paths["timeseries"]))
+        metadata = self._load_metadata(dataset_id)
+        self.get_dataset_paths(dataset_id)  # raises if either stored file is missing
+        state = self._parsing_session(dataset_id)
+        parse_result = _parse_timeseries(state, str(metadata["timeseries_file"]))
         if state.timeseries_df is None:
             raise ValueError(f"Dataset '{dataset_id}' could not be parsed for preview")
 

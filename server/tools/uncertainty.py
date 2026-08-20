@@ -10,12 +10,11 @@ import numpy as np
 import pandas as pd
 
 from server.core.powercurve import (
-    GENERIC_CURVE_NAME,
     REFERENCE_AIR_DENSITY,
-    GENERIC_RATED_KW,
-    GENERIC_ROTOR_DIAMETER_M,
     conversion_guidance,
     energy_sensitivity_factor,
+    get_power_curve,
+    indicative_aep_mwh,
     indicative_capacity_factor,
     normalise_speed_to_reference_density,
 )
@@ -130,7 +129,11 @@ def _energy_sensitivity_block(state: SessionState, u_total: float) -> dict[str, 
         }
     values = series.to_numpy(dtype=float)
     values, density_basis = _density_normalised(state, values)
-    sensitivity = energy_sensitivity_factor(values)
+    # One curve for the sensitivity factor, the capacity factor and the AEP. Resolved
+    # once here so the published energy figure and the speed-to-energy conversion can
+    # never describe different machines (design doc S7.12).
+    curve = get_power_curve(state.get_power_curve_name())
+    sensitivity = energy_sensitivity_factor(values, curve=curve)
     return {
         "available": True,
         "factor": round(sensitivity, 4),
@@ -139,14 +142,18 @@ def _energy_sensitivity_block(state: SessionState, u_total: float) -> dict[str, 
         "measured_on": source,
         "records": int(values.size),
         "mean_speed_mps": round(float(values.mean()), 4),
+        "indicative_gross_aep_mwh": round(float(indicative_aep_mwh(values, curve)), 1),
+        "aep_basis": (
+            "Gross and indicative: one generic turbine, no wake, availability or "
+            "electrical losses. Not a project energy yield."
+        ),
         "power_curve": {
-            "name": GENERIC_CURVE_NAME,
-            "rated_kw": GENERIC_RATED_KW,
-            "rotor_diameter_m": GENERIC_ROTOR_DIAMETER_M,
-            "basis": "generic",
-            "indicative_capacity_factor": round(float(indicative_capacity_factor(values)), 4),
+            **curve.describe(),
+            "indicative_capacity_factor": round(
+                float(indicative_capacity_factor(values, curve)), 4
+            ),
         },
-        "how_to_convert": conversion_guidance(sensitivity, u_total),
+        "how_to_convert": conversion_guidance(sensitivity, u_total, curve),
     }
 
 

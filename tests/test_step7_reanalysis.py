@@ -193,8 +193,11 @@ def test_merra2_can_be_selected_as_the_long_term_reference():
     both, so the cost was paid and the benefit was not collected.
 
     A second independent long-term source is the standard way to test whether an LTC result
-    depends on the reference chosen, and both sources now write the same interpolated series
-    every LTC algorithm reads.
+    depends on the reference chosen, and both sources are now interpolated to site.
+
+    MERRA-2 is served at **50 m**, not 100 m, so its columns are ``Spd_50m``/``Dir_50m``
+    (design doc S6.3). This test used to build MERRA-2 node frames carrying ``Spd_100m``,
+    which no real MERRA-2 payload contains.
     """
     index = pd.date_range("2015-01-01", periods=500, freq="h", tz="UTC")
     rng = np.random.default_rng(3)
@@ -202,8 +205,8 @@ def test_merra2_can_be_selected_as_the_long_term_reference():
     def _node_frame(offset: float) -> pd.DataFrame:
         return pd.DataFrame(
             {
-                "Spd_100m": 7.0 + offset + rng.normal(0, 1.0, len(index)),
-                "Dir_100m": np.full(len(index), 220.0),
+                "Spd_50m": 7.0 + offset + rng.normal(0, 1.0, len(index)),
+                "Dir_50m": np.full(len(index), 220.0),
             },
             index=index,
         )
@@ -223,11 +226,15 @@ def test_merra2_can_be_selected_as_the_long_term_reference():
     assert result["status"] == "ok"
     assert result["reference_source"] == "merra2"
     assert result["nodes_used"] == 4
-    assert "Spd_100m" in result["variables"]
+    assert result["reference_height_m"] == 50.0
+    assert "Spd_50m" in result["variables"]
     # The LTC reads exactly this series, so MERRA-2 has genuinely reached the correction.
     assert state.era5_interpolated_df is not None
-    assert "Spd_100m" in state.era5_interpolated_df.columns
+    assert "Spd_50m" in state.era5_interpolated_df.columns
     assert state.runconfig["reference_source"] == "merra2"
+    # Stored per source, so an ERA5 series would coexist rather than being overwritten.
+    assert "merra2" in state.reanalysis_interpolated
+    assert state.active_reference_source == "merra2"
     assert "dependence on the reference is tested" in result["reference_source_note"]
 
     # An unknown source is refused rather than silently falling back to ERA5.

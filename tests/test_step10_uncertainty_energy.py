@@ -26,9 +26,9 @@ from server.tools.extrapolation import _extrapolate_to_hub_height
 from server.tools.ltc import _run_ltc_linear_least_squares, _run_ltc_variance_ratio
 from server.tools.shear import _build_shear_table, _calculate_shear_timeseries
 from server.tools.uncertainty import _calculate_uncertainty
+from tests import oracles
 from tests.oracles import (
     HOURS_PER_YEAR,
-    WTG_RATED_KW,
     energy_sensitivity_factor,
     exceedance_factor,
     gross_aep_mwh,
@@ -482,18 +482,28 @@ def test_ensemble_weights_label_their_rmse_basis(reconciled_run: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_power_curve_is_linear_between_bins_with_hard_cutoffs():
-    """The energy oracle must interpolate linearly and respect cut-in/cut-out."""
-    assert turbine_power_kw(np.array([2.99]))[0] == 0.0
-    assert turbine_power_kw(np.array([25.01]))[0] == 0.0
-    midpoint = turbine_power_kw(np.array([7.5]))[0]
-    assert midpoint == pytest.approx((1600.0 + 2300.0) / 2.0)
-    assert turbine_power_kw(np.array([13.0]))[0] == pytest.approx(WTG_RATED_KW)
+@pytest.mark.parametrize("curve", [oracles.CURVE_3MW, oracles.CURVE_4_2MW])
+def test_power_curve_is_linear_between_bins_with_hard_cutoffs(curve):
+    """The energy oracle must interpolate linearly and respect cut-in/cut-out.
+
+    Stated as the linearity *property* rather than against literal bin values, so it
+    holds for every registered curve instead of pinning one machine's numbers.
+    """
+    assert turbine_power_kw(np.array([2.99]), curve)[0] == 0.0
+    assert turbine_power_kw(np.array([25.01]), curve)[0] == 0.0
+    midpoint = turbine_power_kw(np.array([7.5]), curve)[0]
+    neighbours = turbine_power_kw(np.array([7.0, 8.0]), curve)
+    assert midpoint == pytest.approx(neighbours.mean())
+    assert turbine_power_kw(np.array([13.0]), curve)[0] == pytest.approx(
+        oracles.rated_kw(curve)
+    )
 
 
-def test_capacity_factor_uses_leap_averaged_hours():
+@pytest.mark.parametrize("curve", [oracles.CURVE_3MW, oracles.CURVE_4_2MW])
+def test_capacity_factor_uses_leap_averaged_hours(curve):
     """A turbine held at rated power all year must show a 100% capacity factor."""
     always_rated = np.full(10_000, 13.0)
-    aep = gross_aep_mwh(always_rated)
-    assert aep == pytest.approx(WTG_RATED_KW / 1000.0 * HOURS_PER_YEAR)
-    assert aep / (WTG_RATED_KW / 1000.0 * HOURS_PER_YEAR) == pytest.approx(1.0)
+    aep = gross_aep_mwh(always_rated, curve)
+    rated = oracles.rated_kw(curve)
+    assert aep == pytest.approx(rated / 1000.0 * HOURS_PER_YEAR)
+    assert aep / (rated / 1000.0 * HOURS_PER_YEAR) == pytest.approx(1.0)

@@ -15,13 +15,15 @@ import pytest
 
 import server.main  # noqa: F401 — establishes tool-module import order
 from server.core.powercurve import (
-    CUT_IN_MPS,
-    CUT_OUT_MPS,
+    GENERIC_3MW,
+    GENERIC_4_2MW,
     GENERIC_RATED_KW,
     HOURS_PER_YEAR,
     energy_sensitivity_factor,
+    get_power_curve,
     indicative_aep_mwh,
     indicative_capacity_factor,
+    power_curve_names,
     turbine_power_kw,
 )
 from server.state.session import SessionState
@@ -53,19 +55,54 @@ def _state_with_ensemble(speed: np.ndarray) -> SessionState:
 # ---------------------------------------------------------------------------
 
 
-def test_power_curve_is_linear_between_bins_with_hard_cutoffs():
+@pytest.mark.parametrize("curve", [GENERIC_3MW, GENERIC_4_2MW])
+def test_power_curve_is_linear_between_bins_with_hard_cutoffs(curve):
     """Linear interpolation on published bins is the IEC convention; a spline would overshoot."""
-    assert turbine_power_kw(np.array([CUT_IN_MPS - 0.01]))[0] == 0.0
-    assert turbine_power_kw(np.array([CUT_OUT_MPS + 0.01]))[0] == 0.0
-    assert turbine_power_kw(np.array([7.5]))[0] == pytest.approx((1600.0 + 2300.0) / 2.0)
-    assert turbine_power_kw(np.array([13.0]))[0] == pytest.approx(GENERIC_RATED_KW)
+    assert turbine_power_kw(np.array([curve.cut_in_mps - 0.01]), curve)[0] == 0.0
+    assert turbine_power_kw(np.array([curve.cut_out_mps + 0.01]), curve)[0] == 0.0
+    assert turbine_power_kw(np.array([13.0]), curve)[0] == pytest.approx(curve.rated_kw)
+    # Midway between two published bins is the mean of them, on every curve.
+    midpoint = turbine_power_kw(np.array([7.5]), curve)[0]
+    assert midpoint == pytest.approx((curve.power_kw[7] + curve.power_kw[8]) / 2.0)
 
 
-def test_indicative_aep_uses_leap_averaged_hours():
+def test_default_curve_is_the_generic_three_megawatt_machine():
+    """The engine reports AEP on a generic 3 MW machine (design doc S7.12, S11)."""
+    assert get_power_curve().name == "generic-3.0MW-130m-IIA"
+    assert GENERIC_RATED_KW == 3000.0
+    assert set(power_curve_names()) == {"generic-3.0MW-130m-IIA", "generic-4.2MW-150m-IIA"}
+    # Specific power places it in the modern onshore class it claims.
+    assert GENERIC_3MW.specific_power_w_m2 == pytest.approx(226.0, abs=1.0)
+
+
+def test_unknown_power_curve_is_rejected_by_name():
+    with pytest.raises(ValueError, match="power curve must be one of"):
+        get_power_curve("vestas-v150")
+
+
+@pytest.mark.parametrize("curve", [GENERIC_3MW, GENERIC_4_2MW])
+def test_implied_cp_peaks_in_the_expected_band(curve):
+    """A curve with a plausible shape peaks near Cp 0.4-0.45 in the 6-9 m/s range.
+
+    This is what makes the curve generic-but-physical rather than made up: Betz caps
+    Cp at 0.593 and a real machine of this class runs a little over two-thirds of it.
+    """
+    area = np.pi * (curve.rotor_diameter_m / 2.0) ** 2
+    speeds = np.arange(5.0, 10.0)
+    available_kw = 0.5 * 1.225 * area * speeds**3 / 1000.0
+    cp = turbine_power_kw(speeds, curve) / available_kw
+    assert cp.max() == pytest.approx(0.41, abs=0.04)
+    assert cp.max() < 0.593  # Betz
+
+
+@pytest.mark.parametrize("curve", [GENERIC_3MW, GENERIC_4_2MW])
+def test_indicative_aep_uses_leap_averaged_hours(curve):
     """A turbine held at rated power all year must show a 100% capacity factor."""
     always_rated = np.full(5_000, 13.0)
-    assert indicative_aep_mwh(always_rated) == pytest.approx(GENERIC_RATED_KW / 1000.0 * HOURS_PER_YEAR)
-    assert indicative_capacity_factor(always_rated) == pytest.approx(1.0)
+    assert indicative_aep_mwh(always_rated, curve) == pytest.approx(
+        curve.rated_kw / 1000.0 * HOURS_PER_YEAR
+    )
+    assert indicative_capacity_factor(always_rated, curve) == pytest.approx(1.0)
 
 
 def test_production_curve_agrees_with_the_independent_oracle():
@@ -74,12 +111,44 @@ def test_production_curve_agrees_with_the_independent_oracle():
     `tests/oracles.py` carries its own power curve and sensitivity implementation precisely
     so it can check this one. Agreement across a range of site means is the cross-check.
     """
-    for mean_speed in (5.5, 7.5, 9.5):
-        speed = _weibull_site(mean_speed)
-        assert energy_sensitivity_factor(speed) == pytest.approx(
-            oracles.energy_sensitivity_factor(speed), rel=1e-9
-        )
-        assert indicative_aep_mwh(speed) == pytest.approx(oracles.gross_aep_mwh(speed), rel=1e-9)
+    for curve_name in (oracles.CURVE_3MW, oracles.CURVE_4_2MW):
+        for mean_speed in (5.5, 7.5, 9.5):
+            speed = _weibull_site(mean_speed)
+            assert energy_sensitivity_factor(speed, curve=curve_name) == pytest.approx(
+                oracles.energy_sensitivity_factor(speed, curve=curve_name), rel=1e-9
+            )
+            assert indicative_aep_mwh(speed, curve_name) == pytest.approx(
+                oracles.gross_aep_mwh(speed, curve_name), rel=1e-9
+            )
+
+
+def test_sensitivity_depends_on_the_machine_which_is_why_one_curve_must_serve_both_uses():
+    """S differs between machines at the same site, so AEP and S must share a curve.
+
+    Reporting energy off one curve while converting speed uncertainty with S from
+    another would describe two different turbines (design doc S7.12).
+
+    The measured gap between these two curves is small - about 0.018 at an 8.5 m/s
+    site - because 226 and 238 W/m2 are similar specific powers. It is not negligible
+    against a factor reported to four decimal places, and a machine of genuinely
+    different specific power would diverge much further. Note also that the sign
+    flips below roughly 6 m/s, where neither curve has meaningful time at rated
+    power, so this asserts the ordering only at a windy site.
+    """
+    speed = _weibull_site(8.5)
+    s_3mw = energy_sensitivity_factor(speed, curve=GENERIC_3MW)
+    s_4_2mw = energy_sensitivity_factor(speed, curve=GENERIC_4_2MW)
+
+    # Above rated-power onset the smaller machine spends more hours flat-topped, so
+    # its elasticity is the lower of the two.
+    assert s_3mw < s_4_2mw
+    assert abs(s_3mw - s_4_2mw) == pytest.approx(0.018, abs=0.005)
+
+    # At a low-wind site almost no hours reach rated power on either curve and the
+    # ordering is not guaranteed - the shapes differ more than the ratings do.
+    calm = _weibull_site(5.5)
+    assert energy_sensitivity_factor(calm, curve=GENERIC_3MW) == pytest.approx(2.11, abs=0.02)
+    assert energy_sensitivity_factor(calm, curve=GENERIC_4_2MW) == pytest.approx(2.10, abs=0.02)
 
 
 # ---------------------------------------------------------------------------
@@ -129,14 +198,21 @@ def test_uncertainty_response_carries_the_factor_and_the_conversion():
     assert block["measured_on"] == "ensemble"
     assert 1.0 < block["factor"] < 1.8
     assert block["power_curve"]["basis"] == "generic"
+    # AEP and S come from one machine, named in the response beside both.
+    assert block["power_curve"]["name"] == "generic-3.0MW-130m-IIA"
+    assert block["indicative_gross_aep_mwh"] > 0.0
 
     guidance = block["how_to_convert"]
     speed_pct = float(result["total_uncertainty_pct"])
     energy_pct = block["factor"] * speed_pct
 
-    # The arithmetic in the text is the arithmetic the numbers imply.
+    # The arithmetic in the text is the arithmetic the numbers imply. Compared
+    # numerically rather than by string match: `factor` is rounded to 4 dp while the
+    # guidance text is rendered from the unrounded value, so the last displayed digit
+    # can legitimately differ by one.
     assert f"{speed_pct:.2f}%" in guidance["steps"][0]
-    assert f"{energy_pct:.2f}%" in guidance["steps"][2]
+    quoted = float(guidance["steps"][2].split("The result, ")[1].split("%")[0])
+    assert quoted == pytest.approx(energy_pct, abs=0.01)
     # And the caveats a reader needs are all present.
     assert "do not" in guidance["do_not"].lower()
     assert "floor" in guidance["not_included"]

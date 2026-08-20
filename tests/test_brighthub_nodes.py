@@ -61,7 +61,12 @@ def test_fetch_reanalysis_nodes_annotates_distance_km_and_bearing() -> None:
 
 
 def test_fetch_reanalysis_nodes_limits_counts() -> None:
-    """Only the 4 nearest ERA5 nodes and 1 nearest MERRA-2 node are returned."""
+    """Four nodes are returned for each source (design doc S6.1).
+
+    MERRA-2 used to be capped at one node, which made spatial interpolation to site
+    impossible and left it usable only as a raw node series. Both sources now return
+    four so either can be interpolated and used as a long-term reference.
+    """
     era5_payload = [
         {"latitude_ddeg": 52.0 + i * 0.05, "longitude_ddeg": 5.0} for i in range(10)
     ]
@@ -76,6 +81,8 @@ def test_fetch_reanalysis_nodes_limits_counts() -> None:
         result = fetch_reanalysis_nodes(token="fake-token", lat=52.0, lon=5.0)
 
     assert len(result["era5_nodes"]) == 4
-    assert len(result["merra2_nodes"]) == 1
-    # The single MERRA-2 node is the closest one (first in distance-sorted order).
+    assert len(result["merra2_nodes"]) == 4
+    # Still distance-sorted, so the closest node leads.
     assert result["merra2_nodes"][0]["latitude_ddeg"] == 52.0
+    merra_distances = [float(node["distance_km"]) for node in result["merra2_nodes"]]
+    assert merra_distances == sorted(merra_distances)

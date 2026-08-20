@@ -73,9 +73,14 @@ class SessionManager:
         target.brighthub_token = source.brighthub_token
         target.era5_nodes = copy.deepcopy(source.era5_nodes)
         target.era5_data = {key: frame.copy(deep=True) for key, frame in source.era5_data.items()}
-        target.era5_interpolated_df = (
-            None if source.era5_interpolated_df is None else source.era5_interpolated_df.copy(deep=True)
-        )
+        # Clone every reference source's interpolated series, not just the active one
+        # (design doc §6.4) — a fork that kept only the active source would silently
+        # drop the other reference and make the fork's scenario space smaller than
+        # its parent's.
+        target.reanalysis_interpolated = {
+            key: frame.copy(deep=True) for key, frame in source.reanalysis_interpolated.items()
+        }
+        target.active_reference_source = source.active_reference_source
         target.merra_nodes = copy.deepcopy(source.merra_nodes)
         target.merra_data = {key: frame.copy(deep=True) for key, frame in source.merra_data.items()}
         target.reanalysis_cache_identity = copy.deepcopy(source.reanalysis_cache_identity)

@@ -13,6 +13,11 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from server.core.reanalysis import (
+    AUXILIARY_VARIABLES,
+    get_reference_source,
+    reference_source_names,
+)
 from server.core.spatial import bearing_compass, haversine_km, interpolate_spatial
 from server.main import mcp
 from server.schemas.common import Coordinate
@@ -409,7 +414,7 @@ def _compute_era5_wind_speed(state: SessionState, latitude: float, longitude: fl
     }
 
 
-REFERENCE_SOURCES = ("era5", "merra2")
+REFERENCE_SOURCES = reference_source_names()
 
 
 def _reference_nodes_and_data(
@@ -445,13 +450,13 @@ def _interpolate_era5_to_site(state: SessionState, source: str = "era5") -> dict
     reads, so switching source and re-running the LTC is how a reference-dependence check is
     made. The source actually used is recorded on the run configuration.
     """
-    if source not in REFERENCE_SOURCES:
-        raise ValueError(f"source must be one of {', '.join(REFERENCE_SOURCES)}, got '{source}'")
+    descriptor = get_reference_source(source)
+    speed_col, dir_col = descriptor.speed_col, descriptor.dir_col
     coordinate = state.get_coordinate()
     if coordinate is None:
         raise ValueError("Site coordinate is not set. Run find_era5_nodes first")
     nodes, node_data, key_for = _reference_nodes_and_data(state, source)
-    label = "ERA5" if source == "era5" else "MERRA-2"
+    label = descriptor.label
     if len(nodes) < 4:
         raise ValueError(
             f"{label} nodes are not available. "
@@ -465,9 +470,9 @@ def _interpolate_era5_to_site(state: SessionState, source: str = "era5") -> dict
         if key not in node_data:
             raise ValueError(f"{label} data for node '{key}' is not loaded")
         frame = node_data[key]
-        if "Spd_100m" not in frame.columns or "Dir_100m" not in frame.columns:
+        if speed_col not in frame.columns or dir_col not in frame.columns:
             raise ValueError(
-                f"{label} node '{key}' must have Spd_100m and Dir_100m. "
+                f"{label} node '{key}' must have {speed_col} and {dir_col}. "
                 "Run compute_era5_wind_speed first"
             )
         frames.append(frame)
@@ -476,7 +481,7 @@ def _interpolate_era5_to_site(state: SessionState, source: str = "era5") -> dict
         common_index = common_index.intersection(frame.index)
     if common_index.empty:
         raise ValueError(f"{label} node dataframes do not share any common timestamps for interpolation")
-    variables = ["Spd_100m", "sp", "t2m", "d2m"]
+    variables = [speed_col, *AUXILIARY_VARIABLES]
     site = (coordinate.latitude, coordinate.longitude)
     result = pd.DataFrame(index=common_index)
     methods_used: set[str] = set()
@@ -505,35 +510,40 @@ def _interpolate_era5_to_site(state: SessionState, source: str = "era5") -> dict
         result[variable] = np.asarray(interpolated, dtype=float)
     # Vector-interpolate u/v for direction only.  Speed was already
     # scalar-interpolated above to avoid vector-cancellation bias.
-    speed_values = np.vstack([frame.loc[common_index, "Spd_100m"].to_numpy(dtype=float) for frame in frames])
-    direction_values = np.vstack([frame.loc[common_index, "Dir_100m"].to_numpy(dtype=float) for frame in frames])
+    speed_values = np.vstack([frame.loc[common_index, speed_col].to_numpy(dtype=float) for frame in frames])
+    direction_values = np.vstack([frame.loc[common_index, dir_col].to_numpy(dtype=float) for frame in frames])
     direction_rad = np.radians(direction_values)
     u_values = -speed_values * np.sin(direction_rad)
     v_values = -speed_values * np.cos(direction_rad)
     interp_u, method_u = interpolate_spatial(points, u_values, site)
     interp_v, method_v = interpolate_spatial(points, v_values, site)
     methods_used.update({method_u, method_v})
-    variable_methods["Dir_100m"] = method_u if method_u == method_v else f"{method_u}/{method_v}"
-    result["Dir_100m"] = (270.0 - np.degrees(np.arctan2(np.asarray(interp_v), np.asarray(interp_u)))) % 360.0
-    state.era5_interpolated_df = result.sort_index()
-    # The LTC reads a single interpolated series, so the source that produced it has to be
-    # recorded or a reference-dependence check cannot be told apart from a re-run (F-58).
-    state.runconfig["reference_source"] = source
+    variable_methods[dir_col] = method_u if method_u == method_v else f"{method_u}/{method_v}"
+    result[dir_col] = (270.0 - np.degrees(np.arctan2(np.asarray(interp_v), np.asarray(interp_u)))) % 360.0
+    # Stored per source (design doc §6.4), so ERA5 and MERRA-2 site series coexist and a
+    # scenario can switch between them without recomputing either. Interpolating a source
+    # also makes it the active reference, preserving the previous single-slot behaviour
+    # for callers that interpolate and then immediately run an LTC.
+    state.reanalysis_interpolated[descriptor.name] = result.sort_index()
+    state.set_active_reference_source(descriptor.name)
     state.touch()
     method_name = "idw" if "idw" in methods_used else "linear"
     payload: dict[str, object] = {
         "status": "ok",
-        "rows": int(len(state.era5_interpolated_df)),
+        "rows": int(len(result)),
         "method": method_name,
         # The collapsed label is retained for existing consumers; the map is the truth.
         "method_by_variable": variable_methods,
         "method_is_mixed": len(methods_used) > 1,
-        "variables": state.era5_interpolated_df.columns.tolist(),
+        "variables": result.columns.tolist(),
         "skipped_variables": skipped_variables,
         # Reported by the path rather than asserted as a literal, so a future change of
         # approach would show up here instead of silently contradicting the field (F-62).
-        "speed_interpolation": "scalar" if "Spd_100m" in variable_methods else "unavailable",
-        "reference_source": source,
+        "speed_interpolation": "scalar" if speed_col in variable_methods else "unavailable",
+        "reference_source": descriptor.name,
+        "reference_height_m": descriptor.native_height_m,
+        "speed_column": speed_col,
+        "direction_column": dir_col,
         "nodes_used": len(points),
         "reference_source_note": (
             "This is the series every LTC algorithm will use. Re-running the interpolation "

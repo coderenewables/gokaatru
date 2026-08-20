@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from server.core.powercurve import get_power_curve
+from server.core.reanalysis import DEFAULT_REFERENCE_SOURCE, get_reference_source
 from server.core.runconfig import strip_mirrors
 from server.schemas.common import Coordinate
 
@@ -45,7 +47,13 @@ class SessionState:
     brighthub_token: str | None
     era5_nodes: list[dict[str, object]] | None
     era5_data: dict[str, pd.DataFrame]
-    era5_interpolated_df: pd.DataFrame | None
+    # Interpolated site series keyed by reference source (design doc §6.4). There used
+    # to be a single `era5_interpolated_df` slot that both ERA5 and MERRA-2 wrote to,
+    # so the two could never coexist and a scenario axis over reference source was
+    # structurally impossible — selecting one destroyed the other. `era5_interpolated_df`
+    # survives as a property over this dict so the ~90 existing readers keep working.
+    reanalysis_interpolated: dict[str, pd.DataFrame]
+    active_reference_source: str
     merra_nodes: list[dict[str, object]] | None
     merra_data: dict[str, pd.DataFrame]
     reanalysis_cache_identity: dict[str, object] | None
@@ -96,7 +104,8 @@ class SessionState:
         self.brighthub_token = None
         self.era5_nodes = None
         self.era5_data = {}
-        self.era5_interpolated_df = None
+        self.reanalysis_interpolated = {}
+        self.active_reference_source = DEFAULT_REFERENCE_SOURCE
         self.merra_nodes = None
         self.merra_data = {}
         self.reanalysis_cache_identity = None
@@ -193,6 +202,63 @@ class SessionState:
                 elevation_m=float(location.get("elevation_m", 0.0)),
             )
         return self.coordinate
+
+    @property
+    def era5_interpolated_df(self) -> pd.DataFrame | None:
+        """Return the interpolated site series for the *active* reference source.
+
+        Kept as a property rather than a field so the readers written against the old
+        single-slot storage keep working unchanged (design doc §6.4). Switching
+        `active_reference_source` transparently switches what every one of them sees,
+        which is exactly what a scenario axis over reference source needs.
+
+        The name is now a misnomer — it may hold MERRA-2 — but renaming it would touch
+        ~90 call sites for no behavioural gain. New code should read
+        `reanalysis_interpolated` directly and be explicit about the source.
+        """
+        return self.reanalysis_interpolated.get(self.active_reference_source)
+
+    @era5_interpolated_df.setter
+    def era5_interpolated_df(self, value: pd.DataFrame | None) -> None:
+        """Write the interpolated series for the active reference source."""
+        if value is None:
+            self.reanalysis_interpolated.pop(self.active_reference_source, None)
+        else:
+            self.reanalysis_interpolated[self.active_reference_source] = value
+
+    def set_active_reference_source(self, name: str) -> None:
+        """Select which downloaded reference the LTC and its readers see.
+
+        Validates against the descriptor table so an unknown source fails here rather
+        than as a missing-column error somewhere downstream.
+        """
+        self.active_reference_source = get_reference_source(name).name
+        self.runconfig["reference_source"] = self.active_reference_source
+
+    def get_active_reference_source(self):
+        """Return the descriptor for the active reference source."""
+        return get_reference_source(self.active_reference_source)
+
+    def has_reference_series(self, name: str) -> bool:
+        """Return whether an interpolated site series exists for one reference source."""
+        return self.reanalysis_interpolated.get(name) is not None
+
+    def get_power_curve_name(self) -> str | None:
+        """Return the runconfig's power-curve name, or None for the module default.
+
+        One curve serves both the reported AEP and the energy-sensitivity factor S
+        (design doc S7.12). Reading it from a single runconfig key is what keeps the
+        two from drifting onto different machines.
+        """
+        value = self.runconfig.get("power_curve")
+        return str(value) if isinstance(value, str) else None
+
+    def set_power_curve_name(self, name: str | None) -> None:
+        """Select the power curve for this session, validating the name eagerly."""
+        if name is None:
+            self.runconfig.pop("power_curve", None)
+            return
+        self.runconfig["power_curve"] = get_power_curve(name).name
 
     def get_project_name(self) -> str | None:
         """Return the project name from runconfig when available, else the mirrored session field."""

@@ -623,8 +623,10 @@ def test_reanalysis_hub_extrapolation_reports_when_it_writes_nothing():
     assert reanalysis["status"] == "no_op"
     assert reanalysis["wrote_hub_column"] is False
     assert reanalysis["extrapolated_nodes"] == []
-    assert reanalysis["skipped_nodes"] == ["interpolated_site_series"]
-    assert reanalysis["reference_column"] == "Spd_100m"
+    # The label carries its source now that both ERA5 and MERRA-2 site series exist.
+    assert reanalysis["skipped_nodes"] == ["interpolated_site_series:era5"]
+    # Reference columns are now per source: ERA5 at 100 m, MERRA-2 at 50 m.
+    assert reanalysis["reference_columns"]["era5"] == "Spd_100m"
     assert "will either fail on the missing column or reuse a stale one" in reanalysis["warning"]
     # And the failure surfaces on the top-level response under its own key, so it does
     # not compete with the extrapolation-lever warning.

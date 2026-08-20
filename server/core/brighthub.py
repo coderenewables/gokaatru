@@ -146,33 +146,78 @@ def fetch_timeseries_csv(
     return b"".join(chunks).decode(encoding, errors="replace")
 
 
+def select_grid_nodes(nodes: list[dict], lat: float, lon: float, count: int = 4) -> list[dict]:
+    """Pick ``count`` nodes for spatial interpolation, preferring ones that bracket the site.
+
+    Nearest-N is not the same as bracketing-N. Sorting purely by distance can return
+    four nodes all on one side of the site when it sits near a grid-cell corner, which
+    silently degrades bilinear interpolation to extrapolation — the interpolator still
+    returns a number, and nothing in the result says the site was outside the hull.
+
+    So prefer a set that straddles the site in both axes: take the nearest nodes from
+    each of the four quadrants around it where they exist, then backfill by distance.
+    On a regular grid with the site inside a cell this returns exactly the cell corners.
+    Near a data boundary it degrades to nearest-N, which is the honest fallback.
+    """
+    by_distance = sorted(nodes, key=lambda n: float(n["distance_km"]))
+    if len(by_distance) <= count:
+        # Still distance-sorted: callers rely on the order, and returning the raw
+        # payload order here would make the sort depend on how many nodes came back.
+        return by_distance
+    selected: list[dict] = []
+    seen: set[int] = set()
+    # One node per quadrant first, so the selection straddles the site where it can.
+    for want_north in (True, False):
+        for want_east in (True, False):
+            for index, node in enumerate(by_distance):
+                if index in seen:
+                    continue
+                is_north = float(node["latitude_ddeg"]) >= lat
+                is_east = float(node["longitude_ddeg"]) >= lon
+                if is_north is want_north and is_east is want_east:
+                    selected.append(node)
+                    seen.add(index)
+                    break
+    for index, node in enumerate(by_distance):
+        if len(selected) >= count:
+            break
+        if index not in seen:
+            selected.append(node)
+            seen.add(index)
+    selected.sort(key=lambda n: float(n["distance_km"]))
+    return selected[:count]
+
+
 def fetch_reanalysis_nodes(token: str, lat: float, lon: float) -> dict[str, list[dict]]:
-    """Fetch nearest ERA5 (×4) and MERRA-2 (×1) reanalysis nodes near a coordinate."""
-    params = {
-        "min_latitude_ddeg": lat - 0.5,
-        "max_latitude_ddeg": lat + 0.5,
-        "min_longitude_ddeg": lon - 0.5,
-        "max_longitude_ddeg": lon + 0.5,
-    }
+    """Fetch the four nearest ERA5 and four nearest MERRA-2 reanalysis nodes near a coordinate.
+
+    MERRA-2 used to return a single node, which made spatial interpolation impossible
+    and left it usable only as a raw node series (design doc §6.1). Both sources now
+    return four, selected to bracket the site where the grid allows.
+
+    The search box is sized per source. MERRA-2's grid is 0.5 deg latitude by 0.625 deg
+    longitude, so the +/-0.5 deg box that comfortably holds 25 ERA5 nodes can fail to
+    hold four MERRA-2 nodes; its longitude half-width is widened accordingly.
+    """
     headers = _auth_headers(token)
 
-    era5_resp = requests.get(
-        f"{BRIGHTHUB_BASE_URL}/reanalysis/ERA5/nodes",
-        headers=headers,
-        params=params,
-        timeout=30,
-    )
-    era5_resp.raise_for_status()
-    era5_nodes: list[dict] = era5_resp.json()
+    def _fetch(dataset: str, half_lat: float, half_lon: float) -> list[dict]:
+        response = requests.get(
+            f"{BRIGHTHUB_BASE_URL}/reanalysis/{dataset}/nodes",
+            headers=headers,
+            params={
+                "min_latitude_ddeg": lat - half_lat,
+                "max_latitude_ddeg": lat + half_lat,
+                "min_longitude_ddeg": lon - half_lon,
+                "max_longitude_ddeg": lon + half_lon,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
 
-    merra2_resp = requests.get(
-        f"{BRIGHTHUB_BASE_URL}/reanalysis/MERRA-2/nodes",
-        headers=headers,
-        params=params,
-        timeout=30,
-    )
-    merra2_resp.raise_for_status()
-    merra2_nodes: list[dict] = merra2_resp.json()
+    era5_nodes: list[dict] = _fetch("ERA5", 0.5, 0.5)
+    merra2_nodes: list[dict] = _fetch("MERRA-2", 0.75, 0.875)
 
     for node in era5_nodes:
         node_lat = float(node["latitude_ddeg"])
@@ -187,10 +232,10 @@ def fetch_reanalysis_nodes(token: str, lat: float, lon: float) -> dict[str, list
         node["distance_km"] = haversine_km(lat, lon, node_lat, node_lon)
         node["bearing"] = bearing_compass(lat, lon, node_lat, node_lon)
 
-    era5_nodes.sort(key=lambda n: float(n["distance_km"]))
-    merra2_nodes.sort(key=lambda n: float(n["distance_km"]))
-
-    return {"era5_nodes": era5_nodes[:4], "merra2_nodes": merra2_nodes[:1]}
+    return {
+        "era5_nodes": select_grid_nodes(era5_nodes, lat, lon, 4),
+        "merra2_nodes": select_grid_nodes(merra2_nodes, lat, lon, 4),
+    }
 
 
 def download_reanalysis_data(

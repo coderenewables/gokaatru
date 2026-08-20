@@ -14,6 +14,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from scipy.stats import genextreme, gumbel_r, norm, weibull_min
 
+from server.core.reanalysis import get_reference_source, reference_source_names
 from server.core.validators import to_utc_index
 from server.main import mcp
 from server.tools.advanced_analysis import _compute_energy_metrics, _compute_extremes, _compute_persistence, _consecutive_ramps
@@ -219,15 +220,34 @@ def _expanding_annual_mean(series: pd.Series) -> tuple[list[int], list[float], f
     return years, running, float(running[-1])
 
 
-def _era5_monthly_speed(frame_like: object) -> pd.Series:
-    """Return monthly mean ERA5 100 m wind speed from one node or interpolated dataframe."""
+def _reference_speed_column(state: SessionState, frame: pd.DataFrame) -> str:
+    """Return the reference speed column present on an interpolated site series.
+
+    The series may be ERA5 (100 m) or MERRA-2 (50 m) depending on the active reference
+    source, so the column is resolved from the descriptor rather than assumed to be
+    ``Spd_100m`` (design doc S6.3). Falls back to any known source column so a frame
+    carried over from a previous source still plots.
+    """
+    preferred = state.get_active_reference_source().speed_col
+    if preferred in frame.columns:
+        return preferred
+    for name in reference_source_names():
+        candidate = get_reference_source(name).speed_col
+        if candidate in frame.columns:
+            return candidate
+    known = ", ".join(get_reference_source(n).speed_col for n in reference_source_names())
+    raise ValueError(f"Interpolated site data must contain one of: {known}")
+
+
+def _era5_monthly_speed(frame_like: object, speed_col: str = "Spd_100m") -> pd.Series:
+    """Return monthly mean reference wind speed from one node or interpolated dataframe."""
     frame = _indexed_frame(frame_like)
-    if "Spd_100m" not in frame.columns:
-        raise ValueError("ERA5 speed plotting requires a Spd_100m column")
-    series = frame["Spd_100m"].dropna()
+    if speed_col not in frame.columns:
+        raise ValueError(f"Reference speed plotting requires a {speed_col} column")
+    series = frame[speed_col].dropna()
     monthly = series.groupby(series.index.month).mean().reindex(range(1, 13))
     if monthly.dropna().empty:
-        raise ValueError("ERA5 speed plotting requires at least one non-null Spd_100m value")
+        raise ValueError(f"Reference speed plotting requires at least one non-null {speed_col} value")
     return monthly
 
 
@@ -261,11 +281,10 @@ def _plot_era5_measured_overlay(state: SessionState) -> dict:
         raise ValueError("ERA5 interpolated site data is not available")
     measured = _require_series(state, _preferred_measured_speed_column(state)).rename("measured")
     era5_frame = _indexed_frame(state.era5_interpolated_df)
-    if "Spd_100m" not in era5_frame.columns:
-        raise ValueError("ERA5 interpolated site data must contain Spd_100m")
-    overlap = pd.concat([measured, era5_frame["Spd_100m"].rename("era5")], axis=1, join="inner").dropna()
+    speed_col = _reference_speed_column(state, era5_frame)
+    overlap = pd.concat([measured, era5_frame[speed_col].rename("era5")], axis=1, join="inner").dropna()
     if overlap.empty:
-        raise ValueError("Measured and ERA5 interpolated series do not overlap")
+        raise ValueError("Measured and reference interpolated series do not overlap")
     monthly = overlap.resample("ME").mean().dropna()
     if monthly.empty:
         raise ValueError("Measured and ERA5 overlap does not contain enough data for monthly plotting")
@@ -830,11 +849,10 @@ def _plot_era5_scatter(state: SessionState) -> dict:
         raise ValueError("ERA5 interpolated site data is not available")
     measured = _require_series(state, _preferred_measured_speed_column(state)).rename("measured")
     era5_frame = _indexed_frame(state.era5_interpolated_df)
-    if "Spd_100m" not in era5_frame.columns:
-        raise ValueError("ERA5 interpolated site data must contain Spd_100m")
-    overlap = pd.concat([measured, era5_frame["Spd_100m"].rename("era5")], axis=1, join="inner").dropna()
+    speed_col = _reference_speed_column(state, era5_frame)
+    overlap = pd.concat([measured, era5_frame[speed_col].rename("era5")], axis=1, join="inner").dropna()
     if overlap.empty:
-        raise ValueError("Measured and ERA5 interpolated series do not overlap")
+        raise ValueError("Measured and reference interpolated series do not overlap")
     monthly = overlap.resample("ME").mean().dropna()
     if monthly.empty:
         raise ValueError("Measured and ERA5 overlap does not contain enough data for a scatter")

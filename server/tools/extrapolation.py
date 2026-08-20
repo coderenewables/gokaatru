@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from server.core.formulas import ROUGHNESS_MAX_M, ROUGHNESS_MIN_M
+from server.core.reanalysis import get_reference_source, reference_source_names
 from server.main import mcp
 from server.state.session import SessionState, session
 
@@ -352,108 +353,136 @@ def _extrapolate_to_hub_height(state: SessionState, hub_height_m: float, shear_m
 def _extrapolate_reanalysis_to_hub(
     state: SessionState,
     hub_height_m: float,
-    reference_height_m: float = 100.0,
+    reference_height_m: float | None = None,
+    source: str | None = None,
 ) -> dict:
-    """Extrapolate ERA5 site wind speed to hub height using the session month-hour shear lookup table."""
-    if state.era5_interpolated_df is None:
-        raise ValueError("ERA5 interpolated data is not available. Run ERA5 interpolation tools first")
+    """Extrapolate one reanalysis site series to hub height using the month-hour shear table.
+
+    ``reference_height_m`` defaults to the source's *native* height rather than to
+    100 m: ERA5 is served at 100 m and MERRA-2 at 50 m, so a fixed default silently
+    produced the wrong lever for MERRA-2 - or, more often, raised a missing-column
+    error, because ``Spd_100m`` is not a MERRA-2 column at all (design doc S6.3).
+    """
+    descriptor = get_reference_source(source or state.active_reference_source)
+    frame = state.reanalysis_interpolated.get(descriptor.name)
+    if frame is None:
+        raise ValueError(
+            f"{descriptor.label} interpolated data is not available. Run reanalysis interpolation first"
+        )
     if state.shear_table is None:
         raise ValueError("Reanalysis hub-height extrapolation requires session.shear_table")
-    reference_col = f"Spd_{int(reference_height_m)}m"
-    if reference_col not in state.era5_interpolated_df.columns:
-        raise ValueError(f"Reference ERA5 column '{reference_col}' not found in interpolated data")
-    shear_values = _lookup_table_values(state.era5_interpolated_df.index, state.shear_table)
-    reference_speed = state.era5_interpolated_df[reference_col].to_numpy(dtype=float)
+    height = descriptor.native_height_m if reference_height_m is None else float(reference_height_m)
+    reference_col = f"Spd_{int(height)}m"
+    if reference_col not in frame.columns:
+        raise ValueError(
+            f"Reference {descriptor.label} column '{reference_col}' not found in interpolated data"
+        )
+    shear_values = _lookup_table_values(frame.index, state.shear_table)
+    reference_speed = frame[reference_col].to_numpy(dtype=float)
     hub_speed = _power_extrapolate_array(
         reference_speed,
-        np.full_like(reference_speed, reference_height_m),
+        np.full_like(reference_speed, height),
         hub_height_m,
         shear_values,
     )
     column_name = _hub_column_name(hub_height_m)
-    state.era5_interpolated_df[column_name] = hub_speed
-    return {"status": "ok", "column_name": column_name}
+    frame[column_name] = hub_speed
+    return {
+        "status": "ok",
+        "column_name": column_name,
+        "reference_source": descriptor.name,
+        "reference_height_m": height,
+    }
 
 
 def _extrapolate_all_reanalysis_nodes(
     state: SessionState,
     hub_height_m: float,
-    reference_height_m: float = 100.0,
+    reference_height_m: float | None = None,
 ) -> dict:
-    """Extrapolate every ERA5/MERRA node and the interpolated series to hub height using the shear table."""
+    """Extrapolate every ERA5/MERRA-2 node and both site series to hub height.
+
+    The reference column is resolved **per source**. It used to be one column name
+    derived from a fixed 100 m default and applied to everything, so every MERRA-2
+    node was skipped for want of a ``Spd_100m`` it can never have - the mechanical
+    reason MERRA-2 was downloaded, cached and then used for nothing (design doc
+    S6.3). Passing ``reference_height_m`` explicitly still overrides, but then
+    applies to all sources and is only meaningful when they share a height.
+    """
     if state.shear_table is None:
         raise ValueError("Hub-height extrapolation of reanalysis data requires session.shear_table")
 
-    ref_col = f"Spd_{int(reference_height_m)}m"
     hub_col = _hub_column_name(hub_height_m)
     extrapolated_keys: list[str] = []
     skipped_keys: list[str] = []
+    reference_columns: dict[str, str] = {}
 
-    # --- individual ERA5 nodes ---
-    for key, frame in state.era5_data.items():
+    def _extrapolate_frame(frame: pd.DataFrame, descriptor, label: str) -> bool:
+        height = (
+            descriptor.native_height_m if reference_height_m is None else float(reference_height_m)
+        )
+        ref_col = f"Spd_{int(height)}m"
+        reference_columns[descriptor.name] = ref_col
         if ref_col not in frame.columns:
-            skipped_keys.append(key)
-            continue
+            skipped_keys.append(label)
+            return False
         shear = _lookup_table_values(frame.index, state.shear_table)
         ref_speed = frame[ref_col].to_numpy(dtype=float)
         frame[hub_col] = _power_extrapolate_array(
-            ref_speed, np.full_like(ref_speed, reference_height_m), hub_height_m, shear,
+            ref_speed, np.full_like(ref_speed, height), hub_height_m, shear,
         )
-        extrapolated_keys.append(key)
+        extrapolated_keys.append(label)
+        return True
 
-    # --- individual MERRA-2 nodes ---
+    era5 = get_reference_source("era5")
+    merra2 = get_reference_source("merra2")
+
+    for key, frame in state.era5_data.items():
+        _extrapolate_frame(frame, era5, key)
+
     merra_data: dict[str, pd.DataFrame] = getattr(state, "merra_data", {})
     for key, frame in merra_data.items():
-        if ref_col not in frame.columns:
-            skipped_keys.append(f"merra:{key}")
-            continue
-        shear = _lookup_table_values(frame.index, state.shear_table)
-        ref_speed = frame[ref_col].to_numpy(dtype=float)
-        frame[hub_col] = _power_extrapolate_array(
-            ref_speed, np.full_like(ref_speed, reference_height_m), hub_height_m, shear,
-        )
-        extrapolated_keys.append(f"merra:{key}")
+        _extrapolate_frame(frame, merra2, f"merra:{key}")
 
-    # --- interpolated ERA5 at site ---
+    # --- interpolated site series, one per reference source ---
     # F-22: the interpolated series was only ever touched when the reference column was
     # present, and it never reached `skipped_nodes` - that list collected node keys only.
     # With ERA5 present but carrying just 10 m winds this returned status "ok" with both
     # lists empty, having written nothing at all, and LTC then either failed on a missing
     # column or silently reused a hub column from an earlier run.
-    interp_done = False
-    if state.era5_interpolated_df is not None:
-        if ref_col in state.era5_interpolated_df.columns:
-            shear = _lookup_table_values(state.era5_interpolated_df.index, state.shear_table)
-            ref_speed = state.era5_interpolated_df[ref_col].to_numpy(dtype=float)
-            state.era5_interpolated_df[hub_col] = _power_extrapolate_array(
-                ref_speed, np.full_like(ref_speed, reference_height_m), hub_height_m, shear,
-            )
-            interp_done = True
-        else:
-            skipped_keys.append("interpolated_site_series")
+    interpolated_done: list[str] = []
+    for name in reference_source_names():
+        frame = state.reanalysis_interpolated.get(name)
+        if frame is None:
+            continue
+        if _extrapolate_frame(frame, get_reference_source(name), f"interpolated_site_series:{name}"):
+            interpolated_done.append(name)
 
-    wrote_anything = bool(extrapolated_keys) or interp_done
+    interp_done = bool(interpolated_done)
+    wrote_anything = bool(extrapolated_keys)
     result: dict[str, object] = {
         "status": "ok" if wrote_anything else "no_op",
         "hub_column": hub_col,
-        "reference_column": ref_col,
+        "reference_columns": reference_columns,
         "extrapolated_nodes": extrapolated_keys,
         "skipped_nodes": skipped_keys,
         "interpolated_extrapolated": interp_done,
+        "interpolated_sources": interpolated_done,
         "wrote_hub_column": wrote_anything,
     }
     if not wrote_anything:
+        expected = ", ".join(sorted(set(reference_columns.values()))) or "the reference column"
         result["warning"] = (
-            f"No reanalysis series was extrapolated to hub height: none of them carries the "
-            f"reference column '{ref_col}'. Nothing wrote '{hub_col}', so any long-term "
+            f"No reanalysis series was extrapolated to hub height: none of them carries its "
+            f"reference column ({expected}). Nothing wrote '{hub_col}', so any long-term "
             "correction that expects it will either fail on the missing column or reuse a "
-            "stale one from an earlier run. Check that the reanalysis download included "
-            f"{int(reference_height_m)} m winds."
+            "stale one from an earlier run. Check that the reanalysis download included the "
+            "native-height winds for each source."
         )
     elif skipped_keys:
         result["warning"] = (
-            f"{len(skipped_keys)} reanalysis series were skipped for want of the reference "
-            f"column '{ref_col}': {skipped_keys}."
+            f"{len(skipped_keys)} reanalysis series were skipped for want of their reference "
+            f"column ({reference_columns}): {skipped_keys}."
         )
     return result
 
@@ -475,6 +504,8 @@ def extrapolate_to_hub_height(hub_height_m: float, shear_model: str = "power_law
 
 
 @mcp.tool()
-def extrapolate_reanalysis_to_hub(hub_height_m: float, reference_height_m: float = 100.0) -> dict:
+def extrapolate_reanalysis_to_hub(
+    hub_height_m: float, reference_height_m: float | None = None
+) -> dict:
     """Extrapolate ERA5 site wind speed to hub height using the session month-hour shear lookup table."""
     return _extrapolate_reanalysis_to_hub(session, hub_height_m, reference_height_m)

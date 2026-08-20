@@ -19,6 +19,7 @@ from server.core.brighthub import (
     get_data_model,
     list_measurement_locations,
 )
+from server.core.reanalysis import DEFAULT_REFERENCE_SOURCE, reference_source_names
 from server.main import mcp
 from server.schemas.common import Coordinate
 from server.state.session import SessionState, get_active_session, session
@@ -309,9 +310,12 @@ _BRIGHTHUB_ERA5_COLUMNS = {
     "Prs_0m_hPa": "sp",
 }
 
+# MERRA-2 serves 50 m winds and has no 100 m field; `download_reanalysis_data` requests
+# `Spd_50m_mps,Dir_50m_deg` accordingly. This map used to also carry `Spd_100m_mps` and
+# `Dir_100m_deg` entries for keys the payload never contains, which read as though a
+# 100 m MERRA-2 field existed and was simply missing. The heights each source is served
+# at now live in `server/core/reanalysis.py`.
 _BRIGHTHUB_MERRA_COLUMNS = {
-    "Spd_100m_mps": "Spd_100m",
-    "Dir_100m_deg": "Dir_100m",
     "Spd_50m_mps": "Spd_50m",
     "Dir_50m_deg": "Dir_50m",
     "Tmp_2m_degC": "t2m",
@@ -406,7 +410,14 @@ def _prepare_brighthub_reanalysis(
     longitude: float,
     source: str = "brighthub",
 ) -> dict:
-    """Load BrightHub ERA5 + MERRA-2 and interpolate ERA5 to the project site."""
+    """Load BrightHub ERA5 + MERRA-2 and interpolate *both* to the project site.
+
+    MERRA-2 used to be downloaded, cached, extrapolated and then used for nothing: this
+    function called `_interpolate_era5_to_site(state)` with its default `source="era5"`,
+    so the `source="merra2"` path — which already existed and already required four
+    nodes — was unreachable. Both are now interpolated, which is what makes reference
+    source a usable scenario axis (design doc §6.2).
+    """
     from server.core.spatial import bearing_compass, haversine_km
     from server.tools.era5 import _interpolate_era5_to_site
 
@@ -424,8 +435,12 @@ def _prepare_brighthub_reanalysis(
         and len(state.era5_nodes) >= 4
         and bool(state.era5_data)
         and state.merra_nodes is not None
+        and len(state.merra_nodes) >= 4
         and bool(state.merra_data)
-        and state.era5_interpolated_df is not None
+        # Both series must be present for the cache to be a hit. Checking only the
+        # active one would serve a half-prepared session as complete and fail later,
+        # at the point some scenario switched to the source that was never built.
+        and all(state.has_reference_series(name) for name in reference_source_names())
     ):
         current_coordinate = state.get_coordinate()
         elevation_m = 0.0 if current_coordinate is None else current_coordinate.elevation_m
@@ -437,10 +452,13 @@ def _prepare_brighthub_reanalysis(
             "era5_nodes": len(state.era5_nodes),
             "merra2_nodes": len(state.merra_nodes),
             "interpolation": {
-                "status": "ok",
-                "rows": int(len(state.era5_interpolated_df)),
-                "method": "cached",
-                "variables": state.era5_interpolated_df.columns.tolist(),
+                name: {
+                    "status": "ok",
+                    "rows": int(len(state.reanalysis_interpolated[name])),
+                    "method": "cached",
+                    "variables": state.reanalysis_interpolated[name].columns.tolist(),
+                }
+                for name in reference_source_names()
             },
         }
 
@@ -456,8 +474,10 @@ def _prepare_brighthub_reanalysis(
 
     if len(era5_results) < 4:
         raise ValueError("BrightHub returned fewer than four ERA5 nodes; site interpolation requires four nodes")
-    if not merra_results:
-        raise ValueError("BrightHub returned no MERRA-2 reanalysis data")
+    if len(merra_results) < 4:
+        raise ValueError(
+            "BrightHub returned fewer than four MERRA-2 nodes; site interpolation requires four nodes"
+        )
 
     current_coordinate = state.get_coordinate()
     elevation_m = 0.0 if current_coordinate is None else current_coordinate.elevation_m
@@ -492,7 +512,10 @@ def _prepare_brighthub_reanalysis(
         )
         for item in merra_results
     }
-    interpolation = _interpolate_era5_to_site(state)
+    # Interpolate every source, then leave the default active so a caller that prepares
+    # and immediately runs an LTC gets ERA5 as before.
+    interpolation = {name: _interpolate_era5_to_site(state, name) for name in reference_source_names()}
+    state.set_active_reference_source(DEFAULT_REFERENCE_SOURCE)
     state.reanalysis_cache_identity = cache_identity
     state.touch()
     return {

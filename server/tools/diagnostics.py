@@ -230,9 +230,13 @@ def _compute_mcp_readiness(state: SessionState, speed_sensor: str, reference_sen
     frame = _require_frame(state)
     if state.era5_interpolated_df is None:
         raise ValueError("ERA5 interpolation is required before MCP readiness can be assessed")
-    reference = reference_sensor or "Spd_100m"
+    # Defaults to the active source's native column - MERRA-2 has no `Spd_100m`
+    # (design doc S6.3).
+    reference = reference_sensor or state.get_active_reference_source().speed_col
     if reference not in state.era5_interpolated_df.columns:
-        raise ValueError(f"Reference column '{reference}' is not available in interpolated ERA5 data")
+        raise ValueError(
+            f"Reference column '{reference}' is not available in the interpolated reference data"
+        )
     measured = to_utc_index(frame[[speed_sensor]]).resample("h").mean()
     concurrent = measured.join(to_utc_index(state.era5_interpolated_df[[reference]]), how="inner").dropna()
     if len(concurrent) < 10:

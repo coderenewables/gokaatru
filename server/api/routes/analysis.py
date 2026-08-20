@@ -205,9 +205,11 @@ def _resolve_ltc_columns(state: SessionState) -> tuple[str, str, str, str]:
         if isinstance(mapping.get("direction_col"), str):
             short_dir_col = str(mapping["direction_col"])
             break
-    long_col = "Spd_100m"
-    long_dir_col = "Dir_100m"
-    return short_col, long_col, short_dir_col, long_dir_col
+    # Resolved from the active reference source rather than hardcoded to ERA5's 100 m
+    # columns: MERRA-2 is served at 50 m, so a fixed `Spd_100m` made it impossible to
+    # run an LTC against it at all (design doc §6.3).
+    descriptor = state.get_active_reference_source()
+    return short_col, descriptor.speed_col, short_dir_col, descriptor.dir_col
 
 
 def _run_scenario_pipeline(

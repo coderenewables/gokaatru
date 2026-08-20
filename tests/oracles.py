@@ -124,16 +124,27 @@ def directional_series(index: pd.DatetimeIndex, directions_deg: list[float]) -> 
 
 
 # --- Energy conversion ------------------------------------------------------
-# GoKaatru computes no AEP, so Step 10 supplies its own turbine. A representative
-# modern onshore machine: 4.2 MW, 150 m rotor (238 W/m2 specific power), IEC IIA.
-# Stated explicitly because the AEP sensitivity factor is turbine-specific.
-WTG_RATED_KW = 4200.0
+# GoKaatru publishes only an *indicative* AEP, so the oracle supplies its own turbines.
+# Two representative modern onshore machines, both roughly IEC IIA:
+#   - 3.0 MW / 130 m rotor (226 W/m2) — the production default the engine reports on
+#   - 4.2 MW / 150 m rotor (238 W/m2) — the larger machine, kept as a contrast
+# Stated explicitly because the AEP sensitivity factor is turbine-specific. The arrays
+# are duplicated from production on purpose: the oracle is only a cross-check if it
+# shares no code with the thing it checks.
 WTG_CUT_IN_MPS = 3.0
 WTG_CUT_OUT_MPS = 25.0
 HOURS_PER_YEAR = 8766.0  # 365.25 days, leap-averaged
 
 _PC_SPEED = np.arange(0.0, 31.0, 1.0)
-_PC_POWER = np.array(
+_PC_POWER_3MW = np.array(
+    [
+        0, 0, 0, 40, 175, 400, 720, 1150, 1700, 2300, 2750, 2950, 3000, 3000,
+        3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000,
+        0, 0, 0, 0, 0,
+    ],
+    dtype=float,
+)
+_PC_POWER_4_2MW = np.array(
     [
         0, 0, 0, 60, 250, 570, 1000, 1600, 2300, 3050, 3700, 4100, 4200, 4200,
         4200, 4200, 4200, 4200, 4200, 4200, 4200, 4200, 4200, 4200, 4200, 4200,
@@ -142,28 +153,51 @@ _PC_POWER = np.array(
     dtype=float,
 )
 
+CURVE_3MW = "generic-3.0MW-130m-IIA"
+CURVE_4_2MW = "generic-4.2MW-150m-IIA"
+DEFAULT_CURVE = CURVE_3MW
 
-def turbine_power_kw(speed: np.ndarray) -> np.ndarray:
+_ORACLE_CURVES: dict[str, tuple[float, np.ndarray]] = {
+    CURVE_3MW: (3000.0, _PC_POWER_3MW),
+    CURVE_4_2MW: (4200.0, _PC_POWER_4_2MW),
+}
+
+# Rated power of the default curve, for tests that assert against "the" turbine.
+WTG_RATED_KW = _ORACLE_CURVES[DEFAULT_CURVE][0]
+
+# Retained name for the default curve's power array.
+_PC_POWER = _PC_POWER_3MW
+
+
+def rated_kw(curve: str = DEFAULT_CURVE) -> float:
+    """Return the rated power of one oracle curve."""
+    return _ORACLE_CURVES[curve][0]
+
+
+def turbine_power_kw(speed: np.ndarray, curve: str = DEFAULT_CURVE) -> np.ndarray:
     """Interpolate the power curve linearly in speed, with hard cut-in and cut-out.
 
     Linear interpolation on the published bins is the IEC 61400-12-1 convention; a
     spline would overshoot near the knee and around rated power.
     """
-    values = np.interp(speed, _PC_SPEED, _PC_POWER, left=0.0, right=0.0)
+    _, power = _ORACLE_CURVES[curve]
+    values = np.interp(speed, _PC_SPEED, power, left=0.0, right=0.0)
     outside = (speed < WTG_CUT_IN_MPS) | (speed > WTG_CUT_OUT_MPS)
     return np.where(outside, 0.0, values)
 
 
-def gross_aep_mwh(speed: np.ndarray) -> float:
+def gross_aep_mwh(speed: np.ndarray, curve: str = DEFAULT_CURVE) -> float:
     """Gross single-turbine AEP: mean power over the series times hours per year."""
     valid = np.asarray(speed, dtype=float)
     valid = valid[np.isfinite(valid)]
     if valid.size == 0:
         raise ValueError("AEP requires at least one finite wind-speed value")
-    return float(np.mean(turbine_power_kw(valid)) / 1000.0 * HOURS_PER_YEAR)
+    return float(np.mean(turbine_power_kw(valid, curve)) / 1000.0 * HOURS_PER_YEAR)
 
 
-def energy_sensitivity_factor(speed: np.ndarray, epsilon: float = 0.01) -> float:
+def energy_sensitivity_factor(
+    speed: np.ndarray, epsilon: float = 0.01, curve: str = DEFAULT_CURVE
+) -> float:
     """Return S = d(ln AEP) / d(ln U), the elasticity of energy to wind speed.
 
     Computed by central difference on the actual long-term series rather than from
@@ -174,8 +208,8 @@ def energy_sensitivity_factor(speed: np.ndarray, epsilon: float = 0.01) -> float
     if not 0.0 < epsilon < 0.5:
         raise ValueError("epsilon must be a small positive fraction")
     series = np.asarray(speed, dtype=float)
-    upper = gross_aep_mwh(series * (1.0 + epsilon))
-    lower = gross_aep_mwh(series * (1.0 - epsilon))
+    upper = gross_aep_mwh(series * (1.0 + epsilon), curve)
+    lower = gross_aep_mwh(series * (1.0 - epsilon), curve)
     return float((np.log(upper) - np.log(lower)) / (np.log1p(epsilon) - np.log1p(-epsilon)))
 
 

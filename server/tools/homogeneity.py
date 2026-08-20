@@ -13,7 +13,9 @@ from server.state.session import SessionState, session
 
 def _wind_speed_column(frame: pd.DataFrame) -> str:
     """Pick the first available wind-speed column using the Phase 3 ERA5 naming conventions."""
-    for column in ["Spd_100m_hub", "Spd_100m", "corrected_wind_speed", "Ensemble_Speed"]:
+    # `Spd_50m` is MERRA-2's native reference column; without it a MERRA-2-referenced
+    # session finds no wind-speed column at all (design doc S6.3).
+    for column in ["Spd_100m_hub", "Spd_100m", "Spd_50m", "corrected_wind_speed", "Ensemble_Speed"]:
         if column in frame.columns:
             return column
     raise ValueError("No wind-speed column found for homogeneity analysis")

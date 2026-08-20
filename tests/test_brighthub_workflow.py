@@ -15,14 +15,22 @@ from server.tools.brighthub import (
 from server.tools.extrapolation import _extrapolate_reanalysis_to_hub
 
 
-def _payload(latitude: float, longitude: float) -> dict:
+def _payload(latitude: float, longitude: float, dataset: str = "ERA5") -> dict:
+    """Build a BrightHub node payload in the column shape that dataset is actually served in.
+
+    ERA5 carries 100 m winds and MERRA-2 carries 50 m; `download_reanalysis_data`
+    requests different variables for each. This helper used to return ERA5 columns for
+    both, which is not a payload BrightHub can produce (design doc S6.3).
+    """
+    height = 100 if dataset == "ERA5" else 50
+    speed_key, dir_key = f"Spd_{height}m_mps", f"Dir_{height}m_deg"
     return {
         "latitude": latitude,
         "longitude": longitude,
         "timeseries_data": {
             "data": [
-                {"timestamp": "2024-01-01T00:00:00Z", "Spd_100m_mps": 8.0, "Dir_100m_deg": 180.0, "Tmp_2m_degC": 10.0, "Prs_0m_hPa": 1010.0},
-                {"timestamp": "2024-01-01T01:00:00Z", "Spd_100m_mps": 9.0, "Dir_100m_deg": 190.0, "Tmp_2m_degC": 11.0, "Prs_0m_hPa": 1011.0},
+                {"timestamp": "2024-01-01T00:00:00Z", speed_key: 8.0, dir_key: 180.0, "Tmp_2m_degC": 10.0, "Prs_0m_hPa": 1010.0},
+                {"timestamp": "2024-01-01T01:00:00Z", speed_key: 9.0, dir_key: 190.0, "Tmp_2m_degC": 11.0, "Prs_0m_hPa": 1011.0},
             ]
         },
     }
@@ -38,7 +46,12 @@ def test_prepare_brighthub_reanalysis_stores_era5_merra_and_interpolates(monkeyp
         {"latitude_ddeg": 53.0, "longitude_ddeg": 4.0},
         {"latitude_ddeg": 53.0, "longitude_ddeg": 5.0},
     ]
-    merra_nodes = [{"latitude_ddeg": 52.5, "longitude_ddeg": 4.5}]
+    merra_nodes = [
+        {"latitude_ddeg": 52.5, "longitude_ddeg": 4.5},
+        {"latitude_ddeg": 52.5, "longitude_ddeg": 4.75},
+        {"latitude_ddeg": 52.75, "longitude_ddeg": 4.5},
+        {"latitude_ddeg": 52.75, "longitude_ddeg": 4.75},
+    ]
 
     monkeypatch.setattr(
         "server.tools.brighthub.fetch_reanalysis_nodes",
@@ -47,7 +60,7 @@ def test_prepare_brighthub_reanalysis_stores_era5_merra_and_interpolates(monkeyp
     monkeypatch.setattr(
         "server.tools.brighthub.download_reanalysis_data",
         lambda _token, nodes, dataset: [
-            _payload(node["latitude_ddeg"], node["longitude_ddeg"])
+            _payload(node["latitude_ddeg"], node["longitude_ddeg"], dataset)
             for node in nodes
         ],
     )
@@ -56,16 +69,16 @@ def test_prepare_brighthub_reanalysis_stores_era5_merra_and_interpolates(monkeyp
 
     assert result["source"] == "brighthub"
     assert result["era5_nodes"] == 4
-    assert result["merra2_nodes"] == 1
+    assert result["merra2_nodes"] == 4
     assert len(state.era5_data) == 4
-    assert len(state.merra_data) == 1
+    assert len(state.merra_data) == 4
     assert isinstance(state.era5_interpolated_df, pd.DataFrame)
 
     # Each downloaded BrightHub reanalysis node is persisted to the session workspace.
     cache_dir = tmp_path / "brighthub_cache"
     assert cache_dir.is_dir()
     assert len(list(cache_dir.glob("ERA5_*.parquet"))) == 4
-    assert len(list(cache_dir.glob("MERRA-2_*.parquet"))) == 1
+    assert len(list(cache_dir.glob("MERRA-2_*.parquet"))) == 4
 
 
 def test_brighthub_download_reanalysis_persists_brighthub_frames(monkeypatch, tmp_path) -> None:
@@ -80,7 +93,7 @@ def test_brighthub_download_reanalysis_persists_brighthub_frames(monkeypatch, tm
     monkeypatch.setattr(
         "server.tools.brighthub.download_reanalysis_data",
         lambda _token, req_nodes, dataset: [
-            _payload(node["latitude_ddeg"], node["longitude_ddeg"]) for node in req_nodes
+            _payload(node["latitude_ddeg"], node["longitude_ddeg"], dataset) for node in req_nodes
         ],
     )
 
@@ -138,7 +151,12 @@ def test_prepare_brighthub_reanalysis_reuses_matching_site_cache(monkeypatch) ->
         {"latitude_ddeg": 53.0, "longitude_ddeg": 4.0},
         {"latitude_ddeg": 53.0, "longitude_ddeg": 5.0},
     ]
-    merra_nodes = [{"latitude_ddeg": 52.5, "longitude_ddeg": 4.5}]
+    merra_nodes = [
+        {"latitude_ddeg": 52.5, "longitude_ddeg": 4.5},
+        {"latitude_ddeg": 52.5, "longitude_ddeg": 4.75},
+        {"latitude_ddeg": 52.75, "longitude_ddeg": 4.5},
+        {"latitude_ddeg": 52.75, "longitude_ddeg": 4.75},
+    ]
     calls = {"find": 0, "download": 0}
 
     def find_nodes(*_args):
@@ -147,7 +165,7 @@ def test_prepare_brighthub_reanalysis_reuses_matching_site_cache(monkeypatch) ->
 
     def download(_token, nodes, _dataset):
         calls["download"] += 1
-        return [_payload(node["latitude_ddeg"], node["longitude_ddeg"]) for node in nodes]
+        return [_payload(node["latitude_ddeg"], node["longitude_ddeg"], _dataset) for node in nodes]
 
     monkeypatch.setattr("server.tools.brighthub.fetch_reanalysis_nodes", find_nodes)
     monkeypatch.setattr("server.tools.brighthub.download_reanalysis_data", download)

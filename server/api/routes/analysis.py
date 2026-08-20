@@ -31,6 +31,7 @@ from server.api.schemas import (
     SensorStatisticsResponse,
     UndoCleaningRuleRequest,
 )
+from server.core.uncertainty_inputs import derive_uncertainty_inputs
 from server.state.session import SessionState
 from server.tools.cleaning import _apply_cleaning_rule, _get_cleaning_log, _undo_cleaning_rule
 from server.tools.atmosphere import _compute_atmospheric_conditions
@@ -251,21 +252,11 @@ def _run_scenario_pipeline(
 
     # --- 5. Uncertainty ---
     if uncertainty_params is None:
-        # Build sensible defaults from session state
-        hub_height = state.get_hub_height_m() or 100.0
-        highest_sensor_height = max(state.sensor_mapping.keys()) if state.sensor_mapping else 80.0
-        uncertainty_params = {
-            "measurement_uncertainty_pct": 2.0,
-            "measurement_height_m": float(highest_sensor_height),
-            "hub_height_m": hub_height,
-            "shear_method": "simple_power_law",
-            "mcp_r_squared": 0.85,
-            "concurrent_hours": 8760.0,
-            "algorithm": ltc_algorithms[0],
-            "iav_pct": 6.0,
-            "shear_std": 0.0,
-            "is_interpolation": False,
-        }
+        # Derived from this scenario's own results, not from constants. The block that
+        # used to sit here hardcoded mcp_r_squared 0.85, concurrent_hours 8760 and
+        # shear_std 0.0, which across a sweep would have made every scenario report
+        # near-identical uncertainty however well its own fit performed (design doc S7.5).
+        uncertainty_params = derive_uncertainty_inputs(state, ltc_algorithms[0])
     else:
         # Ensure algorithm is in the executed set
         algo_in_params = str(uncertainty_params.get("algorithm", ltc_algorithms[0]))

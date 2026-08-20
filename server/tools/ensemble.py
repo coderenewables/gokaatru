@@ -247,8 +247,13 @@ def _run_ensemble(state: SessionState, measured_col: str) -> dict:
     overlap = pd.concat([measured.rename("measured"), aligned["Ensemble_Speed"]], axis=1, join="inner").dropna()
     metrics = _overlap_metrics(overlap["measured"], overlap["Ensemble_Speed"])
     output = aligned.reset_index(names="Timestamp")
-    output_path = _ensemble_output_path(state)
-    output.to_csv(output_path, index=False)
+    # Written to disk only when the session asks for it; a sweep keeps the blend in
+    # memory and skips ~10 MB of CSV per leaf (design doc §7.2).
+    output_path = ""
+    if state.persist_result_files:
+        path = _ensemble_output_path(state)
+        output.to_csv(path, index=False)
+        output_path = str(path)
     state.ensemble_df = output.copy()
     state.stamp_derived("ensemble")
     response: dict[str, object] = {
@@ -270,7 +275,8 @@ def _run_ensemble(state: SessionState, measured_col: str) -> dict:
         "metrics": {"rmse": metrics["rmse"], "r2": metrics["r2"], "bias": metrics["bias"]},
         "component_spread": spread,
         "component_coverage": coverage,
-        "result_file": str(output_path),
+        "result_file": output_path,
+        "persisted": bool(output_path),
         **state.staleness_report(),
     }
     if response["weight_basis_is_mixed"]:

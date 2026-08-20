@@ -151,7 +151,16 @@ import {
 
 const ACTIVE_SESSION_STORAGE_KEY = "gokaatru-active-session-id";
 
-type TabId = "import" | "setup" | "workflow" | "results" | "copilot" | "compare" | "howto" | "sensor_review";
+type TabId =
+  | "import"
+  | "setup"
+  | "workflow"
+  | "engine"
+  | "results"
+  | "copilot"
+  | "compare"
+  | "howto"
+  | "sensor_review";
 
 interface ActivePlot {
   plotName: PlotName;

@@ -1,14 +1,25 @@
-// Primary navigation: Data import / Canvas / Stepper / Results / Copilot / Sensor Overview / Compare / How To.
+// Primary navigation: Data import / Canvas / Stepper / Analysis Engine / Results /
+// Copilot / Sensor Overview / Compare / How To.
 import clsx from "clsx";
 
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
 
-type TabId = "import" | "setup" | "workflow" | "results" | "copilot" | "compare" | "howto" | "sensor_review";
+type TabId =
+  | "import"
+  | "setup"
+  | "workflow"
+  | "engine"
+  | "results"
+  | "copilot"
+  | "compare"
+  | "howto"
+  | "sensor_review";
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "import", label: "Data import" },
   { id: "workflow", label: "Canvas" },
   { id: "setup", label: "Stepper" },
+  { id: "engine", label: "Analysis Engine" },
   { id: "results", label: "Results" },
   { id: "copilot", label: "Copilot" },
   { id: "sensor_review", label: "Sensor Overview" },

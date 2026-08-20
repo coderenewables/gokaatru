@@ -54,6 +54,11 @@ class SessionState:
     # survives as a property over this dict so the ~90 existing readers keep working.
     reanalysis_interpolated: dict[str, pd.DataFrame]
     active_reference_source: str
+    # Whether LTC/ensemble results are also written to disk as CSV. A sweep sets this
+    # False: one LTC result over a 20-year hourly reference is ~10 MB, so a 9,000-leaf
+    # sweep would write ~90 GB of intermediate files nobody reads (design doc §7.2).
+    # The in-memory result on `ltc_results` is unaffected either way.
+    persist_result_files: bool
     merra_nodes: list[dict[str, object]] | None
     merra_data: dict[str, pd.DataFrame]
     reanalysis_cache_identity: dict[str, object] | None
@@ -106,6 +111,7 @@ class SessionState:
         self.era5_data = {}
         self.reanalysis_interpolated = {}
         self.active_reference_source = DEFAULT_REFERENCE_SOURCE
+        self.persist_result_files = True
         self.merra_nodes = None
         self.merra_data = {}
         self.reanalysis_cache_identity = None

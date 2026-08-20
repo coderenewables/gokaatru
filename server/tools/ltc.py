@@ -299,15 +299,29 @@ def _result_frame(reference_df: pd.DataFrame, corrected: np.ndarray) -> pd.DataF
 
 
 def _save_ltc_result(state: SessionState, algorithm: str, result_df: pd.DataFrame, metrics: dict[str, object]) -> str:
-    """Persist an LTC result to CSV and store it in session state."""
-    output_dir = Path(state.get_data_dir()) / "ltc_results"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-    output_path = output_dir / f"ltc_{algorithm}_{timestamp}.csv"
-    result_df.to_csv(output_path, index=False)
-    state.ltc_results[algorithm] = {"df": result_df.copy(), "metrics": metrics.copy(), "file": str(output_path)}
+    """Store an LTC result in session state, and on disk unless the caller opted out.
+
+    A sweep sets ``persist_result_files`` False: one result over a 20-year hourly
+    reference is ~10 MB, so writing every leaf would cost ~90 GB of files nothing reads
+    (design doc §7.2). The in-memory result is stored either way, so every consumer
+    behaves identically; only ``file`` differs, and it says so rather than being absent.
+    """
+    output_path = ""
+    if state.persist_result_files:
+        output_dir = Path(state.get_data_dir()) / "ltc_results"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        path = output_dir / f"ltc_{algorithm}_{timestamp}.csv"
+        result_df.to_csv(path, index=False)
+        output_path = str(path)
+    state.ltc_results[algorithm] = {
+        "df": result_df.copy(),
+        "metrics": metrics.copy(),
+        "file": output_path,
+        "persisted": bool(output_path),
+    }
     state.stamp_derived(f"ltc:{algorithm}")
-    return str(output_path)
+    return output_path
 
 
 def _variance_attenuation(reference_df: pd.DataFrame, corrected: np.ndarray) -> dict[str, object]:

@@ -183,14 +183,22 @@ def _xgboost_import() -> tuple[DMatrixFactory, XGBoostTrain]:
 
 def _save_xgboost_result(state: SessionState, result_df: pd.DataFrame, metrics: Mapping[str, object]) -> str:
     """Persist the XGBoost LTC result to CSV and session state."""
-    output_dir = Path(state.get_data_dir()) / "ltc_results"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-    output_path = output_dir / f"ltc_xgboost_{timestamp}.csv"
-    result_df.to_csv(output_path, index=False)
-    state.ltc_results["xgboost"] = {"df": result_df.copy(), "metrics": dict(metrics), "file": str(output_path)}
+    output_path = ""
+    if state.persist_result_files:
+        output_dir = Path(state.get_data_dir()) / "ltc_results"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        path = output_dir / f"ltc_xgboost_{timestamp}.csv"
+        result_df.to_csv(path, index=False)
+        output_path = str(path)
+    state.ltc_results["xgboost"] = {
+        "df": result_df.copy(),
+        "metrics": dict(metrics),
+        "file": output_path,
+        "persisted": bool(output_path),
+    }
     state.stamp_derived("ltc:xgboost")
-    return str(output_path)
+    return output_path
 
 
 def _run_ltc_xgboost(

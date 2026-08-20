@@ -18,8 +18,16 @@ def _hub_column_name(hub_height_m: float) -> str:
     return f"Spd_{int(hub_height_m)}m_hub" if float(hub_height_m).is_integer() else f"Spd_{hub_height_m}m_hub"
 
 
-def _speed_height_map(state: SessionState) -> dict[float, str]:
-    """Extract measured speed columns from the loaded sensor mapping."""
+def _speed_height_map(
+    state: SessionState, reference_columns: list[str] | None = None
+) -> dict[float, str]:
+    """Extract measured speed columns from the loaded sensor mapping.
+
+    ``reference_columns`` narrows the map to a chosen subset — axis A2 of the analysis
+    engine, the sensor set a scenario extrapolates *from* (design doc §3.A). Without it
+    every mapped sensor is a candidate and ``_nearest_indices`` picks per record, which
+    is the right default for an interactive analysis but makes the axis inexpressible.
+    """
     if state.timeseries_df is None:
         raise ValueError("Timeseries data is not loaded")
     mapping = {
@@ -27,6 +35,14 @@ def _speed_height_map(state: SessionState) -> dict[float, str]:
         for height, sensor_map in state.sensor_mapping.items()
         if sensor_map.get("speed_col") in state.timeseries_df.columns
     }
+    if reference_columns is not None:
+        wanted = set(reference_columns)
+        mapping = {height: column for height, column in mapping.items() if column in wanted}
+        if not mapping:
+            raise ValueError(
+                f"None of the requested reference sensors {sorted(wanted)} is mapped and "
+                "present in the loaded data"
+            )
     if not mapping:
         raise ValueError("No valid speed sensors are available in session.sensor_mapping")
     return {height: str(column) for height, column in mapping.items()}
@@ -191,13 +207,18 @@ def _extrapolation_lever(
     return summary
 
 
-def _extrapolate_to_hub_height(state: SessionState, hub_height_m: float, shear_model: str = "power_law") -> dict:
+def _extrapolate_to_hub_height(
+    state: SessionState,
+    hub_height_m: float,
+    shear_model: str = "power_law",
+    reference_columns: list[str] | None = None,
+) -> dict:
     """Create a hub-height wind-speed series using power-law or log-law shear per IEC 61400-12-1 Annex B."""
     if shear_model not in {"power_law", "log_law"}:
         raise ValueError(f"shear_model must be 'power_law' or 'log_law', got '{shear_model}'")
     if state.timeseries_df is None:
         raise ValueError("Timeseries data is not loaded")
-    speed_map = _speed_height_map(state)
+    speed_map = _speed_height_map(state, reference_columns)
     heights = np.asarray(list(sorted(speed_map.keys())), dtype=float)
     columns = [speed_map[height] for height in heights]
     speed_matrix = state.timeseries_df[columns].to_numpy(dtype=float)
@@ -399,6 +420,7 @@ def _extrapolate_all_reanalysis_nodes(
     state: SessionState,
     hub_height_m: float,
     reference_height_m: float | None = None,
+    shear_model: str = "power_law",
 ) -> dict:
     """Extrapolate every ERA5/MERRA-2 node and both site series to hub height.
 
@@ -408,9 +430,19 @@ def _extrapolate_all_reanalysis_nodes(
     reason MERRA-2 was downloaded, cached and then used for nothing (design doc
     S6.3). Passing ``reference_height_m`` explicitly still overrides, but then
     applies to all sources and is only meaningful when they share a height.
+
+    ``shear_model`` must match the profile the *measured* series was carried up with.
+    This used to be power-law unconditionally, so a log-law scenario raised on the
+    missing shear table - and had it not raised, it would have carried the reanalysis
+    up a power-law profile while the measurement went up a logarithmic one, which is
+    an internally inconsistent pair of series to then correlate.
     """
-    if state.shear_table is None:
-        raise ValueError("Hub-height extrapolation of reanalysis data requires session.shear_table")
+    if shear_model not in {"power_law", "log_law"}:
+        raise ValueError(f"shear_model must be 'power_law' or 'log_law', got '{shear_model}'")
+    profile_table = state.shear_table if shear_model == "power_law" else state.roughness_table
+    if profile_table is None:
+        needed = "session.shear_table" if shear_model == "power_law" else "session.roughness_table"
+        raise ValueError(f"Hub-height extrapolation of reanalysis data requires {needed}")
 
     hub_col = _hub_column_name(hub_height_m)
     extrapolated_keys: list[str] = []
@@ -426,11 +458,17 @@ def _extrapolate_all_reanalysis_nodes(
         if ref_col not in frame.columns:
             skipped_keys.append(label)
             return False
-        shear = _lookup_table_values(frame.index, state.shear_table)
+        params = _lookup_table_values(frame.index, profile_table)
         ref_speed = frame[ref_col].to_numpy(dtype=float)
-        frame[hub_col] = _power_extrapolate_array(
-            ref_speed, np.full_like(ref_speed, height), hub_height_m, shear,
-        )
+        reference_heights = np.full_like(ref_speed, height)
+        if shear_model == "power_law":
+            frame[hub_col] = _power_extrapolate_array(
+                ref_speed, reference_heights, hub_height_m, params
+            )
+        else:
+            frame[hub_col] = _log_extrapolate_array(
+                ref_speed, reference_heights, hub_height_m, params
+            )
         extrapolated_keys.append(label)
         return True
 
@@ -463,6 +501,7 @@ def _extrapolate_all_reanalysis_nodes(
     result: dict[str, object] = {
         "status": "ok" if wrote_anything else "no_op",
         "hub_column": hub_col,
+        "shear_model": shear_model,
         "reference_columns": reference_columns,
         "extrapolated_nodes": extrapolated_keys,
         "skipped_nodes": skipped_keys,

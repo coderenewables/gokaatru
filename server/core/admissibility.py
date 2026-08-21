@@ -23,6 +23,22 @@ Two statuses are neither pass nor fail:
 
 Thresholds travel with the scenario rather than living as code defaults, so a result's
 pass/fail can be re-derived later instead of trusted (design doc §7.7).
+
+**There is deliberately no LTC R^2 gate.** There was one, and the first live-reanalysis
+run showed it does not screen what it appears to (design doc §13.6). R^2 is the quantity
+least squares *minimises by construction*, so ranking MCP estimators by it is circular:
+measured on a real campaign, linear least squares scored 0.441 against total least squares
+0.341 and variance ratio 0.330, and any threshold cutting between them removes the
+non-least-squares methods regardless of whether they are wrong. Variance ratio deliberately
+does not maximise R^2 — it matches the mean and standard deviation, which is precisely the
+variance attenuation least squares suffers from and which `_variance_attenuation` exists to
+report. Gating on R^2 therefore eliminates the methodological diversity axis D exists to
+measure, and at any threshold that admits anything it collapses the sweep onto one corner
+of the space.
+
+`ltc_r_squared` remains a **reported metric** on every scenario row, and still feeds the
+parametric `u_mcp` term through `derive_mcp_r_squared`. It is informative; it is just not
+a basis for exclusion.
 """
 from __future__ import annotations
 
@@ -49,9 +65,6 @@ class GateThresholds:
     extrapolation_ratio_warn: float = 1.5
     extrapolation_ratio_fail: float = 2.0
 
-    ltc_r_squared_warn: float = 0.85
-    ltc_r_squared_fail: float = 0.80
-
     concurrent_months_warn: float = 12.0
     concurrent_months_fail: float = 9.0
 
@@ -77,6 +90,13 @@ class GateThresholds:
     min_records_per_cell: int = 30
     cell_coverage_warn: float = 0.90
     cell_coverage_fail: float = 0.75
+
+    # Share of a roughness series that may sit on a clip bound. A clipped z0 carries no
+    # information about the surface at all, and on a real 4-height mast 35% of records
+    # land on a bound — so a log-law scenario can rest almost entirely on bounds while
+    # passing every other gate, since the alpha gates do not apply to it.
+    roughness_clip_warn: float = 0.05
+    roughness_clip_fail: float = 0.25
 
     def as_runconfig(self) -> dict[str, Any]:
         """Return the thresholds as they are written into a scenario runconfig."""
@@ -206,18 +226,6 @@ def _extrapolation_gate(stages: dict[str, Any], thresholds: GateThresholds) -> G
     )
 
 
-def _ltc_r_squared_gate(state: Any, algorithm: str, thresholds: GateThresholds) -> GateResult:
-    payload = state.ltc_results.get(algorithm) or {}
-    metrics = payload.get("metrics") or {}
-    value = metrics.get("r_squared")
-    if not isinstance(value, (int, float)) or not np.isfinite(value):
-        return GateResult("ltc_r_squared", NOT_APPLICABLE, None, f"'{algorithm}' reported no r_squared")
-    score = float(value)
-    status = _ascending(score, thresholds.ltc_r_squared_warn, thresholds.ltc_r_squared_fail)
-    basis = "out-of-fold" if "in_sample_r_squared" in metrics else "concurrent period"
-    return GateResult("ltc_r_squared", status, score, f"{basis} R^2 of {score:.3f}")
-
-
 def _concurrent_gate(state: Any, algorithm: str, thresholds: GateThresholds) -> GateResult:
     metrics = (state.ltc_results.get(algorithm) or {}).get("metrics") or {}
     points = metrics.get("concurrent_points")
@@ -307,6 +315,31 @@ def _sector_records_gate(stages: dict[str, Any], thresholds: GateThresholds) -> 
     return GateResult("sector_records", status, worst, f"thinnest sector holds {int(worst)} records")
 
 
+def _roughness_clip_gate(state: Any, stages: dict[str, Any], thresholds: GateThresholds) -> GateResult:
+    """Judge how much of a log-law scenario's roughness series is a bound, not a fit.
+
+    The power-law gates (`mean_shear_alpha`, `alpha_cell_dispersion`) are
+    `not_applicable` for a log-law scenario, so without this one a log-law result passes
+    with strictly fewer checks than its power-law sibling.
+    """
+    if stages.get("build_shear", {}).get("method") != "log_law":
+        return GateResult(
+            "roughness_clipping", NOT_APPLICABLE, None, "scenario does not use the log law"
+        )
+    stats = getattr(state, "roughness_clip_stats", None)
+    if not isinstance(stats, dict) or not stats.get("records_used"):
+        return GateResult("roughness_clipping", NOT_APPLICABLE, None, "no roughness series was built")
+    fraction = float(stats.get("clipped_fraction", 0.0))
+    status = _descending(fraction, thresholds.roughness_clip_warn, thresholds.roughness_clip_fail)
+    return GateResult(
+        "roughness_clipping",
+        status,
+        fraction,
+        f"{fraction:.1%} of roughness records sit on a clip bound "
+        f"({stats.get('records_clipped', 0):,} of {stats.get('records_used', 0):,})",
+    )
+
+
 def _shear_provenance_gate(stages: dict[str, Any]) -> GateResult:
     source = stages.get("build_shear", {}).get("shear_source")
     if source == "analyst_supplied":
@@ -335,11 +368,11 @@ def evaluate_gates(
     return AdmissibilityReport(
         gates=[
             _extrapolation_gate(stages, thresholds),
-            _ltc_r_squared_gate(state, algorithm, thresholds),
             _concurrent_gate(state, algorithm, thresholds),
             _mean_alpha_gate(state, stages, thresholds),
             _alpha_dispersion_gate(state, stages, thresholds),
             _cell_coverage_gate(state, stages, thresholds),
+            _roughness_clip_gate(state, stages, thresholds),
             _sector_records_gate(stages, thresholds),
             _shear_provenance_gate(stages),
         ]

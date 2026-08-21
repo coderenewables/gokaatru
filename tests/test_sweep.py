@@ -213,7 +213,7 @@ def test_every_scenario_is_persisted_with_a_runconfig(tmp_path):
         assert path.is_file(), entry["runconfig"]
         config = json.loads(path.read_text(encoding="utf-8"))
         assert config["scenario"]["config_hash"] == entry["config_hash"]
-        assert config["admissibility"]["thresholds"]["ltc_r_squared_fail"] == 0.80
+        assert config["admissibility"]["thresholds"]["extrapolation_ratio_fail"] == 2.0
 
 
 def test_a_persisted_sweep_can_be_read_back(tmp_path):
@@ -388,19 +388,51 @@ def test_a_bracketed_hub_reports_no_extrapolation_lever(tmp_path):
 def test_thresholds_travel_with_the_scenario(tmp_path):
     """A result's pass/fail must be re-derivable, not trusted (design doc §7.7)."""
     base = _base_state(tmp_path)
-    strict = GateThresholds(ltc_r_squared_warn=0.999, ltc_r_squared_fail=0.995)
+    strict = GateThresholds(extrapolation_ratio_warn=1.0001, extrapolation_ratio_fail=1.001)
 
     outcome = run_sweep(base, _small_spec(), thresholds=strict, sweep_id="strict")
-    assert outcome["manifest"]["thresholds"]["ltc_r_squared_fail"] == 0.995
+    assert outcome["manifest"]["thresholds"]["extrapolation_ratio_fail"] == 1.001
     completed = [row for row in outcome["results"] if row["status"] == "ok"]
     assert all(row["admissible"] is False for row in completed)
-    assert all("ltc_r_squared" in row["failed_gates"] for row in completed)
+    assert all("extrapolation_ratio" in row["failed_gates"] for row in completed)
+
+
+def test_a_sweep_with_nothing_admissible_says_so_and_names_the_gate(tmp_path):
+    """An empty distribution with nothing explaining it reads as "no signal".
+
+    Measured on a real complex-terrain campaign: every scenario failed the R^2 gate, so
+    the engine reported a spread over zero scenarios. That is not a measurement of the
+    site, it is a measurement of the threshold, and the manifest has to say which.
+    """
+    base = _base_state(tmp_path)
+    impossible = GateThresholds(extrapolation_ratio_fail=1.0001)
+
+    manifest = run_sweep(base, _small_spec(), thresholds=impossible, persist=False)["manifest"]
+
+    assert manifest["counts"]["admissible"] == 0
+    assert manifest["gate_failures"]["extrapolation_ratio"] == manifest["counts"]["completed"]
+    assert "No scenario was admissible" in manifest["diagnosis"]
+    assert "extrapolation_ratio" in manifest["diagnosis"]
+
+
+def test_a_healthy_sweep_carries_no_diagnosis(tmp_path):
+    """The diagnosis is for the pathological case only; a normal run must not carry one."""
+    base = _base_state(tmp_path)
+    manifest = run_sweep(base, _small_spec(), persist=False)["manifest"]
+    assert manifest["counts"]["admissible"] > 0
+    assert manifest["diagnosis"] is None
+
+
+def test_gate_failures_are_tallied_even_when_some_scenarios_pass(tmp_path):
+    base = _base_state(tmp_path)
+    manifest = run_sweep(base, _small_spec(), persist=False)["manifest"]
+    assert isinstance(manifest["gate_failures"], dict)
 
 
 def test_inadmissible_scenarios_stay_in_the_table(tmp_path):
     """Excluded from statistics, never from the record."""
     base = _base_state(tmp_path)
-    strict = GateThresholds(ltc_r_squared_fail=0.999)
+    strict = GateThresholds(extrapolation_ratio_fail=1.0001)
     outcome = run_sweep(base, _small_spec(), thresholds=strict)
 
     assert outcome["manifest"]["counts"]["admissible"] == 0
@@ -512,5 +544,39 @@ def test_a_stop_request_halts_between_scenarios(tmp_path):
 def test_gate_statuses_are_columns_on_the_row(tmp_path):
     base = _base_state(tmp_path)
     row = run_sweep(base, _small_spec(), persist=False)["results"][0]
-    assert row["gate_ltc_r_squared"] in {PASS, WARN, FAIL, NOT_APPLICABLE}
+    assert row["gate_extrapolation_ratio"] in {PASS, WARN, FAIL, NOT_APPLICABLE}
+    # R^2 is reported as a metric but is deliberately not a gate (see the module docstring
+    # of server/core/admissibility.py, and design doc S13.6).
+    assert "gate_ltc_r_squared" not in row
+    assert "ltc_r_squared" in row
     assert row["gate_shear_provenance"] in {PASS, MARKED}
+
+
+def test_each_gate_carries_the_value_it_was_reached_on(tmp_path):
+    """A status alone says a scenario was excluded; the value says by how much.
+
+    Without it the frontend can name the gate but cannot show whether the threshold or
+    the campaign is at fault, which is the question a reader actually has.
+    """
+    base = _base_state(tmp_path)
+    row = run_sweep(base, _small_spec(), persist=False)["results"][0]
+
+    assert "gate_extrapolation_ratio_value" in row
+    assert isinstance(row["gate_extrapolation_ratio_value"], float)
+    # A gate with nothing to measure reports None rather than a misleading zero.
+    assert row["gate_sector_records"] == NOT_APPLICABLE
+    assert row["gate_sector_records_value"] is None
+
+
+def test_the_scenario_runconfig_carries_full_gate_records(tmp_path):
+    """A verdict without the number it was reached on is not auditable."""
+    base = _base_state(tmp_path)
+    outcome = run_sweep(base, _small_spec(), sweep_id="gates")
+    entry = next(e for e in outcome["manifest"]["scenarios"] if e["status"] == "ok")
+    config = load_scenario_runconfig(base, "gates", entry["config_hash"])
+
+    gates = config["admissibility"]["result"]["gates"]
+    assert isinstance(gates, list)
+    by_name = {gate["name"]: gate for gate in gates}
+    assert by_name["extrapolation_ratio"]["detail"]
+    assert set(by_name["extrapolation_ratio"]) == {"name", "status", "value", "detail"}

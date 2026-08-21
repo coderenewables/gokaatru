@@ -9,16 +9,18 @@ import { SweepDesigner } from "./SweepDesigner";
 import { SweepMonitor } from "./SweepMonitor";
 import { SpreadExplorer } from "./SpreadExplorer";
 import { SensitivityView } from "./SensitivityView";
+import { GateReportView } from "./GateReportView";
 import { SpreadSummaryView } from "./SpreadSummaryView";
 import { useSweepStore } from "../../store/useSweepStore";
 import { useWorkspaceStore } from "../../store/useWorkspaceStore";
 
-type SweepTab = "design" | "monitor" | "explore" | "sensitivity" | "summary";
+type SweepTab = "design" | "monitor" | "explore" | "gates" | "sensitivity" | "summary";
 
 const TABS: Array<{ id: SweepTab; label: string }> = [
   { id: "design", label: "Design" },
   { id: "monitor", label: "Run" },
   { id: "explore", label: "Spread" },
+  { id: "gates", label: "Gates" },
   { id: "sensitivity", label: "Sensitivity" },
   { id: "summary", label: "Summary & export" },
 ];
@@ -46,8 +48,12 @@ export function AnalysisEngineView() {
     if (phase === "running") setTab("monitor");
   }, [phase]);
   useEffect(() => {
-    if (phase === "complete" && rows.length > 0) setTab("explore");
-  }, [phase, rows.length]);
+    if (phase !== "complete" || rows.length === 0) return;
+    // An empty spread is not worth landing on. When every scenario was excluded, the
+    // gate report is the screen that actually answers why.
+    const anyAdmissible = rows.some((row) => row.status === "ok" && row.admissible);
+    setTab(anyAdmissible ? "explore" : "gates");
+  }, [phase, rows]);
 
   return (
     <div className="analysis-engine-view">
@@ -89,6 +95,7 @@ export function AnalysisEngineView() {
         {tab === "design" ? <SweepDesigner /> : null}
         {tab === "monitor" ? <SweepMonitor /> : null}
         {tab === "explore" ? <SpreadExplorer /> : null}
+        {tab === "gates" ? <GateReportView /> : null}
         {tab === "sensitivity" ? <SensitivityView /> : null}
         {tab === "summary" ? <SpreadSummaryView /> : null}
       </div>

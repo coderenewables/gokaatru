@@ -84,6 +84,22 @@ export function SpreadSummaryView() {
 
   return (
     <div className="sweep-summary">
+      {manifest?.diagnosis ? (
+        <section className="sweep-diagnosis">
+          <h4>No scenario was admissible</h4>
+          <p>{manifest.diagnosis}</p>
+          {manifest.gate_failures && Object.keys(manifest.gate_failures).length > 0 ? (
+            <ul>
+              {Object.entries(manifest.gate_failures).map(([gate, count]) => (
+                <li key={gate}>
+                  {gate.replace(/_/g, " ")}: {count} scenario{count === 1 ? "" : "s"}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="sweep-no-recommendation">
         <h4>This is a spread, not a recommendation</h4>
         <p>

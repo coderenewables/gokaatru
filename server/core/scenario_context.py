@@ -76,6 +76,7 @@ RESET_FIELDS: tuple[str, ...] = (
     "shear_timeseries_df",
     "shear_clamp_stats",
     "roughness_timeseries_df",
+    "roughness_clip_stats",
     "shear_table",
     "roughness_table",
     "ltc_results",
@@ -123,6 +124,7 @@ SHEAR_STAGE_FIELDS: tuple[str, ...] = (
     "shear_timeseries_df",
     "shear_clamp_stats",
     "roughness_timeseries_df",
+    "roughness_clip_stats",
     "shear_table",
     "roughness_table",
 )

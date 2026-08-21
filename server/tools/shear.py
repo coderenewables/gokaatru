@@ -30,6 +30,12 @@ SHEAR_ALPHA_BOUND = 1.0
 # Clamp rate above which the response carries an explicit warning.
 SHEAR_CLAMP_WARNING_FRACTION = 0.05
 
+# Roughness clip rate above which the response carries an explicit warning. Set lower
+# than the shear clamp threshold because a clipped z0 is a harder failure: alpha is
+# clamped at a physically extreme but finite value, whereas z0 pins at a bound that
+# carries no information about the surface at all.
+ROUGHNESS_CLIP_WARNING_FRACTION = 0.02
+
 # Last-resort fallbacks, reachable only when a table has no finite cell at all.  Named
 # rather than inlined because substituting a generic value for a site-specific one is a
 # methodology choice: 0.143 is the one-seventh power law and 0.0002 m is open-water
@@ -158,8 +164,23 @@ def _resolve_min_speed(state: SessionState, min_speed_mps: float | None) -> floa
     return resolved
 
 
-def _fit_rowwise_log_profile(speed_matrix: np.ndarray, heights: np.ndarray) -> np.ndarray:
-    """Fit row-wise U versus ln(z) regressions to estimate roughness length from valid sensors."""
+def _fit_rowwise_log_profile(
+    speed_matrix: np.ndarray, heights: np.ndarray
+) -> tuple[np.ndarray, dict[str, object]]:
+    """Fit row-wise U versus ln(z) regressions to estimate roughness length from valid sensors.
+
+    Returns the series alongside **clip statistics**, the log-law counterpart of the
+    shear clamp report (D3). Measured on a real 4-height mast, 35% of records land on a
+    clip bound: `exp(-intercept/slope)` is violently sensitive to a near-flat profile, so
+    an ordinary campaign produces a roughness series a third of which is a bound rather
+    than a measurement. Nothing reported that, and axis B of the analysis engine makes
+    the log law a first-class scenario choice, so a scenario could rest on a mostly
+    clipped series with no disclosure at all.
+
+    `z0` is also evaluated only on the rows that survive the validity mask. Computing it
+    for every row overflowed `exp` on near-zero slopes and emitted a RuntimeWarning for
+    values that were then discarded.
+    """
     log_heights = np.log(heights)
     valid = np.isfinite(speed_matrix) & (speed_matrix > 0.5)
     counts = valid.sum(axis=1)
@@ -173,11 +194,50 @@ def _fit_rowwise_log_profile(speed_matrix: np.ndarray, heights: np.ndarray) -> n
     sxy = np.sum(centered_x * centered_y, axis=1)
     slopes = np.divide(sxy, sxx, out=np.full_like(sxy, np.nan, dtype=float), where=sxx > 0)
     intercepts = mean_y - slopes * mean_x
-    z0 = np.exp(-intercepts / slopes)
     valid_rows = (counts >= 2) & np.isfinite(slopes) & (slopes > 0.1)
+
     result = np.full(speed_matrix.shape[0], np.nan, dtype=float)
-    result[valid_rows] = np.clip(z0[valid_rows], ROUGHNESS_MIN_M, ROUGHNESS_MAX_M)
-    return result
+    fitted = np.exp(-intercepts[valid_rows] / slopes[valid_rows])
+    clipped = np.clip(fitted, ROUGHNESS_MIN_M, ROUGHNESS_MAX_M)
+    result[valid_rows] = clipped
+    return result, _roughness_clip_stats(fitted, clipped)
+
+
+def _roughness_clip_stats(fitted: np.ndarray, clipped: np.ndarray) -> dict[str, object]:
+    """Summarize how much of a roughness series is a clip bound rather than a fit."""
+    used = int(fitted.size)
+    if used == 0:
+        return {
+            "records_used": 0,
+            "records_clipped": 0,
+            "clipped_fraction": 0.0,
+            "clipped_at_min": 0,
+            "clipped_at_max": 0,
+            "roughness_bounds_m": [ROUGHNESS_MIN_M, ROUGHNESS_MAX_M],
+            "warning": None,
+        }
+    at_min = int(np.count_nonzero(fitted < ROUGHNESS_MIN_M))
+    at_max = int(np.count_nonzero(fitted > ROUGHNESS_MAX_M) + np.count_nonzero(~np.isfinite(fitted)))
+    clipped_count = at_min + at_max
+    fraction = float(clipped_count / used)
+    stats: dict[str, object] = {
+        "records_used": used,
+        "records_clipped": clipped_count,
+        "clipped_fraction": fraction,
+        "clipped_at_min": at_min,
+        "clipped_at_max": at_max,
+        "roughness_bounds_m": [ROUGHNESS_MIN_M, ROUGHNESS_MAX_M],
+        "warning": None,
+    }
+    if fraction > ROUGHNESS_CLIP_WARNING_FRACTION:
+        stats["warning"] = (
+            f"{fraction:.1%} of roughness records ({clipped_count:,} of {used:,}) were clipped to "
+            f"the [{ROUGHNESS_MIN_M:g}, {ROUGHNESS_MAX_M:g}] m bounds. A clipped z0 is a bound, "
+            "not a measurement: exp(-intercept/slope) diverges as the fitted profile flattens, so "
+            "a high clip rate means the log-law fit is not resolving the surface. Treat a log-law "
+            "extrapolation built on this series as indicative."
+        )
+    return stats
 
 
 def _complete_table(table: pd.DataFrame, fallback: float) -> pd.DataFrame:
@@ -310,17 +370,24 @@ def _calculate_roughness_timeseries(state: SessionState, height_sensors: str) ->
     _require_columns(df, height_map)
     heights = np.asarray(list(height_map.keys()), dtype=float)
     speed_matrix = df[list(height_map.values())].to_numpy(dtype=float)
-    roughness = _fit_rowwise_log_profile(speed_matrix, heights)
+    roughness, clip_stats = _fit_rowwise_log_profile(speed_matrix, heights)
     state.roughness_timeseries_df = pd.DataFrame({"roughness_length": roughness}, index=df.index)
+    state.roughness_clip_stats = clip_stats
     state.stamp_derived("roughness_timeseries")
     valid = state.roughness_timeseries_df["roughness_length"].dropna()
-    return {
+    response: dict[str, object] = {
         "status": "ok",
         "records": int(valid.count()),
         "mean_roughness": float(valid.mean()),
         "median_roughness": float(valid.median()),
         "std_roughness": float(valid.std(ddof=0)),
+        # Every roughness response carries the clip statistics of the series it was built
+        # from, so the series is never read without them.
+        "roughness_clipping": clip_stats,
     }
+    if clip_stats.get("warning"):
+        response["warning"] = clip_stats["warning"]
+    return response
 
 
 def _parse_sensor_names(sensor_names: str) -> list[str]:
@@ -538,12 +605,18 @@ def _build_roughness_table(state: SessionState, aggregation: str = "mean") -> di
     valid = state.roughness_timeseries_df.dropna()
     state.roughness_table = _aggregate_roughness_table(valid, aggregation)
     state.stamp_derived("roughness_table")
-    return {
+    response: dict[str, object] = {
         "method": "log_law",
         "aggregation": aggregation,
         "table": state.roughness_table.values.tolist(),
+        "roughness_clipping": state.roughness_clip_stats or {},
+        "table_coverage": _table_fill_report(state.roughness_table, valid),
         **state.clock_disclosure(),
     }
+    clip_warning = (state.roughness_clip_stats or {}).get("warning")
+    if clip_warning:
+        response["warning"] = clip_warning
+    return response
 
 
 def _resolve_sector_minimum(state: SessionState, requested: int | None) -> int:

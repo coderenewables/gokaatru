@@ -42,6 +42,7 @@ class SessionState:
     shear_timeseries_df: pd.DataFrame | None
     shear_clamp_stats: dict[str, object] | None
     roughness_timeseries_df: pd.DataFrame | None
+    roughness_clip_stats: dict[str, object] | None
     shear_table: pd.DataFrame | None
     roughness_table: pd.DataFrame | None
     brighthub_token: str | None
@@ -104,6 +105,7 @@ class SessionState:
         self.shear_timeseries_df = None
         self.shear_clamp_stats = None
         self.roughness_timeseries_df = None
+        self.roughness_clip_stats = None
         self.shear_table = None
         self.roughness_table = None
         self.brighthub_token = None

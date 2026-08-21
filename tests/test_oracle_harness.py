@@ -163,8 +163,57 @@ def test_rowwise_log_fit_recovers_roughness_from_three_heights():
     heights = np.array([40.0, 80.0, 120.0])
     speeds = log_law_profile(heights, z0_m=0.08)
     matrix = np.tile(speeds, (5, 1))
-    recovered = _fit_rowwise_log_profile(matrix, heights)
+    recovered, clip_stats = _fit_rowwise_log_profile(matrix, heights)
     assert np.allclose(recovered, 0.08, rtol=1e-9)
+    # An exact profile is nowhere near the bounds, so nothing may be reported as clipped.
+    assert clip_stats["records_used"] == 5
+    assert clip_stats["records_clipped"] == 0
+    assert clip_stats["warning"] is None
+
+
+def test_rowwise_log_fit_reports_how_much_of_the_series_is_a_clip_bound():
+    """A near-flat profile pins z0 at a bound, and the series must say so.
+
+    Measured on a real four-height mast, 35% of records land on a bound: the fit is
+    violently sensitive to a flattening profile, so an ordinary campaign produces a
+    roughness series a third of which carries no information about the surface. Nothing
+    reported that before, and axis B makes the log law a first-class scenario choice.
+    """
+    heights = np.array([40.0, 80.0, 120.0])
+    # Profiles implying z0 outside the [1e-6, 2.0] m band, mixed with well-behaved ones.
+    too_rough = np.tile(log_law_profile(heights, z0_m=6.0), (6, 1))
+    too_smooth = np.tile(log_law_profile(heights, z0_m=1e-9), (4, 1))
+    exact = np.tile(log_law_profile(heights, z0_m=0.08), (10, 1))
+    recovered, stats = _fit_rowwise_log_profile(
+        np.vstack([too_rough, too_smooth, exact]), heights
+    )
+
+    assert stats["records_used"] == 20
+    assert stats["records_clipped"] == 10
+    assert stats["clipped_at_max"] == 6
+    assert stats["clipped_at_min"] == 4
+    assert stats["clipped_fraction"] == pytest.approx(0.5)
+    assert "were clipped to" in str(stats["warning"])
+    assert "not a measurement" in str(stats["warning"])
+    # The clipped rows still produce a value — a bound, which is the point of reporting it.
+    assert np.isfinite(recovered).all()
+
+
+def test_rowwise_log_fit_does_not_warn_on_discarded_rows():
+    """z0 is evaluated only on rows that survive the validity mask.
+
+    Computing it for every row overflowed `exp` on near-zero slopes and emitted a
+    RuntimeWarning for values that were then thrown away.
+    """
+    import warnings
+
+    heights = np.array([40.0, 80.0, 120.0])
+    # Rows that fail the slope gate: descending profile, and a calm row.
+    rubbish = np.array([[9.0, 8.0, 7.0], [0.1, 0.1, 0.1]])
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _fit_rowwise_log_profile(rubbish, heights)
+    assert [w for w in caught if "overflow" in str(w.message)] == []
 
 
 # ---------------------------------------------------------------------------

@@ -290,6 +290,32 @@ def _manifest(
     """Build the mapping from result row to runconfig file (design doc §7.13)."""
     completed = [result for result in results if result.status == "ok"]
     admissible = [result for result in completed if result.admissible]
+
+    # Which gate did the excluded scenarios trip, and how often? A sweep where every
+    # scenario fails the same gate has not measured a spread — it has measured a
+    # threshold. Reported on the manifest because the alternative is an empty
+    # distribution with nothing saying why, which reads as "no signal" rather than
+    # "your admissibility rule excluded everything".
+    tally: dict[str, int] = {}
+    for result in completed:
+        for name in result.failures:
+            tally[name] = tally.get(name, 0) + 1
+    diagnosis = None
+    if completed and not admissible:
+        worst = max(tally.items(), key=lambda item: item[1], default=(None, 0))
+        diagnosis = (
+            f"No scenario was admissible: all {len(completed)} completed scenarios failed at "
+            f"least one gate"
+            + (
+                f", most often '{worst[0]}' ({worst[1]} of {len(completed)})."
+                if worst[0]
+                else "."
+            )
+            + " There is no spread to report. Either this campaign genuinely does not "
+            "support the analysis, or a threshold is wrong for this site — check the gate "
+            "tally before widening the sweep."
+        )
+
     return {
         "sweep_id": sweep_id,
         "started_at": started_at.isoformat(),
@@ -306,6 +332,8 @@ def _manifest(
             "admissible": len(admissible),
             "inadmissible": len(completed) - len(admissible),
         },
+        "gate_failures": dict(sorted(tally.items(), key=lambda item: -item[1])),
+        "diagnosis": diagnosis,
         "scenarios": [
             {
                 "config_hash": result.config_hash,

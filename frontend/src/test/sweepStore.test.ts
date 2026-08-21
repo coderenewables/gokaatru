@@ -36,7 +36,7 @@ function axes(overrides: Partial<SweepAxes> = {}): SweepAxes {
     ],
     power_curves: ["generic-3.0MW-130m-IIA"],
     known_sensor_policies: ["nearest_2", "availability_90", "redundant_boom", "widest_lever"],
-    default_thresholds: { ltc_r_squared_fail: 0.8 },
+    default_thresholds: { extrapolation_ratio_fail: 2.0 },
     ...overrides,
   };
 }

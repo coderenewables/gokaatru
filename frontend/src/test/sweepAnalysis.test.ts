@@ -44,7 +44,7 @@ function row(overrides: Partial<ScenarioRow> & { config_hash: string }): Scenari
 describe("row partitioning", () => {
   const rows = [
     row({ config_hash: "a" }),
-    row({ config_hash: "b", admissible: false, failed_gates: "ltc_r_squared" }),
+    row({ config_hash: "b", admissible: false, failed_gates: "extrapolation_ratio" }),
     row({ config_hash: "c", status: "failed", admissible: false, error: "boom" }),
   ];
 

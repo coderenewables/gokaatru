@@ -141,7 +141,8 @@ def test_axes_report_the_default_thresholds(api):
     client, manager = api
     session_id = _prepare(manager, client)
     payload = client.get(f"/api/sessions/{session_id}/sweep/axes", headers=_headers(session_id)).json()
-    assert payload["default_thresholds"]["ltc_r_squared_fail"] == 0.80
+    assert payload["default_thresholds"]["extrapolation_ratio_fail"] == 2.0
+    assert "ltc_r_squared_fail" not in payload["default_thresholds"]
     assert "generic-3.0MW-130m-IIA" in payload["power_curves"]
 
 
@@ -221,17 +222,17 @@ def test_each_scenario_runconfig_is_downloadable(api):
         config = response.json()
         assert config["scenario"]["config_hash"] == entry["config_hash"]
         assert config["scenario"]["reference_source"] in {"era5", "merra2"}
-        assert config["admissibility"]["thresholds"]["ltc_r_squared_fail"] == 0.80
+        assert config["admissibility"]["thresholds"]["extrapolation_ratio_fail"] == 2.0
 
 
 def test_custom_thresholds_are_honoured_and_recorded(api):
     client, manager = api
     session_id = _prepare(manager, client)
 
-    body = _body(sweep_id="strict", thresholds={"ltc_r_squared_fail": 0.999})
+    body = _body(sweep_id="strict", thresholds={"extrapolation_ratio_fail": 1.001})
     payload = client.post(f"/api/sessions/{session_id}/sweep/run", json=body, headers=_headers(session_id)).json()
 
-    assert payload["manifest"]["thresholds"]["ltc_r_squared_fail"] == 0.999
+    assert payload["manifest"]["thresholds"]["extrapolation_ratio_fail"] == 1.001
     assert payload["manifest"]["counts"]["admissible"] == 0
 
 

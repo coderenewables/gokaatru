@@ -76,6 +76,98 @@ export const HEADLINE_METRICS: MetricColumn[] = METRIC_COLUMNS.filter(
 /** Gate verdicts. `not_applicable` is not a pass; `marked` is not a failure. */
 export type GateStatus = "pass" | "warn" | "fail" | "not_applicable" | "marked";
 
+/** What each status means for whether a scenario counts. Only `fail` excludes. */
+export const GATE_STATUS_MEANING: Record<GateStatus, string> = {
+  pass: "Within the preferred standard.",
+  warn: "Below the preferred standard but still counted in every statistic, and marked.",
+  fail: "Excluded from all reported statistics. Still shown in the table.",
+  not_applicable:
+    "This gate had nothing to measure on this scenario — distinct from a pass, so an absent check is never mistaken for a satisfied one.",
+  marked: "Not a defect, but kept visible. Never excludes.",
+};
+
+/**
+ * Human-readable description of every gate, mirroring `server/core/admissibility.py`.
+ *
+ * Kept here rather than fetched so the Gates view can explain a gate that no scenario
+ * happened to trip — a reader needs to know what *was* checked, not only what failed.
+ */
+export interface GateMeta {
+  label: string;
+  measures: string;
+  appliesTo: string;
+  /** Threshold keys on `GateThresholds`, for showing the values in force. */
+  thresholdKeys: string[];
+  /** Larger is worse (ratios, clip fractions) vs smaller is worse (coverage, months). */
+  direction: "higher-is-worse" | "lower-is-worse" | "band" | "none";
+}
+
+export const GATE_META: Record<string, GateMeta> = {
+  extrapolation_ratio: {
+    label: "Extrapolation ratio",
+    measures:
+      "Hub height as a multiple of the reference height actually used, at the worst record. Beyond about 2×, the power-law assumption rather than the measurement determines the hub-height speed.",
+    appliesTo: "Scenarios that extrapolate. Not applicable when hub height is bracketed by measurements.",
+    thresholdKeys: ["extrapolation_ratio_warn", "extrapolation_ratio_fail"],
+    direction: "higher-is-worse",
+  },
+  concurrent_period: {
+    label: "Concurrent period",
+    measures:
+      "Months of measured/reference overlap the correction was fitted on. A short overlap cannot capture a full seasonal cycle.",
+    appliesTo: "Every scenario with an LTC result.",
+    thresholdKeys: ["concurrent_months_warn", "concurrent_months_fail"],
+    direction: "lower-is-worse",
+  },
+  mean_shear_alpha: {
+    label: "Mean shear α",
+    measures:
+      "Mean of the 12×24 power-law table. Below zero is not physical for resource assessment; the upper bound admits dense forest and urban terrain plus stability-skewed sites.",
+    appliesTo: "Power-law scenarios. Not applicable to the log law.",
+    thresholdKeys: ["mean_alpha_warn_low", "mean_alpha_warn_high", "mean_alpha_fail_low", "mean_alpha_fail_high"],
+    direction: "band",
+  },
+  alpha_cell_dispersion: {
+    label: "α cell dispersion",
+    measures:
+      "Share of month-hour cells outside the wider per-cell band. Gated on the fraction rather than any single cell, so one extreme winter-night cell does not fail a sound table.",
+    appliesTo: "Power-law scenarios.",
+    thresholdKeys: ["cell_alpha_low", "cell_alpha_high", "cell_outside_fraction_warn", "cell_outside_fraction_fail"],
+    direction: "higher-is-worse",
+  },
+  shear_table_coverage: {
+    label: "Shear-table coverage",
+    measures:
+      "Share of the 288 month-hour cells holding enough records to mean anything. Unobserved cells are back-filled with the series mean, and the table is applied to the full long-term reference — so a low share means real months are corrected with a synthetic value.",
+    appliesTo: "Fitted-shear scenarios. Not applicable to an analyst-supplied exponent.",
+    thresholdKeys: ["min_records_per_cell", "cell_coverage_warn", "cell_coverage_fail"],
+    direction: "lower-is-worse",
+  },
+  roughness_clipping: {
+    label: "Roughness clipping",
+    measures:
+      "Share of the z0 series sitting on a clip bound rather than a fit. exp(−intercept/slope) diverges as the profile flattens, so a high share means the log-law fit is not resolving the surface at all.",
+    appliesTo: "Log-law scenarios only.",
+    thresholdKeys: ["roughness_clip_warn", "roughness_clip_fail"],
+    direction: "higher-is-worse",
+  },
+  sector_records: {
+    label: "Sector records",
+    measures: "Record count in the thinnest directional sector.",
+    appliesTo: "Directional-shear scenarios, which the extrapolation path cannot yet consume — so currently always not applicable.",
+    thresholdKeys: ["sector_records_warn", "sector_records_fail"],
+    direction: "lower-is-worse",
+  },
+  shear_provenance: {
+    label: "Shear provenance",
+    measures:
+      "Whether the exponent was fitted from measurements or supplied by the analyst. A supplied value satisfies the α band trivially, so the band cannot be what catches it.",
+    appliesTo: "Every scenario. Emits “marked”, never a failure.",
+    thresholdKeys: [],
+    direction: "none",
+  },
+};
+
 /** One row of the sweep result table. Flat by design — see the backend module docstring. */
 export interface ScenarioRow {
   config_hash: string;
@@ -118,6 +210,13 @@ export interface SweepManifestScenario {
 
 export interface SweepManifest {
   sweep_id: string;
+  /** Count of completed scenarios failing each gate, worst first. */
+  gate_failures?: Record<string, number>;
+  /**
+   * Set only when *no* scenario was admissible. An empty distribution with nothing
+   * explaining it reads as "no signal" rather than "your threshold excluded everything".
+   */
+  diagnosis?: string | null;
   started_at: string;
   finished_at: string;
   stopped_early: boolean;

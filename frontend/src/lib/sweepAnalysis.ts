@@ -11,6 +11,7 @@ import {
   AXIS_COLUMNS,
   METRIC_META,
   type AxisColumn,
+  type GateStatus,
   type MetricColumn,
   type ScenarioRow,
 } from "../types/sweep";
@@ -205,6 +206,87 @@ export function histogram(values: number[], bins = 24): Array<{ x0: number; x1: 
     buckets[index].count += 1;
   }
   return buckets;
+}
+
+export interface GateSummary {
+  gate: string;
+  counts: Record<GateStatus, number>;
+  /** Scenarios this gate excluded outright. */
+  failedRows: ScenarioRow[];
+  /** Scenarios it flagged without excluding. */
+  warnedRows: ScenarioRow[];
+  markedRows: ScenarioRow[];
+  /** Range of the measured value across scenarios where the gate had something to measure. */
+  valueRange: { min: number; max: number } | null;
+  /** True when this gate excluded every completed scenario. */
+  excludedEverything: boolean;
+}
+
+/**
+ * Summarise every gate across a result set (design doc §7.7).
+ *
+ * Derived from the `gate_*` columns rather than a separate payload, so a gate added on
+ * the backend appears here without frontend work — the same reasoning as `Disclosure`.
+ */
+export function summariseGates(rows: ScenarioRow[]): GateSummary[] {
+  const completed = rows.filter((row) => row.status === "ok");
+  const names = new Set<string>();
+  for (const row of completed) {
+    for (const key of Object.keys(row)) {
+      if (key.startsWith("gate_") && !key.endsWith("_value")) names.add(key.slice(5));
+    }
+  }
+
+  return [...names]
+    .map<GateSummary>((gate) => {
+      const counts: Record<GateStatus, number> = {
+        pass: 0,
+        warn: 0,
+        fail: 0,
+        not_applicable: 0,
+        marked: 0,
+      };
+      const failedRows: ScenarioRow[] = [];
+      const warnedRows: ScenarioRow[] = [];
+      const markedRows: ScenarioRow[] = [];
+      const values: number[] = [];
+
+      for (const row of completed) {
+        const status = row[`gate_${gate}`] as GateStatus | undefined;
+        if (!status) continue;
+        counts[status] = (counts[status] ?? 0) + 1;
+        if (status === "fail") failedRows.push(row);
+        if (status === "warn") warnedRows.push(row);
+        if (status === "marked") markedRows.push(row);
+        const value = row[`gate_${gate}_value`];
+        if (typeof value === "number" && Number.isFinite(value)) values.push(value);
+      }
+
+      return {
+        gate,
+        counts,
+        failedRows,
+        warnedRows,
+        markedRows,
+        valueRange: values.length
+          ? { min: Math.min(...values), max: Math.max(...values) }
+          : null,
+        excludedEverything: completed.length > 0 && counts.fail === completed.length,
+      };
+    })
+    // Gates that excluded something first, then those that merely warned, then the rest.
+    .sort(
+      (a, b) =>
+        b.counts.fail - a.counts.fail ||
+        b.counts.warn - a.counts.warn ||
+        a.gate.localeCompare(b.gate),
+    );
+}
+
+/** The gate value on one row, when it had something to measure. */
+export function gateValue(row: ScenarioRow, gate: string): number | null {
+  const value = row[`gate_${gate}_value`];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 /** Render the result table as CSV, for the export in §9.5. */

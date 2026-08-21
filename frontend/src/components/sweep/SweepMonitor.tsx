@@ -121,6 +121,13 @@ export function SweepMonitor() {
         </section>
       ) : null}
 
+      {manifest?.diagnosis ? (
+        <section className="sweep-diagnosis">
+          <h5>No scenario was admissible</h5>
+          <p>{manifest.diagnosis}</p>
+        </section>
+      ) : null}
+
       {manifest ? (
         <section className="sweep-counts">
           <h5>Outcome</h5>

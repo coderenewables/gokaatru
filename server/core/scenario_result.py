@@ -111,6 +111,11 @@ class ScenarioResult:
     metrics: dict[str, float | None] = field(default_factory=dict)
     admissible: bool = True
     gate_status: dict[str, str] = field(default_factory=dict)
+    #: The number each gate was reached on, so the UI can show *why* a scenario failed
+    #: rather than only that it did. None where a gate had nothing to measure.
+    gate_values: dict[str, float | None] = field(default_factory=dict)
+    #: One line per gate explaining its verdict, carried into the scenario runconfig.
+    gate_details: dict[str, str] = field(default_factory=dict)
     failures: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     marks: list[str] = field(default_factory=list)
@@ -131,6 +136,10 @@ class ScenarioResult:
             row[column] = self.metrics.get(column)
         for name, status in sorted(self.gate_status.items()):
             row[f"gate_{name}"] = status
+            # The measured value travels beside the verdict. A status alone tells a
+            # reader a scenario was excluded; the value tells them by how much, which is
+            # what they need to judge whether the threshold or the campaign is at fault.
+            row[f"gate_{name}_value"] = self.gate_values.get(name)
         row["failed_gates"] = ",".join(self.failures)
         row["warned_gates"] = ",".join(self.warnings)
         row["marked_gates"] = ",".join(self.marks)
@@ -210,6 +219,8 @@ def build_result(
         metrics=_collect_metrics(state, scenario_record),
         admissible=report.admissible,
         gate_status={gate.name: gate.status for gate in report.gates},
+        gate_values={gate.name: gate.value for gate in report.gates},
+        gate_details={gate.name: gate.detail for gate in report.gates},
         failures=report.failures,
         warnings=report.warnings,
         marks=report.marks,
@@ -269,7 +280,17 @@ def scenario_runconfig(
             "failures": result.failures,
             "warnings": result.warnings,
             "marks": result.marks,
-            "gates": result.gate_status,
+            # Full records rather than bare statuses: the runconfig is what an analyst
+            # takes away, and "failed" without the number it failed on is not auditable.
+            "gates": [
+                {
+                    "name": name,
+                    "status": status,
+                    "value": result.gate_values.get(name),
+                    "detail": result.gate_details.get(name, ""),
+                }
+                for name, status in sorted(result.gate_status.items())
+            ],
         },
     }
     return config

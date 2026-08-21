@@ -15,6 +15,7 @@ import {
   failedRows,
   filterRows,
   formatMetric,
+  gateValue,
   histogram,
   inadmissibleRows,
   metricValues,
@@ -41,8 +42,11 @@ const GATE_TONE: Record<GateStatus, string> = {
 };
 
 function gateColumns(row: ScenarioRow): Array<[string, GateStatus]> {
+  // `gate_<name>` carries the verdict, `gate_<name>_value` the number it was reached on.
+  // Only the verdicts are chips; without the second filter every value column renders as
+  // a phantom gate, and a number passes the "not a pass" test the chip list applies.
   return Object.entries(row)
-    .filter(([key]) => key.startsWith("gate_"))
+    .filter(([key]) => key.startsWith("gate_") && !key.endsWith("_value"))
     .map(([key, value]) => [key.slice("gate_".length), value as GateStatus]);
 }
 
@@ -266,7 +270,13 @@ export function SpreadExplorer() {
                       gateColumns(row)
                         .filter(([, status]) => status !== "pass" && status !== "not_applicable")
                         .map(([name, status]) => (
-                          <span key={name} className={GATE_TONE[status]}>
+                          <span
+                            key={name}
+                            className={GATE_TONE[status]}
+                            title={`${status.replace(/_/g, " ")}${
+                              gateValue(row, name) == null ? "" : ` — measured ${gateValue(row, name)}`
+                            }`}
+                          >
                             {name.replace(/_/g, " ")}
                           </span>
                         ))

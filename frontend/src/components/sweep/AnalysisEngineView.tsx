@@ -2,7 +2,7 @@
 //
 // Sub-tabs rather than one long page: designing a sweep, watching it and interrogating
 // its results are three different activities, and a user is only ever doing one.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 
 import { SweepDesigner } from "./SweepDesigner";
@@ -39,16 +39,33 @@ export function AnalysisEngineView() {
   const [tab, setTab] = useState<SweepTab>("design");
   const sessionId = session?.session_id ?? "";
 
+  // Results live in the session on disk, not in this store, so a page reload leaves the
+  // table empty while a finished sweep sits in `data/sessions/<id>/sweeps/`. Restore the
+  // newest one on mount: an analyst who has already run a sweep should find its spread
+  // waiting, not an empty state and a picker they have to know to use.
   useEffect(() => {
-    if (sessionId) void refreshSweeps(apiBaseUrl, sessionId);
-  }, [apiBaseUrl, refreshSweeps, sessionId]);
+    if (!sessionId) return;
+    void (async () => {
+      await refreshSweeps(apiBaseUrl, sessionId);
+      const current = useSweepStore.getState();
+      if (current.phase !== "idle" || current.rows.length > 0) return;
+      const newest = current.sweeps[0];
+      if (newest) await openSweep(apiBaseUrl, sessionId, newest.sweep_id);
+    })();
+  }, [apiBaseUrl, openSweep, refreshSweeps, sessionId]);
 
   // Follow the run: launching moves to the monitor, finishing moves to the spread.
+  // Keyed on the *transition* out of "running", so restoring a saved sweep loads its
+  // rows without yanking someone off the Design tab they deliberately opened.
+  const previousPhase = useRef(phase);
   useEffect(() => {
-    if (phase === "running") setTab("monitor");
-  }, [phase]);
-  useEffect(() => {
-    if (phase !== "complete" || rows.length === 0) return;
+    const was = previousPhase.current;
+    previousPhase.current = phase;
+    if (phase === "running") {
+      setTab("monitor");
+      return;
+    }
+    if (was !== "running" || phase !== "complete" || rows.length === 0) return;
     // An empty spread is not worth landing on. When every scenario was excluded, the
     // gate report is the screen that actually answers why.
     const anyAdmissible = rows.some((row) => row.status === "ok" && row.admissible);

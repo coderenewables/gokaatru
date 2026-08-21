@@ -122,6 +122,9 @@ class SweepProgress:
     total: int
     config_hash: str | None = None
     detail: dict[str, Any] = field(default_factory=dict)
+    #: Set on ``sweep_finished`` only. The client mints no sweep id of its own, so this
+    #: is its only route from a finished run back to the persisted table.
+    manifest: dict[str, Any] | None = None
 
     def as_record(self) -> dict[str, Any]:
         return {
@@ -130,6 +133,7 @@ class SweepProgress:
             "total": self.total,
             "config_hash": self.config_hash,
             **({"detail": self.detail} if self.detail else {}),
+            **({"manifest": self.manifest} if self.manifest is not None else {}),
         }
 
 
@@ -162,9 +166,17 @@ def run_sweep(
     runconfigs: dict[str, dict[str, Any]] = {}
     started_at = datetime.now(timezone.utc)
 
-    def emit(event: str, config_hash: str | None = None, **detail: Any) -> None:
+    def emit(
+        event: str,
+        config_hash: str | None = None,
+        *,
+        manifest: dict[str, Any] | None = None,
+        **detail: Any,
+    ) -> None:
         if on_progress is not None:
-            on_progress(SweepProgress(event, len(results), len(leaves), config_hash, detail))
+            on_progress(
+                SweepProgress(event, len(results), len(leaves), config_hash, detail, manifest)
+            )
 
     emit("sweep_started")
     stopped = False
@@ -206,7 +218,9 @@ def run_sweep(
     )
     if persist:
         _persist(base_state, identifier, manifest, results, runconfigs)
-    emit("sweep_finished")
+    # Carried on the event, not merely returned: a streaming caller never sees the return
+    # value, and without the id it cannot ask for the table that was just written.
+    emit("sweep_finished", manifest=manifest)
     return {"manifest": manifest, "results": [result.as_row() for result in results]}
 
 

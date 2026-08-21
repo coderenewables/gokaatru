@@ -281,3 +281,44 @@ def test_the_stream_emits_one_event_per_scenario_as_it_completes(api):
     assert events[-1]["total"] == 2
     # And the run really persisted, not just streamed.
     assert client.get(f"/api/sessions/{session_id}/sweep/streamed", headers=_headers(session_id)).status_code == 200
+
+
+def test_the_stream_carries_the_manifest_so_the_client_can_load_the_results(api):
+    """The finished event must name the sweep, or the results are stranded on disk.
+
+    The browser client does not supply a `sweep_id` — the server mints one. Its only
+    route back to the persisted table is the manifest the stream hands it when the run
+    ends. Without that it holds a completed sweep it cannot identify, and the Spread
+    view sits on its empty state while `results.json` exists in the session (§9.2).
+    """
+    client, manager = api
+    session_id = _prepare(manager, client)
+
+    body = _body()
+    body.pop("sweep_id", None)
+    with client.stream(
+        "POST",
+        f"/api/sessions/{session_id}/sweep/run/stream",
+        json=body,
+        headers=_headers(session_id),
+    ) as response:
+        assert response.status_code == 200
+        events = [
+            json.loads(line[len("data: ") :])
+            for line in response.iter_lines()
+            if line.startswith("data: ")
+        ]
+
+    finished = events[-1]
+    assert finished["event"] == "sweep_finished"
+    manifest = finished.get("manifest")
+    assert manifest is not None, "the finished event carried no manifest"
+    assert manifest["sweep_id"]
+
+    # Exactly what the client does next: fetch the table using only the streamed id.
+    loaded = client.get(
+        f"/api/sessions/{session_id}/sweep/{manifest['sweep_id']}",
+        headers=_headers(session_id),
+    )
+    assert loaded.status_code == 200
+    assert len(loaded.json()["results"]) == manifest["counts"]["run"]

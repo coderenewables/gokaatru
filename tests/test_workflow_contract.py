@@ -122,15 +122,51 @@ def test_an_acyclic_graph_still_runs():
 def test_edges_are_not_validated_against_the_data_dependency():
     """FINDING (Step 1): canvas edges are advisory; the real dependency is session state.
 
-    Ordering comes only from the edges the browser sends. A node whose inputs are
-    produced by another node still runs whenever the edges say so, and is caught
-    only if the tool itself happens to check its own preconditions. Two nodes with
-    a genuine data dependency but no edge between them run in id order.
+    Ordering comes only from the edges the browser sends, tie-broken by pipeline stage
+    (F-09, fixed below) and then by node id. Two nodes from the *same* stage with no edge
+    between them still fall back to id order — there is nothing else to go on within one
+    stage, and unlike the cross-stage case this is expected, not a residual gap.
     """
     nodes = [_node("z_producer", "list_cleaning_rules"), _node("a_consumer", "list_cleaning_rules")]
     executor = WorkflowExecutor(SessionState(), nodes, [])
-    # No edges: the consumer runs first purely because "a" sorts before "z".
+    # No edges, and both nodes are the cleaning stage: id order is all that is left to
+    # break the tie, exactly as before this fix.
     assert [node.id for node in executor._ordered_nodes()] == ["a_consumer", "z_producer"]
+
+
+def test_stage_order_breaks_ties_across_pipeline_stages():
+    """F-09 (MEDIUM) — mitigated. Regression test: a cross-stage tie no longer resorts to id.
+
+    Two nodes from different pipeline stages with a genuine data dependency (shear must run
+    before an LTC algorithm that consumes the hub-height series it produces) but no declared
+    edge between them used to run in id order regardless — a shear node named after "z" and
+    an LTC node named after "a" would run the LTC first, silently, and nothing about the run
+    said so. The executor now falls back to the canonical pipeline stage — derived from the
+    session-state read/write matrix in docs/audit/01-ledger.md S2, which is the *real*
+    dependency chain edges do not capture — before falling back to id, so the physically
+    correct order survives even when id order would have gotten it backwards.
+
+    This is a heuristic (which module a tool is registered from), not a full per-tool
+    dependency graph, and an explicit edge still overrides it outright. Within one module
+    (e.g. two era5 sub-steps) ties still fall back to id — see the test above — and that
+    finer-grained ordering remains open.
+    """
+    nodes = [_node("z_shear", "calculate_shear_timeseries"), _node("a_ltc", "run_ltc_linear_least_squares")]
+    executor = WorkflowExecutor(SessionState(), nodes, [])
+    assert [node.id for node in executor._ordered_nodes()] == ["z_shear", "a_ltc"]
+    # The disambiguation is itself recorded (F-09 disclosure), not just applied silently.
+    assert executor._stage_disambiguated_nodes == ["a_ltc", "z_shear"]
+
+
+def test_stage_disambiguation_is_recorded_on_the_run():
+    """The disclosure half of F-09: which nodes the stage tie-break moved is visible on the
+    session runtime, not only on the executor's internal state.
+    """
+    nodes = [_node("z_shear", "calculate_shear_timeseries"), _node("a_ltc", "run_ltc_linear_least_squares")]
+    state = SessionState()
+    state.reset()
+    _drive(WorkflowExecutor(state, nodes, []))
+    assert state.workflow_execution["stage_disambiguated_nodes"] == ["a_ltc", "z_shear"]
 
 
 def test_client_supplied_node_status_cannot_fabricate_completion():

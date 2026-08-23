@@ -194,10 +194,14 @@ def test_api_workflow(
     )
     assert extrapolation_response.status_code == 200
     assert extrapolation_response.json()["column_name"] == "Spd_150m_hub"
+    # Re-baselined for F-23 (extrapolation now honours the shear table's own 3.0 m/s
+    # calibration gate): 68 near-calm records that previously received a hub speed from an
+    # alpha fit calibrated exclusively above 3 m/s are now left unextrapolated instead.
     assert extrapolation_response.json()["method_counts"] == {
         "direct": 0,
         "interpolated": 65519,
-        "extrapolated": 757,
+        "extrapolated": 689,
+        "below_shear_gate": 68,
     }
 
     state = manager.get_session(session_id)

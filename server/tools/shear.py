@@ -291,12 +291,25 @@ def _aggregate_table(df: pd.DataFrame, value_col: str, aggregation: str, fallbac
     return _complete_table(table, fallback)
 
 
-def _aggregate_roughness_table(df: pd.DataFrame, aggregation: str) -> pd.DataFrame:
-    """Aggregate roughness in log-space before exponentiating back to physical z0 values."""
+def _aggregate_roughness_table(df: pd.DataFrame, aggregation: str) -> tuple[pd.DataFrame, float, str]:
+    """Aggregate roughness in log-space before exponentiating back to physical z0 values.
+
+    Returns the table plus the fallback z0 used for any month-hour cell with no finite
+    fit, and its source: the campaign's own mean roughness where any cell resolved, or
+    the hardcoded open-water default only when every cell is empty (F-26 — previously a
+    silent substitution in both directions, unlike the sibling power-law table).
+    """
     working = df.copy()
     working["log_z0"] = np.log(working["roughness_length"])
-    fallback = float(np.exp(working["log_z0"].dropna().mean())) if not working["log_z0"].dropna().empty else DEFAULT_FALLBACK_Z0_M
-    return np.exp(_aggregate_table(working, "log_z0", aggregation, np.log(fallback)))
+    log_z0_valid = working["log_z0"].dropna()
+    if log_z0_valid.empty:
+        fallback = DEFAULT_FALLBACK_Z0_M
+        fallback_source = "open_water_default"
+    else:
+        fallback = float(np.exp(log_z0_valid.mean()))
+        fallback_source = "series_mean"
+    table = np.exp(_aggregate_table(working, "log_z0", aggregation, np.log(fallback)))
+    return table, fallback, fallback_source
 
 
 def _sector_label(index: int, num_sectors: int) -> str:
@@ -309,8 +322,15 @@ def _aggr_momm_table(
     df: pd.DataFrame,
     height_map: dict[float, str],
     min_speed_mps: float = SHEAR_MIN_SPEED_MPS,
-) -> tuple[pd.DataFrame, dict[str, object]]:
-    """Build an aggregate MoMM shear table by deriving alpha from per-height MoMM wind tables."""
+) -> tuple[pd.DataFrame, dict[str, object], dict[str, object]]:
+    """Build an aggregate MoMM shear table by deriving alpha from per-height MoMM wind tables.
+
+    Returns the table, the shear-clamp statistics, and a fallback/coverage report (F-26):
+    which month-hour cells never resolved a pairwise alpha and were filled with the
+    campaign's own mean alpha, or — only when every cell is empty — the hardcoded
+    one-seventh default. This path previously reported neither, unlike its sibling
+    `_build_shear_table`.
+    """
     speeds = df[list(height_map.values())]
     valid = speeds.notna().all(axis=1) & (speeds > min_speed_mps).all(axis=1)
     concurrent = speeds.loc[valid]
@@ -332,8 +352,18 @@ def _aggr_momm_table(
             alpha, stats = _compute_pairwise_shear(speeds_at_bin.reshape(1, -1), heights, min_speed_mps)
             result.loc[month, hour] = alpha[0]
             bin_stats.append(stats)
-    fallback = float(np.nanmean(result.to_numpy())) if np.isfinite(result.to_numpy()).any() else DEFAULT_FALLBACK_ALPHA
-    return result.fillna(fallback), _merge_clamp_stats(bin_stats, min_speed_mps)
+    if np.isfinite(result.to_numpy()).any():
+        fallback = float(np.nanmean(result.to_numpy()))
+        fallback_source = "series_mean"
+    else:
+        fallback = DEFAULT_FALLBACK_ALPHA
+        fallback_source = "one_seventh_power_law_default"
+    fallback_report: dict[str, object] = {
+        "fallback_alpha": fallback,
+        "fallback_source": fallback_source,
+        "table_coverage": _table_fill_report(result, concurrent),
+    }
+    return result.fillna(fallback), _merge_clamp_stats(bin_stats, min_speed_mps), fallback_report
 
 
 def _calculate_shear_timeseries(
@@ -603,13 +633,15 @@ def _build_roughness_table(state: SessionState, aggregation: str = "mean") -> di
     if state.roughness_timeseries_df is None:
         raise ValueError("Roughness timeseries is not available. Run calculate_roughness_timeseries first")
     valid = state.roughness_timeseries_df.dropna()
-    state.roughness_table = _aggregate_roughness_table(valid, aggregation)
+    state.roughness_table, fallback_z0, fallback_source = _aggregate_roughness_table(valid, aggregation)
     state.stamp_derived("roughness_table")
     response: dict[str, object] = {
         "method": "log_law",
         "aggregation": aggregation,
         "table": state.roughness_table.values.tolist(),
         "roughness_clipping": state.roughness_clip_stats or {},
+        "fallback_z0": fallback_z0,
+        "fallback_source": fallback_source,
         "table_coverage": _table_fill_report(state.roughness_table, valid),
         **state.clock_disclosure(),
     }
@@ -713,15 +745,20 @@ def _build_aggr_momm_shear_table(
     height_map = _parse_height_sensors(height_sensors)
     _require_columns(df, height_map)
     resolved_min_speed = _resolve_min_speed(state, min_speed_mps)
-    state.shear_table, clamp_stats = _aggr_momm_table(df, height_map, resolved_min_speed)
+    state.shear_table, clamp_stats, fallback_report = _aggr_momm_table(df, height_map, resolved_min_speed)
     state.shear_clamp_stats = clamp_stats
     state.stamp_derived("shear_table")
-    return {
+    response: dict[str, object] = {
         "method": "power_law",
         "aggregation": "aggr_momm",
         "table": state.shear_table.values.tolist(),
         "shear_clamping": clamp_stats,
+        **fallback_report,
     }
+    coverage = fallback_report.get("table_coverage")
+    if isinstance(coverage, dict) and coverage.get("warning"):
+        response["warning"] = coverage["warning"]
+    return response
 
 
 @mcp.tool()

@@ -4,6 +4,8 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
+import inspect
+import typing
 from pathlib import Path
 
 import pandas as pd
@@ -14,6 +16,8 @@ from server.api.deps import get_session_manager
 from server.api.main import create_app
 from server.core.executor import WorkflowExecutor, _loads_lenient, _tool_registry
 from server.state.manager import SessionManager
+from server.state.session import SessionState
+from server.tools.extrapolation import extrapolate_reanalysis_to_hub
 from server.tools.shear import calculate_shear_timeseries
 
 
@@ -80,6 +84,43 @@ def test_build_kwargs_coerces_list_for_postponed_str_annotations(
     )
 
     assert kwargs == {"height_sensors": '["Spd_180m", "Spd_140m"]'}
+
+
+def test_build_kwargs_coerces_a_union_annotated_parameter(
+    execution_client: tuple[TestClient, SessionManager],
+) -> None:
+    """F-16 (LOW) — FIXED. Regression test: a `float | None` parameter is now coerced.
+
+    `_coerce_value` handled only bare str/int/float/bool; a union annotation such as
+    `reference_height_m: float | None = None` fell through this function unchanged. Latent
+    rather than live in production — every tool that depends on the type has always coerced
+    defensively on its own — but a canvas node's `params_json` round-trip always supplies
+    strings, so a string reaching a union-typed parameter was previously passed through as a
+    string rather than coerced to the member type it actually needs.
+    """
+    client, manager = execution_client
+    session_id, _headers = _create_session(client)
+    state = manager.get_session(session_id)
+    executor = WorkflowExecutor(state, [], [])
+
+    kwargs = executor._build_kwargs(
+        extrapolate_reanalysis_to_hub,
+        {"hub_height_m": "120", "reference_height_m": "100"},
+    )
+
+    assert kwargs == {"hub_height_m": 120.0, "reference_height_m": 100.0}
+    assert isinstance(kwargs["reference_height_m"], float)
+
+
+def test_coerce_value_passes_none_through_a_union_annotation() -> None:
+    """The counterpart: an explicit None must not be coerced into the union's other member."""
+    executor = WorkflowExecutor(SessionState(), [], [])
+    signature = inspect.signature(extrapolate_reanalysis_to_hub)
+    parameter = signature.parameters["reference_height_m"]
+    annotation = typing.get_type_hints(extrapolate_reanalysis_to_hub)["reference_height_m"]
+
+    assert executor._coerce_value(parameter, None, annotation) is None
+    assert executor._coerce_value(parameter, "42.5", annotation) == pytest.approx(42.5)
 
 
 def test_sensors_endpoint_falls_back_to_timeseries_inference_without_datamodel(

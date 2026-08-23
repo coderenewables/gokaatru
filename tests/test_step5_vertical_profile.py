@@ -26,10 +26,14 @@ from server.tools.extrapolation import (
     _power_extrapolate_array,
 )
 from server.tools.shear import (
+    DEFAULT_FALLBACK_Z0_M,
     SECTOR_SHEAR_MIN_RECORDS,
     _compute_veer,
+    _build_aggr_momm_shear_table,
+    _build_roughness_table,
     _build_sector_shear_tables,
     _build_shear_table,
+    _calculate_roughness_timeseries,
     _calculate_shear_timeseries,
     _compute_pairwise_shear,
     _compute_veer,
@@ -211,6 +215,13 @@ def test_extrapolation_lever_widens_when_the_top_sensor_drops_out():
     assert result["extrapolation_ratio"]["max"] == pytest.approx(200.0 / 40.0)
     assert result["reference_height_m"]["min"] == pytest.approx(40.0)
     assert result["reference_height_m"]["max"] == pytest.approx(60.0)
+
+    # F-24: min/max alone cannot distinguish "one record fell back" from "a quarter of the
+    # campaign did" — record_counts gives the distribution across every height actually used.
+    counts = result["reference_height_m"]["record_counts"]
+    assert set(counts) == {"40", "60"}
+    assert counts["40"] == int(outage.sum())
+    assert counts["60"] == int((~outage).sum())
 
 
 def test_hub_extrapolation_within_the_defensible_ratio_raises_no_warning():
@@ -554,15 +565,20 @@ def test_hub_extrapolation_declares_the_neutral_profile_and_any_alpha_reclamp():
 
 
 def test_extrapolation_ignores_the_shear_speed_gate():
-    """FINDING F-23: hub speeds are produced for records the shear gate excluded.
+    """F-23 (MEDIUM) — FIXED. Regression test: near-calm records no longer get a hub speed
+    from a table calibrated exclusively above the shear gate.
 
-    ``_calculate_shear_timeseries`` gates at ``min_speed_mps`` (3.0 m/s default)
-    because below it ln(v2/v1) is anemometer noise. ``_extrapolate_to_hub_height``
-    uses its own mask of ``> 0.1`` m/s, so near-calm records get a hub speed built
-    from the month-hour mean alpha — an alpha derived exclusively from records
-    above 3 m/s. Measured: 5 256 near-calm records had no alpha yet all received a
-    hub speed, leaving the hub series 5 256 records longer than the shear series
-    with nothing in either response explaining the difference.
+    ``_calculate_shear_timeseries`` gates at ``min_speed_mps`` (3.0 m/s default) because
+    below it ln(v2/v1) is anemometer noise. ``_extrapolate_to_hub_height`` used its own mask
+    of ``> 0.1`` m/s with no relation to that gate, so near-calm records received a hub speed
+    built from the month-hour mean alpha — an alpha derived exclusively from records above
+    3 m/s. Measured: 5 256 near-calm records had no alpha yet all received a hub speed,
+    leaving the hub series 5 256 records longer than the shear series with nothing in either
+    response explaining the difference.
+
+    The fix aligns the extrapolation gate with the table's own calibration gate: a record
+    whose reference speed sits below it is left unextrapolated (NaN) and counted separately
+    rather than silently extrapolated from a model outside its calibration domain.
     """
     rng = np.random.default_rng(4)
     index = pd.date_range(*YEAR, freq="10min", tz="UTC")
@@ -584,14 +600,75 @@ def test_extrapolation_ignores_the_shear_speed_gate():
 
     shear = _calculate_shear_timeseries(state, _height_json((40.0, 60.0)))
     _build_shear_table(state, "mean")
-    _extrapolate_to_hub_height(state, 100.0, "power_law")
+    result = _extrapolate_to_hub_height(state, 100.0, "power_law")
 
     alpha = state.shear_timeseries_df["shear_coefficient"]
     hub = state.timeseries_df["Spd_100m_hub"]
 
-    assert int(alpha[calm].notna().sum()) == 0  # gate worked
-    assert int(hub[calm].notna().sum()) == int(calm.sum())  # extrapolated anyway
-    assert int(hub.notna().sum()) > int(shear["records"])
+    assert int(alpha[calm].notna().sum()) == 0  # gate worked for shear, as before
+    assert int(hub[calm].notna().sum()) == 0  # ...and now also for extrapolation
+    assert int(hub.notna().sum()) == len(index) - int(calm.sum())
+
+    assert result["extrapolation_speed_gate_mps"] == pytest.approx(3.0)
+    assert result["records_below_extrapolation_gate"] == int(calm.sum())
+    assert result["method_counts"]["below_shear_gate"] == int(calm.sum())
+    assert "extrapolation_gate_warning" in result
+    assert f"{int(calm.sum()):,}" in result["extrapolation_gate_warning"]
+
+
+def test_roughness_table_discloses_its_fallback():
+    """F-26 (LOW) — FIXED (roughness half). Regression test: `_build_roughness_table` now
+    reports which z0 fills any unobserved month-hour cell, and its source.
+
+    `_aggregate_roughness_table` fell back to z0 = 0.0002 m (open water) when every cell was
+    empty, but `_build_roughness_table`'s response carried nothing about it at all — unlike
+    the power-law sibling `_build_shear_table`, whose `fallback_alpha`/`fallback_source`
+    close the same gap (F-19).
+    """
+    index = pd.date_range(*YEAR, freq="10min", tz="UTC")
+    state = _mast_state((40.0, 60.0), 0.20, index)
+    _calculate_roughness_timeseries(state, _height_json((40.0, 60.0)))
+    result = _build_roughness_table(state, "mean")
+
+    assert result["fallback_source"] == "series_mean"
+    assert isinstance(result["fallback_z0"], float)
+    assert result["fallback_z0"] > 0.0
+    assert "table_coverage" in result
+
+
+def test_roughness_table_reports_the_open_water_default_when_every_cell_is_empty():
+    """The counterpart: when no roughness value resolved anywhere, the hardcoded open-water
+    default is named rather than silently substituted."""
+    index = pd.date_range(*YEAR, freq="10min", tz="UTC")
+    state = _mast_state((40.0, 60.0), 0.20, index)
+    state.roughness_timeseries_df = pd.DataFrame(
+        {"roughness_length": np.full(len(index), np.nan)}, index=index
+    )
+
+    result = _build_roughness_table(state, "mean")
+
+    assert result["fallback_source"] == "open_water_default"
+    assert result["fallback_z0"] == pytest.approx(DEFAULT_FALLBACK_Z0_M)
+
+
+def test_aggr_momm_shear_table_discloses_its_fallback():
+    """F-26 (LOW) — FIXED (aggregate-MoMM half). Regression test: `_build_aggr_momm_shear_table`
+    now reports a fallback and coverage, matching its sibling `_build_shear_table`.
+
+    This table-building path reported neither `fallback_alpha`/`fallback_source` (F-26) nor
+    `table_coverage` (the F-19 pattern) at all, so a table built from a partial campaign was
+    indistinguishable from a full year's — a gap its sibling `_build_shear_table` closed for
+    the ordinary (non-aggregate-MoMM) path.
+    """
+    index = pd.date_range(*YEAR, freq="10min", tz="UTC")
+    state = _mast_state((40.0, 60.0), 0.20, index)
+
+    result = _build_aggr_momm_shear_table(state, _height_json((40.0, 60.0)))
+
+    assert result["fallback_source"] == "series_mean"
+    assert isinstance(result["fallback_alpha"], float)
+    assert result["table_coverage"]["cells_observed"] == 288
+    assert result["table_coverage"]["filled_cells"] == 0
 
 
 def test_reanalysis_hub_extrapolation_reports_when_it_writes_nothing():

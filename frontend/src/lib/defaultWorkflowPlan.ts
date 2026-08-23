@@ -14,15 +14,37 @@ function nearestSensor(sensors: SensorRow[], targetHeightM: number): SensorRow |
   )[0];
 }
 
+// F-15: picking the two sensors nearest hub height with no floor on their separation lets
+// alpha noise dominate the fit. A 1% speed-measurement error becomes an alpha error of
+// roughly 0.01 / ln(h2/h1) - about 0.02 across a 60->100 m pair but ~0.6 across 118->120 m,
+// which is not a usable shear estimate. Requiring ln(h2/h1) >= 0.2 keeps that noise
+// contribution at or below ~0.05, in line with the alpha tolerances used elsewhere in the
+// codebase (see docs/design/analysis-engine.md S7.7.1's warn/fail bands).
+const MIN_LN_HEIGHT_RATIO = 0.2;
+
 function nearestShearSensors(sensors: SensorRow[], targetHeightM: number): SensorRow[] {
-  return [...sensors]
-    .sort(
-      (left, right) =>
-        Math.abs(left.height_m - targetHeightM) - Math.abs(right.height_m - targetHeightM) ||
-        right.height_m - left.height_m,
-    )
-    .slice(0, 2)
-    .sort((left, right) => left.height_m - right.height_m);
+  const byProximity = [...sensors].sort(
+    (left, right) =>
+      Math.abs(left.height_m - targetHeightM) - Math.abs(right.height_m - targetHeightM) ||
+      right.height_m - left.height_m,
+  );
+  if (byProximity.length < 2) {
+    return byProximity;
+  }
+  // Anchor on the sensor nearest the hub height, then search outward - in order of
+  // proximity to the hub, so the search prefers the closest usable pair - for the first
+  // partner whose height ratio clears the separation floor. Falls back to the plain
+  // nearest-2 pair when no partner clears it (e.g. exactly two sensors close together and
+  // no wider option exists), which is the pre-fix behaviour rather than a silent failure.
+  const anchor = byProximity[0];
+  const candidates = byProximity.slice(1).map((sensor) => ({
+    sensor,
+    lnRatio:
+      anchor.height_m > 0 && sensor.height_m > 0 ? Math.abs(Math.log(sensor.height_m / anchor.height_m)) : Infinity,
+  }));
+  const adequatelySeparated = candidates.filter((candidate) => candidate.lnRatio >= MIN_LN_HEIGHT_RATIO);
+  const partner = (adequatelySeparated.length > 0 ? adequatelySeparated : candidates)[0].sensor;
+  return [anchor, partner].sort((left, right) => left.height_m - right.height_m);
 }
 
 function hubColumnName(hubHeightM: number): string {

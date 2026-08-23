@@ -11,8 +11,8 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from types import ModuleType
-from typing import Any, AsyncIterator, Callable, get_type_hints
+from types import ModuleType, UnionType
+from typing import Any, AsyncIterator, Callable, Union, get_args, get_origin, get_type_hints
 from uuid import uuid4
 
 from server.state.session import SessionState, bind_session
@@ -49,6 +49,55 @@ TOOL_MODULE_PATHS = [
     "server.tools.windkit.other",
     "server.tools.windkit.plotting",
 ]
+
+# Canonical pipeline order, used only to tie-break nodes the topological sort cannot order
+# any other way (F-09: canvas edges are advisory, and the real dependency runs through
+# session state, not through declared edges - see docs/audit/01-ledger.md S2's
+# session-state read/write matrix and S3's workflow contract). `TOOL_MODULE_PATHS` above is
+# import order for tool registration and is NOT usable for this: it lists `brighthub` after
+# `era5`, even though `brighthub` writes `era5_data`/`merra_data` and `era5` reads them. This
+# list is deliberately separate and follows the real data-flow chain instead:
+# data_io/cleaning -> brighthub -> era5/homogeneity -> shear -> extrapolation -> air_density
+# -> ltc/ltc_ml -> ensemble -> clipping -> uncertainty, with read-only/diagnostic tool
+# modules after the pipeline they report on, and windkit (a self-contained tool surface, not
+# part of the session pipeline) last. A tie between two nodes that share a stage (e.g. two
+# era5 sub-steps) still falls back to node id, same as before this fix - this only replaces
+# "everything with no edge sorts by id" with "everything with no edge sorts by pipeline stage,
+# then by id within a stage".
+CANONICAL_STAGE_ORDER = [
+    "server.tools.data_io",
+    "server.tools.cleaning",
+    "server.tools.brighthub",
+    "server.tools.era5",
+    "server.tools.homogeneity",
+    "server.tools.shear",
+    "server.tools.extrapolation",
+    "server.tools.air_density",
+    "server.tools.ltc",
+    "server.tools.ltc_ml",
+    "server.tools.ensemble",
+    "server.tools.clipping",
+    "server.tools.uncertainty",
+    "server.tools.statistics",
+    "server.tools.visualization",
+    "server.tools.map",
+    "server.tools.config",
+    "server.tools.advanced_analysis",
+    "server.tools.atmosphere",
+    "server.tools.diagnostics",
+    "server.tools.overview_summary",
+    "server.tools.windkit.wind",
+    "server.tools.windkit.climate",
+    "server.tools.windkit.climate_stats",
+    "server.tools.windkit.topography",
+    "server.tools.windkit.windfarm",
+    "server.tools.windkit.spatial",
+    "server.tools.windkit.ltc",
+    "server.tools.windkit.other",
+    "server.tools.windkit.plotting",
+]
+_STAGE_RANK: dict[str, int] = {module_path: index for index, module_path in enumerate(CANONICAL_STAGE_ORDER)}
+_UNKNOWN_STAGE_RANK = len(CANONICAL_STAGE_ORDER)
 
 PARAM_ALIASES: dict[str, tuple[str, ...]] = {
     "file_path": ("path", "timeseries_path", "timeseries_file", "datamodel_path", "datamodel_file"),
@@ -234,11 +283,38 @@ class WorkflowExecutor:
         self.edges = edges
         # Node ids caught in a dependency cycle, populated by `_ordered_nodes` (F-08).
         self._cycle_nodes: list[str] = []
+        # Node ids whose position moved because of the pipeline-stage tie-break rather than
+        # plain id order, populated by `_ordered_nodes` (F-09).
+        self._stage_disambiguated_nodes: list[str] = []
+
+    def _stage_rank(self, node: WorkflowExecutionNode) -> int:
+        """Resolve a node's position in `CANONICAL_STAGE_ORDER`, for tie-breaking (F-09).
+
+        A dataset node or the `select-dataset` helper has no backend operation and supplies
+        data to everything else, so it ranks before every pipeline stage. An operation whose
+        template isn't registered (shouldn't happen once dispatch has validated it, but this
+        runs before that) sorts after every known stage rather than raising here.
+        """
+        if node.kind == "dataset":
+            return -1
+        template_id = (node.template_id or "").strip()
+        if not template_id or template_id == "select-dataset":
+            return -1
+        entry = _tool_registry().get(template_id)
+        if entry is None:
+            return _UNKNOWN_STAGE_RANK
+        return _STAGE_RANK.get(entry[0].__name__, _UNKNOWN_STAGE_RANK)
 
     def _ordered_nodes(self) -> list[WorkflowExecutionNode]:
-        """Return executable nodes in topological order, with deterministic fallback for cycles."""
+        """Return executable nodes in topological order, with deterministic fallback for cycles.
+
+        Ties - nodes with no edge deciding their relative order - break on pipeline stage
+        first, then on node id (F-09). Edges remain advisory: a declared edge still wins
+        outright, since it changes indegree rather than the tie-break key. What changed is
+        which order two edge-less nodes fall into when both become ready at once.
+        """
         by_id = {node.id: node for node in self.nodes}
-        indegree = {node.id: 0 for node in self.nodes}
+        indegree_template = {node.id: 0 for node in self.nodes}
         adjacency: dict[str, set[str]] = {node.id: set() for node in self.nodes}
 
         for edge in self.edges:
@@ -247,31 +323,47 @@ class WorkflowExecutor:
             if edge.target in adjacency[edge.source]:
                 continue
             adjacency[edge.source].add(edge.target)
-            indegree[edge.target] += 1
+            indegree_template[edge.target] += 1
 
-        ready = sorted([node_id for node_id, degree in indegree.items() if degree == 0])
-        ordered_ids: list[str] = []
+        def _toposort(key: Callable[[str], object]) -> tuple[list[str], list[str]]:
+            indegree = dict(indegree_template)
+            ready = sorted((node_id for node_id, degree in indegree.items() if degree == 0), key=key)
+            ordered: list[str] = []
+            while ready:
+                current = ready.pop(0)
+                ordered.append(current)
+                for neighbor in sorted(adjacency[current]):
+                    indegree[neighbor] -= 1
+                    if indegree[neighbor] == 0:
+                        ready.append(neighbor)
+                ready.sort(key=key)
+            remaining = sorted(node_id for node_id in by_id if node_id not in ordered)
+            return ordered, remaining
 
-        while ready:
-            current = ready.pop(0)
-            ordered_ids.append(current)
-            for neighbor in sorted(adjacency[current]):
-                indegree[neighbor] -= 1
-                if indegree[neighbor] == 0:
-                    ready.append(neighbor)
-            ready.sort()
+        stage_rank = {node.id: self._stage_rank(node) for node in self.nodes}
+        ordered_ids, remaining = _toposort(lambda node_id: (stage_rank[node_id], node_id))
 
-        if len(ordered_ids) == len(by_id):
-            self._cycle_nodes = []
-            return [by_id[node_id] for node_id in ordered_ids]
+        if len(ordered_ids) != len(by_id):
+            # A cycle has no topological order, so any order chosen for the nodes inside it
+            # is arbitrary — and id order in particular can run a node before the node that
+            # feeds it. That used to happen silently: the run reported `ok` and the archived
+            # artifact recorded no cycle (F-08). The cycle is now recorded so the caller can
+            # refuse.
+            self._cycle_nodes = remaining
+            self._stage_disambiguated_nodes = []
+            return [by_id[node_id] for node_id in ordered_ids + remaining]
 
-        # A cycle has no topological order, so any order chosen for the nodes inside it is
-        # arbitrary — and id order in particular can run a node before the node that feeds
-        # it. That used to happen silently: the run reported `ok` and the archived artifact
-        # recorded no cycle (F-08). The cycle is now recorded so the caller can refuse.
-        remaining = sorted(node_id for node_id in by_id if node_id not in ordered_ids)
-        self._cycle_nodes = remaining
-        return [by_id[node_id] for node_id in ordered_ids + remaining]
+        self._cycle_nodes = []
+        # F-09 disclosure: record which nodes this run's stage-aware order actually moved
+        # relative to what pure id order would have produced, so the tie-break is auditable
+        # rather than an invisible behaviour change. An empty list here means every ready-set
+        # this run encountered either had one candidate or candidates that already agreed
+        # with id order.
+        id_only_ordered, _ = _toposort(lambda node_id: node_id)
+        self._stage_disambiguated_nodes = sorted(
+            node_id for position, node_id in enumerate(ordered_ids) if id_only_ordered[position] != node_id
+        )
+        return [by_id[node_id] for node_id in ordered_ids]
 
     def _describe_cycle(self) -> str:
         """Return the message used when a dependency cycle blocks a defensible run order."""
@@ -327,6 +419,28 @@ class WorkflowExecutor:
     def _coerce_value(self, parameter: inspect.Parameter, value: object, annotation: object | None = None) -> object:
         """Coerce one raw params value to the callable parameter annotation where possible."""
         resolved_annotation = parameter.annotation if annotation is None else annotation
+
+        # Optional[X] / X | None and other unions (F-16). `get_type_hints` resolves these to
+        # a real typing.Union / types.UnionType object that none of the branches below ever
+        # matched, so a declared `float | None` parameter fell through this function
+        # uncoerced - latent rather than live, because every tool that actually depends on
+        # the type coerces defensively on its own, but worth closing since a future tool
+        # might not. None passes through as None; a present value is coerced against the
+        # first non-None member whose coercion succeeds, falling back to the raw value if
+        # none do - the same "leave it alone" behaviour an unrecognised annotation has always
+        # had, just reached for a union instead of a bare type.
+        origin = get_origin(resolved_annotation)
+        if origin is Union or origin is UnionType:
+            if value is None:
+                return None
+            members = [member for member in get_args(resolved_annotation) if member is not type(None)]
+            for member in members:
+                try:
+                    return self._coerce_value(parameter, value, member)
+                except (TypeError, ValueError):
+                    continue
+            return value
+
         if isinstance(resolved_annotation, str):
             normalized = resolved_annotation.strip().replace("builtins.", "")
             if normalized == "str":
@@ -490,6 +604,10 @@ class WorkflowExecutor:
             "events": [],
             "executed_nodes": sorted(executed),
             "unverified_completions": unverified,
+            # F-09: nodes this run ordered by pipeline stage rather than by an edge, so a
+            # reviewer can see where the graph's declared edges under-specified the real
+            # dependency and the executor filled the gap from session-state data flow instead.
+            "stage_disambiguated_nodes": list(self._stage_disambiguated_nodes),
         }
         self.state.touch()
         return run_id
@@ -598,6 +716,7 @@ class WorkflowExecutor:
             "config": self.state.to_runconfig(),
             "nodes": nodes,
             "analysis": analysis,
+            "stage_disambiguated_nodes": runtime.get("stage_disambiguated_nodes", []),
         }
         serialized = json.loads(json.dumps(record, default=str))
         run_dir.mkdir(parents=True, exist_ok=True)

@@ -11,6 +11,7 @@ from server.core.formulas import ROUGHNESS_MAX_M, ROUGHNESS_MIN_M
 from server.core.reanalysis import get_reference_source, reference_source_names
 from server.main import mcp
 from server.state.session import SessionState, session
+from server.tools.shear import SHEAR_MIN_SPEED_MPS
 
 
 def _hub_column_name(hub_height_m: float) -> str:
@@ -174,12 +175,20 @@ def _extrapolation_lever(
     reference_heights = heights[nearest]
     ratios = hub_height_m / reference_heights
     max_ratio = float(np.max(ratios))
+    # F-24: the reference height is chosen per record, so a top-sensor dropout is invisible
+    # unless the population is broken out — min/max/most_common alone cannot distinguish "one
+    # record fell back" from "half the campaign did". record_counts gives the distribution
+    # across every height actually used, not just its extremes.
+    height_counts = np.bincount(nearest, minlength=heights.size)
     summary: dict[str, object] = {
         "extrapolated_records": int(extrap_rows.sum()),
         "reference_height_m": {
             "min": float(np.min(reference_heights)),
             "max": float(np.max(reference_heights)),
-            "most_common": float(heights[int(np.bincount(nearest, minlength=heights.size).argmax())]),
+            "most_common": float(heights[int(height_counts.argmax())]),
+            "record_counts": {
+                f"{heights[idx]:g}": int(count) for idx, count in enumerate(height_counts) if count
+            },
         },
         "extrapolation_ratio": {
             "min": float(np.min(ratios)),
@@ -253,6 +262,16 @@ def _extrapolate_to_hub_height(
                 hub_height_m,
             )
             counts["interpolated"] = int(interp_rows.sum())
+    # F-23: the shear/roughness table is fitted only on records above the shear speed gate
+    # (SHEAR_MIN_SPEED_MPS by default, 3.0 m/s - below it ln(v2/v1) is anemometer noise, not
+    # profile), but this mask has always been a fixed > 0.1 m/s regardless of that gate. A
+    # near-calm reference record therefore received a hub speed built from an alpha/z0 fit on
+    # data it does not resemble, and the hub series came out longer than the shear series with
+    # nothing explaining why. Records whose own reference speed sits below the table's gate are
+    # now left unextrapolated and counted separately instead of silently extrapolated from a
+    # model outside its calibration domain.
+    extrapolation_gate_mps = state.get_shear_min_speed_mps(SHEAR_MIN_SPEED_MPS)
+    below_shear_gate_count = 0
     extrap_rows = np.isnan(result) & valid_mask.any(axis=1)
     if extrap_rows.any():
         nearest = _nearest_indices(heights, valid_mask[extrap_rows], hub_height_m)
@@ -262,13 +281,18 @@ def _extrapolate_to_hub_height(
             if state.shear_table is None:
                 raise ValueError("Power-law extrapolation requires session.shear_table")
             params = _lookup_table_values(state.timeseries_df.index[extrap_rows], state.shear_table)
-            result[extrap_rows] = _power_extrapolate_array(ref_speeds, ref_heights, hub_height_m, params)
+            computed = _power_extrapolate_array(ref_speeds, ref_heights, hub_height_m, params)
         else:
             if state.roughness_table is None:
                 raise ValueError("Log-law extrapolation requires session.roughness_table")
             params = _lookup_table_values(state.timeseries_df.index[extrap_rows], state.roughness_table)
-            result[extrap_rows] = _log_extrapolate_array(ref_speeds, ref_heights, hub_height_m, params)
-        counts["extrapolated"] = int(extrap_rows.sum())
+            computed = _log_extrapolate_array(ref_speeds, ref_heights, hub_height_m, params)
+        below_gate = ref_speeds < extrapolation_gate_mps
+        below_shear_gate_count = int(np.count_nonzero(below_gate))
+        computed[below_gate] = np.nan
+        result[extrap_rows] = computed
+        counts["extrapolated"] = int(np.count_nonzero(~below_gate))
+    counts["below_shear_gate"] = below_shear_gate_count
     column_name = _hub_column_name(hub_height_m)
     state.timeseries_df[column_name] = result
     state.set_hub_height_m(float(hub_height_m))
@@ -344,10 +368,22 @@ def _extrapolate_to_hub_height(
         ),
         "alpha_reclamped_records": _alpha_reclamp_count,
         "alpha_clamp_band": list(ALPHA_CLAMP_BAND),
+        "extrapolation_speed_gate_mps": extrapolation_gate_mps,
+        "records_below_extrapolation_gate": below_shear_gate_count,
         "reanalysis": reanalysis_result,
         **lever,
         **state.staleness_report(),
     }
+    if below_shear_gate_count:
+        response["extrapolation_gate_warning"] = (
+            f"{below_shear_gate_count:,} record(s) had a reference speed below the "
+            f"{extrapolation_gate_mps:g} m/s shear-table gate and were left unextrapolated "
+            "(no hub value) rather than extrapolated from a shear/roughness fit calibrated "
+            "exclusively on faster records. This shortens the hub series relative to earlier "
+            "versions that extrapolated every record with a finite reference reading; the "
+            "excluded records are near-calm and the effect on long-term mean speed is small, "
+            "but downstream completeness and LTC pair-count checks will now see fewer records."
+        )
     if _alpha_reclamp_count:
         response["alpha_clamp_warning"] = (
             f"{_alpha_reclamp_count:,} records used a shear exponent outside "

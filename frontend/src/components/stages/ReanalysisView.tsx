@@ -1,19 +1,15 @@
 // Stage 2 — Reanalysis acquisition (spec §4 / Stage 2).
 //
-// BrightHub path (ERA5 + MERRA-2): find nodes, download, interpolate,
-// optional homogeneity test. Direct ERA5 path available as a fallback.
-import { useState } from "react";
-
+// The provider and date window are chosen on the Data import page and the
+// download runs there on "Save config and setup"; this stage reviews the
+// result, re-runs acquisition if needed, and hosts the homogeneity test.
 import { useWorkspaceStore } from "../../store/useWorkspaceStore";
 import { NodeTable } from "../common/NodeTable";
 import { MiniMap } from "../common/MiniMap";
 import { RunButton } from "../common/RunButton";
 
-type Source = "brighthub" | "earthdatahub";
-
 export function ReanalysisView() {
   const config = useWorkspaceStore((state) => state.config);
-  const updateConfigValue = useWorkspaceStore((state) => state.updateConfigValue);
   const saveConfig = useWorkspaceStore((state) => state.saveConfig);
   const fetchBrightHubReanalysisNodes = useWorkspaceStore(
     (state) => state.fetchBrightHubReanalysisNodes,
@@ -22,14 +18,15 @@ export function ReanalysisView() {
     (state) => state.downloadBrightHubReanalysis,
   );
   const invokeSessionOperation = useWorkspaceStore((state) => state.invokeSessionOperation);
+  const runReanalysisAcquisition = useWorkspaceStore((state) => state.runReanalysisAcquisition);
+  const source = config.reanalysis.acquisitionSource;
   const summary = useWorkspaceStore((state) => state.summary);
   const runHomogeneity = useWorkspaceStore((state) => state.runHomogeneity);
   const applyHomogeneityCutoff = useWorkspaceStore((state) => state.applyHomogeneityCutoff);
   const homogeneityReport = useWorkspaceStore((state) => state.homogeneityReport);
 
-  const [source, setSource] = useState<Source>("brighthub");
-  const [startDate, setStartDate] = useState(config.reanalysis.startDate);
-  const [endDate, setEndDate] = useState(config.reanalysis.endDate);
+  const startDate = config.reanalysis.startDate;
+  const endDate = config.reanalysis.endDate;
 
   const brighthubStatus = useWorkspaceStore((state) => state.brighthubStatus);
   const brighthubReanalysis = useWorkspaceStore((state) => state.brighthubReanalysis);
@@ -73,40 +70,15 @@ export function ReanalysisView() {
   return (
     <div className="stage-view">
       <section className="path-panel">
-        <h3>Site coordinate</h3>
+        <h3>Acquisition settings</h3>
         <p className="muted">
-          Lat {lat.toFixed(3)}, lon {lon.toFixed(3)}. Set in Stage 1; update there if needed.
+          Provider{" "}
+          <strong>{source === "brighthub" ? "BrightHub (ERA5 + MERRA-2)" : "Direct ERA5 (EarthDataHub)"}</strong>,{" "}
+          {startDate} → {endDate}, lat {lat.toFixed(3)}, lon {lon.toFixed(3)}. Chosen on the Data
+          import page; change it there and save to re-acquire.
         </p>
-        <div className="form-grid">
-          <label className="form-field">
-            <span>Provider</span>
-            <select value={source} onChange={(e) => setSource(e.target.value as Source)}>
-              <option value="brighthub">BrightHub (ERA5 + MERRA-2)</option>
-              <option value="earthdatahub">Direct ERA5 (EarthDataHub)</option>
-            </select>
-          </label>
-          <label className="form-field">
-            <span>Start date</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                updateConfigValue("reanalysis.startDate", e.target.value);
-              }}
-            />
-          </label>
-          <label className="form-field">
-            <span>End date</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                updateConfigValue("reanalysis.endDate", e.target.value);
-              }}
-            />
-          </label>
+        <div className="path-actions">
+          <RunButton label="Re-run acquisition" variant="secondary" onClick={() => void runReanalysisAcquisition()} />
         </div>
       </section>
 

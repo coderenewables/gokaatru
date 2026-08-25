@@ -34,8 +34,8 @@ from tests.oracles import (
     ISA_PRESSURE_PA,
     ISA_TEMPERATURE_K,
     complete_year_index,
-    diurnal_series,
     directional_series,
+    diurnal_series,
     dry_air_density,
     log_law_profile,
     moist_air_density,
@@ -522,8 +522,8 @@ def test_momm_reports_the_month_hour_cells_it_synthesised():
     table missing whole months carries a warning. MoMM weights months by length to
     represent a full year, so a partial year is exactly where it misleads.
     """
-    from server.tools.statistics import compute_momm
     from server.state.session import bind_session
+    from server.tools.statistics import compute_momm
 
     # Jan-Jun only, deliberately seasonal: a real site's absent months are not
     # equal to the observed mean.

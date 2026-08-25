@@ -40,7 +40,9 @@ def _create_session(client: TestClient) -> str:
     return response.json()["session_id"]
 
 
-def test_session_aware_mcp_tool_updates_only_target_session(client_and_manager: tuple[TestClient, SessionManager]) -> None:
+def test_session_aware_mcp_tool_updates_only_target_session(
+    client_and_manager: tuple[TestClient, SessionManager],
+) -> None:
     """Route MCP tool mutations through the session-specific FastAPI mount instead of the legacy singleton."""
     client, manager = client_and_manager
     first_session_id = _create_session(client)
@@ -67,7 +69,9 @@ def test_session_aware_mcp_tool_updates_only_target_session(client_and_manager: 
     assert "project_name" not in manager.get_session(second_session_id).runconfig
 
 
-def test_session_aware_mcp_rejects_mismatched_session_header(client_and_manager: tuple[TestClient, SessionManager]) -> None:
+def test_session_aware_mcp_rejects_mismatched_session_header(
+    client_and_manager: tuple[TestClient, SessionManager],
+) -> None:
     """Reject MCP requests when an explicit session header disagrees with the mounted session path."""
     client, _manager = client_and_manager
     first_session_id = _create_session(client)

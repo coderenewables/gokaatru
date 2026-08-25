@@ -5,10 +5,10 @@ import numpy as np
 import pandas as pd
 from scipy.stats import genextreme, gumbel_r
 
+from server.core.formulas import adjust_density_to_height
 from server.core.validators import detect_timestep_minutes
 from server.main import mcp
 from server.state.session import SessionState, session
-from server.core.formulas import adjust_density_to_height
 from server.tools.atmosphere import _atmospheric_series, _sensor_height
 
 COMPASS_16 = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
@@ -137,8 +137,16 @@ def _compute_energy_metrics(state: SessionState, speed_sensor: str, direction_se
         result["sectors"] = [
             {
                 "label": COMPASS_16[index],
-                "power_density_w_m2": float(0.5 * air_density * cube_speed[sector_index == index].mean()) if (sector_index == index).any() else 0.0,
-                "energy_pct": 0.0 if total_cube_speed == 0 else float(cube_speed[sector_index == index].sum() / total_cube_speed * 100.0),
+                "power_density_w_m2": (
+                    float(0.5 * air_density * cube_speed[sector_index == index].mean())
+                    if (sector_index == index).any()
+                    else 0.0
+                ),
+                "energy_pct": (
+                    0.0
+                    if total_cube_speed == 0
+                    else float(cube_speed[sector_index == index].sum() / total_cube_speed * 100.0)
+                ),
             }
             for index in range(16)
         ]
@@ -525,6 +533,10 @@ def compute_wind_ramps(speed_sensor: str, event_threshold_m_s: float = 3.0) -> d
 
 
 @mcp.tool()
-def compute_wind_persistence(speed_sensor: str, calm_threshold_m_s: float = 3.0, high_wind_threshold_m_s: float = 15.0) -> dict:
+def compute_wind_persistence(
+    speed_sensor: str,
+    calm_threshold_m_s: float = 3.0,
+    high_wind_threshold_m_s: float = 15.0,
+) -> dict:
     """Summarize calm and high-wind duration statistics from consecutive measured records."""
     return _compute_persistence(session, speed_sensor, calm_threshold_m_s, high_wind_threshold_m_s)

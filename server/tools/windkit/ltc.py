@@ -8,8 +8,9 @@ import json
 
 import windkit
 import windkit.ltc
+
 from server.main import mcp
-from server.tools.windkit._serializers import _ok, ds_to_dict, dict_to_ds
+from server.tools.windkit._serializers import _ok, dict_to_ds, ds_to_dict
 
 
 @mcp.tool()

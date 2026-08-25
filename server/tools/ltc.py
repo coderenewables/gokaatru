@@ -493,7 +493,9 @@ def _run_ltc_speedsort(
         sectors = _speedsort_sector_index(ref_dir)
 
         # All-sector fallback model (for sparse sectors)
-        threshold = float(min(SPEEDSORT_THRESHOLD_CEILING_MPS, SPEEDSORT_THRESHOLD_FRACTION * float(np.mean(reference))))
+        threshold = float(
+            min(SPEEDSORT_THRESHOLD_CEILING_MPS, SPEEDSORT_THRESHOLD_FRACTION * float(np.mean(reference)))
+        )
         fallback_model: dict[str, float] | None = None
         mask_all = reference >= threshold
         if np.any(mask_all):

@@ -138,6 +138,17 @@ export function CleaningView() {
 
   return (
     <div className="stage-view">
+      <section className="path-panel optional-stage-banner">
+        <div className="optional-stage-text">
+          <h3>Data cleaning is optional</h3>
+          <p className="muted">
+            Nothing here is required to continue. Apply filters if the campaign needs them, or go
+            straight to the Analysis Engine.
+          </p>
+        </div>
+        <RunButton label="Skip cleaning →" variant="secondary" onClick={() => setActiveTab("engine")} />
+      </section>
+
       <section className="path-panel">
         <h3>Review sensors</h3>
         <p className="muted">

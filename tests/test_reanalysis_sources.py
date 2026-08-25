@@ -10,8 +10,6 @@ up as a named failure rather than as MERRA-2 quietly going unused again.
 """
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -23,7 +21,6 @@ from server.schemas.common import Coordinate
 from server.state.session import SessionState
 from server.tools.era5 import _interpolate_era5_to_site
 from server.tools.extrapolation import _extrapolate_all_reanalysis_nodes
-
 
 # ---------------------------------------------------------------------------
 # §6.3 — the descriptor table

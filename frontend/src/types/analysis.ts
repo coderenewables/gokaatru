@@ -605,6 +605,9 @@ export const shearMethodSchema = z.enum(["power_law", "log_law", "roughness", "w
 
 export const reanalysisProviderSchema = z.enum(["era5", "merra2", "brighthub", "windkit"]);
 
+/** Where the reanalysis is downloaded from — distinct from which dataset is preferred. */
+export const reanalysisAcquisitionSourceSchema = z.enum(["brighthub", "earthdatahub"]);
+
 export const ltcAlgorithmConfigSchema = z.enum([
   "speedsort",
   "linear_least_squares",
@@ -684,6 +687,7 @@ const reanalysisNodeSchema = z.object({
 
 const reanalysisConfigSchema = z.object({
   preferredProvider: reanalysisProviderSchema,
+  acquisitionSource: reanalysisAcquisitionSourceSchema,
   searchLatitude: z.number(),
   searchLongitude: z.number(),
   startDate: z.string(),

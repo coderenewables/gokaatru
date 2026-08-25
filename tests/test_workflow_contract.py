@@ -290,8 +290,8 @@ def test_undoing_a_cleaning_rule_silently_deletes_the_hub_height_column():
     Undo still rebuilds from raw — that is its job — but it now reports the derived columns
     it removed and bumps the data version, so everything downstream is flagged stale.
     """
-    from server.tools.extrapolation import _extrapolate_to_hub_height
     from server.tools.cleaning import _undo_cleaning_rule
+    from server.tools.extrapolation import _extrapolate_to_hub_height
     from server.tools.shear import _build_shear_table
 
     state = _shear_state()

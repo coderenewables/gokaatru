@@ -418,7 +418,11 @@ def _sensor_statistics(state: SessionState, sensor_name: str) -> dict:
     # statistical reductions computed. Return a minimal safe payload instead
     # of crashing on .mean()/.median()/.std().
     if not pd.api.types.is_numeric_dtype(series):
-        coverage_pct = float(series.notna().sum() / len(state.timeseries_df) * 100.0) if len(state.timeseries_df) else 0.0
+        coverage_pct = (
+            float(series.notna().sum() / len(state.timeseries_df) * 100.0)
+            if len(state.timeseries_df)
+            else 0.0
+        )
         return {
             "sensor_name": sensor_name,
             "mean": float("nan"),

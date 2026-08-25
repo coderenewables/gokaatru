@@ -1279,10 +1279,22 @@ h3 {
   gap: 1.25rem;
 }
 
-.data-import-view {
+.data-import-view,
+.data-cleaning-view {
   max-width: 1120px;
   margin: 1.25rem auto;
   padding: 0 1.25rem 2rem;
+}
+
+.optional-stage-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.optional-stage-text h3 {
+  margin-top: 0;
 }
 
 .sensor-overview-view {

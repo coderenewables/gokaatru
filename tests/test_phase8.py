@@ -37,7 +37,9 @@ def _seed_ltc_state(state: SessionState) -> None:
     index = pd.date_range("2019-01-01", periods=3 * 8760, freq="h")
     reference = 8.0 + 1.4 * np.sin(np.linspace(0.0, 8.0 * np.pi, index.size)) + np.linspace(0.0, 1.0, index.size)
     measured = 0.94 * reference + 0.55 + 0.12 * np.cos(np.linspace(0.0, 6.0 * np.pi, index.size))
-    state.timeseries_df = pd.DataFrame({"Spd_100m": measured, "Dir_100m": np.linspace(0.0, 359.0, index.size)}, index=index)
+    state.timeseries_df = pd.DataFrame(
+        {"Spd_100m": measured, "Dir_100m": np.linspace(0.0, 359.0, index.size)}, index=index
+    )
     state.era5_interpolated_df = pd.DataFrame(
         {
             "Spd_100m_hub": reference,
@@ -127,8 +129,16 @@ def test_plot_dispatch_new_names(api_client: tuple[TestClient, SessionManager]) 
     _seed_ltc_state(state)
 
     responses = {
-        "ltc_scatter": client.post(f"/api/sessions/{session_id}/plots/ltc_scatter", headers=headers, json={"algorithm": "linear_least_squares"}),
-        "ltc_residuals": client.post(f"/api/sessions/{session_id}/plots/ltc_residuals", headers=headers, json={"algorithm": "linear_least_squares"}),
+        "ltc_scatter": client.post(
+            f"/api/sessions/{session_id}/plots/ltc_scatter",
+            headers=headers,
+            json={"algorithm": "linear_least_squares"},
+        ),
+        "ltc_residuals": client.post(
+            f"/api/sessions/{session_id}/plots/ltc_residuals",
+            headers=headers,
+            json={"algorithm": "linear_least_squares"},
+        ),
         "ltc_monthly": client.post(f"/api/sessions/{session_id}/plots/ltc_monthly", headers=headers, json={}),
         "ltc_convergence": client.post(f"/api/sessions/{session_id}/plots/ltc_convergence", headers=headers, json={}),
         "uncertainty_tornado": client.post(

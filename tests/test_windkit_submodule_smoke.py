@@ -147,8 +147,8 @@ class TestPlottingSmoke:
         upstream signature drift at import time."""
         from server.tools.windkit.plotting import (
             windkit_plot_histogram,
-            windkit_plot_wind_rose,
             windkit_plot_vertical_profile,
+            windkit_plot_wind_rose,
         )
         assert callable(windkit_plot_histogram)
         assert callable(windkit_plot_wind_rose)

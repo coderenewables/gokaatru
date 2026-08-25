@@ -16,53 +16,53 @@ from server.state.session import SessionState
 from server.tools.config import _get_run_config, _save_run_config
 from server.tools.map import _get_site_overview_map
 from server.tools.visualization import (
-    _plot_annual_means,
-    _plot_mast_shadow,
-    _plot_mcp_readiness,
-    _plot_duration_curve,
-    _plot_extremes_fit,
     _plot_air_density,
+    _plot_annual_means,
     _plot_cleaning_overlay,
     _plot_coverage_timeline,
     _plot_data_coverage,
     _plot_direction_distribution,
-    _plot_diurnal_boxplot,
     _plot_diurnal,
+    _plot_diurnal_boxplot,
+    _plot_duration_curve,
     _plot_energy_rose,
     _plot_era5_comparison,
     _plot_era5_measured_overlay,
-    _plot_ltc_comparison,
+    _plot_era5_scatter,
+    _plot_exceedance_curve,
+    _plot_extremes_fit,
     _plot_ltc_annual_convergence,
+    _plot_ltc_comparison,
     _plot_ltc_monthly_comparison,
     _plot_ltc_residuals,
     _plot_ltc_scatter,
-    _plot_monthly_means,
+    _plot_mast_shadow,
+    _plot_mcp_readiness,
     _plot_monthly_boxplot,
+    _plot_monthly_means,
+    _plot_power_density,
+    _plot_qc_flags,
+    _plot_ramp_histogram,
     _plot_scatter,
     _plot_scenario_comparison,
-    _plot_shear_profile,
+    _plot_seasonal_profile,
+    _plot_sector_speed,
+    _plot_sensor_distribution,
+    _plot_sensor_residuals,
     _plot_shear_alpha,
+    _plot_shear_profile,
     _plot_shear_table,
     _plot_shear_timeseries,
-    _plot_era5_scatter,
-    _plot_sector_speed,
-    _plot_seasonal_profile,
-    _plot_sensor_distribution,
     _plot_speed_distribution,
-    _plot_power_density,
-    _plot_ramp_histogram,
-    _plot_qc_flags,
-    _plot_sensor_residuals,
-    _plot_timeseries_preview,
     _plot_timeseries,
+    _plot_timeseries_preview,
     _plot_turbulence_intensity,
     _plot_turbulence_windrose,
     _plot_uncertainty_breakdown,
     _plot_uncertainty_tornado,
-    _plot_exceedance_curve,
     _plot_weibull,
-    _plot_windrose,
     _plot_wind_veer,
+    _plot_windrose,
 )
 
 router = APIRouter(prefix="/sessions/{session_id}", tags=["results"])
@@ -100,7 +100,11 @@ def get_ensemble_results(
 ) -> dict:
     """Return a compact summary of the stored ensemble result, if one exists."""
     del session_id
-    reference_columns = [] if state.era5_interpolated_df is None else pd.DataFrame(state.era5_interpolated_df).columns.tolist()
+    reference_columns = (
+        []
+        if state.era5_interpolated_df is None
+        else pd.DataFrame(state.era5_interpolated_df).columns.tolist()
+    )
     if state.ensemble_df is None:
         return {"available": False, "reference_columns": reference_columns}
     frame = pd.DataFrame(state.ensemble_df)
@@ -133,7 +137,9 @@ def get_plot(
         "monthly_boxplot": lambda: _plot_monthly_boxplot(state, body.sensor_name),
         "seasonal_profile": lambda: _plot_seasonal_profile(state, body.sensor_names),
         "air_density": lambda: _plot_air_density(state, body.sensor_a, body.sensor_b, body.sensor_name),
-        "power_density": lambda: _plot_power_density(state, body.speed_sensor or body.sensor_name, body.direction_sensor),
+        "power_density": lambda: _plot_power_density(
+            state, body.speed_sensor or body.sensor_name, body.direction_sensor
+        ),
         "extremes_fit": lambda: _plot_extremes_fit(state, body.speed_sensor or body.sensor_name),
         "ramp_histogram": lambda: _plot_ramp_histogram(state, body.speed_sensor or body.sensor_name),
         "duration_curve": lambda: _plot_duration_curve(state, body.speed_sensor or body.sensor_name),
@@ -143,7 +149,9 @@ def get_plot(
         "mcp_readiness": lambda: _plot_mcp_readiness(state, body.speed_sensor or body.sensor_name, body.sensor_b),
         "speed_distribution": lambda: _plot_speed_distribution(state, body.sensor_name or body.speed_sensor),
         "exceedance_curve": lambda: _plot_exceedance_curve(state, body.sensor_name or body.speed_sensor),
-        "direction_distribution": lambda: _plot_direction_distribution(state, body.direction_sensor or body.sensor_name),
+        "direction_distribution": lambda: _plot_direction_distribution(
+            state, body.direction_sensor or body.sensor_name
+        ),
         "sector_speed": lambda: _plot_sector_speed(state, body.speed_sensor or body.sensor_name, body.direction_sensor),
         "energy_rose": lambda: _plot_energy_rose(state, body.speed_sensor or body.sensor_name, body.direction_sensor),
         "diurnal": lambda: _plot_diurnal(state, body.sensor_names),

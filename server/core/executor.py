@@ -277,7 +277,12 @@ def _tool_registry() -> dict[str, tuple[ModuleType, Callable[..., Any]]]:
 class WorkflowExecutor:
     """Execute workflow operation/dataset nodes in topological order for one session."""
 
-    def __init__(self, state: SessionState, nodes: list[WorkflowExecutionNode], edges: list[WorkflowExecutionEdge]) -> None:
+    def __init__(
+        self,
+        state: SessionState,
+        nodes: list[WorkflowExecutionNode],
+        edges: list[WorkflowExecutionEdge],
+    ) -> None:
         self.state = state
         self.nodes = [node for node in nodes if node.kind in {"dataset", "operation"}]
         self.edges = edges
@@ -665,7 +670,11 @@ class WorkflowExecutor:
         return {
             "cleaning_rule_count": len(self.state.cleaning_log),
             "shear_table_shape": None if self.state.shear_table is None else list(self.state.shear_table.shape),
-            "era5_interpolated_rows": None if self.state.era5_interpolated_df is None else int(len(self.state.era5_interpolated_df)),
+            "era5_interpolated_rows": (
+                None
+                if self.state.era5_interpolated_df is None
+                else int(len(self.state.era5_interpolated_df))
+            ),
             "ltc_metrics": ltc,
             "ensemble": ensemble,
             "uncertainty": self.state.latest_uncertainty,
@@ -781,7 +790,13 @@ class WorkflowExecutor:
         cancelled = self._is_cancelled()
         final_status = "cancelled" if cancelled else "error" if encountered_error else "ok"
         final_event_type = "run_cancelled" if cancelled else "run_finished"
-        final_message = "Execution cancelled" if cancelled else "Execution completed" if not encountered_error else "Execution stopped after error"
+        final_message = (
+            "Execution cancelled"
+            if cancelled
+            else "Execution completed"
+            if not encountered_error
+            else "Execution stopped after error"
+        )
         finished = _as_event(run_id, final_event_type, None, final_status, final_message)
         self._append_event(finished)
         self._finish_runtime(cancelled)
@@ -820,7 +835,9 @@ class WorkflowExecutor:
             return events
 
         self._set_node_status(next_node.id, "running")
-        node_started = _as_event(run_id, "node_started", next_node.id, "running", f"Running {next_node.label or next_node.id}")
+        node_started = _as_event(
+            run_id, "node_started", next_node.id, "running", f"Running {next_node.label or next_node.id}"
+        )
         self._append_event(node_started)
         events.append(node_started)
 

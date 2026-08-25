@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-import pandas as pd
-
 from server.state.session import SessionState
 from server.tools.advanced_analysis import _compute_energy_metrics, _compute_extremes, _compute_persistence
 from server.tools.atmosphere import _compute_atmospheric_conditions
@@ -26,7 +24,11 @@ def _primary_speed_sensor(state: SessionState, requested: str) -> str:
         if metadata.get("sensor_type") == "wind_speed" and name in state.timeseries_df.columns
     ]
     if not candidates:
-        candidates = [str(mapping["speed_col"]) for mapping in state.sensor_mapping.values() if mapping.get("speed_col") in state.timeseries_df.columns]
+        candidates = [
+            str(mapping["speed_col"])
+            for mapping in state.sensor_mapping.values()
+            if mapping.get("speed_col") in state.timeseries_df.columns
+        ]
     if not candidates:
         raise ValueError("No wind-speed sensor is available")
     return max(candidates, key=lambda name: int(state.timeseries_df[name].notna().sum()))
@@ -70,7 +72,15 @@ def _compute_overview_summary(state: SessionState, speed_sensor: str = "", direc
         _entry("Data quality", "Primary speed sensor", speed),
         _entry("Data quality", "Primary coverage", round(float(series.notna().mean() * 100.0), 2), "%"),
         _entry("Data quality", "Cleaning rules applied", len(state.cleaning_log)),
-        _entry("Measurement", "Wind-speed sensors", sum(1 for metadata in state.sensor_inventory.values() if metadata.get("sensor_type") == "wind_speed")),
+        _entry(
+            "Measurement",
+            "Wind-speed sensors",
+            sum(
+                1
+                for metadata in state.sensor_inventory.values()
+                if metadata.get("sensor_type") == "wind_speed"
+            ),
+        ),
     ]
 
     climate = _compute_wind_climate(state, speed, direction)
@@ -86,7 +96,12 @@ def _compute_overview_summary(state: SessionState, speed_sensor: str = "", direc
     _add_optional(items, lambda: _compute_vertical_structure(state), lambda result: items.extend([
         _entry("Vertical structure", "Mean alpha", round(float(result["alpha"]["mean"]), 3)),
         _entry("Vertical structure", "Power-law R²", round(float(result["power_law_r_squared"]), 3)),
-        _entry("Vertical structure", "Mean veer", "N/A" if result["veer"] is None else round(float(result["veer"]["mean_deg_per_100m"]), 3), "deg / 100 m"),
+        _entry(
+            "Vertical structure",
+            "Mean veer",
+            "N/A" if result["veer"] is None else round(float(result["veer"]["mean_deg_per_100m"]), 3),
+            "deg / 100 m",
+        ),
     ]))
     _add_optional(items, lambda: _compute_turbulence_analysis(state, speed), lambda result: items.extend([
         _entry("Turbulence", "Mean TI", round(float(result["mean_ti"]), 3)),
@@ -94,7 +109,11 @@ def _compute_overview_summary(state: SessionState, speed_sensor: str = "", direc
     ]))
     _add_optional(items, lambda: _compute_atmospheric_conditions(state), lambda result: items.extend([
         _entry("Atmosphere", "Mean air density", round(float(result["air_density"]["mean"]), 3), "kg/m³"),
-        _entry("Atmosphere", "Density correction factor", round(float(result["air_density"]["density_correction_factor"]), 3)),
+        _entry(
+            "Atmosphere",
+            "Density correction factor",
+            round(float(result["air_density"]["density_correction_factor"]), 3),
+        ),
     ]))
     _add_optional(items, lambda: _compute_energy_metrics(state, speed, direction), lambda result: items.extend([
         _entry("Energy", "Wind power density", round(float(result["wind_power_density_w_m2"]), 1), "W/m²"),

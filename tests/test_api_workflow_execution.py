@@ -42,7 +42,10 @@ def _create_session(client: TestClient) -> tuple[str, dict[str, str]]:
 
 def test_loads_lenient_repairs_windows_paths_with_unicode_prefix() -> None:
     """Repair raw Windows paths where a directory name begins with the JSON unicode escape prefix."""
-    payload = r'{"file_path":"D:\gokaatru\data\uploads\HKW-B-FLS-Boxkite_timeseries_data.csv","alias":"HKW-B-FLS-Boxkite"}'
+    payload = (
+        r'{"file_path":"D:\gokaatru\data\uploads\HKW-B-FLS-Boxkite_timeseries_data.csv",'
+        r'"alias":"HKW-B-FLS-Boxkite"}'
+    )
 
     result = _loads_lenient(payload)
 
@@ -259,7 +262,12 @@ def test_workflow_stream_endpoint_emits_events(execution_client: tuple[TestClien
         "edges": [],
     }
 
-    with client.stream("POST", f"/api/sessions/{session_id}/workflow/execute/stream", headers=headers, json=payload) as response:
+    with client.stream(
+        "POST",
+        f"/api/sessions/{session_id}/workflow/execute/stream",
+        headers=headers,
+        json=payload,
+    ) as response:
         assert response.status_code == 200
         lines = [line for line in response.iter_lines() if line]
 

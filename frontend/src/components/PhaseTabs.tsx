@@ -1,11 +1,12 @@
-// Primary navigation: Data import / Canvas / Stepper / Analysis Engine / Results /
-// Copilot / Sensor Overview / Compare / How To.
+// Primary navigation: Data import / Data cleaning / Analysis Engine / Canvas /
+// Stepper / Results / Copilot / Sensor Overview / Compare / How To.
 import clsx from "clsx";
 
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
 
 type TabId =
   | "import"
+  | "cleaning"
   | "setup"
   | "workflow"
   | "engine"
@@ -17,9 +18,10 @@ type TabId =
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "import", label: "Data import" },
+  { id: "cleaning", label: "Data cleaning" },
+  { id: "engine", label: "Analysis Engine" },
   { id: "workflow", label: "Canvas" },
   { id: "setup", label: "Stepper" },
-  { id: "engine", label: "Analysis Engine" },
   { id: "results", label: "Results" },
   { id: "copilot", label: "Copilot" },
   { id: "sensor_review", label: "Sensor Overview" },

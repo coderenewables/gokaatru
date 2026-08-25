@@ -23,7 +23,6 @@ from server.tools.statistics import (
     TI_MIN_BIN_RECORDS,
     TI_MIN_SPEED_MPS,
     _compute_turbulence_analysis,
-    _compute_weibull_params,
     _compute_wind_climate,
     _weibull_wasp_fit,
 )

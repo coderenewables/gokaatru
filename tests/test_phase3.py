@@ -16,7 +16,6 @@ import xarray as xr
 from server.state.session import session
 from server.tools.air_density import compute_air_density
 from server.tools.era5 import (
-    Era5UpstreamError,
     _era5_dataset_url,
     _era5_storage_options,
     compute_era5_wind_speed,
@@ -143,7 +142,9 @@ def test_extract_era5_data_retries_transient_payload_errors(monkeypatch: pytest.
         index=index,
     )
     monkeypatch.setattr("server.tools.era5._open_era5_dataset", lambda: object())
-    monkeypatch.setattr("server.tools.era5._era5_cache_path", lambda latitude, longitude: tmp_path / "retry-node.parquet")
+    monkeypatch.setattr(
+        "server.tools.era5._era5_cache_path", lambda latitude, longitude: tmp_path / "retry-node.parquet"
+    )
     monkeypatch.setattr("server.tools.era5.time.sleep", lambda _: None)
 
     def fake_read(dataset: object, latitude: float, longitude: float, start_date: str, end_date: str) -> pd.DataFrame:

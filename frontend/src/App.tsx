@@ -6,6 +6,7 @@ import { AppHeader } from "./components/AppHeader";
 import { PhaseTabs } from "./components/PhaseTabs";
 import { HomeView } from "./components/HomeView";
 import { DataLoadView } from "./components/stages/DataLoadView";
+import { CleaningView } from "./components/stages/CleaningView";
 import { StageShell } from "./components/stages/StageShell";
 import { WorkflowView } from "./components/WorkflowView";
 import { CopilotView } from "./components/CopilotView";
@@ -44,6 +45,11 @@ export default function App() {
         {activeTab === "import" ? (
           <section className="data-import-view">
             <DataLoadView />
+          </section>
+        ) : null}
+        {activeTab === "cleaning" ? (
+          <section className="data-cleaning-view">
+            <CleaningView />
           </section>
         ) : null}
         {activeTab === "setup" ? <StageShell /> : null}

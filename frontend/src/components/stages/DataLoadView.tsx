@@ -47,6 +47,7 @@ export function DataLoadView() {
       {path === "dataset" ? <DatasetPath /> : null}
 
       <SensorInventory sensors={sensors} selected={selected} setSelected={setSelected} />
+      <ReanalysisSourceForm />
       <SiteConfigForm
         applyOnSave={applyOnSave}
         setApplyOnSave={setApplyOnSave}
@@ -456,6 +457,48 @@ function SensorInventory({ sensors, selected, setSelected }: SensorInventoryProp
   );
 }
 
+function ReanalysisSourceForm() {
+  const config = useWorkspaceStore((state) => state.config);
+  const updateConfigValue = useWorkspaceStore((state) => state.updateConfigValue);
+  return (
+    <section className="path-panel">
+      <h3>Long-term reference</h3>
+      <p className="muted">
+        ERA5 and MERRA-2 are downloaded when you save the config below. BrightHub supplies both
+        datasets; EarthDataHub is ERA5 only and requires a configured PAT.
+      </p>
+      <div className="form-grid">
+        <label className="form-field">
+          <span>Provider</span>
+          <select
+            value={config.reanalysis.acquisitionSource}
+            onChange={(e) => updateConfigValue("reanalysis.acquisitionSource", e.target.value)}
+          >
+            <option value="brighthub">BrightHub (ERA5 + MERRA-2)</option>
+            <option value="earthdatahub">Direct ERA5 (EarthDataHub)</option>
+          </select>
+        </label>
+        <label className="form-field">
+          <span>Start date</span>
+          <input
+            type="date"
+            value={config.reanalysis.startDate}
+            onChange={(e) => updateConfigValue("reanalysis.startDate", e.target.value)}
+          />
+        </label>
+        <label className="form-field">
+          <span>End date</span>
+          <input
+            type="date"
+            value={config.reanalysis.endDate}
+            onChange={(e) => updateConfigValue("reanalysis.endDate", e.target.value)}
+          />
+        </label>
+      </div>
+    </section>
+  );
+}
+
 interface SiteConfigFormProps {
   applyOnSave: boolean;
   setApplyOnSave: (value: boolean) => void;
@@ -466,7 +509,7 @@ interface SiteConfigFormProps {
 function SiteConfigForm({ applyOnSave, setApplyOnSave, excludedCount, applySelection }: SiteConfigFormProps) {
   const config = useWorkspaceStore((state) => state.config);
   const updateConfigValue = useWorkspaceStore((state) => state.updateConfigValue);
-  const saveConfigAndRunModel = useWorkspaceStore((state) => state.saveConfigAndRunModel);
+  const saveConfigAndSetup = useWorkspaceStore((state) => state.saveConfigAndSetup);
 
   return (
     <section className="path-panel">
@@ -531,7 +574,7 @@ function SiteConfigForm({ applyOnSave, setApplyOnSave, excludedCount, applySelec
           />
         </label>
       </div>
-      <p className="muted">Hub height is required to build and run the default model.</p>
+      <p className="muted">Hub height is required to build the default model.</p>
       {excludedCount > 0 ? (
         <label className="form-check apply-selection-check">
           <input
@@ -543,10 +586,10 @@ function SiteConfigForm({ applyOnSave, setApplyOnSave, excludedCount, applySelec
         </label>
       ) : null}
       <RunButton
-        label="Save config and run model"
+        label="Save config and setup"
         onClick={async () => {
           if (applyOnSave && excludedCount > 0) await applySelection();
-          void saveConfigAndRunModel();
+          void saveConfigAndSetup();
         }}
       />
     </section>

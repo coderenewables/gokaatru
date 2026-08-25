@@ -184,8 +184,8 @@ const FEATURES: Array<{ icon: string; title: string; body: string }> = [
   },
   {
     icon: "▶",
-    title: "One-click automatic run",
-    body: "Save config and run builds the default Canvas plan and executes the full pipeline — shear, ERA5, LTC, ensemble, uncertainty — with live node progress.",
+    title: "One-click setup",
+    body: "Save config and setup downloads the long-term reference and builds the default Canvas plan — shear, ERA5, LTC, ensemble, uncertainty — ready to run when you are.",
   },
   {
     icon: "◫",

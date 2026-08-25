@@ -14,15 +14,22 @@ State is session-scoped; `runconfig` is the single source of truth for site meta
 The default application flow is:
 
 ```
-Data import + hub height
+Data import + hub height + reanalysis provider
     │
     ├──► BrightHub sign-in when required
     │
-    └──► Save config and run model
+    └──► Save config and setup
+           │
+           ├──► ERA5 / MERRA-2 download + interpolation
            │
            ▼
-    Editable Canvas default plan
-    (live node progress, timing, and ETA)
+    Data cleaning (fully optional, skippable)
+           │
+           ▼
+       Analysis Engine (scenario sweep)
+           │
+           ▼
+    Editable Canvas default plan — prepared, run on demand
            │
            ▼
        Post-import Stepper and specialist tools
@@ -33,8 +40,9 @@ Data import + hub height
 1. Import measured time-series and an IEA Task 43 data model, import a BrightHub location, or load a shared dataset.
 2. (Optional) In the **Analysis sensor selection** table, untick sensors to exclude them. Applying the selection removes them from the working data and records them in `excluded_sensors`; reloading the data file or re-importing from BrightHub restores the full set.
 3. Enter the site metadata and **hub height**. Hub height has no default and is required before a model can run.
-4. Click **Save config and run model**. If BrightHub credentials are not available, the app opens the BrightHub sign-in view instead of starting a run.
-5. On successful authentication, the app persists the runconfig, opens the Canvas, and starts the default graph. The graph remains editable for later reruns or manual changes.
+4. In **Long-term reference**, choose the reanalysis provider — BrightHub (ERA5 + MERRA-2) or EarthDataHub (direct ERA5 only) — and the date window. The choice persists to `runconfig` as `reanalysis.acquisitionSource` (default `brighthub`), so which reanalysis a result was built on is recorded with the analysis rather than being a per-session UI setting. It is a frontend-owned key, not a mirror: nothing on the backend derives it, and `tests/test_runconfig_contract.py` asserts it survives normalization.
+5. Click **Save config and setup**. When the provider is BrightHub and credentials are not available, the app opens the BrightHub sign-in view instead of downloading.
+6. The app persists the runconfig, downloads and interpolates the reanalysis, prepares the default Canvas graph, and opens the optional cleaning step. **The Canvas is not executed automatically** — the prepared graph stays editable and runs only when the analyst starts it from the Canvas.
 
 ### Running a model on Canvas
 
@@ -64,8 +72,8 @@ The Stepper remains available after data import for guided review and manual ope
 
 | Stage | What happens |
 |---|---|
-| **1. Data cleaning** | Review the imported measurement inventory, choose which sensors stay in the analysis (excluded sensors are removed from the working data and recorded in `excluded_sensors`), and apply explicit cleaning filters when appropriate. |
-| **2. Reanalysis acquisition** | Review BrightHub ERA5 + MERRA-2 nodes and site interpolation; optional direct EarthDataHub ERA5 is available as a separate, credentialed fallback. |
+| **1. Data cleaning** | Review the imported measurement inventory, choose which sensors stay in the analysis (excluded sensors are removed from the working data and recorded in `excluded_sensors`), and apply explicit cleaning filters when appropriate. Fully optional — it has its own top-level tab, and nothing downstream requires it. |
+| **2. Reanalysis acquisition** | Review the ERA5 + MERRA-2 nodes and site interpolation already downloaded by **Save config and setup**, and re-run acquisition if needed. The provider (BrightHub, or direct EarthDataHub ERA5) and date window are chosen on the Data import page. |
 | **3. Measured-data exploration** | Recovery/availability, wind rose, Weibull, diurnal/annual profiles, shear profile, turbulence intensity — to refine shear sensors and LTC strategy. |
 | **4. Shear → hub (measured)** | Power-law (α) or log-law (z₀) shear + 12×24 lookup, extrapolate measured sensors to hub height. Only records above `min_speed_mps` (default **3.0 m/s**) contribute — below that, `ln(v₂/v₁)` is anemometer noise rather than profile. α is still bounded to [−1, 1] as a backstop, and every response reports how often that clamp fired. |
 | **5. Reanalysis → hub** | Confirm long-term reference series are available at hub height using the chosen shear method. |
@@ -73,7 +81,7 @@ The Stepper remains available after data import for guided review and manual ope
 | **7. Clipping** | Pick the representative historical window that minimizes combined historic + climate uncertainty. Calendar years below **90%** completeness are excluded and reported, so a partial first or last year cannot inflate inter-annual variability. |
 | **8. Ensemble & uncertainty** | Inverse-RMSE ensemble blend, RSS total uncertainty + P50/75/90/99, and named scenarios for comparison. |
 
-Beyond the stepper, the **Canvas** tab renders the full pipeline as an editable React-Flow DAG (run auto/step, snapshots, fork branches), the **Results** tab is a read-only aggregate report of everything the session has produced (run overview, measured data, shear, reanalysis, LTC, ensemble & uncertainty, clipping/scenarios — it never triggers computation), the **Sensor Overview** tab is a measured-data validation dashboard, the **Copilot** tab is a BYOK chat that drives backend tools via natural language (the *Allow the assistant to modify this session* setting controls whether it may write as well as read — see [Chat tool authority](#chat-tool-authority)), and the **Compare** tab diffs saved scenarios.
+Tabs are ordered **Data import → Data cleaning → Analysis Engine → Canvas → Stepper → Results → Copilot → Sensor Overview → Compare → How To**, so the scenario sweep is reached before committing to a single pipeline. The **Canvas** tab renders the full pipeline as an editable React-Flow DAG (run auto/step, snapshots, fork branches) — it is prepared by *Save config and setup* but never executed automatically; the **Results** tab is a read-only aggregate report of everything the session has produced (run overview, measured data, shear, reanalysis, LTC, ensemble & uncertainty, clipping/scenarios — it never triggers computation), the **Sensor Overview** tab is a measured-data validation dashboard, the **Copilot** tab is a BYOK chat that drives backend tools via natural language (the *Allow the assistant to modify this session* setting controls whether it may write as well as read — see [Chat tool authority](#chat-tool-authority)), and the **Compare** tab diffs saved scenarios.
 
 ## Quick start
 

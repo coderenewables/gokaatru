@@ -16,22 +16,22 @@ export const PIPELINE: PipelineStep[] = [
   {
     n: 1,
     title: "Data import",
-    body: "Upload measured time-series files (or import from BrightHub), then set the site coordinate and hub height.",
+    body: "Upload measured time-series files (or import from BrightHub), set the site coordinate and hub height, and choose the long-term reference provider (BrightHub for ERA5 + MERRA-2, or EarthDataHub for ERA5 only).",
   },
   {
     n: 2,
-    title: "Automatic Canvas run",
-    body: "Save config and run model builds the default Canvas plan (shear, ERA5, linear least-squares, variance-ratio, ensemble, clipping, uncertainty) and executes it automatically, streaming live node progress. The plan stays editable for reruns or manual changes.",
+    title: "Save config and setup",
+    body: "Saving the config downloads the reanalysis at the four surrounding nodes, interpolates it to the site, and builds the default Canvas plan. The plan is prepared but not executed — the Canvas runs only when you start it.",
   },
   {
     n: 3,
-    title: "Data cleaning",
-    body: "Review the measurement inventory and apply only the cleaning filters appropriate for the campaign.",
+    title: "Data cleaning (optional)",
+    body: "Review the measurement inventory and apply only the cleaning filters appropriate for the campaign. Nothing here is required; skip straight to the Analysis Engine if the campaign needs no filtering.",
   },
   {
     n: 4,
-    title: "Reanalysis acquisition",
-    body: "Download ERA5 and MERRA-2 at the four surrounding nodes and interpolate them to your site. Provides the long-term reference series.",
+    title: "Analysis Engine",
+    body: "Sweep the scenario space — sensor policies, shear methods, LTC algorithms — and read the resulting spread, sensitivity, and gate report before committing to a single pipeline.",
   },
   {
     n: 5,
@@ -71,8 +71,10 @@ interface TabDoc {
 }
 
 const TAB_DOCS: TabDoc[] = [
-  { label: "Data import", body: "Upload or import measurements and save the site and hub-height configuration." },
-  { label: "Canvas", body: "Review and edit the automatically prepared analysis plan before running it." },
+  { label: "Data import", body: "Upload or import measurements, choose the reanalysis provider, and save the site and hub-height configuration." },
+  { label: "Data cleaning", body: "Optional filtering applied once, before any scenario runs. Skippable in full." },
+  { label: "Analysis Engine", body: "Sweep the scenario space and read the spread, sensitivity, and gate report." },
+  { label: "Canvas", body: "Review and edit the prepared analysis plan, then run it when you choose." },
   { label: "Stepper", body: "The eight post-import guided analysis stages. Each stage unlocks from its prerequisites." },
   { label: "Results", body: "Read-only aggregate report of everything the session has produced." },
   { label: "Sensor Overview", body: "Validate measured data quality and characterize the measured wind climate." },

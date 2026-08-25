@@ -485,7 +485,8 @@ def test_hour_of_day_bins_declare_the_utc_clock():
     share the clock, so the physics is self-consistent — but the hours are analyst-facing,
     and a 14:00 local peak at UTC+5:30 was reported at 08:30 with nothing saying so.
     """
-    from datetime import timedelta, timezone as dt_timezone
+    from datetime import timedelta
+    from datetime import timezone as dt_timezone
 
     from server.tools.statistics import _compute_diurnal_profile
 

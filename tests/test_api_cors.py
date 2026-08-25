@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from server.api.main import create_app, _get_allowed_origins
+from server.api.main import _get_allowed_origins, create_app
 
 
 def test_cors_allows_local_preview_origin(monkeypatch):

@@ -140,9 +140,8 @@ class TestUndoDeepCopySensorMapping:
         """Mutating the replay's nested sensor_mapping must not affect the live session."""
         state = _build_session()
 
-        # Capture the original nested dict object id
+        # Capture the original nested dict so identity can be asserted after the replay
         original_nested = state.sensor_mapping[80.0]
-        original_id = id(original_nested)
 
         # Apply and undo — the replay creates a deep copy
         _apply_cleaning_rule(state, "range_check", "Spd_80m", '{"min": 0, "max": 50}')

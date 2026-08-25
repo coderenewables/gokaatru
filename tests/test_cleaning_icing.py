@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from server.state.session import SessionState
 from server.tools.cleaning import _apply_icing_filter

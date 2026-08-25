@@ -162,7 +162,9 @@ def test_scenario_without_uncertainty_fails(api_client: tuple[TestClient, Sessio
     _seed_scenario_ready_state(state)
     state.latest_uncertainty = None
 
-    response = client.post(f"/api/sessions/{session_id}/scenarios", headers=headers, json={"name": "Missing uncertainty"})
+    response = client.post(
+        f"/api/sessions/{session_id}/scenarios", headers=headers, json={"name": "Missing uncertainty"}
+    )
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Run uncertainty before saving a scenario"

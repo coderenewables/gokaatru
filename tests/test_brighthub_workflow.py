@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -29,8 +28,20 @@ def _payload(latitude: float, longitude: float, dataset: str = "ERA5") -> dict:
         "longitude": longitude,
         "timeseries_data": {
             "data": [
-                {"timestamp": "2024-01-01T00:00:00Z", speed_key: 8.0, dir_key: 180.0, "Tmp_2m_degC": 10.0, "Prs_0m_hPa": 1010.0},
-                {"timestamp": "2024-01-01T01:00:00Z", speed_key: 9.0, dir_key: 190.0, "Tmp_2m_degC": 11.0, "Prs_0m_hPa": 1011.0},
+                {
+                    "timestamp": "2024-01-01T00:00:00Z",
+                    speed_key: 8.0,
+                    dir_key: 180.0,
+                    "Tmp_2m_degC": 10.0,
+                    "Prs_0m_hPa": 1010.0,
+                },
+                {
+                    "timestamp": "2024-01-01T01:00:00Z",
+                    speed_key: 9.0,
+                    dir_key: 190.0,
+                    "Tmp_2m_degC": 11.0,
+                    "Prs_0m_hPa": 1011.0,
+                },
             ]
         },
     }

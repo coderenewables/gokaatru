@@ -7,13 +7,9 @@ belt-and-suspenders guard.
 
 from __future__ import annotations
 
-import json
-import math
-
 import pytest
 
 from server.tools.config import _parse_config_value
-
 
 # ---------------------------------------------------------------------------
 # 1. Non-standard literals are rejected

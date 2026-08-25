@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import math
 
-import numpy as np
 import pytest
 
 from server.core.formulas import (
@@ -18,7 +17,6 @@ from server.core.formulas import (
     roughness_from_two_heights,
 )
 from server.core.momm import MEAN_DAYS_IN_MONTH as MOMM_MEAN_DAYS_IN_MONTH
-
 
 # =====================================================================
 # D9.5 — single source of truth for MEAN_DAYS_IN_MONTH

@@ -13,7 +13,6 @@ import pytest
 from server.state.session import session
 from server.tools.data_io import _parse_datamodel, _parse_timeseries
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 UPLOADS_DIR = REPO_ROOT / "data" / "uploads"
 

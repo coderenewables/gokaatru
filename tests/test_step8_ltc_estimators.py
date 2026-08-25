@@ -220,7 +220,10 @@ def test_ensemble_renormalises_weights_per_timestamp():
     corrected_full = TRUE_SLOPE * reference + TRUE_INTERCEPT
     covered = long_index >= pd.Timestamp("2020-01-01", tz="UTC")
     state.ltc_results = {
-        "algo_a": {"df": pd.DataFrame({"Timestamp": long_index, "corrected_wind_speed": corrected_full}), "metrics": {}},
+        "algo_a": {
+            "df": pd.DataFrame({"Timestamp": long_index, "corrected_wind_speed": corrected_full}),
+            "metrics": {},
+        },
         "algo_b": {
             "df": pd.DataFrame(
                 {"Timestamp": long_index[covered], "corrected_wind_speed": corrected_full[covered]}

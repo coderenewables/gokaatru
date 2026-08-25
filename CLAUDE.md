@@ -139,11 +139,16 @@ cd frontend && npm run test          # vitest
 cd frontend && npm run build         # tsc --noEmit && vite build
 ```
 
-Current baseline (verified 2026-08-23): 926 backend tests passing / 2 skipped, 172 frontend
-tests passing, frontend typecheck clean, 223 MCP tools registered. (The 2026-08-19
-verification report's 785/117 figures are stale — the project has added the sweep/Analysis
-Engine test suite and the F-09/15/16/23/26 fix-round tests since. `validate-gokaatru` always
-re-derives the live count rather than trusting either baseline.)
+Current baseline (verified 2026-08-25): 927 backend tests passing / 2 skipped, 178 frontend
+tests passing, frontend typecheck clean, 223 MCP tools registered, and
+`ruff check server/ tests/` clean. (The 2026-08-19 verification report's 785/117 figures are
+stale — the project has added the sweep/Analysis Engine test suite and the F-09/15/16/23/26
+fix-round tests since. `validate-gokaatru` always re-derives the live count rather than
+trusting either baseline.)
+
+**Ruff was not clean before 2026-08-25** — 185 findings (97 E501, 36 I001, 31 F401, 17 W292,
+3 F841, 1 F811) had accumulated because `ruff>=0.1` is unpinned and the check was not being
+run to zero. They are all fixed now; keep it at zero rather than letting a second wall build.
 
 ## Current state (2026-08-23)
 

@@ -4,8 +4,8 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,8 +22,8 @@ from server.api.routes.exports import router as exports_router
 from server.api.routes.health import router as health_router
 from server.api.routes.mcp import router as mcp_router
 from server.api.routes.results import router as results_router
-from server.api.routes.sweep import router as sweep_router
 from server.api.routes.sessions import router as sessions_router
+from server.api.routes.sweep import router as sweep_router
 from server.api.routes.uploads import router as uploads_router
 from server.api.routes.windkit import router as windkit_router
 from server.api.routes.workflow_execution import router as workflow_execution_router

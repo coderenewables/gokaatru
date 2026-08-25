@@ -121,7 +121,9 @@ def test_era5_extract_upstream_failure_returns_502(client: TestClient, monkeypat
 
     def fail_extract(*args: object, **kwargs: object) -> dict:
         del args, kwargs
-        raise Era5UpstreamError("ERA5 download failed while reading the remote EarthDataHub payload. Please retry the request.")
+        raise Era5UpstreamError(
+            "ERA5 download failed while reading the remote EarthDataHub payload. Please retry the request."
+        )
 
     monkeypatch.setattr("server.api.routes.analysis._extract_era5_data", fail_extract)
 

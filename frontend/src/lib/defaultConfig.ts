@@ -70,6 +70,7 @@ export function createDefaultWindAnalysisConfig(): WindAnalysisConfig {
     },
     reanalysis: {
       preferredProvider: "era5",
+      acquisitionSource: "brighthub",
       searchLatitude: 0,
       searchLongitude: 0,
       startDate: "2000-01-01",

@@ -189,6 +189,7 @@ export function serializeConfigToRunconfig(config: WindAnalysisConfig): AnyRecor
     },
     reanalysis: {
       preferredProvider: config.reanalysis.preferredProvider,
+      acquisitionSource: config.reanalysis.acquisitionSource,
       startDate: config.reanalysis.startDate,
       endDate: config.reanalysis.endDate,
       nodes: config.reanalysis.nodes,

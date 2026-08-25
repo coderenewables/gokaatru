@@ -4,9 +4,7 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
-
 
 # Mapping of sensor_mapping field names to their physical sensor type.  Lives in
 # core rather than tools/data_io so modules can share it without dragging in

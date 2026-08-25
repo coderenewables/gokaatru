@@ -6,12 +6,11 @@ from __future__ import annotations
 
 import json
 
-import numpy as np
+import windkit
 import xarray as xr
 
-import windkit
 from server.main import mcp
-from server.tools.windkit._serializers import _ok, da_to_dict, dict_to_da, dict_to_ds, ds_to_dict
+from server.tools.windkit._serializers import _ok, da_to_dict, dict_to_da
 
 
 @mcp.tool()

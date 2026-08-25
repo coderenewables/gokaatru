@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from server.core.validators import detect_timestep_minutes, to_utc_index
+from server.core.validators import to_utc_index
 from server.main import mcp
 from server.state.session import SessionState, session
 
@@ -38,7 +38,11 @@ def _speed_candidates(state: SessionState) -> list[str]:
         if metadata.get("sensor_type") == "wind_speed" and name in frame.columns
     ]
     if not candidates:
-        candidates = [(float(height), str(mapping["speed_col"])) for height, mapping in state.sensor_mapping.items() if mapping.get("speed_col") in frame.columns]
+        candidates = [
+            (float(height), str(mapping["speed_col"]))
+            for height, mapping in state.sensor_mapping.items()
+            if mapping.get("speed_col") in frame.columns
+        ]
     return [name for _height, name in sorted(candidates, reverse=True)]
 
 
@@ -80,7 +84,11 @@ def _comparison_metrics(pair: pd.DataFrame, sensor_a: str, sensor_b: str) -> dic
     slope = 0.0 if denominator <= 1e-12 else float(np.sum(centered_x * centered_y) / denominator)
     offset = float(y_values.mean() - slope * x_values.mean())
     residuals = y_values - x_values
-    correlation = 0.0 if np.std(x_values) == 0 or np.std(y_values) == 0 else float(np.corrcoef(x_values, y_values)[0, 1])
+    correlation = (
+        0.0
+        if np.std(x_values) == 0 or np.std(y_values) == 0
+        else float(np.corrcoef(x_values, y_values)[0, 1])
+    )
     return {
         "correlation": correlation,
         "r_squared": correlation**2,
@@ -97,12 +105,19 @@ def _compute_sensor_comparison(state: SessionState, sensor_a: str = "", sensor_b
     default_a, default_b = _default_comparison_pair(state) if not (sensor_a and sensor_b) else (sensor_a, sensor_b)
     pair = _aligned_pair(state, default_a, default_b)
     residual = (pair[default_b] - pair[default_a]).rename("residual")
-    sampled = residual.resample("D").mean() if len(residual) > 50_000 else residual.iloc[:: max(1, len(residual) // 10_000)]
+    sampled = (
+        residual.resample("D").mean()
+        if len(residual) > 50_000
+        else residual.iloc[:: max(1, len(residual) // 10_000)]
+    )
     return {
         "sensor_a": default_a,
         "sensor_b": default_b,
         **_comparison_metrics(pair, default_a, default_b),
-        "residuals": [{"timestamp": timestamp.isoformat(), "value": float(value)} for timestamp, value in sampled.items()],
+        "residuals": [
+            {"timestamp": timestamp.isoformat(), "value": float(value)}
+            for timestamp, value in sampled.items()
+        ],
     }
 
 
@@ -115,7 +130,11 @@ def _default_direction_sensor(state: SessionState) -> str:
         if metadata.get("sensor_type") == "wind_direction" and name in frame.columns
     ]
     if not candidates:
-        candidates = [(float(height), str(mapping["dir_col"])) for height, mapping in state.sensor_mapping.items() if mapping.get("dir_col") in frame.columns]
+        candidates = [
+            (float(height), str(mapping["dir_col"]))
+            for height, mapping in state.sensor_mapping.items()
+            if mapping.get("dir_col") in frame.columns
+        ]
     if not candidates:
         raise ValueError("Mast-effect analysis requires a wind-direction sensor")
     return max(candidates)[1]
@@ -243,7 +262,11 @@ def _compute_mcp_readiness(state: SessionState, speed_sensor: str, reference_sen
         raise ValueError("MCP readiness requires at least 10 concurrent hourly points")
     concurrent.columns = [speed_sensor, reference]
     metrics = _comparison_metrics(concurrent, reference, speed_sensor)
-    adjustment = float(concurrent[reference].mean() / concurrent[speed_sensor].mean()) if concurrent[speed_sensor].mean() > 0 else float("nan")
+    adjustment = (
+        float(concurrent[reference].mean() / concurrent[speed_sensor].mean())
+        if concurrent[speed_sensor].mean() > 0
+        else float("nan")
+    )
     return {
         "speed_sensor": speed_sensor,
         "reference_sensor": reference,

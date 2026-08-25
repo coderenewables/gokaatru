@@ -17,11 +17,21 @@ from scipy.stats import genextreme, gumbel_r, norm, weibull_min
 from server.core.reanalysis import get_reference_source, reference_source_names
 from server.core.validators import to_utc_index
 from server.main import mcp
-from server.tools.advanced_analysis import _compute_energy_metrics, _compute_extremes, _compute_persistence, _consecutive_ramps
-from server.tools.atmosphere import _atmospheric_series
-from server.tools.diagnostics import _compute_mast_effects, _compute_mcp_readiness, _compute_qc_diagnostics, _compute_sensor_comparison
-from server.tools.shear import _vertical_structure_series
 from server.state.session import SessionState, session
+from server.tools.advanced_analysis import (
+    _compute_energy_metrics,
+    _compute_extremes,
+    _compute_persistence,
+    _consecutive_ramps,
+)
+from server.tools.atmosphere import _atmospheric_series
+from server.tools.diagnostics import (
+    _compute_mast_effects,
+    _compute_mcp_readiness,
+    _compute_qc_diagnostics,
+    _compute_sensor_comparison,
+)
+from server.tools.shear import _vertical_structure_series
 
 COMPASS_16 = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
 MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -271,7 +281,11 @@ def _plot_era5_comparison(state: SessionState) -> dict:
             line=dict(color="#c86a2a", width=4),
         )
     )
-    figure.update_layout(title="ERA5 Annual Profile — Nodes vs Site", xaxis_title="Month", yaxis_title="Mean Speed (m/s)")
+    figure.update_layout(
+        title="ERA5 Annual Profile — Nodes vs Site",
+        xaxis_title="Month",
+        yaxis_title="Mean Speed (m/s)",
+    )
     return _plot_result(figure, "ERA5 Annual Profile — Nodes vs Site")
 
 
@@ -397,8 +411,16 @@ def _plot_speed_distribution(state: SessionState, sensor_name: str) -> dict:
     sorted_speed = np.sort(speed.to_numpy(dtype=float))
     exceedance = 100.0 * (1.0 - (np.arange(len(sorted_speed)) + 0.5) / len(sorted_speed))
     figure = make_subplots(specs=[[{"secondary_y": True}]])
-    figure.add_trace(go.Histogram(x=speed, histnorm="probability density", nbinsx=40, name="Density", opacity=0.72), secondary_y=False)
-    figure.add_trace(go.Scatter(x=sorted_speed, y=exceedance, mode="lines", name="Exceedance", line=dict(color="#c86a2a")), secondary_y=True)
+    figure.add_trace(
+        go.Histogram(x=speed, histnorm="probability density", nbinsx=40, name="Density", opacity=0.72),
+        secondary_y=False,
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=sorted_speed, y=exceedance, mode="lines", name="Exceedance", line=dict(color="#c86a2a")
+        ),
+        secondary_y=True,
+    )
     figure.update_layout(title=f"Wind-Speed Distribution — {sensor_name}", bargap=0.04)
     figure.update_xaxes(title_text="Wind Speed (m/s)")
     figure.update_yaxes(title_text="Probability Density", secondary_y=False)
@@ -414,8 +436,16 @@ def _plot_sensor_distribution(state: SessionState, sensor_name: str) -> dict:
     ordered = np.sort(values.to_numpy(dtype=float))
     cumulative = 100.0 * (np.arange(len(ordered)) + 0.5) / len(ordered)
     figure = make_subplots(specs=[[{"secondary_y": True}]])
-    figure.add_trace(go.Histogram(x=values, histnorm="probability density", nbinsx=40, name="Density", opacity=0.72), secondary_y=False)
-    figure.add_trace(go.Scatter(x=ordered, y=cumulative, mode="lines", name="Cumulative", line=dict(color="#c86a2a")), secondary_y=True)
+    figure.add_trace(
+        go.Histogram(x=values, histnorm="probability density", nbinsx=40, name="Density", opacity=0.72),
+        secondary_y=False,
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=ordered, y=cumulative, mode="lines", name="Cumulative", line=dict(color="#c86a2a")
+        ),
+        secondary_y=True,
+    )
     figure.update_layout(title=f"Distribution — {sensor_name}", bargap=0.04)
     figure.update_xaxes(title_text="Measured Value")
     figure.update_yaxes(title_text="Probability Density", secondary_y=False)
@@ -463,7 +493,11 @@ def _plot_monthly_boxplot(state: SessionState, sensor_name: str) -> dict:
         group = values[values.index.month == month]
         if not group.empty:
             figure.add_trace(go.Box(y=group, name=MONTH_LABELS[month - 1], boxpoints=False, showlegend=False))
-    figure.update_layout(title=f"Monthly Distribution — {sensor_name}", xaxis_title="Month", yaxis_title="Measured Value")
+    figure.update_layout(
+        title=f"Monthly Distribution — {sensor_name}",
+        xaxis_title="Month",
+        yaxis_title="Measured Value",
+    )
     return _plot_result(figure, f"Monthly Distribution — {sensor_name}")
 
 
@@ -479,7 +513,12 @@ def _plot_seasonal_profile(state: SessionState, sensor_names: str) -> dict:
     return _plot_result(figure, "Seasonal Profile")
 
 
-def _plot_air_density(state: SessionState, temperature_sensor: str, pressure_sensor: str, humidity_sensor: str = "") -> dict:
+def _plot_air_density(
+    state: SessionState,
+    temperature_sensor: str,
+    pressure_sensor: str,
+    humidity_sensor: str = "",
+) -> dict:
     """Plot measured air density over time with monthly and diurnal climatology."""
     density, temperature_name, pressure_name, humidity_name = _atmospheric_series(
         state,
@@ -493,7 +532,10 @@ def _plot_air_density(state: SessionState, temperature_sensor: str, pressure_sen
     time_series = valid.resample("D").mean() if len(valid) > 50000 else valid
     monthly = valid.groupby(valid.index.month).mean().reindex(range(1, 13))
     diurnal = valid.groupby(valid.index.hour).mean().reindex(range(24))
-    seasonal = [valid[valid.index.month.isin(months)].mean() for months in ([12, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11])]
+    seasonal = [
+        valid[valid.index.month.isin(months)].mean()
+        for months in ([12, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11])
+    ]
     figure = make_subplots(
         rows=2,
         cols=2,
@@ -501,9 +543,15 @@ def _plot_air_density(state: SessionState, temperature_sensor: str, pressure_sen
     )
     figure.add_trace(go.Scatter(x=time_series.index, y=time_series, mode="lines", name="Density"), row=1, col=1)
     figure.add_trace(go.Bar(x=MONTH_LABELS, y=monthly, name="Monthly density"), row=1, col=2)
-    figure.add_trace(go.Scatter(x=list(range(24)), y=diurnal, mode="lines+markers", name="Diurnal density"), row=2, col=1)
+    figure.add_trace(
+        go.Scatter(x=list(range(24)), y=diurnal, mode="lines+markers", name="Diurnal density"),
+        row=2,
+        col=1,
+    )
     figure.add_trace(go.Bar(x=["DJF", "MAM", "JJA", "SON"], y=seasonal, name="Seasonal density"), row=2, col=2)
-    inputs = f"T: {temperature_name}, P: {pressure_name}" + (f", RH: {humidity_name}" if humidity_name else " (dry-air assumption)")
+    inputs = f"T: {temperature_name}, P: {pressure_name}" + (
+        f", RH: {humidity_name}" if humidity_name else " (dry-air assumption)"
+    )
     figure.update_layout(title=f"Air Density — {inputs}", showlegend=False)
     figure.update_yaxes(title_text="kg/m³", row=1, col=1)
     figure.update_yaxes(title_text="kg/m³", row=1, col=2)
@@ -522,16 +570,40 @@ def _plot_power_density(state: SessionState, speed_sensor: str, direction_sensor
         rows=2,
         cols=2,
         specs=[[{}, {}], [{"type": "polar"}, {"type": "polar"}]],
-        subplot_titles=("Power-Density Distribution", "Monthly Power Density", "Directional Energy", "Directional Power Density"),
+        subplot_titles=(
+            "Power-Density Distribution",
+            "Monthly Power Density",
+            "Directional Energy",
+            "Directional Power Density",
+        ),
     )
     figure.add_trace(go.Histogram(x=instantaneous, nbinsx=50, name="Power density"), row=1, col=1)
     figure.add_trace(go.Bar(x=MONTH_LABELS, y=metrics["monthly_power_density_w_m2"], name="Monthly WPD"), row=1, col=2)
     sectors = metrics["sectors"]
     if sectors:
         sector_rows = list(sectors)
-        figure.add_trace(go.Barpolar(r=[row["energy_pct"] for row in sector_rows], theta=[row["label"] for row in sector_rows], name="Energy contribution"), row=2, col=1)
-        figure.add_trace(go.Barpolar(r=[row["power_density_w_m2"] for row in sector_rows], theta=[row["label"] for row in sector_rows], name="Sector WPD"), row=2, col=2)
-    figure.update_layout(title=f"Wind Power Density — {speed_sensor} ({metrics['density_source']} density)", showlegend=False)
+        figure.add_trace(
+            go.Barpolar(
+                r=[row["energy_pct"] for row in sector_rows],
+                theta=[row["label"] for row in sector_rows],
+                name="Energy contribution",
+            ),
+            row=2,
+            col=1,
+        )
+        figure.add_trace(
+            go.Barpolar(
+                r=[row["power_density_w_m2"] for row in sector_rows],
+                theta=[row["label"] for row in sector_rows],
+                name="Sector WPD",
+            ),
+            row=2,
+            col=2,
+        )
+    figure.update_layout(
+        title=f"Wind Power Density — {speed_sensor} ({metrics['density_source']} density)",
+        showlegend=False,
+    )
     figure.update_yaxes(title_text="W/m²", row=1, col=2)
     return _plot_result(figure, "Wind Power Density")
 
@@ -544,7 +616,15 @@ def _plot_extremes_fit(state: SessionState, speed_sensor: str) -> dict:
     gev = extremes["gev"]
     gumbel = extremes["gumbel"]
     figure = make_subplots(rows=1, cols=2, subplot_titles=("Annual Maxima", "Return-Level Fit"))
-    figure.add_trace(go.Bar(x=[row["year"] for row in maxima], y=[row["max_speed"] for row in maxima], name="Annual maxima"), row=1, col=1)
+    figure.add_trace(
+        go.Bar(
+            x=[row["year"] for row in maxima],
+            y=[row["max_speed"] for row in maxima],
+            name="Annual maxima",
+        ),
+        row=1,
+        col=1,
+    )
     # The GEV curve is only drawn when the fit was identifiable (F-77). Below the year
     # threshold `_compute_extremes` does not fit it at all, and drawing a curve from absent
     # parameters would put the very number the guard exists to suppress back on the screen.
@@ -554,7 +634,13 @@ def _plot_extremes_fit(state: SessionState, speed_sensor: str) -> dict:
         )
         figure.add_trace(go.Scatter(x=periods, y=gev_levels, mode="lines+markers", name="GEV"), row=1, col=2)
     gumbel_levels = gumbel_r.isf(1.0 / periods, loc=float(gumbel["location"]), scale=float(gumbel["scale"]))
-    figure.add_trace(go.Scatter(x=periods, y=gumbel_levels, mode="lines+markers", name="Gumbel", line=dict(dash="dash")), row=1, col=2)
+    figure.add_trace(
+        go.Scatter(
+            x=periods, y=gumbel_levels, mode="lines+markers", name="Gumbel", line=dict(dash="dash")
+        ),
+        row=1,
+        col=2,
+    )
     subtitle = " — Screening Only" if extremes["screening_only"] else ""
     if not gev.get("available"):
         subtitle += f" — Gumbel only ({extremes['sample_years']} annual maxima)"
@@ -592,7 +678,11 @@ def _plot_duration_curve(state: SessionState, speed_sensor: str) -> dict:
         figure.add_trace(go.Scatter(x=list(range(1, len(calm) + 1)), y=calm, mode="lines", name="Calm periods"))
     if high:
         figure.add_trace(go.Scatter(x=list(range(1, len(high) + 1)), y=high, mode="lines", name="High-wind periods"))
-    figure.update_layout(title=f"Wind Persistence — {speed_sensor}", xaxis_title="Ranked Period", yaxis_title="Duration (minutes)")
+    figure.update_layout(
+        title=f"Wind Persistence — {speed_sensor}",
+        xaxis_title="Ranked Period",
+        yaxis_title="Duration (minutes)",
+    )
     figure.update_yaxes(type="log")
     return _plot_result(figure, "Wind Persistence")
 
@@ -605,7 +695,11 @@ def _plot_sensor_residuals(state: SessionState, sensor_a: str, sensor_b: str) ->
         raise ValueError("No comparison residuals are available for plotting")
     residuals["timestamp"] = pd.to_datetime(residuals["timestamp"])
     figure = make_subplots(rows=1, cols=2, subplot_titles=("Residual Time Series", "Residual Distribution"))
-    figure.add_trace(go.Scatter(x=residuals["timestamp"], y=residuals["value"], mode="lines", name="B - A"), row=1, col=1)
+    figure.add_trace(
+        go.Scatter(x=residuals["timestamp"], y=residuals["value"], mode="lines", name="B - A"),
+        row=1,
+        col=1,
+    )
     figure.add_trace(go.Histogram(x=residuals["value"], nbinsx=50, name="Residuals"), row=1, col=2)
     figure.update_layout(title=f"Sensor Residuals — {result['sensor_a']} vs {result['sensor_b']}", showlegend=False)
     figure.update_yaxes(title_text="Residual (m/s)", row=1, col=1)
@@ -616,9 +710,26 @@ def _plot_mast_shadow(state: SessionState, sensor_a: str, sensor_b: str, directi
     """Plot measured speed ratio by direction to review potential mast-shadow sectors."""
     result = _compute_mast_effects(state, sensor_a, sensor_b, direction_sensor)
     sectors = result["sectors"]
-    figure = go.Figure(go.Barpolar(r=[row["speed_ratio"] for row in sectors], theta=[row["label"] for row in sectors], name="Speed ratio"))
-    figure.add_trace(go.Scatterpolar(r=[result["baseline_speed_ratio"]] * 16, theta=[row["label"] for row in sectors], mode="lines", name="Median ratio", line=dict(dash="dash")))
-    figure.update_layout(title=f"Mast-Effect Speed Ratio — {result['sensor_b']} / {result['sensor_a']}", polar=dict(radialaxis=dict(title="Speed Ratio")))
+    figure = go.Figure(
+        go.Barpolar(
+            r=[row["speed_ratio"] for row in sectors],
+            theta=[row["label"] for row in sectors],
+            name="Speed ratio",
+        )
+    )
+    figure.add_trace(
+        go.Scatterpolar(
+            r=[result["baseline_speed_ratio"]] * 16,
+            theta=[row["label"] for row in sectors],
+            mode="lines",
+            name="Median ratio",
+            line=dict(dash="dash"),
+        )
+    )
+    figure.update_layout(
+        title=f"Mast-Effect Speed Ratio — {result['sensor_b']} / {result['sensor_a']}",
+        polar=dict(radialaxis=dict(title="Speed Ratio")),
+    )
     return _plot_result(figure, "Mast-Effect Speed Ratio")
 
 
@@ -648,10 +759,33 @@ def _plot_mcp_readiness(state: SessionState, speed_sensor: str, reference_sensor
     sampled = concurrent.iloc[:: max(1, len(concurrent) // 10_000)]
     monthly = concurrent.resample("MS").mean()
     figure = make_subplots(rows=1, cols=2, subplot_titles=("Concurrent Scatter", "Monthly Mean Comparison"))
-    figure.add_trace(go.Scattergl(x=sampled[reference], y=sampled[speed_sensor], mode="markers", marker=dict(opacity=0.35), name="Concurrent"), row=1, col=1)
+    figure.add_trace(
+        go.Scattergl(
+            x=sampled[reference],
+            y=sampled[speed_sensor],
+            mode="markers",
+            marker=dict(opacity=0.35),
+            name="Concurrent",
+        ),
+        row=1,
+        col=1,
+    )
     line = np.linspace(float(sampled[reference].min()), float(sampled[reference].max()), 100)
-    figure.add_trace(go.Scatter(x=line, y=float(readiness["slope"]) * line + float(readiness["offset"]), mode="lines", name="OLS"), row=1, col=1)
-    figure.add_trace(go.Scatter(x=monthly.index, y=monthly[speed_sensor], mode="lines+markers", name="Measured"), row=1, col=2)
+    figure.add_trace(
+        go.Scatter(
+            x=line,
+            y=float(readiness["slope"]) * line + float(readiness["offset"]),
+            mode="lines",
+            name="OLS",
+        ),
+        row=1,
+        col=1,
+    )
+    figure.add_trace(
+        go.Scatter(x=monthly.index, y=monthly[speed_sensor], mode="lines+markers", name="Measured"),
+        row=1,
+        col=2,
+    )
     figure.add_trace(go.Scatter(x=monthly.index, y=monthly[reference], mode="lines+markers", name="ERA5"), row=1, col=2)
     figure.update_layout(title=f"MCP Readiness — R²={float(readiness['r_squared']):.3f}")
     figure.update_xaxes(title_text=reference, row=1, col=1)
@@ -668,7 +802,11 @@ def _plot_exceedance_curve(state: SessionState, sensor_name: str) -> dict:
     sorted_speed = np.sort(speed.to_numpy(dtype=float))
     exceedance = 100.0 * (1.0 - (np.arange(len(sorted_speed)) + 0.5) / len(sorted_speed))
     figure = go.Figure(go.Scatter(x=exceedance, y=sorted_speed, mode="lines", name=sensor_name))
-    figure.update_layout(title=f"Exceedance Probability — {sensor_name}", xaxis_title="Exceedance Probability (%)", yaxis_title="Wind Speed (m/s)")
+    figure.update_layout(
+        title=f"Exceedance Probability — {sensor_name}",
+        xaxis_title="Exceedance Probability (%)",
+        yaxis_title="Wind Speed (m/s)",
+    )
     figure.update_xaxes(autorange="reversed")
     return _plot_result(figure, f"Exceedance Probability — {sensor_name}")
 
@@ -680,11 +818,16 @@ def _plot_direction_distribution(state: SessionState, direction_sensor: str) -> 
         raise ValueError(f"Sensor '{direction_sensor}' has no valid values for direction plotting")
     counts, _ = np.histogram(direction, bins=np.arange(-11.25, 371.25, 22.5))
     figure = go.Figure(go.Barpolar(r=counts / counts.sum() * 100.0, theta=COMPASS_16, name=direction_sensor))
-    figure.update_layout(title=f"Direction Distribution — {direction_sensor}", polar=dict(radialaxis=dict(ticksuffix="%")))
+    figure.update_layout(
+        title=f"Direction Distribution — {direction_sensor}",
+        polar=dict(radialaxis=dict(ticksuffix="%")),
+    )
     return _plot_result(figure, f"Direction Distribution — {direction_sensor}")
 
 
-def _directional_frame(state: SessionState, speed_sensor: str, direction_sensor: str) -> tuple[pd.DataFrame, np.ndarray]:
+def _directional_frame(
+    state: SessionState, speed_sensor: str, direction_sensor: str
+) -> tuple[pd.DataFrame, np.ndarray]:
     """Return concurrent speed/direction records and 16-sector indices for directional plots."""
     frame = pd.concat([_require_series(state, speed_sensor), _require_series(state, direction_sensor)], axis=1).dropna()
     if frame.empty:
@@ -697,9 +840,18 @@ def _directional_frame(state: SessionState, speed_sensor: str, direction_sensor:
 def _plot_sector_speed(state: SessionState, speed_sensor: str, direction_sensor: str) -> dict:
     """Plot sector mean wind speed for a selected speed/direction pair."""
     frame, sector_index = _directional_frame(state, speed_sensor, direction_sensor)
-    speeds = [float(frame.loc[sector_index == index, speed_sensor].mean()) if (sector_index == index).any() else 0.0 for index in range(16)]
+    speeds = [
+        float(frame.loc[sector_index == index, speed_sensor].mean())
+        if (sector_index == index).any()
+        else 0.0
+        for index in range(16)
+    ]
     figure = go.Figure(go.Bar(x=COMPASS_16, y=speeds, name="Mean speed", marker_color="#0b7a6f"))
-    figure.update_layout(title=f"Sector Mean Wind Speed — {speed_sensor}", xaxis_title="Direction sector", yaxis_title="Mean Speed (m/s)")
+    figure.update_layout(
+        title=f"Sector Mean Wind Speed — {speed_sensor}",
+        xaxis_title="Direction sector",
+        yaxis_title="Mean Speed (m/s)",
+    )
     return _plot_result(figure, f"Sector Mean Wind Speed — {speed_sensor}")
 
 
@@ -708,9 +860,17 @@ def _plot_energy_rose(state: SessionState, speed_sensor: str, direction_sensor: 
     frame, sector_index = _directional_frame(state, speed_sensor, direction_sensor)
     cube_speed = frame[speed_sensor].to_numpy(dtype=float) ** 3
     total = float(cube_speed.sum())
-    contribution = [0.0 if total == 0 else float(cube_speed[sector_index == index].sum() / total * 100.0) for index in range(16)]
-    figure = go.Figure(go.Barpolar(r=contribution, theta=COMPASS_16, name="Energy contribution", marker_color="#c86a2a"))
-    figure.update_layout(title=f"Directional Energy Contribution — {speed_sensor}", polar=dict(radialaxis=dict(ticksuffix="%")))
+    contribution = [
+        0.0 if total == 0 else float(cube_speed[sector_index == index].sum() / total * 100.0)
+        for index in range(16)
+    ]
+    figure = go.Figure(
+        go.Barpolar(r=contribution, theta=COMPASS_16, name="Energy contribution", marker_color="#c86a2a")
+    )
+    figure.update_layout(
+        title=f"Directional Energy Contribution — {speed_sensor}",
+        polar=dict(radialaxis=dict(ticksuffix="%")),
+    )
     return _plot_result(figure, f"Directional Energy Contribution — {speed_sensor}")
 
 
@@ -1021,7 +1181,8 @@ def _plot_ltc_scatter(state: SessionState, algorithm: str) -> dict:
     figure.update_layout(
         title=(
             f"LTC Scatter — {algorithm}<br>"
-            f"<sup>R²={metrics['r2']:.3f}, RMSE={metrics['rmse']:.3f}, MBE={float((overlap['corrected'] - overlap['measured']).mean()):.3f}</sup>"
+            f"<sup>R²={metrics['r2']:.3f}, RMSE={metrics['rmse']:.3f}, "
+            f"MBE={float((overlap['corrected'] - overlap['measured']).mean()):.3f}</sup>"
         ),
         xaxis_title="Measured Speed (m/s)",
         yaxis_title="Corrected Speed (m/s)",
@@ -1094,7 +1255,12 @@ def _plot_ltc_monthly_comparison(state: SessionState) -> dict:
             line=dict(color="#c86a2a", width=3),
         )
     )
-    figure.update_layout(title="Monthly LTC Comparison", xaxis_title="Month", yaxis_title="Mean Speed (m/s)", barmode="group")
+    figure.update_layout(
+        title="Monthly LTC Comparison",
+        xaxis_title="Month",
+        yaxis_title="Mean Speed (m/s)",
+        barmode="group",
+    )
     return _plot_result(figure, "Monthly LTC Comparison")
 
 
@@ -1104,7 +1270,9 @@ def _plot_ltc_annual_convergence(state: SessionState) -> dict:
         raise ValueError("Annual convergence plotting requires at least one LTC or ensemble result")
     figure = go.Figure()
     for algorithm, payload in sorted(state.ltc_results.items()):
-        years, running_mean, final_mean = _expanding_annual_mean(_indexed_frame(payload["df"])["corrected_wind_speed"].dropna())
+        years, running_mean, final_mean = _expanding_annual_mean(
+            _indexed_frame(payload["df"])["corrected_wind_speed"].dropna()
+        )
         figure.add_trace(go.Scatter(x=years, y=running_mean, mode="lines+markers", name=algorithm))
         figure.add_trace(
             go.Scatter(
@@ -1117,7 +1285,9 @@ def _plot_ltc_annual_convergence(state: SessionState) -> dict:
             )
         )
     if state.ensemble_df is not None:
-        years, running_mean, final_mean = _expanding_annual_mean(_indexed_frame(state.ensemble_df)["Ensemble_Speed"].dropna())
+        years, running_mean, final_mean = _expanding_annual_mean(
+            _indexed_frame(state.ensemble_df)["Ensemble_Speed"].dropna()
+        )
         figure.add_trace(go.Scatter(x=years, y=running_mean, mode="lines+markers", name="ensemble"))
         figure.add_trace(
             go.Scatter(
@@ -1129,7 +1299,11 @@ def _plot_ltc_annual_convergence(state: SessionState) -> dict:
                 opacity=0.45,
             )
         )
-    figure.update_layout(title="Annual Convergence", xaxis_title="Years Included", yaxis_title="Running Mean Speed (m/s)")
+    figure.update_layout(
+        title="Annual Convergence",
+        xaxis_title="Years Included",
+        yaxis_title="Running Mean Speed (m/s)",
+    )
     return _plot_result(figure, "Annual Convergence")
 
 
@@ -1210,7 +1384,13 @@ def _plot_scenario_comparison(state: SessionState) -> dict:
     figure.add_trace(go.Bar(x=names, y=p75_values, name="P75 speed"), secondary_y=False)
     figure.add_trace(go.Bar(x=names, y=p90_values, name="P90 speed"), secondary_y=False)
     figure.add_trace(
-        go.Scatter(x=names, y=uncertainties, mode="lines+markers", name="Total uncertainty", line=dict(color="#c86a2a", width=3)),
+        go.Scatter(
+            x=names,
+            y=uncertainties,
+            mode="lines+markers",
+            name="Total uncertainty",
+            line=dict(color="#c86a2a", width=3),
+        ),
         secondary_y=True,
     )
     figure.update_layout(title="Scenario Comparison", barmode="group")
@@ -1425,7 +1605,11 @@ def _plot_turbulence_intensity(state: SessionState, speed_sensor: str, sd_sensor
         )
     )
     iec_speeds = np.linspace(x_min, x_max, 200)
-    for label, reference_ti, color in [("IEC Class A", 0.16, "#c86a2a"), ("IEC Class B", 0.14, "#756c4f"), ("IEC Class C", 0.12, "#5f716a")]:
+    for label, reference_ti, color in [
+        ("IEC Class A", 0.16, "#c86a2a"),
+        ("IEC Class B", 0.14, "#756c4f"),
+        ("IEC Class C", 0.12, "#5f716a"),
+    ]:
         figure.add_trace(
             go.Scatter(
                 x=iec_speeds.tolist(),
@@ -1446,12 +1630,18 @@ def _plot_turbulence_intensity(state: SessionState, speed_sensor: str, sd_sensor
 def _plot_turbulence_windrose(state: SessionState, speed_sensor: str, sd_sensor: str, direction_sensor: str) -> dict:
     """Plot mean and P90 turbulence intensity by 16 wind-direction sectors."""
     frame = pd.concat(
-        [_require_series(state, speed_sensor), _require_series(state, sd_sensor), _require_series(state, direction_sensor)],
+        [
+            _require_series(state, speed_sensor),
+            _require_series(state, sd_sensor),
+            _require_series(state, direction_sensor),
+        ],
         axis=1,
     ).dropna()
     valid = frame[(frame[speed_sensor] > 3.0) & (frame[sd_sensor] >= 0.0)].copy()
     if valid.empty:
-        raise ValueError("Turbulence wind rose requires concurrent speed > 3 m/s, non-negative SD, and direction values")
+        raise ValueError(
+            "Turbulence wind rose requires concurrent speed > 3 m/s, non-negative SD, and direction values"
+        )
     valid["ti"] = valid[sd_sensor] / valid[speed_sensor]
     valid = valid.replace([np.inf, -np.inf], np.nan).dropna(subset=["ti"])
     sector_width = 360.0 / 16.0
@@ -1461,7 +1651,11 @@ def _plot_turbulence_windrose(state: SessionState, speed_sensor: str, sd_sensor:
     p90_ti = grouped.quantile(0.90).reindex(range(16), fill_value=0.0)
     title = f"Turbulence Wind Rose — {speed_sensor} by {direction_sensor}"
     figure = go.Figure()
-    figure.add_trace(go.Barpolar(r=mean_ti.tolist(), theta=COMPASS_16, name="Mean TI", marker_color="#0b7a6f", opacity=0.8))
+    figure.add_trace(
+        go.Barpolar(
+            r=mean_ti.tolist(), theta=COMPASS_16, name="Mean TI", marker_color="#0b7a6f", opacity=0.8
+        )
+    )
     figure.add_trace(
         go.Scatterpolar(
             r=p90_ti.tolist(),

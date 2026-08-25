@@ -249,6 +249,18 @@ describe("configSync", () => {
     expect(hydrated.inputs.sharedDatasetId).toBe("dataset-abc");
   });
 
+  it("round-trips the reanalysis acquisition source so the provider choice survives a reload", () => {
+    let config = createDefaultWindAnalysisConfig();
+    expect(config.reanalysis.acquisitionSource).toBe("brighthub");
+
+    config = setConfigValue(config, "reanalysis.acquisitionSource", "earthdatahub");
+    const runconfig = serializeConfigToRunconfig(config);
+    expect((runconfig.reanalysis as Record<string, unknown>).acquisitionSource).toBe("earthdatahub");
+
+    const rehydrated = hydrateConfigFromRunconfig(runconfig);
+    expect(rehydrated.reanalysis.acquisitionSource).toBe("earthdatahub");
+  });
+
   it("serialize persists dataset_id so saves round-trip the dataset intake param", () => {
     let config = createDefaultWindAnalysisConfig();
     config = setConfigValue(config, "inputs.sharedDatasetId", "dataset-xyz");

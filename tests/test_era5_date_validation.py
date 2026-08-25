@@ -89,7 +89,6 @@ class TestExtractEra5RequestSpanCap:
     """Requested span must not exceed ERA5_MAX_SPAN_YEARS."""
 
     def test_span_exceeds_max_raises(self) -> None:
-        max_days = ERA5_MAX_SPAN_YEARS * 365
         with pytest.raises(ValidationError, match=f"exceeds maximum of {ERA5_MAX_SPAN_YEARS} years"):
             ExtractEra5Request(
                 latitude=52.4, longitude=4.8,

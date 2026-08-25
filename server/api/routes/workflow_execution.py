@@ -17,14 +17,14 @@ from fastapi.responses import StreamingResponse
 
 from server.api.deps import get_session_manager, get_session_state, to_bad_request
 from server.api.schemas import (
-    WorkflowDispatchCapabilitiesResponse,
-    WorkflowDispatchCapability,
     WorkflowCompareDiffEntry,
     WorkflowCompareMetric,
     WorkflowComparePlot,
     WorkflowComparePlots,
     WorkflowCompareRequest,
     WorkflowCompareResponse,
+    WorkflowDispatchCapabilitiesResponse,
+    WorkflowDispatchCapability,
     WorkflowExecuteRequest,
     WorkflowExecutionEvent,
     WorkflowExecutionResponse,
@@ -32,16 +32,16 @@ from server.api.schemas import (
     WorkflowForkBranchRequest,
     WorkflowForkBranchResponse,
     WorkflowLoadSnapshotResponse,
-    WorkflowSaveSnapshotRequest,
-    WorkflowSaveSnapshotResponse,
-    WorkflowSnapshotListResponse,
-    WorkflowSnapshotSummary,
     WorkflowReplaceRunConfigRequest,
     WorkflowRunCompareRequest,
     WorkflowRunCompareResponse,
     WorkflowRunListResponse,
     WorkflowRunStepComparison,
     WorkflowRunSummary,
+    WorkflowSaveSnapshotRequest,
+    WorkflowSaveSnapshotResponse,
+    WorkflowSnapshotListResponse,
+    WorkflowSnapshotSummary,
 )
 from server.core.executor import WorkflowExecutionEdge, WorkflowExecutionNode, WorkflowExecutor, dispatch_capabilities
 from server.state.manager import SessionManager
@@ -159,7 +159,12 @@ def _run_summary(record: dict[str, object]) -> WorkflowRunSummary:
         completed_node_count=completed,
     )
 
-def _record_metric(record: dict[str, object], name: str, unit: str, extractor: Callable[[dict[str, object]], float | None]) -> WorkflowCompareMetric:
+def _record_metric(
+    record: dict[str, object],
+    name: str,
+    unit: str,
+    extractor: Callable[[dict[str, object]], float | None],
+) -> WorkflowCompareMetric:
     """Create a metric row for archived records keyed by immutable run id."""
     run_id = str(record["run_id"])
     return WorkflowCompareMetric(name=name, unit=unit, values={run_id: extractor(record)})
@@ -182,7 +187,17 @@ def _run_metric_rows(records: list[dict[str, object]]) -> list[WorkflowCompareMe
         return extract
 
     definitions = [
-        ("Completed steps", "count", lambda record: float(sum(1 for node in record.get("nodes", []) if isinstance(node, dict) and node.get("status") == "done"))),
+        (
+            "Completed steps",
+            "count",
+            lambda record: float(
+                sum(
+                    1
+                    for node in record.get("nodes", [])
+                    if isinstance(node, dict) and node.get("status") == "done"
+                )
+            ),
+        ),
         ("Cleaning rules", "count", numeric(("cleaning_rule_count",))),
         ("ERA5 interpolated records", "count", numeric(("era5_interpolated_rows",))),
         ("Ensemble records", "count", numeric(("ensemble", "rows"))),
@@ -213,7 +228,11 @@ def _run_config_diff(records: list[dict[str, object]]) -> dict[str, list[Workflo
         run_id = str(record["run_id"])
         compare_config = _flatten_config(record.get("config", {}))
         differences[f"{base_id}<->{run_id}"] = [
-            WorkflowCompareDiffEntry(key=key, a=_to_json_value(base_config.get(key)), b=_to_json_value(compare_config.get(key)))
+            WorkflowCompareDiffEntry(
+                key=key,
+                a=_to_json_value(base_config.get(key)),
+                b=_to_json_value(compare_config.get(key)),
+            )
             for key in sorted(set(base_config) | set(compare_config))
             if base_config.get(key) != compare_config.get(key)
         ][:300]
@@ -230,7 +249,10 @@ def _run_step_comparison(records: list[dict[str, object]]) -> list[WorkflowRunSt
             if not isinstance(node, dict) or not isinstance(node.get("id"), str):
                 continue
             node_id = str(node["id"])
-            current = by_node.setdefault(node_id, {"label": node.get("label", node_id), "template_id": node.get("template_id"), "nodes": {}})
+            current = by_node.setdefault(
+                node_id,
+                {"label": node.get("label", node_id), "template_id": node.get("template_id"), "nodes": {}},
+            )
             current["nodes"][run_id] = node
     return [
         WorkflowRunStepComparison(
@@ -809,7 +831,10 @@ def compare_workflow_runs(
     del session_id
     requested_ids = list(dict.fromkeys(body.run_ids))
     if len(requested_ids) < 2:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Select at least two distinct archived runs")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Select at least two distinct archived runs",
+        )
     by_id = {str(record["run_id"]): record for record in _archived_runs(state)}
     missing = [run_id for run_id in requested_ids if run_id not in by_id]
     if missing:

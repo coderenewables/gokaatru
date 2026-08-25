@@ -153,6 +153,7 @@ const ACTIVE_SESSION_STORAGE_KEY = "gokaatru-active-session-id";
 
 type TabId =
   | "import"
+  | "cleaning"
   | "setup"
   | "workflow"
   | "engine"
@@ -243,7 +244,8 @@ interface WorkspaceStore {
   deleteCurrentSession: () => Promise<void>;
   downloadConfig: () => Promise<void>;
   saveConfig: () => Promise<void>;
-  saveConfigAndRunModel: () => Promise<void>;
+  saveConfigAndSetup: () => Promise<void>;
+  runReanalysisAcquisition: () => Promise<void>;
   fetchPlot: (plotName: PlotName, params: PlotRequest) => Promise<PlotResult>;
   refreshResults: () => Promise<void>;
   invokeSessionOperation: <T>(
@@ -750,35 +752,39 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
   },
 
-  saveConfigAndRunModel: async () => {
+  saveConfigAndSetup: async () => {
     const current = get();
     const session = current.session;
     if (!session) return;
     if (!current.summary?.timeseries_loaded) {
       set((state) => ({
-        activity: appendActivity(state.activity, "Model run blocked", "error", "Import measurement data before running the model"),
+        activity: appendActivity(state.activity, "Setup blocked", "error", "Import measurement data before setting up the model"),
       }));
       return;
     }
     if (!Number.isFinite(current.config.site.hubHeightM) || current.config.site.hubHeightM <= 0) {
       set((state) => ({
-        activity: appendActivity(state.activity, "Model run blocked", "error", "Enter a hub height greater than zero"),
+        activity: appendActivity(state.activity, "Setup blocked", "error", "Enter a hub height greater than zero"),
       }));
       return;
     }
 
-    set({ busyLabel: "Checking BrightHub access" });
+    const needsBrightHub = current.config.reanalysis.acquisitionSource === "brighthub";
+    set({ busyLabel: needsBrightHub ? "Checking BrightHub access" : "Saving config" });
     try {
-      const brighthubStatus = await getBrightHubStatus(get().apiBaseUrl, session.session_id);
-      if (!brighthubStatus.authenticated) {
-        set((state) => ({
-          busyLabel: null,
-          brighthubStatus,
-          brighthubPromptRequired: true,
-          activeTab: "import",
-          activity: appendActivity(state.activity, "BrightHub credentials required", "error", "Sign in to run the default ERA5 and MERRA-2 workflow"),
-        }));
-        return;
+      let brighthubStatus = current.brighthubStatus;
+      if (needsBrightHub) {
+        brighthubStatus = await getBrightHubStatus(get().apiBaseUrl, session.session_id);
+        if (!brighthubStatus.authenticated) {
+          set((state) => ({
+            busyLabel: null,
+            brighthubStatus,
+            brighthubPromptRequired: true,
+            activeTab: "import",
+            activity: appendActivity(state.activity, "BrightHub credentials required", "error", "Sign in to download ERA5 and MERRA-2"),
+          }));
+          return;
+        }
       }
 
       const plannedConfig = buildDefaultWorkflowConfig(current.config, current.sensors);
@@ -795,7 +801,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         serverRunconfig: response.runconfig,
         workflowNodes: graph.nodes,
         workflowEdges: graph.edges,
-        activeTab: "workflow",
+        activeTab: "cleaning",
         busyLabel: null,
         brighthubStatus,
         brighthubPromptRequired: false,
@@ -803,12 +809,44 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         assets: upsertAssets(state.assets, [buildConfigAsset(savedConfig)]),
         activity: appendActivity(state.activity, "Saved config and prepared model", "ok", `${graph.nodes.length} nodes`),
       }));
-      await get().executeWorkflowGraph("auto");
+      await get().runReanalysisAcquisition();
     } catch (error) {
       set((state) => ({
         busyLabel: null,
-        activity: appendActivity(state.activity, "Save and run failed", "error", asErrorMessage(error)),
+        activity: appendActivity(state.activity, "Save and setup failed", "error", asErrorMessage(error)),
       }));
+    }
+  },
+
+  runReanalysisAcquisition: async () => {
+    const { config } = get();
+    const acquisitionSource = config.reanalysis.acquisitionSource;
+    const latitude = config.site.latitude;
+    const longitude = config.site.longitude;
+
+    // Each step logs its own failure to the activity feed; swallow here so one
+    // failed download does not leave the caller with an unhandled rejection.
+    try {
+      if (acquisitionSource === "brighthub") {
+        await get().fetchBrightHubReanalysisNodes({ latitude, longitude });
+        if (!get().brighthubReanalysis) return;
+        await get().downloadBrightHubReanalysis({ dataset: "ERA5", source: "brighthub", useNodes: "era5" });
+        await get().downloadBrightHubReanalysis({ dataset: "MERRA-2", source: "brighthub", useNodes: "merra2" });
+      } else {
+        await get().invokeSessionOperation("Find ERA5 nodes (direct)", "POST", "/era5/nodes", {
+          latitude,
+          longitude,
+        });
+        await get().invokeSessionOperation("Extract ERA5 (direct)", "POST", "/era5/extract", {
+          latitude,
+          longitude,
+          start_date: config.reanalysis.startDate,
+          end_date: config.reanalysis.endDate,
+        });
+      }
+      await get().invokeSessionOperation("Interpolate ERA5 to site", "POST", "/era5/interpolate");
+    } catch {
+      /* already reported in the activity log */
     }
   },
 

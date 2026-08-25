@@ -5,15 +5,27 @@ import { createDefaultWindAnalysisConfig } from "../lib/defaultConfig";
 import { serializeConfigToRunconfig } from "../lib/configSync";
 import type { SensorRow, WorkflowDispatchCapability } from "../types/analysis";
 
-const { getBrightHubStatus, streamWorkflowExecution, updateSessionConfig } = vi.hoisted(() => ({
+const {
+  getBrightHubStatus,
+  streamWorkflowExecution,
+  updateSessionConfig,
+  fetchBrightHubReanalysisNodes,
+} = vi.hoisted(() => ({
   getBrightHubStatus: vi.fn(),
   streamWorkflowExecution: vi.fn(),
   updateSessionConfig: vi.fn(),
+  fetchBrightHubReanalysisNodes: vi.fn(),
 }));
 
 vi.mock("../lib/api", async () => {
   const actual = await vi.importActual<typeof import("../lib/api")>("../lib/api");
-  return { ...actual, getBrightHubStatus, streamWorkflowExecution, updateSessionConfig };
+  return {
+    ...actual,
+    getBrightHubStatus,
+    streamWorkflowExecution,
+    updateSessionConfig,
+    fetchBrightHubReanalysisNodes,
+  };
 });
 
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
@@ -43,6 +55,8 @@ describe("prepareDefaultWorkflow", () => {
     updateSessionConfig.mockReset();
     streamWorkflowExecution.mockReset();
     getBrightHubStatus.mockReset();
+    fetchBrightHubReanalysisNodes.mockReset();
+    fetchBrightHubReanalysisNodes.mockRejectedValue(new Error("offline in tests"));
     updateSessionConfig.mockResolvedValue({ runconfig: serializeConfigToRunconfig(plannedConfig) });
     useWorkspaceStore.setState({
       session: { session_id: "session-1" } as never,
@@ -55,6 +69,7 @@ describe("prepareDefaultWorkflow", () => {
       workflowEdges: [],
       defaultWorkflowStatus: "idle",
       activeTab: "setup",
+      brighthubReanalysis: null,
       busyLabel: null,
     });
   });
@@ -72,33 +87,29 @@ describe("prepareDefaultWorkflow", () => {
     expect(state.defaultWorkflowStatus).toBe("ready");
   });
 
-  it("asks for BrightHub credentials instead of starting an unauthenticated run", async () => {
+  it("asks for BrightHub credentials instead of downloading unauthenticated", async () => {
     getBrightHubStatus.mockResolvedValue({ authenticated: false, has_token: false });
 
-    await useWorkspaceStore.getState().saveConfigAndRunModel();
+    await useWorkspaceStore.getState().saveConfigAndSetup();
 
     const state = useWorkspaceStore.getState();
     expect(state.brighthubPromptRequired).toBe(true);
     expect(state.activeTab).toBe("import");
     expect(updateSessionConfig).not.toHaveBeenCalled();
-    expect(streamWorkflowExecution).not.toHaveBeenCalled();
+    expect(fetchBrightHubReanalysisNodes).not.toHaveBeenCalled();
   });
 
-  it("saves the planned config, opens Canvas, and starts the authenticated model", async () => {
+  it("saves the planned config and starts reanalysis acquisition without running Canvas", async () => {
     getBrightHubStatus.mockResolvedValue({ authenticated: true, has_token: true });
-    streamWorkflowExecution.mockImplementation(async (_baseUrl, _sessionId, _payload, onEvent) => {
-      onEvent({ run_id: "run-1", event_type: "run_started", status: "running", timestamp: "2026-08-04T20:00:00.000Z" });
-      onEvent({ run_id: "run-1", event_type: "node_finished", node_id: "dataset", status: "done", timestamp: "2026-08-04T20:00:01.000Z" });
-      onEvent({ run_id: "run-1", event_type: "run_finished", status: "ok", timestamp: "2026-08-04T20:00:02.000Z" });
-    });
 
-    await useWorkspaceStore.getState().saveConfigAndRunModel();
+    await useWorkspaceStore.getState().saveConfigAndSetup();
 
     const state = useWorkspaceStore.getState();
     expect(updateSessionConfig).toHaveBeenCalledOnce();
-    expect(streamWorkflowExecution).toHaveBeenCalledOnce();
-    expect(state.activeTab).toBe("workflow");
+    expect(fetchBrightHubReanalysisNodes).toHaveBeenCalledOnce();
+    expect(streamWorkflowExecution).not.toHaveBeenCalled();
+    expect(state.activeTab).toBe("cleaning");
+    expect(state.defaultWorkflowStatus).toBe("ready");
     expect(state.workflowNodes.map((node) => node.id)).toContain("brighthub_reanalysis");
-    expect(state.workflowStatus?.node_statuses.dataset).toBe("done");
   });
 });

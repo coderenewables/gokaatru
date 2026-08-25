@@ -11,7 +11,6 @@ import re
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from server.state.session import SessionState
 from server.tools.visualization import _plot_diurnal_boxplot, _sample_for_boxplot

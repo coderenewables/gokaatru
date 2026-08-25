@@ -7,12 +7,10 @@ from __future__ import annotations
 import json
 
 import pandas as pd
-import xarray as xr
-
 import windkit
-from server.main import mcp
-from server.tools.windkit._serializers import _ok, da_to_dict, dict_to_ds, ds_to_dict, windkit_file_path
 
+from server.main import mcp
+from server.tools.windkit._serializers import _ok, dict_to_ds, ds_to_dict, windkit_file_path
 
 # ---------------------------------------------------------------------------
 # Time Series Wind Climate (TSWC)

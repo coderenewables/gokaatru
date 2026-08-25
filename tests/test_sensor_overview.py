@@ -9,33 +9,42 @@ import pandas as pd
 import pytest
 
 from server.state.session import session
+from server.tools.advanced_analysis import (
+    _compute_energy_metrics,
+    _compute_extremes,
+    _compute_persistence,
+    _compute_ramps,
+)
 from server.tools.atmosphere import _compute_atmospheric_conditions
-from server.tools.advanced_analysis import _compute_energy_metrics, _compute_extremes, _compute_persistence, _compute_ramps
-from server.tools.data_io import _parse_datamodel, _parse_timeseries
-from server.tools.data_io import _get_data_coverage
-from server.tools.diagnostics import _compute_mast_effects, _compute_mcp_readiness, _compute_qc_diagnostics, _compute_sensor_comparison
+from server.tools.data_io import _get_data_coverage, _parse_datamodel, _parse_timeseries
+from server.tools.diagnostics import (
+    _compute_mast_effects,
+    _compute_mcp_readiness,
+    _compute_qc_diagnostics,
+    _compute_sensor_comparison,
+)
 from server.tools.overview_summary import _compute_overview_summary
 from server.tools.shear import _compute_vertical_structure
 from server.tools.statistics import _compute_turbulence_analysis, _compute_wind_climate
 from server.tools.visualization import (
-    _plot_direction_distribution,
-    _plot_energy_rose,
-    _plot_duration_curve,
-    _plot_extremes_fit,
-    _plot_exceedance_curve,
     _plot_air_density,
+    _plot_direction_distribution,
     _plot_diurnal_boxplot,
-    _plot_monthly_boxplot,
-    _plot_power_density,
-    _plot_ramp_histogram,
+    _plot_duration_curve,
+    _plot_energy_rose,
+    _plot_exceedance_curve,
+    _plot_extremes_fit,
     _plot_mast_shadow,
     _plot_mcp_readiness,
+    _plot_monthly_boxplot,
+    _plot_power_density,
     _plot_qc_flags,
-    _plot_sensor_residuals,
+    _plot_ramp_histogram,
     _plot_seasonal_profile,
-    _plot_sensor_distribution,
-    _plot_shear_alpha,
     _plot_sector_speed,
+    _plot_sensor_distribution,
+    _plot_sensor_residuals,
+    _plot_shear_alpha,
     _plot_speed_distribution,
     _plot_turbulence_intensity,
     _plot_wind_veer,

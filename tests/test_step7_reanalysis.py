@@ -27,9 +27,9 @@ from server.core.spatial import (
     interpolate_spatial,
     unwrap_antimeridian,
 )
+from server.schemas.common import Coordinate
 from server.state.session import SessionState
 from server.tools.era5 import _bounding_pair, _compute_era5_wind_speed, _interpolate_era5_to_site
-from server.schemas.common import Coordinate
 
 ERA5_GRID_DEG = 0.25
 

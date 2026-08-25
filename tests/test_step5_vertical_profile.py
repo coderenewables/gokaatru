@@ -28,7 +28,6 @@ from server.tools.extrapolation import (
 from server.tools.shear import (
     DEFAULT_FALLBACK_Z0_M,
     SECTOR_SHEAR_MIN_RECORDS,
-    _compute_veer,
     _build_aggr_momm_shear_table,
     _build_roughness_table,
     _build_sector_shear_tables,
@@ -598,7 +597,7 @@ def test_extrapolation_ignores_the_shear_speed_gate():
         60.0: {"speed_col": "Spd_60m", "dir_col": None},
     }
 
-    shear = _calculate_shear_timeseries(state, _height_json((40.0, 60.0)))
+    _calculate_shear_timeseries(state, _height_json((40.0, 60.0)))
     _build_shear_table(state, "mean")
     result = _extrapolate_to_hub_height(state, 100.0, "power_law")
 

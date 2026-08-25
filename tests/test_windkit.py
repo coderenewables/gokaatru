@@ -756,7 +756,6 @@ class TestSpatialConversions:
     def test_point_to_cuboid_round_trip(self) -> None:
         from server.tools.windkit.spatial import (
             windkit_create_cuboid,
-            windkit_is_cuboid,
             windkit_to_point,
         )
 

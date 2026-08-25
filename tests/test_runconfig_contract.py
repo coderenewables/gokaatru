@@ -54,7 +54,12 @@ def _frontend_shaped_config() -> dict:
             "aggregation": "mean",
             "useWindKit": False,
         },
-        "reanalysis": {"searchLatitude": 52.5, "searchLongitude": 4.75, "preferredProvider": "ERA5"},
+        "reanalysis": {
+            "searchLatitude": 52.5,
+            "searchLongitude": 4.75,
+            "preferredProvider": "ERA5",
+            "acquisitionSource": "earthdatahub",
+        },
         "ltc": {"uncertainty": {"hubHeightM": 150.0, "iavPct": 5.0}},
     }
 
@@ -86,6 +91,15 @@ class TestEveryMirrorIsReproducible:
         config = _normalize_runconfig(_frontend_shaped_config())
         for path in canonical_paths():
             assert has_dotted(config, path), f"canonical key {path} was lost"
+
+    def test_acquisition_source_is_persisted_not_stripped(self) -> None:
+        """The reanalysis provider is an analyst methodology choice, not a mirror.
+
+        Nothing on the backend derives it, so stripping it would silently reset
+        the site back to BrightHub on the next reload.
+        """
+        config = _normalize_runconfig(_frontend_shaped_config())
+        assert get_dotted(config, "reanalysis.acquisitionSource") == "earthdatahub"
 
 
 class TestPromotionFromLegacyConfigs:

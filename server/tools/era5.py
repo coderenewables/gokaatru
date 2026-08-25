@@ -340,7 +340,12 @@ def _find_era5_nodes(state: SessionState, latitude: float, longitude: float) -> 
         norm_lon = _normalize_longitude(longitude, lon_values)
         lower_lat, upper_lat = _bounding_pair(np.asarray(dataset.latitude.values), latitude)
         lower_lon, upper_lon = _bounding_pair(lon_values, norm_lon)
-        candidate_points = [(lower_lat, lower_lon), (lower_lat, upper_lon), (upper_lat, lower_lon), (upper_lat, upper_lon)]
+        candidate_points = [
+            (lower_lat, lower_lon),
+            (lower_lat, upper_lon),
+            (upper_lat, lower_lon),
+            (upper_lat, upper_lon),
+        ]
         nodes = []
         for node_lat, node_lon in candidate_points:
             signed_lon = _to_signed_longitude(node_lon)

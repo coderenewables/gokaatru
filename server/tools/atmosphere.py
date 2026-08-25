@@ -35,7 +35,14 @@ def _find_sensor(state: SessionState, sensor_type: str, requested: str = "") -> 
     if inventory_match:
         return inventory_match
     field_name = {"temperature": "temp_col", "pressure": "pressure_col", "humidity": "humidity_col"}[sensor_type]
-    mapped_match = next((mapping.get(field_name) for mapping in state.sensor_mapping.values() if mapping.get(field_name) in frame.columns), None)
+    mapped_match = next(
+        (
+            mapping.get(field_name)
+            for mapping in state.sensor_mapping.values()
+            if mapping.get(field_name) in frame.columns
+        ),
+        None,
+    )
     if isinstance(mapped_match, str):
         return mapped_match
     raise ValueError(f"No {sensor_type} sensor is available in the loaded dataset")
@@ -189,7 +196,11 @@ def _compute_atmospheric_conditions(
             "humidity_basis": "measured" if humidity_name else "assumed_dry",
             "height_basis": "pressure_sensor_height",
         },
-        "humidity": _series_summary(_clean_atmospheric_series(frame[humidity_name], "humidity")) if humidity_name else None,
+        "humidity": (
+            _series_summary(_clean_atmospheric_series(frame[humidity_name], "humidity"))
+            if humidity_name
+            else None
+        ),
     }
     if humidity_name is None:
         result["air_density"]["warning"] = (

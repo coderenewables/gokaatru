@@ -210,11 +210,11 @@ def _build_registries() -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if _OPENAI_TOOLS is not None and _TOOL_CALLABLES is not None:
         return _OPENAI_TOOLS, _TOOL_CALLABLES
 
-    from server.main import mcp
-
     # FastMCP's list_tools() is async. We may be called from a sync thread
     # inside uvicorn's running event loop, so use a fresh thread + event loop.
     import concurrent.futures
+
+    from server.main import mcp
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
         future = pool.submit(asyncio.run, mcp.list_tools())
         tools = future.result(timeout=30)
@@ -498,4 +498,7 @@ def chat(
         reply_text = message.get("content", "") or ""
         return ChatResponse(reply=reply_text, tool_calls_executed=tool_calls_executed)
 
-    return ChatResponse(reply="Reached the maximum number of tool-call rounds.", tool_calls_executed=tool_calls_executed)
+    return ChatResponse(
+        reply="Reached the maximum number of tool-call rounds.",
+        tool_calls_executed=tool_calls_executed,
+    )

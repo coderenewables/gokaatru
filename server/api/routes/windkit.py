@@ -5,13 +5,11 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import json
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter
 
-from server.api.deps import get_session_state, to_bad_request
+from server.api.deps import to_bad_request
 from server.api.windkit_schemas import (
-    BboxRequest,
     BwcFromTswcRequest,
     ClipRequest,
     ClipWithMarginRequest,
@@ -67,12 +65,12 @@ from server.api.windkit_schemas import (
     WarpRequest,
     WdToSectorRequest,
     WeibullAKRequest,
+    WeibullFitRequest,
     WeibullM1M3FgtmRequest,
     WeibullM1M3Request,
     WeibullMomentRequest,
     WeibullPdfCdfRequest,
     WeibullProbabilityRequest,
-    WeibullFitRequest,
     WindClimateStatsRequest,
     WindKitResponse,
     WriteFileRequest,
@@ -80,18 +78,17 @@ from server.api.windkit_schemas import (
     WtgOperationRequest,
     WwcToBwcRequest,
 )
-from server.state.session import SessionState
-
-# Import the underscore-free MCP tool functions — they work standalone too.
-from server.tools.windkit import wind as _wind
 from server.tools.windkit import climate as _climate
 from server.tools.windkit import climate_stats as _cstats
 from server.tools.windkit import ltc as _ltc
-from server.tools.windkit import topography as _topo
-from server.tools.windkit import windfarm as _wf
-from server.tools.windkit import spatial as _sp
-from server.tools.windkit import plotting as _plt
 from server.tools.windkit import other as _other
+from server.tools.windkit import plotting as _plt
+from server.tools.windkit import spatial as _sp
+from server.tools.windkit import topography as _topo
+
+# Import the underscore-free MCP tool functions — they work standalone too.
+from server.tools.windkit import wind as _wind
+from server.tools.windkit import windfarm as _wf
 
 router = APIRouter(prefix="/windkit", tags=["windkit"])
 

@@ -16,9 +16,9 @@ from server.state.session import SessionState
 from server.tools.shear import (
     SHEAR_CLAMP_WARNING_FRACTION,
     SHEAR_MIN_SPEED_MPS,
+    _build_shear_table,
     _calculate_shear_timeseries,
     _compute_pairwise_shear,
-    _build_shear_table,
 )
 
 HEIGHTS = np.array([40.0, 60.0, 80.0])

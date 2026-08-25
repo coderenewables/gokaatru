@@ -69,7 +69,10 @@ def _parse_height_sensors(height_sensors: str) -> dict[float, str]:
         raw_mapping = inferred
 
     if not isinstance(raw_mapping, dict):
-        raise ValueError("height_sensors must decode to a JSON object mapping heights to column names or a list of sensor names")
+        raise ValueError(
+            "height_sensors must decode to a JSON object mapping heights to column names "
+            "or a list of sensor names"
+        )
 
     parsed = {float(height): str(column) for height, column in raw_mapping.items()}
     if len(parsed) < 2:

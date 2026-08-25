@@ -152,7 +152,7 @@ describe("StageShell routing", () => {
   it("renders the ReanalysisView for the reanalysis stage", () => {
     useWorkspaceStore.setState({ selectedStage: "reanalysis" });
     render(<StageShell />);
-    expect(screen.getByText("Site coordinate")).toBeInTheDocument();
+    expect(screen.getByText("Acquisition settings")).toBeInTheDocument();
     expect(screen.getByText("BrightHub reanalysis nodes")).toBeInTheDocument();
   });
 
@@ -194,8 +194,8 @@ describe("DataLoadView", () => {
 
   it("removes excluded sensors when saving config with apply-selection checked", async () => {
     const deleteSensors = vi.fn(async () => {});
-    const saveConfigAndRunModel = vi.fn(async () => {});
-    useWorkspaceStore.setState({ deleteSensors, saveConfigAndRunModel });
+    const saveConfigAndSetup = vi.fn(async () => {});
+    useWorkspaceStore.setState({ deleteSensors, saveConfigAndSetup });
     render(<DataLoadView />);
 
     // Uncheck Spd_80m to exclude it
@@ -206,8 +206,8 @@ describe("DataLoadView", () => {
     const applyCheck = screen.getByRole("checkbox", { name: /apply sensor selection/i });
     expect(applyCheck).toBeChecked();
 
-    // Click "Save config and run model" — should apply selection then save
-    const saveButton = screen.getByRole("button", { name: /save config and run model/i });
+    // Click "Save config and setup" — should apply selection then save
+    const saveButton = screen.getByRole("button", { name: /save config and setup/i });
     await act(async () => {
       fireEvent.click(saveButton);
     });
@@ -234,7 +234,7 @@ describe("DataLoadView", () => {
     render(<DataLoadView />);
     expect(screen.getByText("Site & hub height")).toBeInTheDocument();
     expect(screen.getByLabelText("Hub height (m)")).toHaveValue(null);
-    expect(screen.getByRole("button", { name: "Save config and run model" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save config and setup" })).toBeInTheDocument();
   });
 });
 

@@ -88,7 +88,11 @@ def _normalize_runconfig(config: dict[str, object]) -> dict[str, object]:
         if not isinstance(location, dict):
             location = {}
             config["location"] = location
-        for legacy_key, canonical_key in (("latitude", "latitude"), ("longitude", "longitude"), ("elevationM", "elevation_m")):
+        for legacy_key, canonical_key in (
+            ("latitude", "latitude"),
+            ("longitude", "longitude"),
+            ("elevationM", "elevation_m"),
+        ):
             if canonical_key not in location and legacy_key in site:
                 location[canonical_key] = site[legacy_key]
         if "hub_height_m" not in config and "hubHeightM" in site:

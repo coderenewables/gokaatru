@@ -149,3 +149,50 @@ describe("prepareDefaultWorkflow", () => {
     expect(settled.busyLabel).toBeNull();
   });
 });
+
+describe("runReanalysisAcquisition", () => {
+  it("interpolates MERRA-2 as well as ERA5 once both BrightHub downloads succeed", async () => {
+    // Regression: `/era5/interpolate` defaults to `source: "era5"`, and this action called
+    // it exactly once. MERRA-2 was downloaded (the two `downloadBrightHubReanalysis` calls
+    // below) but never interpolated, so `state.reanalysis_interpolated["merra2"]` never got
+    // populated and MERRA-2 stayed permanently unavailable in the Analysis Engine despite
+    // being fully downloaded — the Canvas's own reanalysis node avoids this only because it
+    // calls a different backend tool (`brighthub_prepare_reanalysis`) that interpolates both.
+    const config = createDefaultWindAnalysisConfig();
+    config.site.hubHeightM = 150;
+    const fetchNodes = vi.fn(async () => {
+      useWorkspaceStore.setState({ brighthubReanalysis: {} as never });
+    });
+    const download = vi.fn(async () => {});
+    const invoke = vi.fn((..._args: [string, string, string, unknown?]) => Promise.resolve({}));
+    useWorkspaceStore.setState({
+      config,
+      fetchBrightHubReanalysisNodes: fetchNodes,
+      downloadBrightHubReanalysis: download,
+      invokeSessionOperation: invoke as never,
+      brighthubReanalysis: null,
+    });
+
+    await useWorkspaceStore.getState().runReanalysisAcquisition();
+
+    expect(download).toHaveBeenCalledWith({ dataset: "ERA5", source: "brighthub", useNodes: "era5" });
+    expect(download).toHaveBeenCalledWith({ dataset: "MERRA-2", source: "brighthub", useNodes: "merra2" });
+    expect(invoke).toHaveBeenCalledWith("Interpolate ERA5 to site", "POST", "/era5/interpolate");
+    expect(invoke).toHaveBeenCalledWith("Interpolate MERRA-2 to site", "POST", "/era5/interpolate", {
+      source: "merra2",
+    });
+  });
+
+  it("does not request a MERRA-2 interpolation on the direct EarthDataHub path, which never downloads it", async () => {
+    const config = createDefaultWindAnalysisConfig();
+    config.reanalysis.acquisitionSource = "earthdatahub";
+    const invoke = vi.fn((..._args: [string, string, string, unknown?]) => Promise.resolve({}));
+    useWorkspaceStore.setState({ config, invokeSessionOperation: invoke as never });
+
+    await useWorkspaceStore.getState().runReanalysisAcquisition();
+
+    for (const call of invoke.mock.calls) {
+      expect(call[3]).not.toEqual({ source: "merra2" });
+    }
+  });
+});

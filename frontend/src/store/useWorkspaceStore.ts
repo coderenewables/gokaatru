@@ -852,6 +852,21 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         });
       }
       await get().invokeSessionOperation("Interpolate ERA5 to site", "POST", "/era5/interpolate");
+      if (acquisitionSource === "brighthub") {
+        // MERRA-2 is downloaded above but `/era5/interpolate` defaults to `source: "era5"`
+        // and was never called a second time for it, so `state.reanalysis_interpolated`
+        // never got a "merra2" entry — the Analysis Engine's reference-source axis (and
+        // `interpolate_era5_to_site(source="merra2")` itself, callable directly) require an
+        // interpolated series to exist, not just downloaded node data, so MERRA-2 stayed
+        // permanently unavailable there despite being fully downloaded. The Canvas's own
+        // "BrightHub ERA5 + MERRA-2" node does not hit this because it calls
+        // `brighthub_prepare_reanalysis`, which interpolates both sources in one step; this
+        // path never did. EarthDataHub (the `else` branch above) never downloads MERRA-2 at
+        // all, so it is excluded here.
+        await get().invokeSessionOperation("Interpolate MERRA-2 to site", "POST", "/era5/interpolate", {
+          source: "merra2",
+        });
+      }
     } catch {
       /* already reported in the activity log */
     }

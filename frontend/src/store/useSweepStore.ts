@@ -16,6 +16,7 @@ import {
 import { LTC_ALGORITHMS } from "../types/sweep";
 import type {
   AxisColumn,
+  AxisLevel,
   ScenarioRow,
   SweepAxes,
   SweepManifest,
@@ -91,6 +92,9 @@ interface SweepStore {
   axes: SweepAxes | null;
   axesError: string | null;
   selection: SweepSelection;
+  /** Level names a preset (or the carried-over default) asked for that this session cannot
+   * run, silently dropped from `selection` rather than left selected-and-disabled. */
+  droppedLevels: string[];
 
   phase: SweepPhase;
   error: string | null;
@@ -138,6 +142,49 @@ function toRequestBody(selection: SweepSelection): SweepRequestBody {
   };
 }
 
+function availableNames(levels: AxisLevel[] | undefined): Set<string> {
+  return new Set((levels ?? []).filter((level) => level.available).map((level) => level.name));
+}
+
+/**
+ * Intersect a selection with the levels this session can actually run.
+ *
+ * Both the presets and `DEFAULT_SELECTION` name levels unconditionally — `Exhaustive`
+ * asks for every sensor policy, and the default asks for MERRA-2 — but applicability is
+ * a property of the campaign, not of the preset. Selecting an unavailable level put the
+ * designer in a dead end: the checkbox rendered checked *and* disabled, so the run was
+ * blocked on a box the analyst had no way to untick.
+ *
+ * Returns the dropped names too. A silently narrowed `Exhaustive` is not exhaustive, and
+ * the analyst has to be told which levels this campaign cannot answer for.
+ */
+export function retainAvailableSelection(
+  selection: SweepSelection,
+  axes: SweepAxes | null,
+): { selection: SweepSelection; dropped: string[] } {
+  if (!axes) return { selection, dropped: [] };
+  const sensors = availableNames(axes.sensor_policies);
+  const models = availableNames(axes.shear_models);
+  const sources = availableNames(axes.reference_sources);
+  const dropped = new Set<string>();
+  const keep = (levels: string[], allowed: Set<string>): string[] =>
+    levels.filter((name) => {
+      if (allowed.has(name)) return true;
+      dropped.add(name);
+      return false;
+    });
+  return {
+    selection: {
+      ...selection,
+      shearFitPolicies: keep(selection.shearFitPolicies, sensors),
+      referencePolicies: keep(selection.referencePolicies, sensors),
+      shearModels: keep(selection.shearModels, models),
+      referenceSources: keep(selection.referenceSources, sources),
+    },
+    dropped: [...dropped],
+  };
+}
+
 /** Levels the selection names that this session cannot run — the designer greys these. */
 export function unavailableSelections(
   selection: SweepSelection,
@@ -179,6 +226,7 @@ export const useSweepStore = create<SweepStore>((set, get) => ({
   axes: null,
   axesError: null,
   selection: { ...DEFAULT_SELECTION },
+  droppedLevels: [],
 
   phase: "idle",
   error: null,
@@ -197,7 +245,9 @@ export const useSweepStore = create<SweepStore>((set, get) => ({
 
   loadAxes: async (baseUrl, sessionId) => {
     try {
-      set({ axes: await getSweepAxes(baseUrl, sessionId), axesError: null });
+      const axes = await getSweepAxes(baseUrl, sessionId);
+      const { selection, dropped } = retainAvailableSelection(get().selection, axes);
+      set({ axes, axesError: null, selection, droppedLevels: dropped });
     } catch (error) {
       set({ axes: null, axesError: error instanceof Error ? error.message : String(error) });
     }
@@ -216,9 +266,11 @@ export const useSweepStore = create<SweepStore>((set, get) => ({
     }),
 
   applyPreset: (name) =>
-    set((state) => ({
-      selection: { ...state.selection, ...(SWEEP_PRESETS[name] ?? {}) },
-    })),
+    set((state) => {
+      const merged = { ...state.selection, ...(SWEEP_PRESETS[name] ?? {}) };
+      const { selection, dropped } = retainAvailableSelection(merged, state.axes);
+      return { selection, droppedLevels: dropped };
+    }),
 
   estimate: async (baseUrl, sessionId) => {
     try {

@@ -28,6 +28,10 @@ function axes(overrides: Partial<SweepAxes> = {}): SweepAxes {
     ],
     shear_models: [
       { name: "power_law_mean", available: true },
+      { name: "power_law_median", available: true },
+      { name: "power_law_momm", available: true },
+      { name: "power_law_constant", available: true },
+      { name: "log_law_mean", available: true },
       { name: "power_law_sector_12", available: false, reason: "extrapolation reads only the table" },
     ],
     reference_sources: [
@@ -144,6 +148,39 @@ describe("store selection", () => {
   it("ignores an unknown preset rather than clearing the selection", () => {
     useSweepStore.getState().applyPreset("Nonexistent");
     expect(useSweepStore.getState().selection.ltcAlgorithms).toEqual(["variance_ratio"]);
+  });
+
+  it("drops levels Exhaustive asks for that this session cannot run, rather than selecting them disabled", () => {
+    // Regression: Exhaustive names every sensor policy and shear model unconditionally
+    // (SWEEP_PRESETS.Exhaustive), but `redundant_boom` is unavailable on this campaign's
+    // `axes()` (a lidar with no boom redundancy). Applying the preset used to select it
+    // anyway, which rendered its checkbox checked *and* disabled and left "Run sweep"
+    // permanently blocked with no way to untick the box.
+    useSweepStore.setState({ axes: axes(), droppedLevels: [] });
+
+    useSweepStore.getState().applyPreset("Exhaustive");
+
+    const state = useSweepStore.getState();
+    expect(state.selection.shearFitPolicies).not.toContain("redundant_boom");
+    expect(state.selection.referencePolicies).not.toContain("redundant_boom");
+    // ...and the campaign's own available levels — sensor and shear-model alike — are
+    // still all there; only the genuinely unavailable one was dropped.
+    expect(state.selection.shearFitPolicies).toEqual(
+      expect.arrayContaining(["nearest_2", "availability_90", "widest_lever"]),
+    );
+    expect(state.selection.shearModels).toEqual(SWEEP_PRESETS.Exhaustive.shearModels);
+
+    // The drop is disclosed, not silent.
+    expect(state.droppedLevels).toEqual(["redundant_boom"]);
+
+    // And the launch is no longer blocked on a box the analyst has no way to untick.
+    expect(unavailableSelections(state.selection, state.axes)).toEqual([]);
+  });
+
+  it("applying a preset with nothing unavailable clears a previous drop notice", () => {
+    useSweepStore.setState({ axes: axes(), droppedLevels: ["redundant_boom"] });
+    useSweepStore.getState().applyPreset("Quick look");
+    expect(useSweepStore.getState().droppedLevels).toEqual([]);
   });
 
   it("stores and clears axis filters", () => {

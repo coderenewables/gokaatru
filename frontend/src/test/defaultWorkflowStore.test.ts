@@ -112,4 +112,40 @@ describe("prepareDefaultWorkflow", () => {
     expect(state.defaultWorkflowStatus).toBe("ready");
     expect(state.workflowNodes.map((node) => node.id)).toContain("brighthub_reanalysis");
   });
+
+  it("stays on Import with a reanalysis spinner until the download settles, then moves to Cleaning", async () => {
+    // Regression: activeTab used to jump to "cleaning" (and busyLabel to null) before the
+    // reanalysis download was even requested, so the download's own progress labels flashed
+    // in on a page that had already moved on. The transition to Cleaning must wait for
+    // acquisition to finish, not race ahead of it.
+    getBrightHubStatus.mockResolvedValue({ authenticated: true, has_token: true });
+    let settleNodesFetch: (() => void) | undefined;
+    fetchBrightHubReanalysisNodes.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          settleNodesFetch = () => reject(new Error("offline in tests"));
+        }),
+    );
+
+    const setupPromise = useWorkspaceStore.getState().saveConfigAndSetup();
+
+    // Flush the microtask queue enough to carry the action through its own chained awaits
+    // (getBrightHubStatus, updateSessionConfig) up to the still-pending reanalysis fetch,
+    // without any real timer — every other call in this test resolves synchronously.
+    for (let i = 0; i < 20; i += 1) {
+      await Promise.resolve();
+    }
+
+    const midFlight = useWorkspaceStore.getState();
+    expect(midFlight.activeTab).not.toBe("cleaning");
+    expect(midFlight.busyLabel).toBeTruthy();
+    expect(midFlight.busyLabel).toMatch(/reanalysis/i);
+
+    settleNodesFetch?.();
+    await setupPromise;
+
+    const settled = useWorkspaceStore.getState();
+    expect(settled.activeTab).toBe("cleaning");
+    expect(settled.busyLabel).toBeNull();
+  });
 });

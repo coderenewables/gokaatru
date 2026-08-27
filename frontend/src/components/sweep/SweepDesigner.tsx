@@ -104,6 +104,7 @@ export function SweepDesigner() {
   const axes = useSweepStore((state) => state.axes);
   const axesError = useSweepStore((state) => state.axesError);
   const selection = useSweepStore((state) => state.selection);
+  const droppedLevels = useSweepStore((state) => state.droppedLevels);
   const phase = useSweepStore((state) => state.phase);
   const loadAxes = useSweepStore((state) => state.loadAxes);
   const toggleLevel = useSweepStore((state) => state.toggleLevel);
@@ -177,6 +178,11 @@ export function SweepDesigner() {
           Crossing is always available — it is simply not the default, because the leaf
           count is what constrains the run.
         </small>
+        {droppedLevels.length > 0 ? (
+          <p className="sweep-preset-note">
+            Left out — not available on this campaign: {droppedLevels.join(", ")}.
+          </p>
+        ) : null}
       </section>
 
       <div className="sweep-axis-grid">

@@ -11,13 +11,14 @@ import type { ScenarioRow, SweepManifest, SweepSummary } from "../types/sweep";
 const getSweep = vi.fn();
 const listSweeps = vi.fn();
 const streamSweep = vi.fn();
+const getSweepAxes = vi.fn();
 
 vi.mock("../lib/sweepApi", () => ({
   getSweep: (...args: unknown[]) => getSweep(...args),
   listSweeps: (...args: unknown[]) => listSweeps(...args),
   streamSweep: (...args: unknown[]) => streamSweep(...args),
   estimateSweep: vi.fn(),
-  getSweepAxes: vi.fn(),
+  getSweepAxes: (...args: unknown[]) => getSweepAxes(...args),
   getScenarioRunconfig: vi.fn(),
 }));
 
@@ -79,6 +80,45 @@ describe("sweep run lifecycle", () => {
 
     expect(useSweepStore.getState().phase).toBe("error");
     expect(useSweepStore.getState().error).toContain("not available");
+  });
+});
+
+describe("loadAxes carries the current selection through availability", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("drops a carried-over level a newly loaded session cannot run", async () => {
+    // The selection can already name a level from a previous session (e.g. the default
+    // `merra2`) before this session's axes are known. Loading the axes must reconcile the
+    // two immediately, not leave a now-unavailable level selected until the analyst
+    // happens to touch a preset.
+    useSweepStore.setState({
+      selection: {
+        shearFitPolicies: ["nearest_2"],
+        referencePolicies: ["nearest_2"],
+        shearModels: ["power_law_mean"],
+        referenceSources: ["era5", "merra2"],
+        ltcAlgorithms: ["variance_ratio"],
+        analystShearAlpha: null,
+        thresholds: {},
+      },
+      droppedLevels: [],
+    });
+    getSweepAxes.mockResolvedValue({
+      sensor_policies: [{ name: "nearest_2", available: true, can_fit_shear: true }],
+      shear_models: [{ name: "power_law_mean", available: true }],
+      reference_sources: [{ name: "era5", available: true }, { name: "merra2", available: false, reason: "no MERRA-2 nodes returned for this site" }],
+      power_curves: [],
+      known_sensor_policies: ["nearest_2"],
+      default_thresholds: {},
+    });
+
+    await useSweepStore.getState().loadAxes("http://api", "session-1");
+
+    const state = useSweepStore.getState();
+    expect(state.selection.referenceSources).toEqual(["era5"]);
+    expect(state.droppedLevels).toEqual(["merra2"]);
   });
 });
 

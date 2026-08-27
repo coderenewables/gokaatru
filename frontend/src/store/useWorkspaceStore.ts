@@ -801,8 +801,11 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         serverRunconfig: response.runconfig,
         workflowNodes: graph.nodes,
         workflowEdges: graph.edges,
-        activeTab: "cleaning",
-        busyLabel: null,
+        // Stay on the import view and keep the spinner up (below) rather than jumping to
+        // Cleaning immediately — the reanalysis download is about to start, and navigating
+        // before it finishes leaves the analyst reading a busy label on a page that has
+        // nothing to do with it.
+        busyLabel: "Downloading reanalysis (ERA5 + MERRA-2)",
         brighthubStatus,
         brighthubPromptRequired: false,
         defaultWorkflowStatus: "ready",
@@ -810,6 +813,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         activity: appendActivity(state.activity, "Saved config and prepared model", "ok", `${graph.nodes.length} nodes`),
       }));
       await get().runReanalysisAcquisition();
+      // Reanalysis acquisition reports its own failures to the activity log and never
+      // throws (see its own try/catch), so the transition to Cleaning always happens once
+      // the attempt is finished — cleaning does not depend on reanalysis having succeeded.
+      set({ activeTab: "cleaning", busyLabel: null });
     } catch (error) {
       set((state) => ({
         busyLabel: null,

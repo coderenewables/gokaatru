@@ -21,13 +21,11 @@ delete exactly the file the analyst turns out to need.
 from __future__ import annotations
 
 import json
-import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from itertools import product
 from pathlib import Path
-from queue import Queue
-from typing import Any, Callable, Iterator
+from typing import Any, Callable
 from uuid import uuid4
 
 from server.core.admissibility import DEFAULT_THRESHOLDS, GateThresholds, evaluate_gates
@@ -427,46 +425,3 @@ def list_sweeps(base_state: Any) -> list[dict[str, Any]]:
     return sorted(summaries, key=lambda entry: str(entry.get("started_at")), reverse=True)
 
 
-def iter_progress(
-    base_state: Any, spec: SweepSpec, **kwargs: Any
-) -> Iterator[dict[str, Any]]:
-    """Run a sweep, yielding progress records **as they occur**.
-
-    The sweep runs on a worker thread and its callback feeds a queue this generator
-    drains, so an event reaches the client at the moment the scenario finishes. Collecting
-    the events and replaying them afterwards would satisfy the same signature while
-    delivering nothing until the run was already over — which is precisely what the Run
-    Monitor exists to avoid (design doc §9.2).
-
-    Scenario state is bound through a ``ContextVar``, so running on another thread is safe:
-    the worker gets its own binding and cannot disturb the caller's session.
-    """
-    queue: Queue[dict[str, Any] | None] = Queue()
-    outcome: dict[str, Any] = {}
-
-    def worker() -> None:
-        try:
-            outcome["result"] = run_sweep(
-                base_state,
-                spec,
-                on_progress=lambda event: queue.put(event.as_record()),
-                **kwargs,
-            )
-        except Exception as error:  # noqa: BLE001 — surfaced to the client as an event
-            outcome["error"] = repr(error)
-        finally:
-            queue.put(None)
-
-    thread = threading.Thread(target=worker, name="gokaatru-sweep", daemon=True)
-    thread.start()
-    while True:
-        event = queue.get()
-        if event is None:
-            break
-        yield event
-    thread.join()
-
-    if "error" in outcome:
-        yield {"event": "sweep_error", "error": outcome["error"]}
-        return
-    yield {"event": "sweep_result", "manifest": outcome["result"]["manifest"]}

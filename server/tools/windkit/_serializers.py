@@ -114,11 +114,6 @@ def fig_to_dict(fig: Any) -> dict[str, Any]:
     return json.loads(fig.to_json())
 
 
-def _ensure_json(obj: Any) -> str:
-    """Return a JSON string from any serializable object."""
-    return json.dumps(obj, cls=_NumpyEncoder)
-
-
 def _ok(data: Any) -> dict[str, Any]:
     """Wrap a result in a standard status envelope."""
     return {"status": "ok", "result": data}

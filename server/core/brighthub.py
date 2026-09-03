@@ -59,20 +59,6 @@ def get_data_model(token: str, uuid: str) -> dict:
     return resp.json()
 
 
-def get_measurement_location(token: str, uuid: str) -> dict:
-    """Fetch metadata for a single measurement location."""
-    resp = requests.get(
-        f"{BRIGHTHUB_BASE_URL}/measurement-locations/{uuid}",
-        headers=_auth_headers(token),
-        timeout=30,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    if isinstance(data, list) and data:
-        return data[0]
-    return data
-
-
 def fetch_timeseries_csv(
     token: str,
     uuid: str,

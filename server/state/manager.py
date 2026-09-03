@@ -165,20 +165,6 @@ class SessionManager:
             shutil.rmtree(state.workspace_dir)
         del self._sessions[session_id]
 
-    def list_sessions(self) -> list[dict[str, str | None]]:
-        """Return summaries for all active managed sessions in the current process."""
-        summaries: list[dict[str, str | None]] = []
-        for state in self._sessions.values():
-            summaries.append(
-                {
-                    "session_id": state.session_id,
-                    "workspace_dir": str(state.workspace_dir) if state.workspace_dir is not None else None,
-                    "created_at": state.created_at.isoformat() if state.created_at is not None else None,
-                    "updated_at": state.updated_at.isoformat() if state.updated_at is not None else None,
-                }
-            )
-        return sorted(summaries, key=lambda summary: summary["created_at"] or "")
-
     def fork_session(self, session_id: str) -> SessionState:
         """Create a new session by cloning workspace files and in-memory state from an existing session."""
         source = self.get_session(session_id)

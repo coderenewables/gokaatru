@@ -12,7 +12,6 @@ from pathlib import Path
 
 import pandas as pd
 
-from server.core.powercurve import get_power_curve
 from server.core.reanalysis import DEFAULT_REFERENCE_SOURCE, get_reference_source
 from server.core.runconfig import strip_mirrors
 from server.schemas.common import Coordinate
@@ -260,13 +259,6 @@ class SessionState:
         """
         value = self.runconfig.get("power_curve")
         return str(value) if isinstance(value, str) else None
-
-    def set_power_curve_name(self, name: str | None) -> None:
-        """Select the power curve for this session, validating the name eagerly."""
-        if name is None:
-            self.runconfig.pop("power_curve", None)
-            return
-        self.runconfig["power_curve"] = get_power_curve(name).name
 
     def get_project_name(self) -> str | None:
         """Return the project name from runconfig when available, else the mirrored session field."""

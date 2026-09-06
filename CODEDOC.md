@@ -41,7 +41,7 @@ README's "Deployment model" section first.
 |------|--------|
 | Backend Python | ~25.6k LOC across 85 files |
 | Frontend TS/TSX | ~17.6k LOC |
-| MCP tools registered | **223** (81 native GoKaatru + 142 WindKit pass-throughs) |
+| MCP tools registered | **226** (84 native GoKaatru + 142 WindKit pass-throughs) |
 | FastAPI endpoints | ~200 across 14 route files |
 | Backend tests | 74 pytest files (incl. an independent oracle harness) |
 | Frontend tests | 19 vitest files |
@@ -82,7 +82,6 @@ Rules that follow from this (enforced by reviewers and `tests/test_runconfig_con
 ├── README.md            # functional spec: tool/endpoint inventory + disclosed defaults
 ├── pyproject.toml       # Python package + deps + ruff/pytest config
 ├── startup.ps1          # Windows one-shot dev launcher
-├── .env.example         # environment variable template
 ├── scripts/             # helper scripts
 ├── server/              # Python backend (MCP + FastAPI over one logic core)
 ├── frontend/            # React 19 + Vite + TypeScript app
@@ -165,7 +164,7 @@ pass-throughs add **142**.
 | `extrapolation.py` | 2 | Hub-height extrapolation of measured masts and reanalysis. |
 | `air_density.py` | 2 | IEC moist-air density (point + time series). |
 | `atmosphere.py` | 1 | Measured atmospheric-condition summaries (Sensor Overview). |
-| `era5.py` | 4 | ERA5 node discovery, extraction, wind-speed compute, interpolation to site. |
+| `era5.py` | 7 | ERA5 node discovery, extraction, wind-speed compute, interpolation to site, plus the session-scoped EarthDataHub credential (`earthdatahub_set_credential`/`_clear_credential`/`_status`). |
 | `homogeneity.py` | 2 | Pettitt homogeneity screening of reanalysis + cutoff application. |
 | `ltc.py` | 4 | Deterministic long-term correction: linear LS, total LS, SpeedSort, variance ratio. |
 | `ltc_ml.py` | 1 | XGBoost long-term correction (with truncation disclosure). |
@@ -429,7 +428,8 @@ python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000     # web API
 cd frontend && npm install && npm run dev                              # :5173, proxies /api → :8000
 ```
 
-Environment: copy `.env.example`. For headless deployments, set `WINDKIT_NAME`,
+Environment: no `.env` file needed — BrightHub and EarthDataHub credentials are entered per
+browser session through the UI. For headless deployments, set `WINDKIT_NAME`,
 `WINDKIT_EMAIL`, `WINDKIT_INSTITUTION` to avoid WindKit's interactive first-run prompts.
 `startup.ps1` is a Windows convenience launcher.
 
@@ -462,6 +462,23 @@ See the README's "Known limitations" section for the full list and rationale.
 - Split the 1,856-line `tools/visualization.py` into the themed package described in §4.4,
   preserving every existing import path.
 
+**2026-09-06 — EarthDataHub Zarr v3 migration + credential rework**
+
+- EarthDataHub migrated its ERA5 Zarr stores to the Zarr v3 spec (URL unchanged, migrated in
+  place). `pyproject.toml` bumped `zarr>=2.14` → `zarr>=3.0` (2.x cannot open a v3 store at
+  all) and added explicit `dask`/`aiohttp` dependencies per EarthDataHub's own install docs.
+- The EarthDataHub PAT moved from an environment variable / custom `.netrc` parser to
+  session-scoped state (`SessionState.earthdatahub_pat`), mirroring BrightHub's
+  login/logout/status shape exactly: `earthdatahub_set_credential` / `_clear_credential` /
+  `_status` (3 new MCP tools, `server/tools/era5.py`) and `POST|DELETE /era5/credential`,
+  `GET /era5/credential/status` (`server/api/routes/analysis.py`). `_open_era5_dataset`,
+  `_era5_dataset_url`, `_download_era5_frame_with_retry` and `_find_era5_nodes` now take the
+  session explicitly rather than reading a module-level env-var resolver. The speculative
+  header-based auth path (`EARTHDATAHUB_API_KEY` / `EARTHDATAHUB_BEARER_TOKEN` / a custom
+  header) was removed — it never matched EarthDataHub's actual documented mechanism
+  (URL-embedded credential or `.netrc`), confirmed against their live docs before removal.
+  Tool count: 223 → 226.
+
 **Candidates for a future pass** (larger modules with a plausible seam, left intact here
 because the risk/benefit did not clearly favor churn):
 
@@ -475,4 +492,5 @@ because the risk/benefit did not clearly favor churn):
   concern is possible.
 
 When picking any of these up, keep the public import/HTTP surface identical, and validate
-against the full backend and frontend suites (plus the 223-tool count) before and after.
+against the full backend and frontend suites (plus the tool count — 226 as of 2026-09-06)
+before and after.

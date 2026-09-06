@@ -189,23 +189,31 @@ export function formatMetric(value: unknown, metric: MetricColumn): string {
   return meta.unit ? `${shown} ${meta.unit}` : shown;
 }
 
-/** Simple equal-width histogram, for the distribution panel. */
-export function histogram(values: number[], bins = 24): Array<{ x0: number; x1: number; count: number }> {
-  if (values.length === 0) return [];
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  if (min === max) return [{ x0: min, x1: max, count: values.length }];
-  const width = (max - min) / bins;
-  const buckets = Array.from({ length: bins }, (_, index) => ({
-    x0: min + index * width,
-    x1: min + (index + 1) * width,
-    count: 0,
-  }));
+export interface ValueBucket {
+  value: number;
+  count: number;
+}
+
+/**
+ * Group values by the number each one actually displays as, for the distribution panel.
+ *
+ * Sweep axes are discrete/gridded (a handful of shear models, sensor policies, reference
+ * sources...), so scenarios routinely land on the exact same or near-identical metric value
+ * rather than spreading continuously. An equal-width histogram over `[min, max]` split that
+ * clustering into a fixed number of arbitrary ranges regardless of how the data actually
+ * fell, producing a chart with a few tall occupied bins and wide empty gaps between them.
+ * Grouping by the rounded (displayed) value instead means every bar corresponds to a real
+ * cluster of scenarios, and there are no empty bars to begin with.
+ */
+export function valueHistogram(values: number[], precision: number): ValueBucket[] {
+  const counts = new Map<number, number>();
   for (const value of values) {
-    const index = Math.min(bins - 1, Math.floor((value - min) / width));
-    buckets[index].count += 1;
+    const rounded = Number(value.toFixed(precision));
+    counts.set(rounded, (counts.get(rounded) ?? 0) + 1);
   }
-  return buckets;
+  return [...counts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => a.value - b.value);
 }
 
 export interface GateSummary {

@@ -28,7 +28,7 @@ class SessionManager:
     def _prepare_workspace(self, workspace_dir: Path) -> None:
         """Create the required directory structure and runconfig file for a workspace."""
         workspace_dir.mkdir(parents=True, exist_ok=True)
-        for child in ("uploads", "era5_cache", "brighthub_cache", "ltc_results", "windkit"):
+        for child in ("uploads", "earthdatahub_cache", "brighthub_cache", "ltc_results", "windkit"):
             (workspace_dir / child).mkdir(parents=True, exist_ok=True)
         runconfig_path = workspace_dir / "runconfig.json"
         if not runconfig_path.exists():
@@ -79,6 +79,7 @@ class SessionManager:
         target.roughness_table = None if source.roughness_table is None else source.roughness_table.copy(deep=True)
 
         target.brighthub_token = source.brighthub_token
+        target.earthdatahub_pat = source.earthdatahub_pat
         target.era5_nodes = copy.deepcopy(source.era5_nodes)
         target.era5_data = {key: frame.copy(deep=True) for key, frame in source.era5_data.items()}
         # Clone every reference source's interpolated series, not just the active one

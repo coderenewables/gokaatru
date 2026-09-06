@@ -45,6 +45,7 @@ class SessionState:
     shear_table: pd.DataFrame | None
     roughness_table: pd.DataFrame | None
     brighthub_token: str | None
+    earthdatahub_pat: str | None
     era5_nodes: list[dict[str, object]] | None
     era5_data: dict[str, pd.DataFrame]
     # Interpolated site series keyed by reference source (design doc §6.4). There used
@@ -108,6 +109,7 @@ class SessionState:
         self.shear_table = None
         self.roughness_table = None
         self.brighthub_token = None
+        self.earthdatahub_pat = None
         self.era5_nodes = None
         self.era5_data = {}
         self.reanalysis_interpolated = {}

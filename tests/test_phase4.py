@@ -129,4 +129,6 @@ def test_geojson_mast_marker() -> None:
 def test_all_tools_registered() -> None:
     """Verify the MCP server registers the full Phase 1-4 tool surface after all imports."""
     tools = asyncio.run(mcp.list_tools())
-    assert len(tools) == 223
+    # 223 + earthdatahub_set_credential/earthdatahub_clear_credential/earthdatahub_status
+    # (2026-09: moved the EarthDataHub PAT from an env var/.netrc to session-scoped state).
+    assert len(tools) == 226

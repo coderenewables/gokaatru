@@ -4,7 +4,6 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
-import os
 import time
 from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
@@ -23,6 +22,10 @@ from server.main import mcp
 from server.schemas.common import Coordinate
 from server.state.session import SessionState, session
 
+# Confirmed current (2026-09) against EarthDataHub's own docs: this dataset migrated to the
+# Zarr v3 spec in place at the same URL - no path change, but reading it now requires
+# zarr-python 3.x (pyproject.toml pins zarr>=3.0) plus dask, which EarthDataHub's own install
+# instructions list alongside xarray/zarr/aiohttp for the `chunks={}` lazy-open pattern below.
 ERA5_ZARR_URL = "https://data.earthdatahub.destine.eu/era5/reanalysis-era5-single-levels-v0.zarr"
 ERA5_BASE_VARIABLES = ["u100", "v100", "sp", "t2m", "d2m"]
 ERA5_OPTIONAL_VARIABLES = ["ust", "blh", "sshf"]
@@ -34,83 +37,72 @@ class Era5UpstreamError(RuntimeError):
     """Raised when EarthDataHub responds with a transient or incomplete payload."""
 
 
-def _earthdatahub_pat_from_netrc(hostname: str) -> str:
-    """Read an EarthDataHub PAT from a simple netrc-style file without exposing the secret."""
-    netrc_path = Path(os.environ.get("NETRC", Path.home() / ".netrc"))
-    if not netrc_path.exists():
+def _earthdatahub_pat(state: SessionState | None = None) -> str:
+    """Return the session's EarthDataHub PAT, or "" if none is configured.
+
+    Session-scoped only (`earthdatahub_pat_set` / `earthdatahub_pat_clear` /
+    `earthdatahub_status`, mirroring `brighthub_login`/`brighthub_logout`/`brighthub_status`)
+    - not read from an environment variable or `.netrc`. Entered once per browser session via
+    the Data import page, exactly like the BrightHub client credentials, so the credential
+    never has to live in a server-side config file.
+    """
+    if state is None:
         return ""
-    tokens = netrc_path.read_text(encoding="utf-8").split()
-    current_machine = ""
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if token == "machine" and index + 1 < len(tokens):
-            current_machine = tokens[index + 1]
-            index += 2
-            continue
-        if token == "default":
-            current_machine = "default"
-            index += 1
-            continue
-        if token == "password" and index + 1 < len(tokens):
-            if current_machine in {hostname, "default"}:
-                return tokens[index + 1].strip()
-            index += 2
-            continue
-        index += 1
-    return ""
+    return getattr(state, "earthdatahub_pat", None) or ""
 
 
-def _earthdatahub_pat() -> str:
-    """Resolve the EarthDataHub personal access token from env vars or netrc."""
-    for variable in ["EARTHDATAHUB_PAT", "EDH_PAT", "DESTINE_PAT"]:
-        value = os.environ.get(variable, "").strip()
-        if value:
-            return value
-    return _earthdatahub_pat_from_netrc("data.earthdatahub.destine.eu")
-
-
-def _era5_dataset_url() -> str:
-    """Build the ERA5 Zarr URL, embedding the PAT when one is configured."""
-    pat = _earthdatahub_pat()
+def _era5_dataset_url(state: SessionState | None = None) -> str:
+    """Build the ERA5 Zarr URL, embedding the session's PAT when one is configured."""
+    pat = _earthdatahub_pat(state)
     if not pat:
         return ERA5_ZARR_URL
     parsed = urlsplit(ERA5_ZARR_URL)
-    username = os.environ.get("EARTHDATAHUB_PAT_USERNAME", "edh").strip() or "edh"
-    netloc = f"{quote(username, safe='')}:{quote(pat, safe='')}@{parsed.netloc}"
+    netloc = f"{quote('edh', safe='')}:{quote(pat, safe='')}@{parsed.netloc}"
     return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
 
 
 def _era5_storage_options() -> dict[str, object]:
-    """Build fsspec HTTP storage options, including optional EarthDataHub auth headers."""
-    headers: dict[str, str] = {}
-    explicit_header = os.environ.get("EARTHDATAHUB_AUTH_HEADER", "").strip()
-    explicit_value = os.environ.get("EARTHDATAHUB_AUTH_VALUE", "").strip()
-    bearer_token = os.environ.get("EARTHDATAHUB_BEARER_TOKEN", "").strip() or os.environ.get(
-        "EARTHDATAHUB_TOKEN", ""
-    ).strip()
-    api_key = os.environ.get("EARTHDATAHUB_API_KEY", "").strip()
-    api_key_header = os.environ.get("EARTHDATAHUB_API_KEY_HEADER", "x-api-key").strip() or "x-api-key"
-    if explicit_header and explicit_value:
-        headers[explicit_header] = explicit_value
-    elif bearer_token:
-        headers["Authorization"] = f"Bearer {bearer_token}"
-    elif api_key:
-        headers[api_key_header] = api_key
-    options: dict[str, object] = {"client_kwargs": {"trust_env": True}}
-    if headers:
-        options["headers"] = headers
-    return options
+    """Build fsspec HTTP storage options for the EarthDataHub Zarr store.
+
+    `trust_env: True` lets aiohttp pick up a `.netrc` entry for `data.earthdatahub.destine.eu`
+    on its own if one exists - EarthDataHub's own documented alternative to the
+    URL-embedded credential (confirmed 2026-09 against their current docs). GoKaatru does not
+    read or manage that file itself; the session-scoped PAT in `_era5_dataset_url` is the
+    primary, always-available path.
+    """
+    return {"client_kwargs": {"trust_env": True}}
 
 
-def _open_era5_dataset() -> xr.Dataset:
+def _open_era5_dataset(state: SessionState | None = None) -> xr.Dataset:
     """Open the EarthDataHub ERA5 Zarr store lazily using xarray and zarr."""
     return xr.open_dataset(
-        _era5_dataset_url(),
+        _era5_dataset_url(state),
         storage_options=_era5_storage_options(),
         chunks={},
         engine="zarr",
     )
+
+
+def _set_earthdatahub_credential(state: SessionState, pat: str) -> dict:
+    """Store an EarthDataHub PAT in the session (Standard API key or legacy Classic key)."""
+    cleaned = pat.strip()
+    if not cleaned:
+        raise ValueError("pat must not be empty")
+    state.earthdatahub_pat = cleaned
+    state.touch()
+    return {"status": "ok", "configured": True}
+
+
+def _clear_earthdatahub_credential(state: SessionState) -> dict:
+    """Remove the session's stored EarthDataHub PAT."""
+    state.earthdatahub_pat = None
+    state.touch()
+    return {"status": "ok", "configured": False}
+
+
+def _earthdatahub_status(state: SessionState) -> dict:
+    """Report whether this session has an EarthDataHub PAT configured."""
+    return {"configured": bool(_earthdatahub_pat(state))}
 
 
 def _exception_chain(exc: BaseException) -> list[BaseException]:
@@ -152,6 +144,31 @@ def _is_transient_era5_error(exc: BaseException) -> bool:
         if any(marker in message for marker in markers):
             return True
     return False
+
+
+def _is_auth_error(exc: BaseException) -> bool:
+    """Identify an EarthDataHub credential rejection (missing/invalid/expired PAT).
+
+    Without this, a missing or bad PAT surfaces as a raw ``aiohttp.ClientResponseError``
+    (status 401) all the way up through FastAPI as an opaque 500 - "Finding ERA5 nodes"
+    just fails with no indication of why, which looks identical to an unrelated server
+    fault. Distinguishing it lets the caller raise a message that actually says what to fix.
+    """
+    for current in _exception_chain(exc):
+        status = getattr(current, "status", None)
+        if status in (401, 403):
+            return True
+        message = f"{type(current).__name__}: {current}".lower()
+        if "unauthorized" in message or "forbidden" in message:
+            return True
+    return False
+
+
+_AUTH_ERROR_MESSAGE = (
+    "EarthDataHub rejected the request (401/403) - the configured API key is missing, "
+    "invalid, or expired. Enter a current Standard or Classic API key on the Data import "
+    "page and try again."
+)
 
 
 def _time_coordinate_name(dataset: xr.Dataset) -> str:
@@ -210,18 +227,37 @@ def _era5_key(latitude: float, longitude: float) -> str:
 
 
 def _era5_cache_path(state: SessionState, latitude: float, longitude: float) -> Path:
-    """Build the standard ERA5 cache parquet path for a node."""
-    cache_dir = Path(state.get_data_dir()) / "era5_cache"
+    """Build the standard ERA5 cache parquet path for a node.
+
+    Lives under ``earthdatahub_cache/``, mirroring ``brighthub_cache/``'s per-provider
+    naming and treatment: a session-scoped parquet-per-node cache, keyed by coordinate,
+    that a cache hit always trusts (see ``_load_cached_era5`` / ``_cache_covers_period`` -
+    no TTL or invalidation, same as BrightHub's cache).
+    """
+    cache_dir = Path(state.get_data_dir()) / "earthdatahub_cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir / f"ERA5_{latitude}_{longitude}.parquet"
+
+
+def _align_tz(timestamp: pd.Timestamp, index: pd.DatetimeIndex) -> pd.Timestamp:
+    """Match a bound's tz-awareness to a cached index's, so the two can be compared/sliced.
+
+    The cache is always written tz-aware (UTC; see the D8 note in ``_read_remote_era5_frame``),
+    but ``start_date``/``end_date`` arrive as plain date strings and parse tz-naive - comparing
+    or slicing the two directly raises ``TypeError: Cannot compare tz-naive and tz-aware
+    timestamps`` on every cache hit past the first.
+    """
+    if index.tz is None:
+        return timestamp
+    return timestamp.tz_localize(index.tz) if timestamp.tz is None else timestamp.tz_convert(index.tz)
 
 
 def _cache_covers_period(df: pd.DataFrame, start_date: str, end_date: str) -> bool:
     """Check whether a cached ERA5 dataframe fully covers the requested date range."""
     if df.empty or not isinstance(df.index, pd.DatetimeIndex):
         return False
-    start = pd.Timestamp(start_date)
-    end = pd.Timestamp(end_date)
+    start = _align_tz(pd.Timestamp(start_date), df.index)
+    end = _align_tz(pd.Timestamp(end_date), df.index)
     return bool(df.index.min() <= start and df.index.max() >= end)
 
 
@@ -249,7 +285,9 @@ def _load_cached_era5(cache_path: Path, start_date: str, end_date: str) -> tuple
         cached.index = pd.DatetimeIndex(cached.index)
     if not _cache_covers_period(cached, start_date, end_date):
         return None, False
-    subset = cached.loc[pd.Timestamp(start_date) : pd.Timestamp(end_date)].copy()
+    start = _align_tz(pd.Timestamp(start_date), cached.index)
+    end = _align_tz(pd.Timestamp(end_date), cached.index)
+    subset = cached.loc[start:end].copy()
     # ERA5 is natively UTC; ensure the index is tz-aware (D8).
     if subset.index.tz is None:
         subset.index = subset.index.tz_localize("UTC")
@@ -284,6 +322,7 @@ def _read_remote_era5_frame(
 
 
 def _download_era5_frame_with_retry(
+    state: SessionState,
     latitude: float,
     longitude: float,
     start_date: str,
@@ -294,11 +333,13 @@ def _download_era5_frame_with_retry(
     for attempt in range(1, ERA5_FETCH_MAX_ATTEMPTS + 1):
         dataset: xr.Dataset | None = None
         try:
-            dataset = _open_era5_dataset()
+            dataset = _open_era5_dataset(state)
             return _read_remote_era5_frame(dataset, latitude, longitude, start_date, end_date)
         except ValueError:
             raise
         except Exception as exc:  # noqa: BLE001
+            if _is_auth_error(exc):
+                raise ValueError(_AUTH_ERROR_MESSAGE) from exc
             last_error = exc
             if not _is_transient_era5_error(exc) or attempt >= ERA5_FETCH_MAX_ATTEMPTS:
                 raise Era5UpstreamError(
@@ -328,8 +369,10 @@ def _find_era5_nodes(state: SessionState, latitude: float, longitude: float) -> 
     """Find the four surrounding ERA5 grid nodes using 0.25° bounds and haversine distance."""
     dataset: xr.Dataset | None = None
     try:
-        dataset = _open_era5_dataset()
+        dataset = _open_era5_dataset(state)
     except Exception as exc:  # noqa: BLE001
+        if _is_auth_error(exc):
+            raise ValueError(_AUTH_ERROR_MESSAGE) from exc
         if _is_transient_era5_error(exc):
             raise Era5UpstreamError(
                 "ERA5 node lookup failed while contacting EarthDataHub. Please retry the request."
@@ -374,7 +417,15 @@ def _extract_era5_data(
     start_date: str = "2000-01-01",
     end_date: str = "2025-12-31",
 ) -> dict:
-    """Extract ERA5 node data from Zarr, cache it as parquet, and store it in session state."""
+    """Extract ERA5 node data from Zarr, cache it as parquet, and store it in session state.
+
+    Must not stamp ``state``'s site coordinate: this runs once per grid node in the
+    direct-ERA5 flow (4 calls, one per node returned by ``find_era5_nodes``), and
+    ``_interpolate_era5_to_site`` reads ``state.get_coordinate()`` as the interpolation
+    target. It previously called ``_store_coordinate`` here, so after the 4th node the
+    "site" silently became that node's own coordinate - interpolation then degenerated to
+    exactly one corner's value instead of a genuine blend, with no error raised.
+    """
     try:
         cache_path = _era5_cache_path(state, latitude, longitude)
     except TypeError:
@@ -383,10 +434,9 @@ def _extract_era5_data(
         cache_path = _era5_cache_path(latitude, longitude)
     cached_df, cache_hit = _load_cached_era5(cache_path, start_date, end_date)
     if cached_df is None:
-        cached_df = _download_era5_frame_with_retry(latitude, longitude, start_date, end_date)
+        cached_df = _download_era5_frame_with_retry(state, latitude, longitude, start_date, end_date)
         cached_df.to_parquet(cache_path)
     state.era5_data[_era5_key(latitude, longitude)] = cached_df.copy()
-    _store_coordinate(state, latitude, longitude)
     return {
         "status": "ok",
         "latitude": float(latitude),
@@ -567,6 +617,29 @@ def _interpolate_era5_to_site(state: SessionState, source: str = "era5") -> dict
             "somewhere unrelated unless it is dealt with here."
         )
     return payload
+
+
+@mcp.tool()
+def earthdatahub_set_credential(pat: str) -> dict:
+    """Store an EarthDataHub PAT in the session for the direct-ERA5 (non-BrightHub) path.
+
+    Accepts either a "Standard API key" (current) or a legacy "Classic API key" (deprecated
+    on EarthDataHub's side, but the same credential in usage) - session-scoped only, entered
+    once per browser session on the Data import page, mirroring `brighthub_login`.
+    """
+    return _set_earthdatahub_credential(session, pat)
+
+
+@mcp.tool()
+def earthdatahub_clear_credential() -> dict:
+    """Remove the session's stored EarthDataHub PAT."""
+    return _clear_earthdatahub_credential(session)
+
+
+@mcp.tool()
+def earthdatahub_status() -> dict:
+    """Check whether the session has an EarthDataHub PAT configured."""
+    return _earthdatahub_status(session)
 
 
 @mcp.tool()

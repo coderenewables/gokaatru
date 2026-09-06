@@ -22,7 +22,12 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "windrose>=1.9",
     "xarray>=2023.1",
-    "zarr>=2.14",
+    "zarr>=3.0",  # EarthDataHub migrated all ERA5 Zarr stores to the Zarr v3 spec (2026-09);
+                  # zarr-python 2.x cannot open a v3 store at all. Their own docs pin `zarr>3`.
+    "dask>=2024.1",  # required by EarthDataHub's documented `xr.open_dataset(..., chunks={})`
+                      # lazy-loading pattern used in server/tools/era5.py._open_era5_dataset
+    "aiohttp>=3.9",  # was only a transitive dependency (via fsspec/s3fs); EarthDataHub's docs
+                      # list it as directly required for the Zarr HTTP store access
     "fsspec>=2023.1",
     "s3fs>=2023.1",
     "windkit>=2.0,<2.1",  # pin: widen deliberately after testing new major.minor

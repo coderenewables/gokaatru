@@ -13,12 +13,12 @@ import {
   failedRows,
   filterRows,
   formatMetric,
-  histogram,
   inadmissibleRows,
   metricValues,
   percentile,
   spreadStats,
   toCsv,
+  valueHistogram,
 } from "../lib/sweepAnalysis";
 import type { ScenarioRow } from "../types/sweep";
 
@@ -179,14 +179,25 @@ describe("presentation helpers", () => {
     expect(formatMetric(0.4321, "capacity_factor")).toBe("0.4321");
   });
 
-  it("bins values for the distribution panel", () => {
-    const bins = histogram([1, 2, 3, 4], 2);
-    expect(bins).toHaveLength(2);
-    expect(bins.reduce((total, bin) => total + bin.count, 0)).toBe(4);
+  it("groups values by their rounded display value for the distribution panel", () => {
+    // Regression: an equal-width histogram over [min, max] split gridded sweep results
+    // (which routinely land on the exact same value) into arbitrary ranges, producing a
+    // chart with a few tall occupied bins and wide empty gaps. Grouping by displayed value
+    // means every bar is a real cluster and there is nothing to leave empty.
+    const buckets = valueHistogram([1.001, 1.002, 2.5, 2.5, 4], 0);
+    expect(buckets).toEqual([
+      { value: 1, count: 2 },
+      { value: 3, count: 2 },
+      { value: 4, count: 1 },
+    ]);
   });
 
-  it("returns a single bin when every value is identical", () => {
-    expect(histogram([5, 5, 5], 8)).toHaveLength(1);
+  it("returns a single bucket when every value rounds the same", () => {
+    expect(valueHistogram([5, 5, 5], 0)).toEqual([{ value: 5, count: 3 }]);
+  });
+
+  it("returns nothing for an empty input", () => {
+    expect(valueHistogram([], 3)).toEqual([]);
   });
 
   it("writes CSV with quoted fields where needed", () => {

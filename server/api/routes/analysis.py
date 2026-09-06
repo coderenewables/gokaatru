@@ -25,10 +25,12 @@ from server.api.schemas import (
     HomogeneityAnalyzeRequest,
     HomogeneityApplyRequest,
     ImportRunconfigRequest,
+    InterpolateEra5Request,
     RunLtcRequest,
     RunScenarioRequest,
     SaveScenarioRequest,
     SensorStatisticsResponse,
+    SetEarthDataHubCredentialRequest,
     UndoCleaningRuleRequest,
 )
 from server.core.uncertainty_inputs import derive_uncertainty_inputs
@@ -55,10 +57,13 @@ from server.tools.diagnostics import (
 from server.tools.ensemble import _run_ensemble
 from server.tools.era5 import (
     Era5UpstreamError,
+    _clear_earthdatahub_credential,
     _compute_era5_wind_speed,
+    _earthdatahub_status,
     _extract_era5_data,
     _find_era5_nodes,
     _interpolate_era5_to_site,
+    _set_earthdatahub_credential,
 )
 from server.tools.extrapolation import (
     _add_shear_to_timeseries,
@@ -653,6 +658,44 @@ def extrapolate_hub(
     return result
 
 
+@router.post("/era5/credential")
+def set_earthdatahub_credential(
+    session_id: str,
+    body: SetEarthDataHubCredentialRequest,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict:
+    """Store this session's EarthDataHub PAT for the direct-ERA5 (non-BrightHub) path."""
+    del session_id
+    try:
+        result = _set_earthdatahub_credential(state, body.pat)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+    state.touch()
+    return result
+
+
+@router.delete("/era5/credential")
+def clear_earthdatahub_credential(
+    session_id: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict:
+    """Remove this session's stored EarthDataHub PAT."""
+    del session_id
+    result = _clear_earthdatahub_credential(state)
+    state.touch()
+    return result
+
+
+@router.get("/era5/credential/status")
+def get_earthdatahub_credential_status(
+    session_id: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict:
+    """Check whether this session has an EarthDataHub PAT configured."""
+    del session_id
+    return _earthdatahub_status(state)
+
+
 @router.post("/era5/nodes")
 def find_era5_nodes(
     session_id: str,
@@ -696,7 +739,7 @@ def extract_era5(
 def interpolate_era5(
     session_id: str,
     state: Annotated[SessionState, Depends(get_session_state)],
-    source: str = "era5",
+    body: InterpolateEra5Request = InterpolateEra5Request(),
 ) -> dict:
     """Interpolate loaded reanalysis node datasets to the site location for the current session.
 
@@ -705,7 +748,7 @@ def interpolate_era5(
     """
     del session_id
     try:
-        result = _interpolate_era5_to_site(state, source)
+        result = _interpolate_era5_to_site(state, body.source)
     except ValueError as exc:
         raise to_bad_request(exc) from exc
     state.touch()

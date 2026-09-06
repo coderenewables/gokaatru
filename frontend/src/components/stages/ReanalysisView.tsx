@@ -3,6 +3,8 @@
 // The provider and date window are chosen on the Data import page and the
 // download runs there on "Save config and setup"; this stage reviews the
 // result, re-runs acquisition if needed, and hosts the homogeneity test.
+import { useState } from "react";
+
 import { useWorkspaceStore } from "../../store/useWorkspaceStore";
 import { NodeTable } from "../common/NodeTable";
 import { MiniMap } from "../common/MiniMap";
@@ -19,6 +21,7 @@ export function ReanalysisView() {
   );
   const invokeSessionOperation = useWorkspaceStore((state) => state.invokeSessionOperation);
   const runReanalysisAcquisition = useWorkspaceStore((state) => state.runReanalysisAcquisition);
+  const setReanalysisProgress = useWorkspaceStore((state) => state.setReanalysisProgress);
   const source = config.reanalysis.acquisitionSource;
   const summary = useWorkspaceStore((state) => state.summary);
   const runHomogeneity = useWorkspaceStore((state) => state.runHomogeneity);
@@ -33,8 +36,10 @@ export function ReanalysisView() {
   const era5Nodes = useWorkspaceStore((state) => state.era5Nodes);
   const merraNodes = useWorkspaceStore((state) => state.merraNodes);
   const siteMap = useWorkspaceStore((state) => state.siteMap);
+  const earthdatahubStatus = useWorkspaceStore((state) => state.earthdatahubStatus);
 
   const authenticated = brighthubStatus?.authenticated ?? false;
+  const earthdatahubConfigured = earthdatahubStatus?.configured ?? false;
   const lat = config.site.latitude;
   const lon = config.site.longitude;
 
@@ -49,22 +54,58 @@ export function ReanalysisView() {
     downloadBrightHubReanalysis({ dataset: "MERRA-2", source: "brighthub", useNodes: "merra2" });
 
   // Direct ERA5 path (EarthDataHub Zarr): find + extract + interpolate.
+  //
+  // Interpolation needs all four bounding-grid nodes' data present, not just the site's own
+  // coordinate (that mismatch is what left ERA5 - not just MERRA-2 - showing unavailable in
+  // the Analysis Engine on this path). "Find" discovers the four nodes; "Extract" must fetch
+  // each of their own coordinates, not the site's, mirroring how the BrightHub path downloads
+  // every one of its nodes rather than a single point.
+  const [directEra5Nodes, setDirectEra5Nodes] = useState<Array<{ latitude: number; longitude: number }>>([]);
+
   const findEra5Direct = async () => {
-    await invokeSessionOperation("Find ERA5 nodes (direct)", "POST", "/era5/nodes", {
-      latitude: lat,
-      longitude: lon,
-    });
+    const result = await invokeSessionOperation<{ nodes: Array<{ latitude: number; longitude: number }> }>(
+      "Find ERA5 nodes (direct)",
+      "POST",
+      "/era5/nodes",
+      { latitude: lat, longitude: lon },
+    );
+    setDirectEra5Nodes(result?.nodes ?? []);
   };
   const extractEra5Direct = async () => {
-    await invokeSessionOperation("Extract ERA5 (direct)", "POST", "/era5/extract", {
-      latitude: lat,
-      longitude: lon,
-      start_date: startDate,
-      end_date: endDate,
-    });
+    // Sequential, not concurrent: firing all four nodes at once was tried and
+    // live-reproduced as worse - EarthDataHub reset/rejected simultaneous connections from
+    // the same credential, so all four failed outright (502) instead of just being slow.
+    // A slow sequential success beats a fast concurrent failure.
+    try {
+      for (let index = 0; index < directEra5Nodes.length; index += 1) {
+        const node = directEra5Nodes[index];
+        setReanalysisProgress({
+          provider: "earthdatahub",
+          phase: "downloading",
+          dataset: "ERA5",
+          current: index + 1,
+          total: directEra5Nodes.length,
+          latitude: node.latitude,
+          longitude: node.longitude,
+        });
+        await invokeSessionOperation("Extract ERA5 (direct)", "POST", "/era5/extract", {
+          latitude: node.latitude,
+          longitude: node.longitude,
+          start_date: startDate,
+          end_date: endDate,
+        });
+      }
+    } finally {
+      setReanalysisProgress(null);
+    }
   };
   const interpolateEra5 = async () => {
-    await invokeSessionOperation("Interpolate ERA5 to site", "POST", "/era5/interpolate");
+    setReanalysisProgress({ provider: source, phase: "interpolating", dataset: "ERA5" });
+    try {
+      await invokeSessionOperation("Interpolate ERA5 to site", "POST", "/era5/interpolate");
+    } finally {
+      setReanalysisProgress(null);
+    }
   };
 
   return (
@@ -128,12 +169,28 @@ export function ReanalysisView() {
       ) : (
         <section className="path-panel">
           <h3>Direct ERA5 (EarthDataHub)</h3>
-          <p className="muted">ERA5 only; no MERRA-2 on this path. Requires a configured PAT.</p>
-          <div className="path-actions">
-            <RunButton label="Find ERA5 nodes" onClick={findEra5Direct} />
-            <RunButton label="Extract node data" variant="secondary" onClick={extractEra5Direct} />
-            <RunButton label="Interpolate to site" onClick={interpolateEra5} />
-          </div>
+          <p className="muted">ERA5 only; no MERRA-2 on this path.</p>
+          {!earthdatahubConfigured ? (
+            <p className="muted">Configure your EarthDataHub credential in Stage 1 first.</p>
+          ) : (
+            <>
+              <div className="path-actions">
+                <RunButton label="Find ERA5 nodes" onClick={findEra5Direct} />
+                <RunButton
+                  label="Extract node data"
+                  variant="secondary"
+                  onClick={extractEra5Direct}
+                  disabled={directEra5Nodes.length === 0}
+                />
+                <RunButton label="Interpolate to site" onClick={interpolateEra5} />
+              </div>
+              <p className="muted">
+                {directEra5Nodes.length > 0
+                  ? `${directEra5Nodes.length} surrounding node(s) found — extract each before interpolating.`
+                  : "Find the surrounding nodes first."}
+              </p>
+            </>
+          )}
         </section>
       )}
 

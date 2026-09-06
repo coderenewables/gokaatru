@@ -16,11 +16,11 @@ import {
   filterRows,
   formatMetric,
   gateValue,
-  histogram,
   inadmissibleRows,
   metricValues,
   spreadStats,
   toCsv,
+  valueHistogram,
 } from "../../lib/sweepAnalysis";
 import {
   AXIS_COLUMNS,
@@ -54,35 +54,61 @@ function Histogram({
   admissible,
   ghost,
   label,
+  precision,
 }: {
   admissible: number[];
   ghost: number[];
   label: string;
+  precision: number;
 }) {
-  const all = [...admissible, ...ghost];
-  const bins = histogram(all, 24);
-  if (bins.length === 0) return <p className="muted">No values to plot.</p>;
+  const admissibleBuckets = valueHistogram(admissible, precision);
+  const ghostBuckets = valueHistogram(ghost, precision);
+  if (admissibleBuckets.length === 0 && ghostBuckets.length === 0) {
+    return <p className="muted">No values to plot.</p>;
+  }
 
-  const ghostBins = histogram(ghost, 24);
-  const peak = Math.max(...bins.map((bin) => bin.count), 1);
+  const admissibleByValue = new Map(admissibleBuckets.map((bucket) => [bucket.value, bucket.count]));
+  const ghostByValue = new Map(ghostBuckets.map((bucket) => [bucket.value, bucket.count]));
+  const values = [...new Set([...admissibleByValue.keys(), ...ghostByValue.keys()])].sort((a, b) => a - b);
+  const peak = Math.max(
+    ...values.map((value) => (admissibleByValue.get(value) ?? 0) + (ghostByValue.get(value) ?? 0)),
+    1,
+  );
 
   return (
-    <div className="sweep-histogram" role="img" aria-label={`Distribution of ${label}`}>
-      {bins.map((bin, index) => {
-        const ghostCount = ghostBins[index]?.count ?? 0;
-        return (
-          <div key={bin.x0} className="sweep-histogram-column" title={`${bin.x0.toFixed(3)} – ${bin.x1.toFixed(3)}: ${bin.count}`}>
+    <div className="sweep-histogram-wrap">
+      <div className="sweep-histogram" role="img" aria-label={`Distribution of ${label}`}>
+        {values.map((value) => {
+          const count = admissibleByValue.get(value) ?? 0;
+          const ghostCount = ghostByValue.get(value) ?? 0;
+          const total = count + ghostCount;
+          return (
             <div
-              className="sweep-histogram-ghost"
-              style={{ height: `${(ghostCount / peak) * 100}%` }}
-            />
-            <div
-              className="sweep-histogram-bar"
-              style={{ height: `${((bin.count - ghostCount) / peak) * 100}%` }}
-            />
-          </div>
-        );
-      })}
+              key={value}
+              className="sweep-histogram-column"
+              title={`${value}: ${total} scenario${total === 1 ? "" : "s"}`}
+            >
+              <div className="sweep-histogram-ghost" style={{ height: `${(ghostCount / peak) * 100}%` }} />
+              <div className="sweep-histogram-bar" style={{ height: `${(count / peak) * 100}%` }} />
+            </div>
+          );
+        })}
+      </div>
+      {/* Counts labelled directly, not just on hover: sweep axes are discrete, so distinct
+          values often recur with near-identical counts (e.g. 8 values at 36 scenarios each)
+          and bar height alone then carries almost no signal - it reads as a rendering bug
+          rather than a genuinely flat distribution without a number to confirm it. */}
+      <div className="sweep-histogram-axis">
+        {values.map((value) => {
+          const total = (admissibleByValue.get(value) ?? 0) + (ghostByValue.get(value) ?? 0);
+          return (
+            <span key={value} className="sweep-histogram-tick">
+              <strong>{total}</strong>
+              {value.toFixed(precision)}
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -163,17 +189,15 @@ export function SpreadExplorer() {
           admissible={metricValues(good, metric)}
           ghost={showInadmissible ? metricValues(excluded, metric) : []}
           label={meta.label}
+          precision={meta.precision}
         />
         {stats ? (
           <dl className="sweep-stat-row">
             {(
               [
-                ["min", stats.min],
-                ["P10", stats.p10],
-                ["P50", stats.p50],
-                ["P90", stats.p90],
-                ["max", stats.max],
-                ["std", stats.std],
+                ["mean", stats.mean],
+                ["median", stats.p50],
+                ["σ", stats.std],
               ] as Array<[string, number]>
             ).map(([label, value]) => (
               <div key={label}>
@@ -181,10 +205,6 @@ export function SpreadExplorer() {
                 <dd>{formatMetric(value, metric)}</dd>
               </div>
             ))}
-            <div>
-              <dt>range</dt>
-              <dd>{stats.rangePctOfMean.toFixed(2)}% of mean</dd>
-            </div>
           </dl>
         ) : (
           <p className="muted">No admissible scenario carries this metric.</p>

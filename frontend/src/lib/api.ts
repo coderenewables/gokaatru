@@ -48,6 +48,10 @@ export interface BrightHubStatusResponse {
   has_token: boolean;
 }
 
+export interface EarthDataHubStatusResponse {
+  configured: boolean;
+}
+
 export interface BrightHubLocation {
   uuid: string;
   name: string;
@@ -493,6 +497,31 @@ export async function downloadBrightHubReanalysis(
 // ---------------------------------------------------------------------------
 // Direct ERA5 (Stage 2)
 // ---------------------------------------------------------------------------
+
+export async function getEarthDataHubStatus(
+  baseUrl: string,
+  sessionId: string,
+): Promise<EarthDataHubStatusResponse> {
+  return requestJson<EarthDataHubStatusResponse>(baseUrl, `/api/sessions/${sessionId}/era5/credential/status`);
+}
+
+export async function setEarthDataHubCredential(
+  baseUrl: string,
+  sessionId: string,
+  pat: string,
+): Promise<{ status: string; configured: boolean }> {
+  return requestJson(baseUrl, `/api/sessions/${sessionId}/era5/credential`, {
+    method: "POST",
+    body: JSON.stringify({ pat }),
+  });
+}
+
+export async function clearEarthDataHubCredential(
+  baseUrl: string,
+  sessionId: string,
+): Promise<{ status: string; configured: boolean }> {
+  return requestJson(baseUrl, `/api/sessions/${sessionId}/era5/credential`, { method: "DELETE" });
+}
 
 export async function findEra5Nodes(
   baseUrl: string,

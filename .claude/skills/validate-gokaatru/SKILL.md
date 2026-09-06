@@ -18,7 +18,9 @@ broke, or before reporting a task complete.
    ```bash
    python -m pytest tests/ -v
    ```
-   Current clean baseline (2026-08-23): 926 passed, 2 skipped. This number moves as the
+   Current clean baseline (2026-09-06): 931 passed, 2 skipped — assumes the gitignored
+   `data/uploads/` fixtures (Boxkite, WB-ESMAP, etc.) are present; without them, some tests
+   error at setup rather than failing. This number moves as the
    project grows — treat it as "roughly this many, zero failures" rather than an exact target.
    If a *different* count of failures shows
    up, don't assume they're pre-existing — GoKaatru's own audit history
@@ -29,18 +31,18 @@ broke, or before reporting a task complete.
    ```bash
    python -c "import asyncio; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())), 'tools')"
    ```
-   Current baseline: 223. If you added or removed a tool, expect the count to move by that
+   Current baseline: 226. If you added or removed a tool, expect the count to move by that
    many; if it moved unexpectedly, something registered wrong.
 4. If `frontend/` changed:
    ```bash
-   cd frontend && npm run test    # vitest, baseline 172 passed (2026-08-23)
+   cd frontend && npm run test    # vitest, baseline 189 passed (2026-09-06)
    cd frontend && npm run build   # tsc --noEmit && vite build
    ```
 
 ## Reporting
 
 Summarize as a short pass/fail table, not raw command output. Call out any count that moved
-from the baselines above (926/2 skipped backend, 172 frontend, 223 tools) even if everything
+from the baselines above (931/2 skipped backend, 189 frontend, 226 tools) even if everything
 still "passes" — a moved baseline is itself worth flagging to the user.
 
 If you changed `server/tools/` or `server/api/routes/`, also check whether both the MCP tool

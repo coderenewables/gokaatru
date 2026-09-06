@@ -460,18 +460,19 @@ function SensorInventory({ sensors, selected, setSelected }: SensorInventoryProp
 function ReanalysisSourceForm() {
   const config = useWorkspaceStore((state) => state.config);
   const updateConfigValue = useWorkspaceStore((state) => state.updateConfigValue);
+  const source = config.reanalysis.acquisitionSource;
   return (
     <section className="path-panel">
       <h3>Long-term reference</h3>
       <p className="muted">
         ERA5 and MERRA-2 are downloaded when you save the config below. BrightHub supplies both
-        datasets; EarthDataHub is ERA5 only and requires a configured PAT.
+        datasets; EarthDataHub is ERA5 only.
       </p>
       <div className="form-grid">
         <label className="form-field">
           <span>Provider</span>
           <select
-            value={config.reanalysis.acquisitionSource}
+            value={source}
             onChange={(e) => updateConfigValue("reanalysis.acquisitionSource", e.target.value)}
           >
             <option value="brighthub">BrightHub (ERA5 + MERRA-2)</option>
@@ -495,7 +496,57 @@ function ReanalysisSourceForm() {
           />
         </label>
       </div>
+      {source === "earthdatahub" ? <EarthDataHubCredentialForm /> : null}
     </section>
+  );
+}
+
+function EarthDataHubCredentialForm() {
+  const earthdatahubStatus = useWorkspaceStore((state) => state.earthdatahubStatus);
+  const refreshEarthDataHub = useWorkspaceStore((state) => state.refreshEarthDataHub);
+  const setEarthDataHubCredential = useWorkspaceStore((state) => state.setEarthDataHubCredential);
+  const clearEarthDataHubCredential = useWorkspaceStore((state) => state.clearEarthDataHubCredential);
+  const [pat, setPat] = useState("");
+
+  useEffect(() => {
+    refreshEarthDataHub();
+  }, [refreshEarthDataHub]);
+
+  const configured = earthdatahubStatus?.configured ?? false;
+
+  return (
+    <div className="path-panel earthdatahub-credential">
+      <h4>EarthDataHub credential</h4>
+      <p className="muted">
+        A "Standard API key" or legacy "Classic" key from{" "}
+        <a href="https://earthdatahub.destine.eu" target="_blank" rel="noreferrer">
+          earthdatahub.destine.eu
+        </a>
+        's Quota &amp; API keys page — both work identically here. Stored for this session
+        only; never written to a config file.
+      </p>
+      {configured ? (
+        <>
+          <p className="status-ok">✓ Credential configured for this session</p>
+          <RunButton label="Remove credential" variant="secondary" onClick={() => void clearEarthDataHubCredential()} />
+        </>
+      ) : (
+        <div className="form-grid">
+          <label className="form-field">
+            <span>API key / PAT</span>
+            <input type="password" value={pat} onChange={(e) => setPat(e.target.value)} />
+          </label>
+          <RunButton
+            label="Save credential"
+            onClick={async () => {
+              await setEarthDataHubCredential(pat);
+              setPat("");
+            }}
+            disabled={!pat}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 

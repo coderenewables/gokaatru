@@ -86,6 +86,12 @@ class ExtrapolateHubRequest(BaseModel):
     shear_model: str = "power_law"
 
 
+class SetEarthDataHubCredentialRequest(BaseModel):
+    """Store the session's EarthDataHub PAT for the direct-ERA5 path."""
+
+    pat: str = Field(..., min_length=1)
+
+
 class FindEra5NodesRequest(BaseModel):
     """Request ERA5 node lookup for a site coordinate."""
 
@@ -116,6 +122,20 @@ class ExtractEra5Request(BaseModel):
                 f"{ERA5_MAX_SPAN_YEARS} years ({max_days} days)"
             )
         return self
+
+
+class InterpolateEra5Request(BaseModel):
+    """Select which downloaded reanalysis becomes the interpolated long-term reference.
+
+    Previously ``source`` was a bare ``str = "era5"`` function parameter with no ``Body()``
+    annotation, so FastAPI bound it as a *query* parameter - every caller (including this
+    project's own frontend) sent it in the JSON body instead, which FastAPI silently ignored,
+    always falling back to the ``"era5"`` default. The MERRA-2 interpolation call added to fix
+    F-58/the "MERRA-2 stays unavailable" report therefore never actually interpolated MERRA-2
+    at all; it silently re-interpolated ERA5 a second time. A request body model is the fix.
+    """
+
+    source: str = "era5"
 
 
 class RunLtcRequest(BaseModel):

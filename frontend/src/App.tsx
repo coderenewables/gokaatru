@@ -4,6 +4,7 @@ import { Suspense, useEffect } from "react";
 
 import { AppHeader } from "./components/AppHeader";
 import { PhaseTabs } from "./components/PhaseTabs";
+import { ReanalysisProgressOverlay } from "./components/ReanalysisProgressOverlay";
 import { HomeView } from "./components/HomeView";
 import { DataLoadView } from "./components/stages/DataLoadView";
 import { CleaningView } from "./components/stages/CleaningView";
@@ -39,6 +40,7 @@ export default function App() {
 
   return (
     <main className="app-shell">
+      <ReanalysisProgressOverlay />
       <AppHeader />
       <PhaseTabs />
       <Suspense fallback={<ViewFallback />}>

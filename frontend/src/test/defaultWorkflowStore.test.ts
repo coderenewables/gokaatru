@@ -10,11 +10,19 @@ const {
   streamWorkflowExecution,
   updateSessionConfig,
   fetchBrightHubReanalysisNodes,
+  downloadBrightHubReanalysis,
+  getEarthDataHubStatus,
+  setEarthDataHubCredential,
+  clearEarthDataHubCredential,
 } = vi.hoisted(() => ({
   getBrightHubStatus: vi.fn(),
   streamWorkflowExecution: vi.fn(),
   updateSessionConfig: vi.fn(),
   fetchBrightHubReanalysisNodes: vi.fn(),
+  downloadBrightHubReanalysis: vi.fn(),
+  getEarthDataHubStatus: vi.fn(),
+  setEarthDataHubCredential: vi.fn(),
+  clearEarthDataHubCredential: vi.fn(),
 }));
 
 vi.mock("../lib/api", async () => {
@@ -25,10 +33,20 @@ vi.mock("../lib/api", async () => {
     streamWorkflowExecution,
     updateSessionConfig,
     fetchBrightHubReanalysisNodes,
+    downloadBrightHubReanalysis,
+    getEarthDataHubStatus,
+    setEarthDataHubCredential,
+    clearEarthDataHubCredential,
   };
 });
 
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
+
+// Captured before any test can overwrite it: the "runReanalysisAcquisition" tests replace
+// this store action wholesale with a stub, and nothing restores it afterwards - the
+// "downloadBrightHubReanalysis" describe block below re-installs this real implementation
+// so it is actually exercising the action under test, not a leftover stub.
+const REAL_DOWNLOAD_BRIGHTHUB_REANALYSIS = useWorkspaceStore.getState().downloadBrightHubReanalysis;
 
 const SENSORS: SensorRow[] = [
   { name: "Spd_80m", height_m: 80, sensor_type: "wind_speed", data_coverage_pct: 95, record_count: 1000 },
@@ -97,6 +115,23 @@ describe("prepareDefaultWorkflow", () => {
     expect(state.activeTab).toBe("import");
     expect(updateSessionConfig).not.toHaveBeenCalled();
     expect(fetchBrightHubReanalysisNodes).not.toHaveBeenCalled();
+  });
+
+  it("asks for an EarthDataHub credential instead of running acquisition unauthenticated", async () => {
+    // Regression: unlike the BrightHub gate above, there was no equivalent check for the
+    // direct-ERA5 (EarthDataHub) path - a missing/cleared PAT let the flow run straight into
+    // `runReanalysisAcquisition`, which failed deep inside "Find ERA5 nodes (direct)" with an
+    // opaque 401, then silently moved on to Cleaning with ERA5 never interpolated.
+    getEarthDataHubStatus.mockResolvedValue({ configured: false });
+    useWorkspaceStore.setState((state) => ({
+      config: { ...state.config, reanalysis: { ...state.config.reanalysis, acquisitionSource: "earthdatahub" } },
+    }));
+
+    await useWorkspaceStore.getState().saveConfigAndSetup();
+
+    const state = useWorkspaceStore.getState();
+    expect(state.activeTab).toBe("import");
+    expect(updateSessionConfig).not.toHaveBeenCalled();
   });
 
   it("saves the planned config and starts reanalysis acquisition without running Canvas", async () => {
@@ -194,5 +229,208 @@ describe("runReanalysisAcquisition", () => {
     for (const call of invoke.mock.calls) {
       expect(call[3]).not.toEqual({ source: "merra2" });
     }
+  });
+
+  it("extracts each discovered node's own coordinate, not just the site's, on the direct EarthDataHub path", async () => {
+    // Regression: `_interpolate_era5_to_site` requires all four bounding-grid nodes' data to
+    // be present in `state.era5_data`; extracting only the site's own coordinate left every
+    // node key interpolation looks for missing, so it always raised and
+    // `reanalysis_interpolated["era5"]` never got populated — which is what left ERA5 (not
+    // just MERRA-2, which genuinely has no data on this path) showing unavailable in the
+    // Analysis Engine whenever EarthDataHub was chosen.
+    const config = createDefaultWindAnalysisConfig();
+    config.reanalysis.acquisitionSource = "earthdatahub";
+    config.site.latitude = 52.4;
+    config.site.longitude = 4.8;
+    const discoveredNodes = [
+      { latitude: 52.25, longitude: 4.75 },
+      { latitude: 52.25, longitude: 5.0 },
+      { latitude: 52.5, longitude: 4.75 },
+      { latitude: 52.5, longitude: 5.0 },
+    ];
+    const invoke = vi.fn((label: string) => {
+      if (label === "Find ERA5 nodes (direct)") return Promise.resolve({ nodes: discoveredNodes });
+      return Promise.resolve({});
+    });
+    useWorkspaceStore.setState({ config, invokeSessionOperation: invoke as never });
+
+    await useWorkspaceStore.getState().runReanalysisAcquisition();
+
+    const extractCalls = invoke.mock.calls.filter((call) => call[0] === "Extract ERA5 (direct)");
+    expect(extractCalls).toHaveLength(discoveredNodes.length);
+    for (const node of discoveredNodes) {
+      expect(extractCalls).toContainEqual([
+        "Extract ERA5 (direct)",
+        "POST",
+        "/era5/extract",
+        {
+          latitude: node.latitude,
+          longitude: node.longitude,
+          start_date: config.reanalysis.startDate,
+          end_date: config.reanalysis.endDate,
+        },
+      ]);
+    }
+    // Never the bare site coordinate, which is the bug this replaces.
+    expect(extractCalls).not.toContainEqual(
+      expect.arrayContaining([expect.objectContaining({ latitude: 52.4, longitude: 4.8 })]),
+    );
+  });
+});
+
+describe("downloadBrightHubReanalysis", () => {
+  beforeEach(() => {
+    useWorkspaceStore.setState({ downloadBrightHubReanalysis: REAL_DOWNLOAD_BRIGHTHUB_REANALYSIS });
+  });
+
+  it("downloads one node per request instead of one bulk request, reporting progress for each", async () => {
+    // Regression: the action used to send every node in a single request, so there was no
+    // per-node signal to drive the blocking progress overlay ("node X of Y", coordinates).
+    // The endpoint accepts a node list of any size, so looping one-at-a-time gives real
+    // progress at the cost of one extra round-trip per node.
+    downloadBrightHubReanalysis.mockReset();
+    downloadBrightHubReanalysis.mockImplementation(
+      async (_baseUrl: string, _sessionId: string, payload: { dataset: string; nodes: Array<{ latitude_ddeg: number; longitude_ddeg: number }> }) => ({
+        dataset: payload.dataset,
+        source: "brighthub",
+        items: payload.nodes.map((n) => ({ latitude: n.latitude_ddeg, longitude: n.longitude_ddeg, rows: 10 })),
+      }),
+    );
+    const nodes = [
+      { latitude_ddeg: 52.25, longitude_ddeg: 4.75, distance_km: 5 },
+      { latitude_ddeg: 52.5, longitude_ddeg: 5.0, distance_km: 8 },
+    ];
+    useWorkspaceStore.setState({
+      session: { session_id: "session-1" } as never,
+      brighthubReanalysis: { era5_nodes: nodes, merra2_nodes: [] } as never,
+    });
+
+    await useWorkspaceStore
+      .getState()
+      .downloadBrightHubReanalysis({ dataset: "ERA5", source: "brighthub", useNodes: "era5" });
+
+    expect(downloadBrightHubReanalysis).toHaveBeenCalledTimes(2);
+    expect(downloadBrightHubReanalysis).toHaveBeenNthCalledWith(1, expect.anything(), "session-1", {
+      dataset: "ERA5",
+      source: "brighthub",
+      nodes: [nodes[0]],
+    });
+    expect(downloadBrightHubReanalysis).toHaveBeenNthCalledWith(2, expect.anything(), "session-1", {
+      dataset: "ERA5",
+      source: "brighthub",
+      nodes: [nodes[1]],
+    });
+    // Cleared once the whole download settles, not left dangling on the last node.
+    expect(useWorkspaceStore.getState().reanalysisProgress).toBeNull();
+  });
+
+  it("exposes the current node index and coordinate mid-download", async () => {
+    downloadBrightHubReanalysis.mockReset();
+    let settleFirst: (() => void) | undefined;
+    downloadBrightHubReanalysis.mockImplementation(
+      async (_baseUrl: string, _sessionId: string, payload: { dataset: string; nodes: Array<{ latitude_ddeg: number; longitude_ddeg: number }> }) => {
+        if (!settleFirst) {
+          return new Promise((resolve) => {
+            settleFirst = () =>
+              resolve({
+                dataset: payload.dataset,
+                source: "brighthub",
+                items: payload.nodes.map((n) => ({ latitude: n.latitude_ddeg, longitude: n.longitude_ddeg })),
+              });
+          });
+        }
+        return {
+          dataset: payload.dataset,
+          source: "brighthub",
+          items: payload.nodes.map((n) => ({ latitude: n.latitude_ddeg, longitude: n.longitude_ddeg })),
+        };
+      },
+    );
+    const nodes = [
+      { latitude_ddeg: 52.25, longitude_ddeg: 4.75, distance_km: 5 },
+      { latitude_ddeg: 52.5, longitude_ddeg: 5.0, distance_km: 8 },
+    ];
+    useWorkspaceStore.setState({
+      session: { session_id: "session-1" } as never,
+      brighthubReanalysis: { era5_nodes: nodes, merra2_nodes: [] } as never,
+    });
+
+    const downloadPromise = useWorkspaceStore
+      .getState()
+      .downloadBrightHubReanalysis({ dataset: "ERA5", source: "brighthub", useNodes: "era5" });
+
+    for (let i = 0; i < 10; i += 1) {
+      await Promise.resolve();
+    }
+    expect(useWorkspaceStore.getState().reanalysisProgress).toMatchObject({
+      provider: "brighthub",
+      phase: "downloading",
+      dataset: "ERA5",
+      current: 1,
+      total: 2,
+      latitude: 52.25,
+      longitude: 4.75,
+      distanceKm: 5,
+    });
+
+    settleFirst?.();
+    await downloadPromise;
+    expect(useWorkspaceStore.getState().reanalysisProgress).toBeNull();
+  });
+});
+
+describe("EarthDataHub credential (session-scoped, not an env file)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useWorkspaceStore.setState({
+      session: { session_id: "session-1" } as never,
+      earthdatahubStatus: null,
+    });
+  });
+
+  it("refreshes status from the backend", async () => {
+    getEarthDataHubStatus.mockResolvedValue({ configured: true });
+
+    await useWorkspaceStore.getState().refreshEarthDataHub();
+
+    expect(getEarthDataHubStatus).toHaveBeenCalledWith(expect.anything(), "session-1");
+    expect(useWorkspaceStore.getState().earthdatahubStatus).toEqual({ configured: true });
+  });
+
+  it("degrades to unconfigured rather than throwing when the status check fails", async () => {
+    getEarthDataHubStatus.mockRejectedValue(new Error("network error"));
+
+    await useWorkspaceStore.getState().refreshEarthDataHub();
+
+    expect(useWorkspaceStore.getState().earthdatahubStatus).toEqual({ configured: false });
+  });
+
+  it("saves a credential and reflects it as configured", async () => {
+    setEarthDataHubCredential.mockResolvedValue({ status: "ok", configured: true });
+
+    await useWorkspaceStore.getState().setEarthDataHubCredential("my-pat");
+
+    expect(setEarthDataHubCredential).toHaveBeenCalledWith(expect.anything(), "session-1", "my-pat");
+    expect(useWorkspaceStore.getState().earthdatahubStatus).toEqual({ configured: true });
+  });
+
+  it("clears a credential and reflects it as unconfigured", async () => {
+    useWorkspaceStore.setState({ earthdatahubStatus: { configured: true } });
+    clearEarthDataHubCredential.mockResolvedValue({ status: "ok", configured: false });
+
+    await useWorkspaceStore.getState().clearEarthDataHubCredential();
+
+    expect(clearEarthDataHubCredential).toHaveBeenCalledWith(expect.anything(), "session-1");
+    expect(useWorkspaceStore.getState().earthdatahubStatus).toEqual({ configured: false });
+  });
+
+  it("reports a save failure in the activity log without leaving a stale busy label", async () => {
+    setEarthDataHubCredential.mockRejectedValue(new Error("bad pat"));
+
+    await useWorkspaceStore.getState().setEarthDataHubCredential("bad");
+
+    const state = useWorkspaceStore.getState();
+    expect(state.busyLabel).toBeNull();
+    expect(state.activity[0]?.label).toBe("EarthDataHub credential failed");
   });
 });

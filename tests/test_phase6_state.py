@@ -22,7 +22,7 @@ def test_create_session_creates_workspace_structure(tmp_path: Path) -> None:
     assert state.created_at is not None
     assert state.updated_at is not None
     assert (state.workspace_dir / "uploads").is_dir()
-    assert (state.workspace_dir / "era5_cache").is_dir()
+    assert (state.workspace_dir / "earthdatahub_cache").is_dir()
     assert (state.workspace_dir / "ltc_results").is_dir()
     assert (state.workspace_dir / "runconfig.json").is_file()
     assert state.get_data_dir() == str(state.workspace_dir)

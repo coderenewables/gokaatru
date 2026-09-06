@@ -4,7 +4,7 @@
 
 GoKaatru ships as two parts that work together:
 
-- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **223 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration, and WindKit.
+- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **226 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration, and WindKit.
 - **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison. (The backend WindKit tool surface remains available via the API/MCP server, but the frontend no longer ships a dedicated WindKit tab.)
 
 State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The frontend's convenience fields are **derived mirrors** of canonical backend keys, not independent state — the mapping is defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
@@ -40,7 +40,7 @@ Data import + hub height + reanalysis provider
 1. Import measured time-series and an IEA Task 43 data model, import a BrightHub location, or load a shared dataset.
 2. (Optional) In the **Analysis sensor selection** table, untick sensors to exclude them. Applying the selection removes them from the working data and records them in `excluded_sensors`; reloading the data file or re-importing from BrightHub restores the full set.
 3. Enter the site metadata and **hub height**. Hub height has no default and is required before a model can run.
-4. In **Long-term reference**, choose the reanalysis provider — BrightHub (ERA5 + MERRA-2) or EarthDataHub (direct ERA5 only) — and the date window. The choice persists to `runconfig` as `reanalysis.acquisitionSource` (default `brighthub`), so which reanalysis a result was built on is recorded with the analysis rather than being a per-session UI setting. It is a frontend-owned key, not a mirror: nothing on the backend derives it, and `tests/test_runconfig_contract.py` asserts it survives normalization.
+4. In **Long-term reference**, choose the reanalysis provider — BrightHub (ERA5 + MERRA-2) or EarthDataHub (direct ERA5 only) — and the date window. The choice persists to `runconfig` as `reanalysis.acquisitionSource` (default `brighthub`), so which reanalysis a result was built on is recorded with the analysis rather than being a per-session UI setting. It is a frontend-owned key, not a mirror: nothing on the backend derives it, and `tests/test_runconfig_contract.py` asserts it survives normalization. Choosing EarthDataHub reveals a credential field for a PAT (a "Standard API key" or a legacy "Classic" key from [earthdatahub.destine.eu](https://earthdatahub.destine.eu)'s Quota & API keys page — both work identically here) — entered once per browser session and stored server-side in memory only, exactly like the BrightHub client credentials on the same page; there is no server config file to edit.
 5. Click **Save config and setup**. When the provider is BrightHub and credentials are not available, the app opens the BrightHub sign-in view instead of downloading.
 6. The app persists the runconfig, downloads and interpolates the reanalysis, prepares the default Canvas graph, and opens the optional cleaning step. **The Canvas is not executed automatically** — the prepared graph stays editable and runs only when the analyst starts it from the Canvas.
 
@@ -157,6 +157,8 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/sessions/{id}/coverage/{sensor}` | GET | Per-sensor coverage/gap stats |
 | `/sessions/{id}/statistics/{sensor}` | GET | Weibull, monthly/diurnal, percentiles |
 | `/sessions/{id}/era5/{nodes\|extract\|interpolate}` | POST | ERA5 node discovery, extraction, interpolation |
+| `/sessions/{id}/era5/credential` | POST/DELETE | Set or clear this session's EarthDataHub PAT (direct-ERA5 path) |
+| `/sessions/{id}/era5/credential/status` | GET | Whether this session has an EarthDataHub PAT configured |
 | `/sessions/{id}/shear/{calculate\|table}` | POST | Shear timeseries + 12×24 lookup |
 | `/sessions/{id}/roughness/{calculate\|table}` | POST | Log-law roughness equivalents |
 | `/sessions/{id}/extrapolation/hub` | POST | Extrapolate measured + reanalysis to hub height |
@@ -199,6 +201,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 
 ### ERA5 And Reanalysis
 - `find_era5_nodes`, `extract_era5_data`, `compute_era5_wind_speed`, `interpolate_era5_to_site`, `extrapolate_reanalysis_to_hub`, `analyze_homogeneity`, `apply_homogeneity_cutoff`
+- Direct-ERA5 (EarthDataHub) credential, session-scoped like the BrightHub login above: `earthdatahub_set_credential`, `earthdatahub_clear_credential`, `earthdatahub_status`
 
 ### Extrapolation And Shear
 - `extrapolate_to_hub_height`, `calculate_shear_timeseries`, `calculate_roughness_timeseries`, `build_shear_table`, `build_roughness_table`, `build_sector_shear_tables`, `build_aggr_momm_shear_table`

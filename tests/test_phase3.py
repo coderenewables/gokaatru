@@ -13,12 +13,19 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from server.schemas.common import Coordinate
 from server.state.session import session
 from server.tools.air_density import compute_air_density
 from server.tools.era5 import (
+    ERA5_ZARR_URL,
+    _align_tz,
+    _cache_covers_period,
     _era5_dataset_url,
     _era5_storage_options,
     compute_era5_wind_speed,
+    earthdatahub_clear_credential,
+    earthdatahub_set_credential,
+    earthdatahub_status,
     extract_era5_data,
     find_era5_nodes,
 )
@@ -59,7 +66,7 @@ def _set_ltc_frames(measured: np.ndarray, reference: np.ndarray) -> pd.DatetimeI
 def test_find_era5_nodes_grid(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify surrounding ERA5 nodes are discovered from a mocked 0.25° latitude-longitude grid."""
     fake_dataset = xr.Dataset(coords={"latitude": [52.0, 52.25, 52.5], "longitude": [4.5, 4.75, 5.0]})
-    monkeypatch.setattr("server.tools.era5._open_era5_dataset", lambda: fake_dataset)
+    monkeypatch.setattr("server.tools.era5._open_era5_dataset", lambda *_args: fake_dataset)
     result = find_era5_nodes(52.4, 4.8)
     assert len(result["nodes"]) == 4
     assert all(node["distance_km"] > 0 for node in result["nodes"])
@@ -72,7 +79,7 @@ def test_find_era5_nodes_closes_dataset_when_lookup_fails(monkeypatch: pytest.Mo
     """Close the remote dataset even when coordinate-boundary calculation raises."""
     fake_dataset = xr.Dataset(coords={"latitude": [52.0, 52.25], "longitude": [4.5, 4.75]})
     closed: list[xr.Dataset] = []
-    monkeypatch.setattr("server.tools.era5._open_era5_dataset", lambda: fake_dataset)
+    monkeypatch.setattr("server.tools.era5._open_era5_dataset", lambda *_args: fake_dataset)
     monkeypatch.setattr("server.tools.era5._close_dataset", lambda dataset: closed.append(dataset))
     monkeypatch.setattr("server.tools.era5._bounding_pair", lambda *_args: (_ for _ in ()).throw(RuntimeError("boom")))
 
@@ -82,27 +89,39 @@ def test_find_era5_nodes_closes_dataset_when_lookup_fails(monkeypatch: pytest.Mo
     assert closed == [fake_dataset]
 
 
-def test_era5_storage_options_bearer_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify EarthDataHub bearer-token auth is translated into HTTP storage headers."""
-    monkeypatch.delenv("EARTHDATAHUB_AUTH_HEADER", raising=False)
-    monkeypatch.delenv("EARTHDATAHUB_AUTH_VALUE", raising=False)
-    monkeypatch.delenv("EARTHDATAHUB_API_KEY", raising=False)
-    monkeypatch.delenv("EARTHDATAHUB_API_KEY_HEADER", raising=False)
-    monkeypatch.setenv("EARTHDATAHUB_BEARER_TOKEN", "secret-token")
-    options = _era5_storage_options()
-    assert options["headers"] == {"Authorization": "Bearer secret-token"}
+def test_era5_storage_options_has_no_custom_auth_headers() -> None:
+    """EarthDataHub's documented auth is URL-embedded or `.netrc`, not a custom header (2026-09).
+
+    The credential now lives on the session (`earthdatahub_set_credential`), not in an
+    environment variable, so there is nothing left for a header-based path to read.
+    `trust_env` is the only option: it lets aiohttp pick up a `.netrc` entry on its own.
+    """
+    assert _era5_storage_options() == {"client_kwargs": {"trust_env": True}}
 
 
-def test_era5_dataset_url_from_netrc(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Verify EarthDataHub PATs stored in netrc are translated into the documented edh:PAT URL format."""
-    netrc_path = tmp_path / ".netrc"
-    netrc_path.write_text("machine data.earthdatahub.destine.eu\npassword test-pat\n", encoding="utf-8")
-    monkeypatch.delenv("EARTHDATAHUB_PAT", raising=False)
-    monkeypatch.delenv("EDH_PAT", raising=False)
-    monkeypatch.delenv("DESTINE_PAT", raising=False)
-    monkeypatch.setenv("NETRC", str(netrc_path))
-    dataset_url = _era5_dataset_url()
-    assert dataset_url.startswith("https://edh:test-pat@data.earthdatahub.destine.eu/")
+def test_era5_dataset_url_uses_the_session_credential() -> None:
+    """EarthDataHub PAT moved from env/.netrc to the session (mirrors BrightHub's login).
+
+    `_era5_dataset_url` embeds whatever PAT is stored on `session.earthdatahub_pat` — set via
+    `earthdatahub_set_credential`, the session-scoped equivalent of `brighthub_login` — and
+    falls back to the bare (unauthenticated) URL when none is configured.
+    """
+    assert earthdatahub_status()["configured"] is False
+    assert _era5_dataset_url(session) == ERA5_ZARR_URL
+
+    earthdatahub_set_credential("test-pat")
+    assert earthdatahub_status()["configured"] is True
+    assert _era5_dataset_url(session) == "https://edh:test-pat@data.earthdatahub.destine.eu/era5/reanalysis-era5-single-levels-v0.zarr"
+
+    earthdatahub_clear_credential()
+    assert earthdatahub_status()["configured"] is False
+    assert _era5_dataset_url(session) == ERA5_ZARR_URL
+
+
+def test_earthdatahub_set_credential_rejects_blank_input() -> None:
+    """An empty/whitespace-only PAT must be refused rather than silently "configuring" nothing."""
+    with pytest.raises(ValueError, match="must not be empty"):
+        earthdatahub_set_credential("   ")
 
 
 def test_extract_era5_data_supports_valid_time(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -118,7 +137,7 @@ def test_extract_era5_data_supports_valid_time(monkeypatch: pytest.MonkeyPatch, 
         },
         coords={"valid_time": index, "latitude": [52.5], "longitude": [4.75]},
     )
-    monkeypatch.setattr("server.tools.era5._open_era5_dataset", lambda: fake_dataset)
+    monkeypatch.setattr("server.tools.era5._open_era5_dataset", lambda *_args: fake_dataset)
     monkeypatch.setattr("server.tools.era5._era5_cache_path", lambda latitude, longitude: tmp_path / "node.parquet")
     result = extract_era5_data(52.5, 4.75, "2024-01-01", "2024-01-01T02:00:00")
     assert result["rows"] == 3
@@ -141,7 +160,7 @@ def test_extract_era5_data_retries_transient_payload_errors(monkeypatch: pytest.
         },
         index=index,
     )
-    monkeypatch.setattr("server.tools.era5._open_era5_dataset", lambda: object())
+    monkeypatch.setattr("server.tools.era5._open_era5_dataset", lambda *_args: object())
     monkeypatch.setattr(
         "server.tools.era5._era5_cache_path", lambda latitude, longitude: tmp_path / "retry-node.parquet"
     )
@@ -161,6 +180,82 @@ def test_extract_era5_data_retries_transient_payload_errors(monkeypatch: pytest.
     assert attempts["count"] == 2
     assert result["rows"] == 2
     assert session.era5_data["52.5_4.75"].equals(frame)
+
+
+def test_extract_era5_data_does_not_move_the_site_coordinate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Extracting one grid node's data must never overwrite the session's site coordinate.
+
+    Regression: `_extract_era5_data` used to call `_store_coordinate` with whatever lat/lon
+    it was given. The direct-ERA5 flow calls it once per bounding node (four calls), so the
+    site silently became whichever node was extracted last, and `_interpolate_era5_to_site`
+    (which reads `state.get_coordinate()` as the interpolation target) then degenerated to
+    exactly that node's raw value instead of a genuine spatial blend - with no error raised.
+    """
+    index = pd.date_range("2024-01-01", periods=3, freq="h")
+    fake_dataset = xr.Dataset(
+        data_vars={
+            "u100": (("valid_time", "latitude", "longitude"), np.ones((3, 1, 1), dtype=float)),
+            "v100": (("valid_time", "latitude", "longitude"), np.full((3, 1, 1), 2.0, dtype=float)),
+            "sp": (("valid_time", "latitude", "longitude"), np.full((3, 1, 1), 101325.0, dtype=float)),
+            "t2m": (("valid_time", "latitude", "longitude"), np.full((3, 1, 1), 288.15, dtype=float)),
+            "d2m": (("valid_time", "latitude", "longitude"), np.full((3, 1, 1), 280.15, dtype=float)),
+        },
+        coords={"valid_time": index, "latitude": [52.5], "longitude": [4.75]},
+    )
+    monkeypatch.setattr("server.tools.era5._open_era5_dataset", lambda *_args: fake_dataset)
+    monkeypatch.setattr(
+        "server.tools.era5._era5_cache_path", lambda latitude, longitude: tmp_path / "node.parquet"
+    )
+    session.set_coordinate(Coordinate(latitude=10.0, longitude=20.0, elevation_m=5.0))
+
+    extract_era5_data(52.5, 4.75, "2024-01-01", "2024-01-01T02:00:00")
+
+    coordinate = session.get_coordinate()
+    assert coordinate is not None
+    assert coordinate.latitude == 10.0
+    assert coordinate.longitude == 20.0
+
+
+def test_cache_covers_period_handles_tz_aware_cached_index() -> None:
+    """A tz-aware cached index must compare against tz-naive request bounds without raising.
+
+    Regression: every ERA5 node is cached tz-aware (UTC), so `_cache_covers_period` raised
+    `TypeError: Cannot compare tz-naive and tz-aware timestamps` on any second request for
+    the same node/date range - i.e. every cache hit after the first crashed instead of
+    serving the cache.
+    """
+    index = pd.date_range("2024-01-01", periods=48, freq="h", tz="UTC")
+    frame = pd.DataFrame({"u100": np.ones(48)}, index=index)
+
+    assert _cache_covers_period(frame, "2024-01-01", "2024-01-01T02:00:00") is True
+    assert _cache_covers_period(frame, "2023-12-01", "2024-01-01T02:00:00") is False
+
+    aligned = _align_tz(pd.Timestamp("2024-01-01"), frame.index)
+    assert aligned.tz is not None
+
+
+def test_find_era5_nodes_reports_a_missing_credential_clearly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A missing/invalid EarthDataHub credential must surface as a clear ValueError.
+
+    Regression: a missing or bad PAT makes EarthDataHub respond 401, which previously
+    propagated as a raw ``aiohttp.ClientResponseError`` all the way up through FastAPI as an
+    opaque 500 - "Find ERA5 nodes (direct)" just failed with no indication of why, which is
+    indistinguishable from an unrelated server fault and was the actual cause behind a live
+    report of "ERA5 not enabled in the sweep" (the credential wasn't set at acquisition time).
+    """
+
+    class _FakeUnauthorized(Exception):
+        status = 401
+
+    def _raise_unauthorized(*_args: object, **_kwargs: object) -> None:
+        raise _FakeUnauthorized("401, message='Unauthorized'")
+
+    monkeypatch.setattr("server.tools.era5._open_era5_dataset", _raise_unauthorized)
+
+    with pytest.raises(ValueError, match="rejected the request"):
+        find_era5_nodes(52.4, 4.8)
 
 
 def test_compute_wind_speed() -> None:

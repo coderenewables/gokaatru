@@ -260,6 +260,115 @@ describe("ReanalysisView", () => {
     const { container } = render(<ReanalysisView />);
     expect(container.querySelector(".node-table")).toBeTruthy();
   });
+
+  it("asks for the EarthDataHub credential before offering the direct-ERA5 actions", () => {
+    const config = useWorkspaceStore.getState().config;
+    useWorkspaceStore.setState({
+      config: { ...config, reanalysis: { ...config.reanalysis, acquisitionSource: "earthdatahub" } },
+      earthdatahubStatus: { configured: false },
+    });
+    render(<ReanalysisView />);
+    expect(screen.getByText(/configure your earthdatahub credential/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /find era5 nodes/i })).not.toBeInTheDocument();
+  });
+
+  it("extracts every discovered node's own coordinate, not the site's, on the direct EarthDataHub path", async () => {
+    // Regression: extracting only the site coordinate left every node key the interpolation
+    // step looks for missing, so ERA5 (not just MERRA-2) always showed unavailable in the
+    // Analysis Engine on this path. See useWorkspaceStore's runReanalysisAcquisition for the
+    // same fix applied to the automatic (non-manual) acquisition flow.
+    const config = useWorkspaceStore.getState().config;
+    const discoveredNodes = [
+      { latitude: 52.25, longitude: 4.75 },
+      { latitude: 52.5, longitude: 5.0 },
+    ];
+    const invoke = vi.fn((...args: [string, string, string, unknown?]) => {
+      if (args[0] === "Find ERA5 nodes (direct)") return Promise.resolve({ nodes: discoveredNodes });
+      return Promise.resolve({});
+    });
+    useWorkspaceStore.setState({
+      config: {
+        ...config,
+        site: { ...config.site, latitude: 52.4, longitude: 4.9 },
+        reanalysis: { ...config.reanalysis, acquisitionSource: "earthdatahub" },
+      },
+      earthdatahubStatus: { configured: true },
+      invokeSessionOperation: invoke as never,
+    });
+    render(<ReanalysisView />);
+
+    const extractButton = screen.getByRole("button", { name: /extract node data/i });
+    expect(extractButton).toBeDisabled();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /find era5 nodes/i }));
+    });
+    expect(extractButton).not.toBeDisabled();
+
+    await act(async () => {
+      fireEvent.click(extractButton);
+    });
+
+    const extractCalls = invoke.mock.calls.filter((call) => call[0] === "Extract ERA5 (direct)");
+    expect(extractCalls).toHaveLength(2);
+    expect(extractCalls.map((call) => (call[3] as { latitude: number }).latitude)).toEqual([52.25, 52.5]);
+    expect(extractCalls.every((call) => (call[3] as { latitude: number }).latitude !== 52.4)).toBe(true);
+  });
+
+  it("reports per-node progress in the store while extracting via the direct EarthDataHub path", async () => {
+    const config = useWorkspaceStore.getState().config;
+    const discoveredNodes = [
+      { latitude: 52.25, longitude: 4.75 },
+      { latitude: 52.5, longitude: 5.0 },
+    ];
+    let settleFirstExtract: (() => void) | undefined;
+    const invoke = vi.fn((...args: [string, string, string, unknown?]) => {
+      if (args[0] === "Find ERA5 nodes (direct)") return Promise.resolve({ nodes: discoveredNodes });
+      if (args[0] === "Extract ERA5 (direct)" && !settleFirstExtract) {
+        return new Promise((resolve) => {
+          settleFirstExtract = () => resolve({});
+        });
+      }
+      return Promise.resolve({});
+    });
+    useWorkspaceStore.setState({
+      config: {
+        ...config,
+        site: { ...config.site, latitude: 52.4, longitude: 4.9 },
+        reanalysis: { ...config.reanalysis, acquisitionSource: "earthdatahub" },
+      },
+      earthdatahubStatus: { configured: true },
+      invokeSessionOperation: invoke as never,
+    });
+    render(<ReanalysisView />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /find era5 nodes/i }));
+    });
+
+    const extractPromise = act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /extract node data/i }));
+    });
+
+    // Flush microtasks enough to reach the still-pending first extract call.
+    for (let i = 0; i < 10; i += 1) {
+      await Promise.resolve();
+    }
+    expect(useWorkspaceStore.getState().reanalysisProgress).toMatchObject({
+      provider: "earthdatahub",
+      phase: "downloading",
+      current: 1,
+      total: 2,
+      latitude: 52.25,
+      longitude: 4.75,
+    });
+
+    settleFirstExtract?.();
+    await extractPromise;
+
+    // Cleared once the whole loop settles, not left dangling on the last node.
+    expect(useWorkspaceStore.getState().reanalysisProgress).toBeNull();
+  });
 });
 
 describe("ExploreView", () => {

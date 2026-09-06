@@ -57,6 +57,7 @@ import {
   createSession,
   deleteSession,
   downloadBrightHubReanalysis,
+  clearEarthDataHubCredential,
   downloadRunconfig,
   fetchBrightHubReanalysisNodes,
   fetchPlot,
@@ -64,6 +65,7 @@ import {
   getApiHealth,
   getBrightHubStatus,
   getCoverage,
+  getEarthDataHubStatus,
   getDatasetPreview,
   getEnsembleResult,
   getLtcResults,
@@ -98,6 +100,7 @@ import {
   loadDatasetIntoSession,
   loginBrightHub,
   logoutBrightHub,
+  setEarthDataHubCredential,
   runClipping,
   runEnsemble,
   runLtc,
@@ -120,6 +123,7 @@ import {
   uploadSessionFile as apiUploadSessionFile,
   type BrightHubLocation,
   type BrightHubStatusResponse,
+  type EarthDataHubStatusResponse,
   type EnsembleResultResponse,
   type LtcResultListResponse,
   resetSession,
@@ -169,6 +173,17 @@ interface ActivePlot {
   result: PlotResult;
 }
 
+export interface ReanalysisProgress {
+  provider: "brighthub" | "earthdatahub";
+  phase: "finding_nodes" | "downloading" | "interpolating";
+  dataset?: "ERA5" | "MERRA-2";
+  current?: number;
+  total?: number;
+  latitude?: number;
+  longitude?: number;
+  distanceKm?: number;
+}
+
 interface WorkspaceStore {
   // session + bootstrap
   apiBaseUrl: string;
@@ -177,6 +192,7 @@ interface WorkspaceStore {
   sessionStatus: "idle" | "loading" | "ready" | "error";
   sessionError: string | null;
   busyLabel: string | null;
+  reanalysisProgress: ReanalysisProgress | null;
   brighthubPromptRequired: boolean;
   activeTab: TabId;
   selectedStage: StageId;
@@ -206,6 +222,7 @@ interface WorkspaceStore {
   brighthubStatus: BrightHubStatusResponse | null;
   brighthubLocations: import("../lib/api").BrightHubLocation[];
   brighthubReanalysis: import("../lib/api").BrightHubReanalysisNodesResponse | null;
+  earthdatahubStatus: EarthDataHubStatusResponse | null;
   siteMap: Record<string, unknown> | null;
   sensorStatistics: SensorStatistics | null;
   coverageDetail: CoverageDetail | null;
@@ -232,6 +249,7 @@ interface WorkspaceStore {
   // actions
   setActiveTab: (tab: TabId) => void;
   setSelectedStage: (stage: StageId) => void;
+  setReanalysisProgress: (progress: ReanalysisProgress | null) => void;
   setApiBaseUrl: (url: string) => void;
   pingApi: () => Promise<void>;
   updateConfigValue: (path: string, value: unknown) => void;
@@ -264,6 +282,9 @@ interface WorkspaceStore {
   refreshBrightHub: () => Promise<void>;
   loginBrightHub: (credentials: { clientId: string; clientSecret: string }) => Promise<void>;
   logoutBrightHub: () => Promise<void>;
+  refreshEarthDataHub: () => Promise<void>;
+  setEarthDataHubCredential: (pat: string) => Promise<void>;
+  clearEarthDataHubCredential: () => Promise<void>;
   importBrightHubLocation: (payload: import("../lib/api").BrightHubImportLocationPayload) => Promise<void>;
 
   // Stage 2 — reanalysis
@@ -432,6 +453,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   sessionStatus: "idle",
   sessionError: null,
   busyLabel: null,
+  reanalysisProgress: null,
   brighthubPromptRequired: false,
   activeTab: "import",
   selectedStage: "cleaning",
@@ -458,6 +480,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   brighthubStatus: null,
   brighthubLocations: [],
   brighthubReanalysis: null,
+  earthdatahubStatus: null,
   siteMap: null,
   sensorStatistics: null,
   coverageDetail: null,
@@ -481,6 +504,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setSelectedStage: (stage) => set({ selectedStage: stage }),
+  setReanalysisProgress: (progress) => set({ reanalysisProgress: progress }),
 
   setApiBaseUrl: (url) => set({ apiBaseUrl: url, apiReachable: null }),
 
@@ -770,6 +794,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
 
     const needsBrightHub = current.config.reanalysis.acquisitionSource === "brighthub";
+    const needsEarthDataHub = current.config.reanalysis.acquisitionSource === "earthdatahub";
     set({ busyLabel: needsBrightHub ? "Checking BrightHub access" : "Saving config" });
     try {
       let brighthubStatus = current.brighthubStatus;
@@ -782,6 +807,23 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
             brighthubPromptRequired: true,
             activeTab: "import",
             activity: appendActivity(state.activity, "BrightHub credentials required", "error", "Sign in to download ERA5 and MERRA-2"),
+          }));
+          return;
+        }
+      }
+      // Mirrors the BrightHub gate above: without this, a missing/cleared EarthDataHub PAT
+      // let the flow run straight into `runReanalysisAcquisition`, which fails deep inside
+      // "Find ERA5 nodes (direct)" with a 401 - the activity log shows one opaque failure
+      // and the run silently moves on to Cleaning with ERA5 never interpolated, instead of
+      // stopping here with a clear reason before any acquisition is attempted.
+      if (needsEarthDataHub) {
+        const earthdatahubStatus = await getEarthDataHubStatus(get().apiBaseUrl, session.session_id);
+        if (!earthdatahubStatus.configured) {
+          set((state) => ({
+            busyLabel: null,
+            earthdatahubStatus,
+            activeTab: "import",
+            activity: appendActivity(state.activity, "EarthDataHub credential required", "error", "Enter an API key on the Data import page before setup"),
           }));
           return;
         }
@@ -840,17 +882,47 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         await get().downloadBrightHubReanalysis({ dataset: "ERA5", source: "brighthub", useNodes: "era5" });
         await get().downloadBrightHubReanalysis({ dataset: "MERRA-2", source: "brighthub", useNodes: "merra2" });
       } else {
-        await get().invokeSessionOperation("Find ERA5 nodes (direct)", "POST", "/era5/nodes", {
-          latitude,
-          longitude,
-        });
-        await get().invokeSessionOperation("Extract ERA5 (direct)", "POST", "/era5/extract", {
-          latitude,
-          longitude,
-          start_date: config.reanalysis.startDate,
-          end_date: config.reanalysis.endDate,
-        });
+        // `_interpolate_era5_to_site` requires all four bounding-grid node dataframes to be
+        // present in `state.era5_data` (it interpolates *between* them) - extracting only the
+        // site's own coordinate leaves every node key it looks for missing, so interpolation
+        // always raised "ERA5 nodes are not available" and `reanalysis_interpolated["era5"]`
+        // never got populated. That is what left ERA5 (not just MERRA-2) showing unavailable
+        // in the Analysis Engine on the EarthDataHub path. Extract each discovered node's own
+        // coordinate instead, mirroring how the BrightHub path downloads all of its nodes.
+        set({ reanalysisProgress: { provider: "earthdatahub", phase: "finding_nodes" } });
+        const nodesResult = await get().invokeSessionOperation<{
+          nodes: Array<{ latitude: number; longitude: number }>;
+        }>("Find ERA5 nodes (direct)", "POST", "/era5/nodes", { latitude, longitude });
+        const nodes = nodesResult?.nodes ?? [];
+        // Sequential, not concurrent, on purpose: firing all four extractions at once was
+        // tried (to bound total wait by the slowest node instead of their sum, since one
+        // node's cold read can take minutes) but live-reproduced as *worse* - EarthDataHub
+        // reset/rejected simultaneous connections from the same credential, so all four
+        // failed outright (502, retries exhausted) instead of just being slow. A slow success
+        // beats a fast failure; revisit with bounded concurrency (e.g. 2 at a time) only after
+        // confirming what connection limit EarthDataHub actually tolerates.
+        for (let index = 0; index < nodes.length; index += 1) {
+          const node = nodes[index];
+          set({
+            reanalysisProgress: {
+              provider: "earthdatahub",
+              phase: "downloading",
+              dataset: "ERA5",
+              current: index + 1,
+              total: nodes.length,
+              latitude: node.latitude,
+              longitude: node.longitude,
+            },
+          });
+          await get().invokeSessionOperation("Extract ERA5 (direct)", "POST", "/era5/extract", {
+            latitude: node.latitude,
+            longitude: node.longitude,
+            start_date: config.reanalysis.startDate,
+            end_date: config.reanalysis.endDate,
+          });
+        }
       }
+      set({ reanalysisProgress: { provider: acquisitionSource, phase: "interpolating", dataset: "ERA5" } });
       await get().invokeSessionOperation("Interpolate ERA5 to site", "POST", "/era5/interpolate");
       if (acquisitionSource === "brighthub") {
         // MERRA-2 is downloaded above but `/era5/interpolate` defaults to `source: "era5"`
@@ -863,12 +935,15 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         // `brighthub_prepare_reanalysis`, which interpolates both sources in one step; this
         // path never did. EarthDataHub (the `else` branch above) never downloads MERRA-2 at
         // all, so it is excluded here.
+        set({ reanalysisProgress: { provider: "brighthub", phase: "interpolating", dataset: "MERRA-2" } });
         await get().invokeSessionOperation("Interpolate MERRA-2 to site", "POST", "/era5/interpolate", {
           source: "merra2",
         });
       }
+      set({ reanalysisProgress: null });
     } catch {
-      /* already reported in the activity log */
+      // already reported in the activity log
+      set({ reanalysisProgress: null });
     }
   },
 
@@ -1088,6 +1163,55 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     }
   },
 
+  refreshEarthDataHub: async () => {
+    const session = get().session;
+    if (!session) return;
+    try {
+      const status = await getEarthDataHubStatus(get().apiBaseUrl, session.session_id);
+      set({ earthdatahubStatus: status });
+    } catch {
+      set({ earthdatahubStatus: { configured: false } });
+    }
+  },
+
+  setEarthDataHubCredential: async (pat) => {
+    const session = get().session;
+    if (!session) return;
+    set({ busyLabel: "Saving EarthDataHub credential" });
+    try {
+      await setEarthDataHubCredential(get().apiBaseUrl, session.session_id, pat);
+      set((state) => ({
+        busyLabel: null,
+        earthdatahubStatus: { configured: true },
+        activity: appendActivity(state.activity, "EarthDataHub credential saved", "ok", "Configured"),
+      }));
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "EarthDataHub credential failed", "error", asErrorMessage(error)),
+      }));
+    }
+  },
+
+  clearEarthDataHubCredential: async () => {
+    const session = get().session;
+    if (!session) return;
+    set({ busyLabel: "Clearing EarthDataHub credential" });
+    try {
+      await clearEarthDataHubCredential(get().apiBaseUrl, session.session_id);
+      set((state) => ({
+        busyLabel: null,
+        earthdatahubStatus: { configured: false },
+        activity: appendActivity(state.activity, "EarthDataHub credential cleared", "ok", "Removed"),
+      }));
+    } catch (error) {
+      set((state) => ({
+        busyLabel: null,
+        activity: appendActivity(state.activity, "EarthDataHub credential clear failed", "error", asErrorMessage(error)),
+      }));
+    }
+  },
+
   importBrightHubLocation: async (payload) => {
     const session = get().session;
     if (!session) return;
@@ -1156,21 +1280,45 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     const nodes = useNodes === "merra2" ? nodesPayload.merra2_nodes : nodesPayload.era5_nodes;
     if (nodes.length === 0) return;
     set({ busyLabel: `Downloading ${dataset}` });
+    // One node per request, not a single bulk call: the endpoint accepts a node list of any
+    // size, so looping gives real per-node progress (index, coordinate) to show in the
+    // blocking progress overlay, at the cost of one extra round-trip per node.
+    const items: import("../lib/api").BrightHubReanalysisDownloadItem[] = [];
     try {
-      const response = await downloadBrightHubReanalysis(get().apiBaseUrl, session.session_id, {
-        dataset,
-        source,
-        nodes,
-      });
+      for (let index = 0; index < nodes.length; index += 1) {
+        const node = nodes[index];
+        set({
+          reanalysisProgress: {
+            provider: "brighthub",
+            phase: "downloading",
+            dataset,
+            current: index + 1,
+            total: nodes.length,
+            latitude: node.latitude_ddeg,
+            longitude: node.longitude_ddeg,
+            distanceKm: node.distance_km ?? undefined,
+          },
+        });
+        const response = await downloadBrightHubReanalysis(get().apiBaseUrl, session.session_id, {
+          dataset,
+          source,
+          nodes: [node],
+        });
+        items.push(...response.items);
+      }
       set((state) => ({
         busyLabel: null,
-        assets: upsertAssets(state.assets, [buildOperationResultAsset(`${dataset}-download`, response)]),
-        activity: appendActivity(state.activity, `Downloaded ${dataset}`, "ok", `${response.items.length} node(s)`),
+        reanalysisProgress: null,
+        assets: upsertAssets(state.assets, [
+          buildOperationResultAsset(`${dataset}-download`, { dataset, source: source ?? "brighthub", items }),
+        ]),
+        activity: appendActivity(state.activity, `Downloaded ${dataset}`, "ok", `${items.length} node(s)`),
       }));
       await get().refreshWorkspace();
     } catch (error) {
       set((state) => ({
         busyLabel: null,
+        reanalysisProgress: null,
         activity: appendActivity(state.activity, `${dataset} download failed`, "error", asErrorMessage(error)),
       }));
     }

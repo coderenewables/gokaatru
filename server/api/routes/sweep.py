@@ -23,6 +23,7 @@ from server.core.admissibility import DEFAULT_THRESHOLDS, GateThresholds
 from server.core.powercurve import power_curve_names
 from server.core.reanalysis import reference_source_names
 from server.core.scenario_pipeline import SHEAR_MODELS, UNIMPLEMENTED_SHEAR_MODELS
+from server.core.scenario_result import fixed_prefix_hash
 from server.core.sensor_selection import POLICIES, resolve_all
 from server.core.sweep import (
     SweepSpec,
@@ -109,6 +110,26 @@ def get_sweep_axes(
         "power_curves": list(power_curve_names()),
         "known_sensor_policies": list(POLICIES),
         "default_thresholds": DEFAULT_THRESHOLDS.as_runconfig(),
+    }
+
+
+@router.get("/prefix-hash")
+def get_prefix_hash(
+    session_id: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict[str, Any]:
+    """Stamp the fixed prefix before any sweep runs, for the Prepare screen (design doc §2).
+
+    ``fixed_prefix_hash`` is otherwise only computed at sweep-launch time and surfaced via
+    the manifest — this lets the Prepare phase show the same hash prospectively, and bundles
+    two of its own inputs (reanalysis sources, cleaning-actions count) so those figures stay
+    provably in sync with the hash they sit beside.
+    """
+    del session_id
+    return {
+        "fixed_prefix_hash": fixed_prefix_hash(state),
+        "reanalysis_sources": sorted(state.reanalysis_interpolated),
+        "cleaning_actions_count": len(state.cleaning_log),
     }
 
 

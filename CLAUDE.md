@@ -13,14 +13,23 @@ IEC 61400-12-1 / 61400-12-2 conventions and is built for **bankable rigor** — 
 bank's technical advisor will try to break.
 
 Two parts, one logic core:
-- **`server/`** — Python MCP server (FastMCP) + FastAPI web API. 226 tools across ingest,
+- **`server/`** — Python MCP server (FastMCP) + FastAPI web API. 227 tools across ingest,
   cleaning, statistics, shear/extrapolation, ERA5+MERRA-2 reanalysis, homogeneity, 5 LTC/MCP
   algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration,
   a scenario **sweep/Analysis Engine**, and a WindKit tool surface (~180 tools).
-- **`frontend/`** — React 19 + Vite + TypeScript app: data import, an editable React-Flow
-  Canvas, a guided post-import Stepper, a read-only Results report, a Sensor Overview
-  validation dashboard, a BYOK AI Copilot, scenario Compare, and the Analysis Engine (Sweep
-  Designer → Run Monitor → Spread Explorer → Sensitivity → Spread Summary).
+- **`frontend/`** — React 19 + Vite + TypeScript app, navigated by a **3-phase primary rail**
+  (`PhaseRail`: Prepare / Run / Interrogate) plus two independent entries (Canvas, Copilot).
+  **Prepare** merges data import, cleaning, reanalysis, Sensor Overview and the Stepper into
+  one screen with an internal section switcher, ending in a stamped fixed-prefix hash.
+  **Run** merges the Sweep Designer and its live monitor. **Interrogate** merges the Spread
+  Explorer, Sensitivity, Gate Report and Spread Summary under one shared metric switch.
+  **Canvas** is the editable React-Flow DAG runner, populated *only* by explicitly loading
+  one scenario's exact config from a completed sweep ("Load from sweep") or by manually
+  editing/rebuilding a config — no more auto-built default pipeline — plus a "Compare runs"
+  toggle (saved workflow-run comparison, retired as its own tab). A ⌘K command palette
+  (`CommandPalette`) jumps to any phase/stage/preset/metric/gate or falls through to
+  "Ask Copilot". See "Current state" below (2026-09-06 and 2026-09-07 entries) for the full
+  rationale.
 
 **Single trusted user, local deployment.** No auth layer; the session id is the only
 credential. See README's "Deployment model" section before ever discussing hosting this for
@@ -163,9 +172,9 @@ cd frontend && npm run test          # vitest
 cd frontend && npm run build         # tsc --noEmit && vite build
 ```
 
-Current baseline (verified 2026-09-06, after the EarthDataHub direct-ERA5 fixes below): 935
-backend tests passing / 2 skipped, 196 frontend tests passing, frontend typecheck clean, 226
-MCP tools registered, and `ruff check server/ tests/` clean. These numbers move as the project
+Current baseline (verified 2026-09-08, after the data model builder below):
+1016 backend tests passing / 2 skipped, 251 frontend tests passing, frontend typecheck clean,
+229 MCP tools registered, and `ruff check server/ tests/` clean. These numbers move as the project
 grows — `validate-gokaatru` always re-derives the live count rather than trusting any written
 baseline, this one included. Backend count assumes the gitignored `data/uploads/` fixtures are
 present (see the `tests/` layout note above); without them, expect setup errors on the tests
@@ -175,7 +184,263 @@ that use them, not a lower clean pass count.
 3 F841, 1 F811) had accumulated because `ruff>=0.1` is unpinned and the check was not being
 run to zero. They are all fixed now; keep it at zero rather than letting a second wall build.
 
-## Current state (last verified 2026-09-06)
+## Current state (last verified 2026-09-08)
+
+**2026-09-08: a CSV-only campaign can now be analysed — minimal Task 43 data model**
+**builder.** Without a data model nothing populates `sensor_mapping` or `state.timezone`
+(`_extract_timezone` is the only thing that ever assigns the latter), so `completed_steps`
+never reached `datamodel` and every height-indexed stage had no heights: a bare CSV was a
+dead end that could only *display* a sensor list. New `server/core/datamodel_builder.py`
+(pure logic — header inference, spec validation, Task 43 emission) plus
+`server/tools/datamodel_builder.py` (`draft_data_model`, `build_data_model`) and
+`GET|POST /sessions/{id}/datamodel/draft|build` in `api/routes/uploads.py`. Tool count
+227 → 229.
+
+**It builds a document, not state.** The output is a real Task 43 subset written into the
+session uploads dir and then fed through the *existing* `_parse_datamodel`, so one code
+path populates session state and the declaration survives as a downloadable, auditable
+artifact carrying `BUILDER_PROVENANCE_NOTE` ("drafted by header inference and declared by
+the analyst; not from an instrument record"). Writing `sensor_mapping` directly would have
+been faster and is exactly the divergence the single-logic principle forbids.
+
+**The decisive test is round-trip equivalence** (`tests/test_datamodel_builder.py`): for
+all three reference campaigns, a data model built from *nothing but the CSV headers*
+produces a `sensor_mapping` identical to the campaign's own hand-authored data model.
+Getting that to hold surfaced two real defects in shared code, both fixed with the
+magnitude measured rather than asserted:
+
+- **Boom-pair coverage ties were broken by document order.** `_resolve_boom_pair`'s
+  docstring promised an alphabetical tie-break but the coverage branch returned the first
+  candidate it saw and never reached it. Ties are the *normal* case — every boom pair in
+  Horns Rev and Launakalana ties **exactly**, because both booms log on one channel
+  schedule — so which sensor represented a height was decided by JSON ordering: **+1.15%**
+  of mean wind speed at Horns Rev 30 m (`Spd_SW_30m` 8.302 → `Spd_NE_30m` 8.398 m/s) and
+  −0.21% at Launakalana 60 m. Ties now fall through to the name and are reported as a
+  distinct `coverage_tie_name_alphabetical`, so a coverage figure that decided nothing
+  does not read as if it had. Constants `RESOLUTION_*` in `data_io.py`.
+- **`sd_col` was `f"{speed}_sd"` unconditionally**, existing or not — Boxkite's mapping
+  named `Spd_250m_sd` against a CSV with no standard-deviation channels at all. Inert
+  (the icing rule skips a missing column) but it travelled into `runconfig` as fact. Now
+  resolved declared-if-present → suffix-if-present → `None`, reading Task 43's own
+  `logger_measurement_config[].column_name` with `statistic_type_id: "sd"` rather than
+  inventing a key. **The existence check is load-bearing**: Horns Rev *declares*
+  `wind_speed__sd__062__…` while its CSV holds `Spd_62m_sd`, so trusting declarations
+  blindly would have regressed a reference campaign. With no timeseries loaded existence
+  cannot be checked and the convention still applies (preserving `test_sensor_mapping`'s
+  no-timeseries expectations).
+
+Inference is deliberately a *draft*, never an answer: `draft_columns` groups columns by
+stem-plus-statistic (which is what pairs `WS_80m_Avg` with `WS_80m_SD` — the old `{speed}_sd`
+convention could only ever pair `Spd_80m` with `Spd_80m_sd`), classifies quality flags and
+logger diagnostics as ignored *before* any instrument pattern (`Qual_Spd_58m_quality` read
+as a sensor would invent a second 58 m anemometer and turn a clean height into a boom pair),
+and returns `height_m: None` with a reason rather than defaulting — 0 m is a real height.
+`build_data_model` refuses by name on a missing height, unknown measurement type, duplicate
+column, statistic column absent from the data, or missing timezone.
+
+Scope, confirmed with the user before building: boom orientation and `is_primary` are
+collected; **install/removal dates are not** — an analyst holding only a CSV does not know
+them, and supplying them would fake a `datamodel_deployment` availability basis instead of
+the honest `period_of_record` fallback (see the availability entry below). Calibration,
+uncertainty, mast geometry and logger provenance are out of scope: nothing in this tree
+reads them, and adding them would be building a Task 43 *exporter*, a different feature.
+
+Frontend: `DataModelBuilder.tsx` is a fourth import path in `DataLoadView` ("Build data
+model"), with `dataModelDraft` / `loadDataModelDraft()` / `buildDataModel()` on the store.
+Columns it could not read are disclosed with the reason in a `<details>` block rather than
+hidden. **One thing checked and found *not* to be a bug**: `DataLoadView` reads
+`summary.sensor_mapping_loaded`, which looks wrong against `SessionSummaryResponse`'s
+`datamodel_loaded` — but the store's `summary` is the `/summary` payload
+(`_get_analysis_summary`, `tools/config.py`), which does send `sensor_mapping_loaded`. Two
+different summary shapes; the code is correct. Verified together: 1016 backend / 2 skipped,
+251 frontend (29 files), ruff clean, 229 tools, `vite build` clean.
+
+**Live end-to-end pass against the running server (2026-09-08), on a deliberately
+non-conventional CSV** — `WS_80m_Avg` / `WS_80m_SD` / `WS_80m_Max` / `WD_80m_Avg` /
+`AirTemp_10m_Avg` / `Qual_WS_80m_quality` / `LoggerBattVolt`, i.e. sharing nothing with the
+`Spd_58m` convention the three checked-in fixtures happen to use. Result: draft read every
+height and type correctly, paired `WS_80m_SD` to `WS_80m_Avg` by stem (the old
+`{speed}_sd` convention would have produced the non-existent `WS_80m_Avg_sd`), demoted
+`_Max` to a statistic, and refused a sensor slot to both the quality flag and the battery
+channel. Build → `completed_steps` reached `datamodel`, `site_utc_offset_hours` = 1.0 from
+the declared offset, and **`shear/calculate` recovered α = 0.15999 against the 0.16 baked
+into the synthetic data** — the stage that is unreachable without a data model. The emitted
+artifact re-uploads through `/uploads/datamodel` as an ordinary data model and yields the
+identical mapping. All three refusals (no height / no timezone / unknown column) returned
+400 naming the offending column.
+
+**The port-8000 dev server was serving stale code again** — started before any of this
+work, so neither new route existed on it (`/openapi.json` had no `datamodel/draft`). This
+is the same trap recorded further below; the fresh-process test suite passing says nothing
+about what the running server has. Restarted the same way (no `--reload`, single process,
+no orphaned worker), and it now serves current code. **Note for the next session: Vite is
+bound to `::1` only, not `127.0.0.1`** — curl against `127.0.0.1:5173` fails with a
+connection error that looks like a dead server; use `http://[::1]:5173`.
+
+**Still not verified: a visual browser pass.** No browser-automation tool was available, so
+layout, spacing and the rendered look of the builder table remain unconfirmed — everything
+above is the serving and API layers, not pixels.
+
+**2026-09-08: `availability_90` now measures over each sensor's own deployed period**
+(closes the §12.3 finding). `availability_pct` divided by the *total* record count, charging
+every sensor for the campaign before it was installed. New `availability_measure()` in
+`core/sensor_selection.py` returns an `AvailabilityMeasure` (pct + basis + record counts) over
+the sensor's deployment window, taken from the Task 43 datamodel's `date_from`/`date_to` where
+present and the column's own first-to-last record otherwise; `_build_sensor_inventory`
+(`tools/data_io.py`) now carries those dates, which nothing read before. **Measured on the
+three reference campaigns**: Horns Rev — where `Spd_58m` predates the rest of the mast by ~13
+months — went from best-sensor **87.1% with 0 of 5** sensors clearing the floor to **100.0%
+with 4 of 5**, so the policy went from unavailable to usable. Boxkite is **unchanged at
+89.7%** and still fails: its losses are genuine scattered gaps, not late installation, which
+is the correct answer rather than a fix that flatters the data. The audit's "unreachable on 2
+of 3 campaigns" is therefore now 1 of 3, and that one is a real data-quality fact. The basis
+travels with every figure (`availability_basis`) because a deployed-period percentage and a
+whole-campaign one are not comparable. README's defaults table carries the measured row.
+
+**2026-09-08: the Copilot's unclassified-tool guard was vacuous, and is now real.**
+`_unclassified_tools()` promised (in its own docstring) that "a new tool that nobody
+classified is discoverable in a test instead of at review time." It derived its input from
+`_build_registries()`'s `callables`, which that function had **already filtered to classified
+tools only** — so it subtracted a set from itself and could never return anything. Its test
+asserted `== set()` and passed vacuously for every unclassified tool ever added, including
+`get_fixed_prefix_hash` two days earlier. Fixed by measuring against the MCP registry itself
+(new cached `_load_mcp_tool_specs()` / `_registry_tool_names()`), which immediately surfaced
+**165 of 227 tools invisible to chat**. The old `== set()` assertion was replaced by the
+invariant it was meant to express — unclassified tools must be neither advertised nor
+executable — plus a check that the guard is capable of failing at all.
+
+With the guard working, the high-value read-only analysis tools were classified: the ten
+`compute_*` diagnostics (`energy_metrics`, `mcp_readiness`, `extreme_winds`, `qc_diagnostics`,
+`sensor_comparison`, `mast_effects`, `atmospheric_conditions`, `wind_ramps`,
+`wind_persistence`, `energy_sensitivity`) plus `get_fixed_prefix_hash` — all verified pure
+reads (no session mutation, no filesystem, no network) before being added. This needed
+`advanced_analysis`, `atmosphere`, `diagnostics` and `scenario_result` adding to
+`_build_registries`'s module list, which is what makes a classified tool *executable* rather
+than merely advertised. Read-only tier **36 → 47**, total exposed **62 → 73**. The remaining
+154 unclassified are deliberate and now visible: 142 WindKit wrappers, plus all 12
+BrightHub/EarthDataHub tools, which are excluded because the read-only tier's contract is "no
+network" and the credential tools would hand an injected prompt a view of session auth state —
+pinned by a test.
+
+**2026-09-08: Canvas can also load a config from a local file.** A fourth Canvas entry
+point, "Upload config" (`WorkflowView.tsx`), sits alongside Load from sweep/Edit config/
+Rebuild from config: picking a `.json` file reads it (via `FileReader` — `Blob#text()` isn't
+implemented consistently across jsdom/Node's differing `File` globals in tests, so
+`FileReader.readAsText` is used for portability, not just in tests) and feeds the raw text
+into the **same** "Edit config" textarea/"Save and run" flow, unvalidated at upload time —
+confirmed with the user before building: load-into-editor-for-review beats a one-click blind
+execute, so a bad file surfaces the existing "Configuration must be valid JSON" check instead
+of silently doing nothing or running garbage. No new validation path was added; this is purely
+a new way to fill the same textarea `saveConfigAndRun` already reads from. 240 frontend tests
+(28 files, +4 over the 2026-09-07 baseline), tsc clean, `vite build` clean. No backend changes.
+
+**2026-09-07: Canvas narrowed to "load a config from the sweeps and run."** Canvas
+previously had a second, silent population path alongside manual editing: `prepareDefaultWorkflow`
+auto-built a generic default DAG from bare session state (sensor pairing, LTC algorithms,
+etc.) and jumped the user into Canvas whenever `refreshWorkspace`/`saveConfig` next ran, and
+`saveConfigAndSetup` (Prepare's Data loading "Save config and setup" button) built the same
+kind of default graph inline as a side effect. Both are removed — Canvas is now populated
+only by explicitly loading one scenario's exact config from a completed sweep (new "Load
+from sweep" button/picker in `WorkflowView.tsx`), or by the existing manual paths (Edit
+config / Rebuild from config), which are unchanged. Rationale: the 2026-09-06 redesign above
+already made Prepare's "Pipeline" section (the Stepper → `StageShell`) the primary way to
+walk through and run every stage independently, leaving the auto-build both redundant and in
+tension with Canvas's real value — taking one exact scenario's config and running/editing it
+as a graph, not re-deriving a generic plan from scratch.
+
+Two new store actions, both pure composition of existing machinery (no new persistence or
+graph-building logic): `useSweepStore.previewSweepScenarios(baseUrl, sessionId, sweepId)`
+peeks a sweep's scenario list via the existing `getSweep()` **without** touching
+`manifest`/`rows`/`phase` — deliberately not reusing `openSweep()`, which mutates the same
+state Run/Interrogate read, so a picker peek from Canvas must not silently change what those
+screens show. `useWorkspaceStore.loadScenarioIntoCanvas(sweepId, configHash)` fetches the
+scenario's materialised runconfig (`getScenarioRunconfig`, already existed) and sequences the
+existing `replaceWorkflowRunConfig()` → `rebuildWorkflowGraph()` pair — the same pipeline the
+pre-existing "Edit config" → "Save and run" flow already used, confirmed server-side
+(`server/api/routes/workflow_execution.py`'s `PUT /run-config`) to safely ignore the
+scenario runconfig's extra `scenario`/`admissibility` keys rather than choking on them.
+
+`buildDefaultWorkflowConfig`/`defaultWorkflowPlanKey` (`lib/defaultWorkflowPlan.ts`) were
+**not** deleted — `saveConfigAndSetup` still calls `buildDefaultWorkflowConfig` to seed
+sensible shear/LTC config defaults (sensor pairing, algorithms, columns) that the Stepper's
+own stage views read to have something to run; only the graph-building half of what that
+function's output used to feed (`createWorkflowGraph` + `workflowNodes`/`workflowEdges`) was
+removed from that flow. The `defaultWorkflowStatus` field and the `prepareDefaultWorkflow`
+action were deleted outright — nothing else referenced either. Verified: 236 frontend tests
+(28 files, +10 tests / +2 files over the prior baseline), tsc clean, `vite build` clean. No
+backend changes — `getScenarioRunconfig`'s route and `replace_workflow_run_config` were
+already exposed and untouched.
+
+**2026-09-06: frontend redesigned around a 3-phase primary IA (Prepare / Run /**
+**Interrogate), replacing the old 10-tab `PhaseTabs`.** Prompted by a Claude Design mockup
+(`Gokaatru Workspace v2.dc.html`) whose own design notes observed that four of the ten tabs
+were the same underlying activity seen from different angles (Canvas runs the pipeline,
+Stepper inspects one stage of it, the Analysis Engine held six sub-tabs of its own, Compare
+was a near-subset of the Spread Explorer) with nothing signalling where the user was in the
+work. Implemented test-first (every new component's test file was written and confirmed
+failing before the implementation landed), and everything built on **composition, not
+rewrite**: `SweepDesigner`, `SweepMonitor`, `SpreadExplorer`, `SpreadSummaryView`,
+`SensitivityView`, `GateReportView`, `DataLoadView`, `StageShell`, `SensorReviewView`,
+`ResultsView` and `CompareView` all kept their existing internals and existing tests; new
+phase-container components (`PrepareView`, `RunView`, `InterrogateView`, `PhaseRail`,
+`CommandPalette`) import and arrange them.
+
+Two findings reshaped the mockup's literal proposal during implementation, not just its
+visuals:
+- **CompareView turned out not to be a subset of SpreadExplorer.** It compares saved
+  Canvas/workflow-run *executions* (node-level status, config diffs); SpreadExplorer compares
+  sweep *scenarios* (gate admissibility, runconfig). Retiring the Compare tab therefore meant
+  relocating its capability into **Canvas** (`WorkflowView.tsx`, behind a local "Compare
+  runs" toggle that swaps the DAG canvas for `<CompareView/>` unchanged) rather than folding
+  it into Interrogate.
+- **The mockup's "stamped prefix hash" wasn't computable before a sweep ran.**
+  `fixed_prefix_hash()` (`server/core/scenario_result.py`) previously only ran at
+  sweep-launch time and only surfaced via the manifest. A new endpoint —
+  `GET /sessions/{id}/sweep/prefix-hash` (`server/api/routes/sweep.py`) plus a matching MCP
+  tool `get_fixed_prefix_hash` (`server/tools/scenario_result.py`, new file) — exposes it
+  from live session state pre-sweep, so Prepare's stamp banner and three of its four
+  prefix-stat tiles (reanalysis sources, cleaning-actions count, the hash itself) are real
+  numbers, not mockup placeholders. Both the route and the tool converge on the same
+  `fixed_prefix_hash()` call rather than duplicating logic. This is the one place the sweep
+  engine gained an MCP counterpart — it otherwise still has none (`server/core/sweep.py`
+  and friends are HTTP-only), a pre-existing gap that was deliberately not closed wholesale
+  here, only not repeated by the one new capability this work added.
+
+Two navigational gaps the mockup itself didn't address were resolved during implementation,
+not left as regressions: **How To** (previously its own tab) is now a header-triggered
+overlay (`toggleHowTo`/`howToOpen` on the store) rather than a phase, since it's reference
+material, not one of the three phases; **Results** (the read-only report) became a 4th
+Prepare section alongside Data loading / Pipeline / Sensor Overview, since it's the tail end
+of the same fixed-prefix pipeline Prepare already owns.
+
+Two deliberate simplifications versus the mockup, both disclosed rather than silently
+diverged: **no ETA figure ships anywhere in Run** — `estimate()` only ever returns
+`{leaf_count, prefix_count}`, and the mockup's `hours = leaves * 0.0009` formula had no basis
+in this codebase; inventing one would have been exactly the kind of undisclosed magic-number
+problem the audit process exists to prevent, so it was dropped instead (guarded by a
+regression test in `RunView.test.tsx`). **Real sweep preset names are used** ("Quick look" /
+"Standard EYA" / "Exhaustive" from `useSweepStore`'s `SWEEP_PRESETS`), not the mockup's
+illustrative "Smoke test".
+
+New/changed store shape: `useWorkspaceStore`'s `activeTab: TabId` (10 values) became
+`activePhase: PhaseId` (5 values: `prepare | run | interrogate | canvas | copilot`); the 7
+call sites that used to set `activeTab` directly (session reset, credential-gate bounces,
+cleaning completion, workflow prepare/execute) were each updated by hand rather than
+mechanically, since several now need to set a second field (`selectedStage` and/or the new
+`prepareSection: "data" | "pipeline" | "sensors" | "results"`) that a blind rename would have
+missed. New fields: `prefixHash`, `reanalysisSourcesForPrefix`, `cleaningActionsCount`,
+`loadPrefixHash()` (Step 1's endpoint, wired to re-fetch after `deleteSensors`);
+`prepareSection`/`setPrepareSection`; `howToOpen`/`toggleHowTo`; `paletteOpen`/
+`setPaletteOpen`. `PhaseTabs.tsx` and `AnalysisEngineView.tsx` were deleted (superseded by
+`PhaseRail.tsx` and the three new phase views respectively) — the 6 components
+`AnalysisEngineView` used to compose were not deleted, only re-homed.
+
+All of the above verified together: 939 backend tests / 2 skipped, ruff clean, 227 MCP tools
+(226 → 227, the one new `get_fixed_prefix_hash` tool); 226 frontend tests / 27 files, tsc
+clean, `vite build` clean. Not yet done: a live-browser pass (`npm run dev`) — everything
+above is verified by the test suite and a clean production build, not by looking at the
+rendered app, so treat the visual polish (spacing, the mockup's exact card/typography
+details) as unverified until someone actually opens it.
 
 **Physics/logic audit: complete.** All 10 steps done, 80 finding IDs raised, 69 fixed in the
 original rounds, 2 measured-away-to-nothing, 2 partly-declined-by-design (no AEP/energy-
@@ -199,27 +464,32 @@ against non-least-squares MCP methods and was removed). See
 
 - **§7.10 method gaps**: matrix/joint-distribution MCP not implemented; bootstrap CIs on LTC
   fits; SpeedSort sector count is still hardcoded, not a parameter.
-- **§12.3 findings**: `availability_90` sensor policy is unreachable on 2 of 3 real test
-  campaigns (measures availability against total record count including pre-installation
-  gaps — should measure against each sensor's own deployed period); `widest_lever` is a good
-  shear-fit set but a bad extrapolation reference (crossing A1×A2 over the same four policies
-  wastes leaves on combinations nobody would defend).
+- **§12.3 findings**: `availability_90` **is fixed** (2026-09-08, see below) — availability
+  is now measured over each sensor's own deployed period rather than the total record count.
+  `widest_lever` is still a good shear-fit set but a bad extrapolation reference (crossing
+  A1×A2 over the same four policies wastes leaves on combinations nobody would defend).
 - **§13.5**: the sweep cost model needs restating against real-reanalysis numbers (~2.4h for
   the 8,960-leaf core, not the 30–70 min estimated against synthetic references); a
   replacement for the removed R² gate — "is this reanalysis usable at this site at all," a
   per-reference gate computed once — is designed but not built.
-- **`CompareView.tsx`** is flagged for retirement/subsumption into the Spread Explorer (its
-  manual 2–4 run comparison is a strict subset) — not yet done; both still exist.
+- **`CompareView.tsx`** retirement is done, but not as originally flagged here: it turned out
+  *not* to be a strict subset of the Spread Explorer (it compares saved Canvas/workflow-run
+  executions, not sweep scenarios — see "2026-09-06: frontend redesigned..." above), so its
+  tab was removed and its capability relocated into Canvas instead of merged into
+  Interrogate. `CompareView.tsx` itself is unchanged, just re-homed.
 - Two decisions explicitly flagged "worth revisiting, not settled": whether analyst-supplied
   shear (single-height fallback) should accept a range instead of one value; whether
   `max(parametric, empirical)` uncertainty substitution should become coverage-gated
   replacement instead.
 
-**No architectural drift currently known** between the Canvas (React-Flow DAG, editable,
-live execution) and the Stepper (guided linear review) — they coexist as separate tabs in
-`PhaseTabs`, each serving a distinct purpose (Canvas = run the pipeline; Stepper = inspect
-one stage in depth), not competing models. If you're picking this up after a gap, re-verify
-this against `frontend/src/App.tsx` and `PhaseTabs.tsx` before assuming it still holds.
+**Superseded 2026-09-06**: Canvas and the Stepper are no longer peer top-level tabs — `
+PhaseTabs.tsx` was deleted along with the 10-tab IA it rendered. Canvas is now its own
+`PhaseRail` entry (React-Flow DAG, editable, live execution, plus the relocated Compare
+capability); the Stepper lives inside Prepare's "Pipeline" section (`PrepareView.tsx` →
+`StageShell.tsx`, unchanged internally) rather than as an independent destination. The
+distinct-purposes reasoning still holds (Canvas runs the pipeline as a graph; the Stepper
+inspects one stage linearly) — only where each one is reached changed. If picking this up
+after a gap, re-verify against `frontend/src/App.tsx`, `PhaseRail.tsx` and `PrepareView.tsx`.
 
 **Since 2026-08-23, two independent frontend bugs in the Analysis Engine were found and
 fixed** (both in `useSweepStore.ts` / `useWorkspaceStore.ts`, with regression tests):

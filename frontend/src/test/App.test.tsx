@@ -76,11 +76,12 @@ describe("App bootable shell", () => {
     });
 
     await waitFor(() => {
-      // The workspace opens at the standalone data import view.
-      expect(screen.getByRole("button", { name: "Data import" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Stepper" })).toBeInTheDocument();
+      // The workspace opens on the Prepare phase, Data loading section by default.
+      expect(screen.getByRole("button", { name: /Prepare/ })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Data loading" })).toBeInTheDocument();
       expect(screen.getByText("Site & hub height")).toBeInTheDocument();
     });
-    expect(screen.queryByRole("button", { name: "Data loading" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Data import" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stepper" })).not.toBeInTheDocument();
   });
 });

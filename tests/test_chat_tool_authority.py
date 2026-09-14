@@ -21,6 +21,7 @@ from server.api.routes.chat import (
     _allowed_tools,
     _build_registries,
     _execute_tool,
+    _registry_tool_names,
     _tools_for_request,
     _unclassified_tools,
 )
@@ -30,8 +31,66 @@ from server.state.session import SessionState
 class TestAllowlistIsComplete:
     """Deny by default: every exposed tool must be deliberately classified."""
 
-    def test_no_unclassified_tools_are_reachable(self) -> None:
-        assert _unclassified_tools() == set()
+    def test_unclassified_tools_are_measured_against_the_registry_not_the_exposed_set(self) -> None:
+        """Regression: the helper derived its input from `callables`, which `_build_registries`
+        had *already* filtered to classified tools only — so it subtracted a set from itself
+        and could never report anything. Its docstring promised the opposite ("a new tool that
+        nobody classified is discoverable in a test instead of at review time") and the test
+        that consumed it asserted `== set()`, so it passed vacuously for every unclassified
+        tool ever added. Measured against the real registry it must see the whole gap.
+        """
+        registry = _registry_tool_names()
+        classified = _READ_ONLY_TOOLS | _MUTATING_TOOLS
+        assert _unclassified_tools() == registry - classified
+
+    def test_the_registry_is_not_fully_classified_and_the_guard_can_say_so(self) -> None:
+        """The guard's whole purpose is to be capable of failing. Most of the 227-tool
+        surface (the WindKit wrappers especially) is deliberately unexposed, so a non-empty
+        result here is correct — what matters is that it is *reported* rather than invisible.
+        """
+        assert _unclassified_tools(), "the guard cannot detect an unclassified tool"
+
+    @pytest.mark.parametrize(
+        "tool",
+        [
+            "compute_energy_metrics",
+            "compute_mcp_readiness",
+            "compute_extreme_winds",
+            "compute_qc_diagnostics",
+            "compute_sensor_comparison",
+            "compute_mast_effects",
+            "compute_atmospheric_conditions",
+            "compute_wind_ramps",
+            "compute_wind_persistence",
+            "compute_energy_sensitivity",
+            "get_fixed_prefix_hash",
+        ],
+    )
+    def test_diagnostic_analysis_tools_are_answerable_without_the_mutating_flag(self, tool: str) -> None:
+        """These are the tools an analyst's "why is this spread so wide?" actually needs.
+        All are pure reads — no session mutation, no filesystem, no network — so they belong
+        in the default tier rather than behind the opt-in, and must be *executable*, not just
+        advertised."""
+        _, callables = _build_registries()
+        assert tool in _READ_ONLY_TOOLS
+        assert tool in _allowed_tools(False)
+        assert tool in callables
+
+    def test_credential_and_network_tools_stay_out_of_the_read_only_tier(self) -> None:
+        """The read-only tier's contract is no session mutation, no filesystem, *no network*.
+        BrightHub and EarthDataHub tools breach it — and the credential ones would hand an
+        injected prompt a view of the session's authentication state."""
+        for tool in _READ_ONLY_TOOLS:
+            assert not tool.startswith("brighthub_")
+            assert not tool.startswith("earthdatahub_")
+
+    def test_no_unclassified_tool_is_reachable(self) -> None:
+        """The real safety invariant, replacing the vacuous `_unclassified_tools() == set()`:
+        whatever is unclassified must be neither offered to the model nor executable."""
+        openai_tools, callables = _build_registries()
+        unclassified = _unclassified_tools()
+        assert unclassified.isdisjoint({tool["function"]["name"] for tool in openai_tools})
+        assert unclassified.isdisjoint(set(callables))
 
     def test_tiers_do_not_overlap(self) -> None:
         assert _READ_ONLY_TOOLS & _MUTATING_TOOLS == frozenset()

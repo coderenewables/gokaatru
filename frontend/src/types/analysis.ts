@@ -48,6 +48,58 @@ export interface SessionSummary {
   completed_steps: string[];
 }
 
+// Data model builder — for sessions that arrive as a bare CSV with no Task 43 JSON.
+// A draft is a proposal read off the column headers; nothing here is authoritative
+// until the analyst declares it and the build succeeds.
+export type DataModelColumnRole = "measurement" | "statistic" | "ignored";
+
+export interface DataModelDraftColumn {
+  name: string;
+  role: DataModelColumnRole;
+  measurement_type_id: string | null;
+  height_m: number | null;
+  statistic_type_id: string | null;
+  parent: string | null;
+  reason: string | null;
+}
+
+export interface DataModelDraft {
+  columns: DataModelDraftColumn[];
+  detected_heights_m: number[];
+  columns_needing_a_height: string[];
+  basis: string;
+  note: string;
+}
+
+export interface DataModelStatisticSpec {
+  column_name: string;
+  statistic_type_id: string;
+}
+
+export interface DataModelPointSpec {
+  name: string;
+  measurement_type_id: string;
+  height_m: number;
+  boom_orientation_deg?: number;
+  is_primary?: boolean;
+  statistics?: DataModelStatisticSpec[];
+}
+
+export interface DataModelLocationSpec {
+  name?: string;
+  latitude_ddeg?: number;
+  longitude_ddeg?: number;
+  elevation_m?: number;
+  measurement_station_type_id?: string;
+  timezone?: string;
+  offset_from_utc_hrs?: number;
+}
+
+export interface DataModelSpec {
+  location: DataModelLocationSpec;
+  points: DataModelPointSpec[];
+}
+
 export interface AnalysisSummary {
   project_name?: string | null;
   hub_height_m?: number | null;

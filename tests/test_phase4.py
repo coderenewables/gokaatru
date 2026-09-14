@@ -131,4 +131,8 @@ def test_all_tools_registered() -> None:
     tools = asyncio.run(mcp.list_tools())
     # 223 + earthdatahub_set_credential/earthdatahub_clear_credential/earthdatahub_status
     # (2026-09: moved the EarthDataHub PAT from an env var/.netrc to session-scoped state).
-    assert len(tools) == 226
+    # 226 + get_fixed_prefix_hash (2026-09: prefix hash needed pre-sweep for the Prepare
+    # screen; the sweep engine's HTTP route and this tool converge on the same core fn).
+    # 227 + draft_data_model/build_data_model (2026-09: a campaign delivered as a bare CSV
+    # had no way to reach a sensor mapping at all).
+    assert len(tools) == 229

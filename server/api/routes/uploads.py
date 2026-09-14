@@ -21,6 +21,7 @@ from server.tools.data_io import (
     _parse_datamodel,
     _parse_timeseries,
 )
+from server.tools.datamodel_builder import _build_data_model, _draft_data_model
 
 router = APIRouter(prefix="/sessions/{session_id}", tags=["uploads"])
 
@@ -122,6 +123,47 @@ def upload_datamodel(
         raise to_bad_request(exc) from exc
     state.touch()
     return {**result, "file_path": str(saved_path)}
+
+
+class BuildDataModelRequest(BaseModel):
+    """Request body for POST /datamodel/build — the analyst's declaration of the columns.
+
+    Deliberately permissive at the schema layer: ``server.core.datamodel_builder`` owns
+    every refusal so the MCP tool and this route reject exactly the same specs, with the
+    same message naming the same column.
+    """
+
+    location: dict = Field(default_factory=dict)
+    points: list[dict] = Field(default_factory=list)
+
+
+@router.get("/datamodel/draft")
+def draft_data_model(
+    session_id: str,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict:
+    """Draft a Task 43 reading of the loaded timeseries columns for review."""
+    del session_id
+    try:
+        return _draft_data_model(state)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+
+
+@router.post("/datamodel/build")
+def build_data_model(
+    session_id: str,
+    body: BuildDataModelRequest,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict:
+    """Build a minimal IEA Task 43 data model from declared columns and load it."""
+    del session_id
+    try:
+        result = _build_data_model(state, {"location": body.location, "points": body.points})
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+    state.touch()
+    return result
 
 
 @router.get("/sensors")

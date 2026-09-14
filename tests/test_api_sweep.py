@@ -147,6 +147,60 @@ def test_axes_report_the_default_thresholds(api):
 
 
 # ---------------------------------------------------------------------------
+# The stamped prefix, before a sweep ever runs
+# ---------------------------------------------------------------------------
+
+
+def test_prefix_hash_is_available_before_any_sweep_runs(api):
+    """The Prepare screen stamps a hash prospectively — it must not require a sweep first."""
+    client, manager = api
+    session_id = _prepare(manager, client)
+
+    payload = client.get(
+        f"/api/sessions/{session_id}/sweep/prefix-hash", headers=_headers(session_id)
+    ).json()
+
+    assert len(payload["fixed_prefix_hash"]) == 16
+    assert all(c in "0123456789abcdef" for c in payload["fixed_prefix_hash"])
+    assert set(payload["reanalysis_sources"]) == {"era5", "merra2"}
+    assert payload["cleaning_actions_count"] == 0
+    # Nothing was persisted — reading the prefix hash must not create a sweep.
+    assert client.get(f"/api/sessions/{session_id}/sweep", headers=_headers(session_id)).json()["sweeps"] == []
+
+
+def test_prefix_hash_changes_when_the_sensor_inventory_changes(api):
+    """The hash is what makes two sweeps comparable — it must move when the prefix does."""
+    client, manager = api
+    session_id = _prepare(manager, client)
+    state: SessionState = manager.get_session(session_id)
+
+    before = client.get(
+        f"/api/sessions/{session_id}/sweep/prefix-hash", headers=_headers(session_id)
+    ).json()["fixed_prefix_hash"]
+
+    del state.sensor_inventory[next(iter(state.sensor_inventory))]
+
+    after = client.get(
+        f"/api/sessions/{session_id}/sweep/prefix-hash", headers=_headers(session_id)
+    ).json()["fixed_prefix_hash"]
+
+    assert before != after
+
+
+def test_prefix_hash_reports_the_real_cleaning_log_length(api):
+    client, manager = api
+    session_id = _prepare(manager, client)
+    state: SessionState = manager.get_session(session_id)
+    state.cleaning_log = [{"rule": "icing", "removed": 12}, {"rule": "range", "removed": 3}]
+
+    payload = client.get(
+        f"/api/sessions/{session_id}/sweep/prefix-hash", headers=_headers(session_id)
+    ).json()
+
+    assert payload["cleaning_actions_count"] == 2
+
+
+# ---------------------------------------------------------------------------
 # Pricing before launching
 # ---------------------------------------------------------------------------
 

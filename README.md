@@ -38,6 +38,7 @@ Data import + hub height + reanalysis provider
 ### Data import and default Canvas plan
 
 1. Import measured time-series and an IEA Task 43 data model, import a BrightHub location, or load a shared dataset.
+   - **No Task 43 JSON?** The fourth import path, **Build data model**, reads the loaded CSV's column headers and drafts a sensor per column — measurement type, height, and the turbulence column paired with each anemometer. The draft is a proposal: correct or exclude any row, declare the logger's UTC offset (or an IANA zone), optionally add boom orientation and a primary-sensor flag, then build. The result is a real Task 43 document written into the session workspace and parsed by the same code path as an uploaded one, so it is downloadable and re-usable rather than an inference living in server memory. Columns it could not read — quality flags, logger diagnostics, statistic channels — are listed with the reason rather than hidden.
 2. (Optional) In the **Analysis sensor selection** table, untick sensors to exclude them. Applying the selection removes them from the working data and records them in `excluded_sensors`; reloading the data file or re-importing from BrightHub restores the full set.
 3. Enter the site metadata and **hub height**. Hub height has no default and is required before a model can run.
 4. In **Long-term reference**, choose the reanalysis provider — BrightHub (ERA5 + MERRA-2) or EarthDataHub (direct ERA5 only) — and the date window. The choice persists to `runconfig` as `reanalysis.acquisitionSource` (default `brighthub`), so which reanalysis a result was built on is recorded with the analysis rather than being a per-session UI setting. It is a frontend-owned key, not a mirror: nothing on the backend derives it, and `tests/test_runconfig_contract.py` asserts it survives normalization. Choosing EarthDataHub reveals a credential field for a PAT (a "Standard API key" or a legacy "Classic" key from [earthdatahub.destine.eu](https://earthdatahub.destine.eu)'s Quota & API keys page — both work identically here) — entered once per browser session and stored server-side in memory only, exactly like the BrightHub client credentials on the same page; there is no server config file to edit.
@@ -152,6 +153,8 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/sessions/{id}/config/import` | POST | Import a complete runconfig JSON payload |
 | `/sessions/{id}/summary` | GET | Workflow progress and analysis readiness |
 | `/sessions/{id}/uploads/{timeseries\|datamodel}` | POST | Upload a file (multipart) |
+| `/sessions/{id}/datamodel/draft` | GET | Draft a Task 43 reading of the loaded timeseries columns (header inference, for review) |
+| `/sessions/{id}/datamodel/build` | POST | Build a minimal Task 43 data model from declared columns, persist it, and load it |
 | `/sessions/{id}/sensors` | GET | Sensor inventory |
 | `/sessions/{id}/sensors/delete` | POST | Remove sensors from the session (drops their columns; persists `excluded_sensors`) |
 | `/sessions/{id}/coverage/{sensor}` | GET | Per-sensor coverage/gap stats |
@@ -198,6 +201,8 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 
 ### Data I/O
 - `parse_timeseries`, `parse_datamodel`, `list_sensors`, `get_period_of_record`, `get_data_coverage`
+- Data model builder, for a campaign delivered as a bare CSV with no IEA Task 43 JSON:
+  `draft_data_model`, `build_data_model`
 
 ### ERA5 And Reanalysis
 - `find_era5_nodes`, `extract_era5_data`, `compute_era5_wind_speed`, `interpolate_era5_to_site`, `extrapolate_reanalysis_to_hub`, `analyze_homogeneity`, `apply_homogeneity_cutoff`
@@ -290,7 +295,8 @@ invites use:
 | Fewer than **4 380 valid concurrent records** (six months) for any LTC algorithm | A sub-six-month MCP is not defensible. Counted as valid concurrent *pairs*, not calendar span, so a gappy nine-month overlap is judged on the data it actually contains. This also rejects coarse-cadence references: a five-year monthly series is 60 pairs. |
 | Fewer than **six complete annual means** for clipping | After the completeness gate below. |
 | Inferred timestep not in `{1, 2, 5, 10, 15, 30, 60}` minutes | A silently repaired cadence propagates into gap statistics, diurnal aggregation and ERA5 alignment with no trace. |
-| Datamodel declares no timezone | A wrong assumption here is silent and corrupts every LTC. Provide `timezone` (IANA) or `offset_from_utc_hrs` in `logger_main_config`. |
+| Datamodel declares no timezone | A wrong assumption here is silent and corrupts every LTC. Provide `timezone` (IANA) or `offset_from_utc_hrs` in `logger_main_config`. The data model builder refuses to emit a document without one, for the same reason. |
+| A built data model column with no declared height | `build_data_model` names the column instead of defaulting. 0 m is a real height, and a sensor silently placed on the ground is not detectable in any downstream result. |
 | Degenerate (vertical) relationship in total least squares | The slope is genuinely undefined; the old code returned a `1e12` sentinel. |
 
 ### Defaults that affect results
@@ -303,10 +309,14 @@ invites use:
 | SpeedSort binning | **12 sectors × 30°**, min **200** records/sector | Sparse sectors fall back to the all-sector fit; `independent_sectors` and the per-sector `sector_models` report where the fit is thin. |
 | Mast-shadow speed gate | **4.0 m/s**, min **50** records/sector | Detection is two-sided: a low ratio means `sensor_b` is shadowed, a high ratio means `sensor_a` is. Sparse sectors are reported but not flagged. |
 | `range_check` bounds | **Derived from sensor type** | wind_speed 0–50 m/s, wind_direction 0–360°, temperature −60–60 °C, pressure 80 000–110 000 Pa, humidity 0–100%. An unknown type falls back to that sensor's own data range, which makes the rule a **no-op** — an intentional fail-safe, reported as `bounds_source: "sensor_data_range"`. Explicit `min`/`max` always win. |
+| Boom-pair tie-break | **Alphabetical**, after coverage | Resolution order is unchanged — primary flag, then coverage, then name — but a coverage *tie* now falls through to the name instead of keeping whichever candidate the document happened to list first. Ties are the normal case, not a corner one: every boom pair in Horns Rev and Launakalana ties exactly, because both booms are logged on one channel schedule. Ordering therefore decided the mast's representative sensor, worth **+1.15%** of mean wind speed at Horns Rev 30 m (8.302 → 8.398 m/s) and **−0.21%** at Launakalana 60 m. Reported as `resolution: "coverage_tie_name_alphabetical"` in `runconfig.site.sensor_resolution`, distinct from `"coverage"`, so a coverage figure that decided nothing does not read as if it had. |
+| Turbulence (`sd_col`) column | **Declared column if present, else `{speed}_sd` if present, else none** | Previously `f"{speed}_sd"` unconditionally, whether or not such a column was ever logged — Boxkite's mapping named `Spd_250m_sd` against a CSV with no standard-deviation channels at all. Inert downstream (the icing rule skips a column it cannot find) but it travelled into `runconfig` as fact. A Task 43 `logger_measurement_config[].column_name` declaration with `statistic_type_id: "sd"` is now preferred, **but only when that column exists in the loaded data**: Horns Rev declares `wind_speed__sd__062__…` while its CSV holds `Spd_62m_sd`, so trusting declarations blindly would lose a real column. With no timeseries loaded yet, existence cannot be checked and the suffix convention still applies. |
+| Built data model provenance | **Recorded in the artifact** | A data model produced by `build_data_model` carries a note on its `measurement_location` stating that column roles and heights were drafted by header inference and declared by the analyst, not taken from an instrument record. Nothing is defaulted during a build: a column with no readable height, an unknown measurement type, a duplicate name, a statistic column absent from the data, or a missing timezone is refused by name rather than filled in. |
 | ERA5 spatial interpolation | **Scalar** for speed, **vector** for direction | Deliberately different. Vector interpolation of speed under-predicts where node directions diverge across the cell, because opposing components cancel. Reported as `speed_interpolation: "scalar"`. |
 | Long-term reference | **ERA5** (`source` on `interpolate_era5_to_site`) | `"merra2"` selects the other downloaded reanalysis. Both write the same interpolated series every LTC algorithm reads, so switching source and repeating the LTC is how a result's dependence on the reference is tested. Reported as `reference_source`. |
 | Timestamp interval label | **`interval_start`** (`runconfig.timestamp_label`) | IEA Task 43 permits start, end and centre labelling and a file does not say which it uses, so this is an assumption. Set it to `interval_end` or `interval_centre` and the measured index is shifted onto interval-start before matching — a mismatch against instantaneous reanalysis is a systematic half-interval offset in every LTC, not noise. |
 | Hourly resample coverage | **0.5** of expected sub-hourly samples | A 3-of-6 hour is kept and averaged as a full hour; a 1-of-6 hour is dropped. Reported as `hours_kept`, `hours_dropped_below_minimum` and `hours_kept_partially_populated`. |
+| `availability_90` denominator | **The sensor's own deployed period** | Was the *total* record count, which charged every sensor for the campaign before it was installed. On Horns Rev — where `Spd_58m` predates the rest of the mast by ~13 months — the best sensor read **87.1%** and *no* sensor cleared the 90% floor, so axis A silently lost a level on an ordinary campaign; measured over each sensor's own deployment the best reads **100.0%** and **4 of 5** clear it. The window comes from the Task 43 datamodel's sensor `date_from`/`date_to` where present, else the column's own first-to-last record; `availability_basis` reports which, because the two are not comparable. Boxkite is **unchanged at 89.7%** — its losses are real scattered gaps, not late installation, so it still fails the floor and should. |
 | Sector shear minimum | **200** records/sector | Matches the SpeedSort gate. Below it a sector is not tabulated, because 20 records produced a 288-cell table of which 285 were that sector's own mean. Every sector's count and the reason for each exclusion are reported; overridable via `min_sector_records`. |
 | Roughness band | **[1e-6, 2.0] m** | The ceiling covers WAsP class 3 and dense forest or urban terrain. It was 1.5 m, which truncated them — and the clamp *raises* log-law hub speed, so it was not a conservative backstop. |
 | Tower-shadow sector | **Derived per sensor** | Boom orientation from the datamodel (shadow centred at boom + 180 deg, width 70 deg), else the sectors `compute_mast_effects` measured, else the legacy 20-degree window at 170-190 deg — which reports `sector_basis: "default_guess"` and warns that it is about a third of a lattice tower's real shadow. |
@@ -515,8 +525,15 @@ model's authority.
 
 | Tier | Count | Exposed when |
 |---|---|---|
-| Read-only — query, compute, plot | 36 | always |
-| Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty | 26 | only with `allow_mutating_tools: true` |
+| Read-only — query, compute, plot | 48 | always |
+| Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty | 27 | only with `allow_mutating_tools: true` |
+
+The remaining 154 of the 229 registered tools are deliberately unclassified and
+therefore unreachable from chat: the WindKit wrappers, and every BrightHub /
+EarthDataHub tool — the read-only tier's contract is "no session mutation, no
+filesystem, **no network**", and the credential tools would additionally hand an
+injected prompt a view of the session's authentication state. Both exclusions are
+pinned by tests.
 
 The authority check is repeated server-side at execution rather than trusted
 from the tool list sent upstream, because a model can name a tool it was never

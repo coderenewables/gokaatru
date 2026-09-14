@@ -31,6 +31,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import numpy as np
+import pandas as pd
 
 NEAREST_2 = "nearest_2"
 AVAILABILITY_90 = "availability_90"
@@ -39,8 +40,16 @@ WIDEST_LEVER = "widest_lever"
 
 POLICIES: tuple[str, ...] = (NEAREST_2, AVAILABILITY_90, REDUNDANT_BOOM, WIDEST_LEVER)
 
-#: Availability floor for ``availability_90``, as a percentage of total records.
+#: Availability floor for ``availability_90``, as a percentage of the sensor's own
+#: deployed period (not of the whole campaign — see ``availability_measure``).
 AVAILABILITY_THRESHOLD_PCT = 90.0
+
+#: Deployment window taken from the Task 43 datamodel's sensor ``date_from``/``date_to``.
+AVAILABILITY_BASIS_DATAMODEL = "datamodel_deployment"
+#: Deployment window inferred from the column's own first and last recorded values.
+AVAILABILITY_BASIS_RECORD = "period_of_record"
+#: No usable window at all — the column is absent or entirely empty.
+AVAILABILITY_BASIS_NONE = "unavailable"
 
 #: A shear exponent needs two distinct heights; ln(z2/z1) is zero otherwise.
 MIN_HEIGHTS_FOR_SHEAR_FIT = 2
@@ -96,14 +105,96 @@ def _speed_columns_by_height(state) -> dict[float, str]:
     }
 
 
-def availability_pct(state, column: str) -> float:
-    """Return a column's non-null share of the loaded record count, as a percentage."""
+@dataclass(frozen=True)
+class AvailabilityMeasure:
+    """A column's availability, and the window it was measured over.
+
+    The window matters as much as the number: a figure taken over a sensor's own
+    deployment is not comparable with one taken over the whole campaign, so the basis
+    travels with the percentage rather than being inferred by the reader.
+    """
+
+    pct: float
+    basis: str
+    records_present: int = 0
+    records_expected: int = 0
+
+    def as_detail(self) -> dict[str, object]:
+        return {
+            "pct": round(self.pct, 2),
+            "basis": self.basis,
+            "records_present": self.records_present,
+            "records_expected": self.records_expected,
+        }
+
+
+def _deployment_window(state, column: str):
+    """Return (start, end, basis) for a column's deployment.
+
+    The Task 43 datamodel's ``date_from``/``date_to`` describe when the instrument was
+    actually on the mast, which is the honest denominator. They are frequently absent
+    (``date_to`` is null across all three reference campaigns), so a missing bound falls
+    back to the column's own first/last recorded value — the period of record — rather
+    than to the campaign, which is the defect this replaces.
+    """
+    entry = (state.sensor_inventory or {}).get(column) or {}
+    start = _coerce_timestamp(entry.get("date_from"))
+    end = _coerce_timestamp(entry.get("date_to"))
+    basis = AVAILABILITY_BASIS_DATAMODEL if (start is not None or end is not None) else AVAILABILITY_BASIS_RECORD
+
+    present = state.timeseries_df[column].dropna()
+    if present.empty:
+        return None, None, AVAILABILITY_BASIS_NONE
+    if start is None:
+        start = present.index[0]
+    if end is None:
+        end = present.index[-1]
+    return start, end, basis
+
+
+def _coerce_timestamp(value: object):
+    """Parse a datamodel date into a tz-aware Timestamp matching the series, or None."""
+    if value is None:
+        return None
+    try:
+        stamp = pd.Timestamp(value)
+    except (ValueError, TypeError):
+        return None
+    return None if pd.isna(stamp) else stamp
+
+
+def availability_measure(state, column: str) -> AvailabilityMeasure:
+    """Return a column's availability over its own deployed period (design doc §12.3).
+
+    Measuring against the *total* record count charges a sensor for every record before
+    it was installed and after it was removed, which on real campaigns pushed healthy
+    late-added sensors below the 90% floor and silently cost axis A a level.
+    """
     if state.timeseries_df is None or column not in state.timeseries_df.columns:
-        return 0.0
-    total = len(state.timeseries_df)
-    if total == 0:
-        return 0.0
-    return float(state.timeseries_df[column].notna().sum()) / total * 100.0
+        return AvailabilityMeasure(0.0, AVAILABILITY_BASIS_NONE)
+    if len(state.timeseries_df) == 0:
+        return AvailabilityMeasure(0.0, AVAILABILITY_BASIS_NONE)
+
+    start, end, basis = _deployment_window(state, column)
+    if start is None or end is None:
+        return AvailabilityMeasure(0.0, AVAILABILITY_BASIS_NONE)
+
+    index = state.timeseries_df.index
+    if getattr(index, "tz", None) is not None:
+        start = start.tz_localize(index.tz) if start.tzinfo is None else start.tz_convert(index.tz)
+        end = end.tz_localize(index.tz) if end.tzinfo is None else end.tz_convert(index.tz)
+
+    window = state.timeseries_df.loc[(index >= start) & (index <= end), column]
+    expected = len(window)
+    if expected == 0:
+        return AvailabilityMeasure(0.0, AVAILABILITY_BASIS_NONE)
+    present = int(window.notna().sum())
+    return AvailabilityMeasure(present / expected * 100.0, basis, present, expected)
+
+
+def availability_pct(state, column: str) -> float:
+    """Return a column's availability over its deployed period, as a percentage."""
+    return availability_measure(state, column).pct
 
 
 def redundant_boom_heights(state) -> dict[float, list[str]]:
@@ -146,9 +237,17 @@ def _resolve_nearest_2(state, heights: dict[float, str], hub_height_m: float | N
 
 
 def _resolve_availability(state, heights: dict[float, str]) -> SensorSelection:
-    """Take every height whose speed column clears the availability floor."""
-    measured = {h: availability_pct(state, column) for h, column in heights.items()}
+    """Take every height whose speed column clears the availability floor.
+
+    Availability is measured over each sensor's own deployed period, so a late-installed
+    sensor is judged on the campaign it was actually present for. The basis travels with
+    every figure — a deployed-period percentage and a whole-campaign one are not
+    comparable, and the reader must be able to tell which they are looking at.
+    """
+    measures = {h: availability_measure(state, column) for h, column in heights.items()}
+    measured = {h: m.pct for h, m in measures.items()}
     chosen = tuple(sorted(h for h, pct in measured.items() if pct >= AVAILABILITY_THRESHOLD_PCT))
+    bases = {str(h): measures[h].basis for h in sorted(measures)}
     if not chosen:
         best = max(measured.values(), default=0.0)
         return _unavailable(
@@ -156,6 +255,7 @@ def _resolve_availability(state, heights: dict[float, str]) -> SensorSelection:
             f"No sensor reaches {AVAILABILITY_THRESHOLD_PCT:g}% availability "
             f"(best is {best:.1f}%).",
             availability_pct={str(h): round(pct, 2) for h, pct in sorted(measured.items())},
+            availability_basis=bases,
         )
     return SensorSelection(
         policy=AVAILABILITY_90,
@@ -164,6 +264,7 @@ def _resolve_availability(state, heights: dict[float, str]) -> SensorSelection:
         detail={
             "threshold_pct": AVAILABILITY_THRESHOLD_PCT,
             "availability_pct": {str(h): round(measured[h], 2) for h in chosen},
+            "availability_basis": bases,
             "excluded_heights_m": [h for h in sorted(measured) if h not in chosen],
         },
     )

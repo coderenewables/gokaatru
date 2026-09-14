@@ -146,17 +146,19 @@ The interface-free heart. Nothing here imports FastAPI or FastMCP.
 | `scenario_pipeline.py` | One scenario expressed as composable stages, from shear to uncertainty. |
 | `scenario_result.py` | One flat, hashable record per scenario (the sweep table row shape). |
 | `sensor_selection.py` | Resolves a sensor-selection *policy* (e.g. `availability_90`, `widest_lever`) to concrete sensors. |
+| `datamodel_builder.py` | Builds a minimal IEA Task 43 data model from CSV column headers alone, for campaigns delivered without one. Header inference (`draft_columns`), spec validation and Task 43 emission (`build_datamodel`); emits a *document*, never session state. |
 | `uncertainty_inputs.py` | Derives a scenario's uncertainty inputs from its own results. |
 
 ### 4.3 `server/tools/` — analytics (the MCP tool surface)
 
 Each module owns one analysis area and exposes a handful of `@mcp.tool()` functions plus the
-private helpers behind them. The GoKaatru-native tools total **81**; the WindKit
+private helpers behind them. The GoKaatru-native tools total **87**; the WindKit
 pass-throughs add **142**.
 
 | Module | Tools | Area |
 |--------|:----:|------|
 | `data_io.py` | 5 | Phase-1 timeseries + datamodel loading, sensor inventory, coverage. |
+| `datamodel_builder.py` | 2 | Draft a Task 43 reading of the loaded columns, and build/persist/load the declared data model (`server/core/datamodel_builder.py` does the work). |
 | `config.py` | 5 | Run-configuration management (get/update/save/load/summary). |
 | `cleaning.py` | 4 | Rule-based timeseries cleaning (list/apply/log/undo). |
 | `statistics.py` | 9 | Weibull, wind climate, turbulence, windrose, diurnal/monthly, MoMM, scatter. |
@@ -232,7 +234,7 @@ logic as the MCP tools, and shape the response with the Pydantic models in `sche
 | `brighthub.py` | 8 | BrightHub login/logout/status, location browsing, reanalysis, import. |
 | `sweep.py` | 7 | Scenario-sweep engine surface (axes, estimate, run, **run/stream** SSE, list, get, runconfig). |
 | `datasets.py` | 6 | Shared dataset-pool CRUD + load-into-session. |
-| `uploads.py` | 5 | Timeseries/datamodel upload, sensor inventory + coverage, delete. |
+| `uploads.py` | 7 | Timeseries/datamodel upload, the data model builder (draft/build), sensor inventory + coverage, delete. |
 | `results.py` | 5 | LTC/ensemble results, plots, site map, runconfig export. |
 | `sessions.py` | 4 | Session lifecycle. |
 | `exports.py` | 4 | File downloads (timeseries CSV, LTC CSV, ensemble CSV, runconfig JSON). |
@@ -313,29 +315,67 @@ React 19 + Vite + TypeScript. `npm run dev` serves on `:5173` and proxies `/api`
 
 ```
 frontend/src/
-├── App.tsx              # thin shell; gates on session existence, switches primary views
+├── App.tsx              # thin shell; gates on session existence, switches on activePhase
 ├── main.tsx             # React entry
 ├── components/
-│   ├── PhaseTabs.tsx     # primary nav: Data import / Cleaning / Analysis Engine / Canvas /
-│   │                     #   Stepper / Results / Copilot / Sensor Overview / Compare / How To
+│   ├── PhaseRail.tsx     # primary nav (2026-09 redesign): Prepare / Run / Interrogate /
+│   │                     #   Canvas / Copilot — replaced the old 10-tab PhaseTabs.tsx
+│   ├── CommandPalette.tsx  # ⌘K "Ask or jump" — searches real phases/stages/presets/
+│   │                     #   metrics/gates; free text falls through to Ask Copilot
+│   ├── PrepareView.tsx   # Prepare phase: merges Data import/Cleaning/Reanalysis/Sensor
+│   │                     #   Overview/Stepper/Results into one screen with an internal
+│   │                     #   Data loading|Pipeline|Sensor Overview|Results section switcher,
+│   │                     #   real prefix-stat tiles + stamp banner (server/tools/scenario_result.py)
+│   ├── RunView.tsx       # Run phase: SweepDesigner + SweepMonitor on one screen
+│   ├── InterrogateView.tsx  # Interrogate phase: SpreadSummaryView + SpreadExplorer +
+│   │                     #   SensitivityView + GateReportView stacked under one metric switch
 │   ├── AppHeader.tsx, HomeView.tsx, HowToView.tsx, AssetsDrawer.tsx
-│   ├── WorkflowView.tsx  # the editable React-Flow Canvas (run the pipeline as a DAG)
-│   ├── Stepper.tsx       # guided linear per-stage review
-│   ├── SensorReviewView.tsx  # Sensor Overview validation dashboard
-│   ├── CopilotView.tsx   # BYOK AI Copilot
-│   ├── CompareView.tsx   # manual 2–4 run comparison (flagged for subsumption into Spread Explorer)
+│   │                     #   HowToView is now a header-triggered overlay (howToOpen), not a tab
+│   ├── WorkflowView.tsx  # Canvas: the editable React-Flow DAG. Populated *only* by
+│   │                     #   "Load from sweep" (picks a sweep + scenario, loads that
+│   │                     #   scenario's exact runconfig via loadScenarioIntoCanvas), "Upload
+│   │                     #   config" (reads a local .json file via FileReader into the same
+│   │                     #   Edit config textarea, 2026-09-08), or manual Edit config/
+│   │                     #   Rebuild from config — no auto-built default pipeline
+│   │                     #   (2026-09-07; see CLAUDE.md). Also hosts a "Compare runs" toggle
+│   │                     #   that swaps in CompareView unchanged (Compare's tab was retired —
+│   │                     #   it compares workflow-run executions, not sweep scenarios, so it
+│   │                     #   relocated here rather than into Interrogate)
+│   ├── Stepper.tsx       # guided linear per-stage review — now reached via Prepare's
+│   │                     #   "Pipeline" section (StageShell), not a standalone tab
+│   ├── SensorReviewView.tsx  # Sensor Overview validation dashboard — reached via Prepare's
+│   │                     #   "Sensor Overview" section
+│   ├── CopilotView.tsx   # BYOK AI Copilot (kept as its own PhaseRail entry, alongside ⌘K)
+│   ├── CompareView.tsx   # manual 2–4 workflow-run comparison; mounted inside WorkflowView now
 │   ├── common/           # shared widgets: PlotFrame, MetricsCard, NodeTable, SensorPicker,
 │   │                     #   Disclosure, MiniMap, RunButton, StageHeader
-│   ├── stages/           # one view per pipeline stage (DataLoad, Cleaning, Shear/Extrap,
-│   │                     #   Reanalysis, LTC, Ensemble, Clipping, Explore)
-│   ├── results/          # read-only Results report, split into per-section components
-│   └── sweep/            # Analysis Engine views (Designer, Monitor, Spread/Sensitivity/Summary)
+│   ├── stages/           # one view per pipeline stage (DataLoad, DataModelBuilder,
+│   │                     #   Cleaning, Shear/Extrap, Reanalysis, LTC, Ensemble,
+│   │                     #   Clipping, Explore) — composed by StageShell inside
+│   │                     #   PrepareView; DataModelBuilder is a DataLoad sub-path
+│   ├── results/          # read-only Results report — reached via Prepare's "Results" section
+│   └── sweep/            # the individual sweep views RunView/InterrogateView compose
+│                         #   (Designer, Monitor, Spread/Sensitivity/Summary/GateReport);
+│                         #   AnalysisEngineView.tsx (the old 6-sub-tab shell) was deleted
 ├── store/
-│   ├── useWorkspaceStore.ts  # single Zustand store = entire app state (~2,000 LOC)
-│   └── useSweepStore.ts      # separate sweep store (kept apart from the large workspace store)
+│   ├── useWorkspaceStore.ts  # single Zustand store = entire app state (~2,300 LOC).
+│   │                     #   Nav field is `activePhase: PhaseId` (5 values), not the old
+│   │                     #   `activeTab: TabId` (10 values); `prepareSection` picks Prepare's
+│   │                     #   internal section; `prefixHash`/`reanalysisSourcesForPrefix`/
+│   │                     #   `cleaningActionsCount`/`loadPrefixHash()` back Prepare's tiles;
+│   │                     #   `howToOpen`/`paletteOpen` are the two overlay flags;
+│   │                     #   `loadScenarioIntoCanvas(sweepId, configHash)` is Canvas's sole
+│   │                     #   population path (2026-09-07) — sequences the pre-existing
+│   │                     #   `replaceWorkflowRunConfig`+`rebuildWorkflowGraph` pair
+│   └── useSweepStore.ts      # separate sweep store (kept apart from the large workspace
+│                         #   store); `previewSweepScenarios()` peeks a sweep's scenario list
+│                         #   for Canvas's picker without touching manifest/rows/phase, unlike
+│                         #   `openSweep()` which Run/Interrogate read from
 ├── lib/
 │   ├── api.ts            # Axios/fetch HTTP client; auto-injects X-GoKaatru-Session header
-│   ├── sweepApi.ts       # HTTP client for the sweep engine (kept apart from api.ts)
+│   ├── sweepApi.ts       # HTTP client for the sweep engine, incl. getPrefixHash (2026-09)
+│   ├── prepareStats.ts   # pure helpers for Prepare's stat tiles (meanCoverage) — plain
+│   │                     #   arithmetic over already-disclosed numbers, no disclosure entry
 │   ├── workflow.ts       # React-Flow DAG builder for the 8-stage workflow
 │   ├── defaultWorkflowPlan.ts, defaultConfig.ts  # default DAG + config
 │   ├── stages.ts         # maps backend completed_steps → 8-stage status
@@ -345,14 +385,16 @@ frontend/src/
 │   └── copilotAgent.ts   # BYOK copilot agent over the OpenAI-compatible /chat endpoint
 └── types/
     ├── analysis.ts       # canonical config schema + backend response interfaces
-    └── sweep.ts          # sweep result-row schema, mirroring the backend
+    └── sweep.ts          # sweep result-row schema, mirroring the backend; PrefixHash added
 ```
 
 Two design points worth knowing:
 
 - The **Canvas** (React-Flow DAG, editable, live execution) and the **Stepper** (guided
-  linear review) are **not competing models** — they are separate tabs, Canvas = run the
-  pipeline, Stepper = inspect one stage in depth.
+  linear review) are **not competing models** — Canvas = run the pipeline as a graph,
+  Stepper = inspect one stage in depth. Since the 2026-09 redesign they are reached
+  differently (Canvas is its own `PhaseRail` entry; the Stepper lives inside Prepare's
+  "Pipeline" section) but the underlying distinction is unchanged.
 - `configSync.ts` is the load-bearing bridge: the backend's single source of truth is the
   flat `runconfig` dict (mirrored from `core/runconfig.py`); the typed `WindAnalysisConfig`
   the UI edits is kept in sync with it in both directions.
@@ -383,7 +425,7 @@ These are enforced by review and by tests, not by style tooling. Match them when
 
 ## 9. Testing
 
-### Backend (`tests/`, pytest — 74 files)
+### Backend (`tests/`, pytest — 75 files)
 
 - `tests/oracles.py` is an **independent-implementation oracle harness**: it imports nothing
   from `server/`, so a passing oracle test is real corroboration, not a tautology.
@@ -402,7 +444,7 @@ python -m pytest tests/ -v
 python -c "import asyncio; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())), 'tools')"
 ```
 
-### Frontend (`frontend/src/test/`, vitest — 19 files)
+### Frontend (`frontend/src/test/`, vitest — 29 files)
 
 Covers the stores, the workflow/DAG builder, stage-status logic, the sweep lifecycle and
 analysis, disclosure rendering, and the stage/results views.

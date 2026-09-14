@@ -10,6 +10,9 @@ export function AppHeader() {
   const newSession = useWorkspaceStore((state) => state.newSession);
   const deleteCurrentSession = useWorkspaceStore((state) => state.deleteCurrentSession);
   const downloadConfig = useWorkspaceStore((state) => state.downloadConfig);
+  const howToOpen = useWorkspaceStore((state) => state.howToOpen);
+  const toggleHowTo = useWorkspaceStore((state) => state.toggleHowTo);
+  const setPaletteOpen = useWorkspaceStore((state) => state.setPaletteOpen);
 
   const confirmDelete = () => {
     if (!session) return;
@@ -37,6 +40,15 @@ export function AppHeader() {
           {coordinateLabel ? ` · ${coordinateLabel}` : ""}
         </p>
       </div>
+      <button
+        type="button"
+        className="palette-trigger"
+        onClick={() => setPaletteOpen(true)}
+        title="Ask or jump (Ctrl/Cmd+K)"
+      >
+        <span>Ask or jump</span>
+        <kbd>⌘K</kbd>
+      </button>
       <div className="app-header-status">
         {busyLabel ? (
           <span className="busy-pill" role="status">
@@ -54,6 +66,15 @@ export function AppHeader() {
           aria-label="Refresh workspace"
         >
           ↻
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={toggleHowTo}
+          aria-pressed={howToOpen}
+          title="How to use GoKaatru"
+        >
+          How To
         </button>
         <button
           type="button"

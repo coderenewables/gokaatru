@@ -260,6 +260,13 @@ export interface SweepAxes {
   default_thresholds: Record<string, number>;
 }
 
+/** The fixed-prefix hash, stamped before any sweep runs (design doc §2). */
+export interface PrefixHash {
+  fixed_prefix_hash: string;
+  reanalysis_sources: string[];
+  cleaning_actions_count: number;
+}
+
 export interface SweepRequestBody {
   shear_fit_policies: string[];
   reference_policies: string[];

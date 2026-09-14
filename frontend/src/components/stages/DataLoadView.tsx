@@ -5,10 +5,11 @@
 import { useEffect, useState } from "react";
 
 import { useWorkspaceStore } from "../../store/useWorkspaceStore";
+import { DataModelBuilder } from "./DataModelBuilder";
 import { RunButton } from "../common/RunButton";
 import type { SensorRow } from "../../types/analysis";
 
-type LoadPath = "upload" | "brighthub" | "dataset";
+type LoadPath = "upload" | "brighthub" | "dataset" | "builder";
 
 export function DataLoadView() {
   const [path, setPath] = useState<LoadPath>("upload");
@@ -40,11 +41,13 @@ export function DataLoadView() {
         <PathTab id="upload" active={path === "upload"} onClick={setPath} label="Upload files" />
         <PathTab id="brighthub" active={path === "brighthub"} onClick={setPath} label="BrightHub import" />
         <PathTab id="dataset" active={path === "dataset"} onClick={setPath} label="Shared dataset" />
+        <PathTab id="builder" active={path === "builder"} onClick={setPath} label="Build data model" />
       </div>
 
       {path === "upload" ? <UploadPath /> : null}
       {path === "brighthub" ? <BrightHubPath /> : null}
       {path === "dataset" ? <DatasetPath /> : null}
+      {path === "builder" ? <DataModelBuilder /> : null}
 
       <SensorInventory sensors={sensors} selected={selected} setSelected={setSelected} />
       <ReanalysisSourceForm />
@@ -133,7 +136,12 @@ function UploadPath() {
       {summary?.sensor_mapping_loaded ? (
         <p className="status-ok">✓ Data model loaded</p>
       ) : (
-        <p className="muted">Data model not yet loaded.</p>
+        <p className="muted">
+          Data model not yet loaded.
+          {summary?.timeseries_loaded
+            ? " No Task 43 JSON for this campaign? Use Build data model to declare the sensors from the CSV headers."
+            : null}
+        </p>
       )}
     </section>
   );

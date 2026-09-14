@@ -119,6 +119,48 @@ class TestBuildSensorMapping:
         mapping_b, _ = _build_sensor_mapping(order_b)
         assert mapping_a[80.0]["speed_col"] == mapping_b[80.0]["speed_col"]
 
+    def test_a_coverage_tie_is_broken_by_name_not_by_document_order(self) -> None:
+        """Coverage ties are the normal case for a boom pair, not the exception: every
+        pair in Horns Rev and Launakalana ties exactly, because both booms are logged on
+        the same channel schedule. The coverage branch returned the first candidate it
+        saw, so which sensor represented the height was decided by the order the points
+        happened to appear in the JSON — worth 1.15% of mean wind speed at Horns Rev 30 m.
+        """
+        index = pd.date_range("2023-06-01", periods=200, freq="10min")
+        ts_df = pd.DataFrame(
+            {"Spd_N_80m": np.ones(len(index)), "Spd_S_80m": np.ones(len(index))},
+            index=index,
+        )
+        forward = _make_points([
+            {"name": "Spd_S_80m", "height_m": 80.0, "type": "wind_speed"},
+            {"name": "Spd_N_80m", "height_m": 80.0, "type": "wind_speed"},
+        ])
+        reverse = _make_points(list(reversed([
+            {"name": "Spd_S_80m", "height_m": 80.0, "type": "wind_speed"},
+            {"name": "Spd_N_80m", "height_m": 80.0, "type": "wind_speed"},
+        ])))
+        mapping_a, log_a = _build_sensor_mapping(forward, timeseries_df=ts_df)
+        mapping_b, _ = _build_sensor_mapping(reverse, timeseries_df=ts_df)
+
+        assert mapping_a[80.0]["speed_col"] == mapping_b[80.0]["speed_col"] == "Spd_N_80m"
+        assert log_a[0]["resolution"] == "coverage_tie_name_alphabetical"
+
+    def test_a_genuine_coverage_difference_still_wins_over_the_name(self) -> None:
+        """The tie-break must not displace the coverage rule it backs up."""
+        index = pd.date_range("2023-06-01", periods=200, freq="10min")
+        ts_df = pd.DataFrame(
+            {"Spd_N_80m": np.ones(len(index)), "Spd_S_80m": np.ones(len(index))},
+            index=index,
+        )
+        ts_df.loc[ts_df.index[:100], "Spd_N_80m"] = np.nan
+        points = _make_points([
+            {"name": "Spd_N_80m", "height_m": 80.0, "type": "wind_speed"},
+            {"name": "Spd_S_80m", "height_m": 80.0, "type": "wind_speed"},
+        ])
+        mapping, log = _build_sensor_mapping(points, timeseries_df=ts_df)
+        assert mapping[80.0]["speed_col"] == "Spd_S_80m"
+        assert log[0]["resolution"] == "coverage"
+
     def test_output_type_backward_compatible(self) -> None:
         """Output type is dict[float, dict[str, str | None]] as required by 10+ consumers."""
         points = _make_points([
@@ -132,6 +174,31 @@ class TestBuildSensorMapping:
             for key, value in sensor_map.items():
                 assert isinstance(key, str)
                 assert value is None or isinstance(value, str)
+
+
+class TestSdColumnOnRealCampaigns:
+    """``sd_col`` is now resolved against the data rather than asserted from a suffix."""
+
+    UPLOADS = Path(__file__).resolve().parents[1] / "data" / "uploads"
+
+    def _load(self, stem: str) -> None:
+        csv = sorted(self.UPLOADS.glob(f"{stem}*.csv"))[0]
+        datamodel = sorted(self.UPLOADS.glob(f"{stem}*.json"))[0]
+        _parse_timeseries(session, str(csv))
+        _parse_datamodel(session, str(datamodel))
+
+    def test_horns_rev_keeps_its_conventionally_named_sd_columns(self) -> None:
+        """Its data model declares SD column names its own CSV does not contain, so the
+        suffix convention is what actually finds them."""
+        self._load("HornsRev-MAST")
+        assert session.sensor_mapping[58.0]["sd_col"] == "Spd_58m_sd"
+        assert session.sensor_mapping[62.0]["sd_col"] == "Spd_62m_sd"
+
+    def test_boxkite_no_longer_points_at_a_column_that_was_never_logged(self) -> None:
+        """Boxkite has no standard-deviation channels at all, yet every height carried
+        ``Spd_<h>m_sd``. Inert downstream, but it travelled into runconfig as fact."""
+        self._load("HKW-B-FLS-Boxkite")
+        assert all(slots["sd_col"] is None for slots in session.sensor_mapping.values())
 
 
 class TestSensorResolutionInRunconfig:

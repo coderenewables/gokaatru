@@ -2,7 +2,6 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
 import { Stepper } from "../components/Stepper";
-import { PhaseTabs } from "../components/PhaseTabs";
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
 import { computeStageStatuses, STEPPER_STAGE_ORDER } from "../lib/stages";
 import type { StageId, StageStatus } from "../types/analysis";
@@ -69,40 +68,8 @@ describe("Stepper", () => {
   });
 });
 
-describe("PhaseTabs", () => {
-  beforeEach(() => {
-    useWorkspaceStore.setState({
-      activeTab: "setup",
-      session: { session_id: "s1" } as never,
-    });
-  });
-
-  it("renders all browser tabs", () => {
-    render(<PhaseTabs />);
-    expect(screen.getByRole("button", { name: "Data import" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Stepper" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Canvas" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Results" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Copilot" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Compare" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sensor Overview" })).toBeInTheDocument();
-  });
-
-  it("marks the active tab and switches on click", () => {
-    render(<PhaseTabs />);
-    const stepperTab = screen.getByRole("button", { name: "Stepper" });
-    expect(stepperTab).toHaveAttribute("aria-current", "page");
-
-    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
-    expect(useWorkspaceStore.getState().activeTab).toBe("workflow");
-    expect(screen.getByRole("button", { name: "Canvas" })).toHaveAttribute("aria-current", "page");
-    expect(stepperTab).not.toHaveAttribute("aria-current", "page");
-
-    fireEvent.click(screen.getByRole("button", { name: "Sensor Overview" }));
-    expect(useWorkspaceStore.getState().activeTab).toBe("sensor_review");
-    expect(screen.getByRole("button", { name: "Sensor Overview" })).toHaveAttribute("aria-current", "page");
-  });
-});
+// Top-level nav (now PhaseRail: Prepare/Run/Interrogate/Canvas/Copilot) is covered by
+// PhaseRail.test.tsx — Stepper itself is Prepare-internal now (see PrepareView.test.tsx).
 
 // Helper: stage titles live in STAGE_META; expose for regex matching.
 function STAGE_META_TITLE(stage: StageId): string {

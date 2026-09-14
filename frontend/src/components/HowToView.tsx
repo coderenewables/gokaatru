@@ -84,7 +84,9 @@ const TAB_DOCS: TabDoc[] = [
 ];
 
 export function HowToView() {
-  const setActiveTab = useWorkspaceStore((state) => state.setActiveTab);
+  const setActivePhase = useWorkspaceStore((state) => state.setActivePhase);
+  const setPrepareSection = useWorkspaceStore((state) => state.setPrepareSection);
+  const toggleHowTo = useWorkspaceStore((state) => state.toggleHowTo);
 
   return (
     <main className="howto-shell">
@@ -160,7 +162,11 @@ export function HowToView() {
           <button
             type="button"
             className="primary-button"
-            onClick={() => setActiveTab("import")}
+            onClick={() => {
+              setActivePhase("prepare");
+              setPrepareSection("data");
+              toggleHowTo();
+            }}
           >
             Go to Data import
           </button>

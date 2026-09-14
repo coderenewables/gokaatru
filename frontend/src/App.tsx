@@ -3,19 +3,16 @@
 import { Suspense, useEffect } from "react";
 
 import { AppHeader } from "./components/AppHeader";
-import { PhaseTabs } from "./components/PhaseTabs";
+import { PhaseRail } from "./components/PhaseRail";
+import { CommandPalette } from "./components/CommandPalette";
 import { ReanalysisProgressOverlay } from "./components/ReanalysisProgressOverlay";
 import { HomeView } from "./components/HomeView";
-import { DataLoadView } from "./components/stages/DataLoadView";
-import { CleaningView } from "./components/stages/CleaningView";
-import { StageShell } from "./components/stages/StageShell";
+import { PrepareView } from "./components/PrepareView";
+import { RunView } from "./components/RunView";
+import { InterrogateView } from "./components/InterrogateView";
 import { WorkflowView } from "./components/WorkflowView";
 import { CopilotView } from "./components/CopilotView";
-import { CompareView } from "./components/CompareView";
-import { AnalysisEngineView } from "./components/sweep/AnalysisEngineView";
 import { HowToView } from "./components/HowToView";
-import { SensorReviewView } from "./components/SensorReviewView";
-import { ResultsView } from "./components/results/ResultsView";
 import { useWorkspaceStore } from "./store/useWorkspaceStore";
 
 function ViewFallback() {
@@ -25,7 +22,8 @@ function ViewFallback() {
 export default function App() {
   const session = useWorkspaceStore((state) => state.session);
   const sessionStatus = useWorkspaceStore((state) => state.sessionStatus);
-  const activeTab = useWorkspaceStore((state) => state.activeTab);
+  const activePhase = useWorkspaceStore((state) => state.activePhase);
+  const howToOpen = useWorkspaceStore((state) => state.howToOpen);
   const restoreSession = useWorkspaceStore((state) => state.restoreSession);
 
   useEffect(() => {
@@ -41,27 +39,21 @@ export default function App() {
   return (
     <main className="app-shell">
       <ReanalysisProgressOverlay />
+      <CommandPalette />
       <AppHeader />
-      <PhaseTabs />
+      <PhaseRail />
       <Suspense fallback={<ViewFallback />}>
-        {activeTab === "import" ? (
-          <section className="data-import-view">
-            <DataLoadView />
-          </section>
-        ) : null}
-        {activeTab === "cleaning" ? (
-          <section className="data-cleaning-view">
-            <CleaningView />
-          </section>
-        ) : null}
-        {activeTab === "setup" ? <StageShell /> : null}
-        {activeTab === "workflow" ? <WorkflowView /> : null}
-        {activeTab === "engine" ? <AnalysisEngineView /> : null}
-        {activeTab === "copilot" ? <CopilotView /> : null}
-        {activeTab === "compare" ? <CompareView /> : null}
-        {activeTab === "results" ? <ResultsView /> : null}
-        {activeTab === "howto" ? <HowToView /> : null}
-        {activeTab === "sensor_review" ? <SensorReviewView /> : null}
+        {howToOpen ? (
+          <HowToView />
+        ) : (
+          <>
+            {activePhase === "prepare" ? <PrepareView /> : null}
+            {activePhase === "run" ? <RunView /> : null}
+            {activePhase === "interrogate" ? <InterrogateView /> : null}
+            {activePhase === "canvas" ? <WorkflowView /> : null}
+            {activePhase === "copilot" ? <CopilotView /> : null}
+          </>
+        )}
       </Suspense>
     </main>
   );

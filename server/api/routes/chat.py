@@ -98,6 +98,24 @@ _READ_ONLY_TOOLS: frozenset[str] = frozenset({
     "plot_uncertainty_breakdown",
     "plot_weibull",
     "plot_windrose",
+    # Diagnostic analysis — the tools an analyst's "why is this spread so wide?"
+    # actually needs. All pure reads over the loaded series and derived artefacts.
+    "compute_atmospheric_conditions",
+    "compute_energy_metrics",
+    "compute_energy_sensitivity",
+    "compute_extreme_winds",
+    "compute_mast_effects",
+    "compute_mcp_readiness",
+    "compute_qc_diagnostics",
+    "compute_sensor_comparison",
+    "compute_wind_persistence",
+    "compute_wind_ramps",
+    # The fixed-prefix identity — what makes two sweeps comparable.
+    "get_fixed_prefix_hash",
+    # Proposes a reading of the loaded column headers; writes nothing. Its counterpart
+    # build_data_model writes a file and replaces the sensor mapping, so that one is
+    # mutating.
+    "draft_data_model",
 })
 
 # Mutate session state, write files, or make outbound network calls. Requires an
@@ -106,6 +124,9 @@ _MUTATING_TOOLS: frozenset[str] = frozenset({
     # ingest — reads the filesystem and replaces the loaded dataset
     "parse_datamodel",
     "parse_timeseries",
+    # writes a data model into the session workspace, then parses it — so it replaces
+    # the sensor mapping and the campaign timezone in one call
+    "build_data_model",
     # destructive data edits
     "apply_cleaning_rule",
     "undo_cleaning_rule",
@@ -189,15 +210,48 @@ def _allowed_tools(allow_mutating: bool) -> frozenset[str]:
     return _READ_ONLY_TOOLS
 
 
+_MCP_TOOL_SPECS: dict[str, Any] | None = None
+
+
+def _load_mcp_tool_specs() -> dict[str, Any]:
+    """Return every tool the MCP registry advertises, keyed by name. Cached.
+
+    FastMCP's ``list_tools()`` is async and we may be called from a sync thread inside
+    uvicorn's running event loop, so it runs on a fresh thread with its own loop.
+    """
+    global _MCP_TOOL_SPECS
+    if _MCP_TOOL_SPECS is not None:
+        return _MCP_TOOL_SPECS
+
+    import concurrent.futures
+
+    from server.main import mcp
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(asyncio.run, mcp.list_tools())
+        tools = future.result(timeout=30)
+
+    _MCP_TOOL_SPECS = {tool.name: tool for tool in tools}
+    return _MCP_TOOL_SPECS
+
+
+def _registry_tool_names() -> set[str]:
+    """Return every tool name the MCP registry advertises, classified or not."""
+    return set(_load_mcp_tool_specs())
+
+
 def _unclassified_tools() -> set[str]:
     """Return registry tools in neither tier — never exposed, but worth surfacing.
 
     A new tool that nobody classified is invisible to chat rather than silently
     reachable. This helper exists so that omission is discoverable in a test
     instead of at review time.
+
+    Measured against the **registry**, not against ``_build_registries``'s callables:
+    those are already filtered to classified tools, so deriving from them subtracted a
+    set from itself and could never report anything — the omission this was written to
+    catch was exactly the omission it could not see.
     """
-    _, callables = _build_registries()
-    return set(callables) - _READ_ONLY_TOOLS - _MUTATING_TOOLS
+    return _registry_tool_names() - _READ_ONLY_TOOLS - _MUTATING_TOOLS
 
 
 def _build_registries() -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -210,24 +264,21 @@ def _build_registries() -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if _OPENAI_TOOLS is not None and _TOOL_CALLABLES is not None:
         return _OPENAI_TOOLS, _TOOL_CALLABLES
 
-    # FastMCP's list_tools() is async. We may be called from a sync thread
-    # inside uvicorn's running event loop, so use a fresh thread + event loop.
-    import concurrent.futures
-
-    from server.main import mcp
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(asyncio.run, mcp.list_tools())
-        tools = future.result(timeout=30)
+    tools = list(_load_mcp_tool_specs().values())
 
     openai_tools: list[dict[str, Any]] = []
     callables: dict[str, Any] = {}
 
     # Build a name→function map from the tool modules.
+    import server.tools.advanced_analysis as _adv
     import server.tools.air_density as _ad
+    import server.tools.atmosphere as _atm
     import server.tools.cleaning as _cl
     import server.tools.clipping as _clip
     import server.tools.config as _cfg
     import server.tools.data_io as _dio
+    import server.tools.datamodel_builder as _dmb
+    import server.tools.diagnostics as _diag
     import server.tools.ensemble as _ens
     import server.tools.era5 as _era5
     import server.tools.extrapolation as _ext
@@ -235,12 +286,16 @@ def _build_registries() -> tuple[list[dict[str, Any]], dict[str, Any]]:
     import server.tools.ltc as _ltc
     import server.tools.ltc_ml as _lml
     import server.tools.map as _mp
+    import server.tools.scenario_result as _scen
     import server.tools.shear as _sh
     import server.tools.statistics as _st
     import server.tools.uncertainty as _unc
     import server.tools.visualization as _viz
 
-    all_modules = [_ad, _cl, _clip, _cfg, _dio, _ens, _era5, _ext, _hom, _ltc, _lml, _mp, _sh, _st, _unc, _viz]
+    all_modules = [
+        _ad, _adv, _atm, _cl, _clip, _cfg, _diag, _dio, _dmb, _ens, _era5, _ext, _hom,
+        _ltc, _lml, _mp, _scen, _sh, _st, _unc, _viz,
+    ]
     module_names: dict[str, Any] = {}
     for mod in all_modules:
         for name, obj in inspect.getmembers(mod, inspect.isfunction):

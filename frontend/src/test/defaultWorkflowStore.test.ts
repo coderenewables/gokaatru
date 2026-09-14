@@ -14,6 +14,11 @@ const {
   getEarthDataHubStatus,
   setEarthDataHubCredential,
   clearEarthDataHubCredential,
+  getAnalysisSummary,
+  getSessionConfig,
+  getSensors,
+  getWorkflowCapabilities,
+  listScenarios,
 } = vi.hoisted(() => ({
   getBrightHubStatus: vi.fn(),
   streamWorkflowExecution: vi.fn(),
@@ -23,6 +28,13 @@ const {
   getEarthDataHubStatus: vi.fn(),
   setEarthDataHubCredential: vi.fn(),
   clearEarthDataHubCredential: vi.fn(),
+  // Only exercised by the "refreshWorkspace" describe block below — every other test in
+  // this file goes through saveConfigAndSetup/etc. and never reaches these.
+  getAnalysisSummary: vi.fn(),
+  getSessionConfig: vi.fn(),
+  getSensors: vi.fn(),
+  getWorkflowCapabilities: vi.fn(),
+  listScenarios: vi.fn(),
 }));
 
 vi.mock("../lib/api", async () => {
@@ -37,6 +49,11 @@ vi.mock("../lib/api", async () => {
     getEarthDataHubStatus,
     setEarthDataHubCredential,
     clearEarthDataHubCredential,
+    getAnalysisSummary,
+    getSessionConfig,
+    getSensors,
+    getWorkflowCapabilities,
+    listScenarios,
   };
 });
 
@@ -65,7 +82,7 @@ const CAPABILITIES: WorkflowDispatchCapability[] = [
   { template_id: "run_clipping_analysis", required_params: ["speed_col"], optional_params: [] },
 ];
 
-describe("prepareDefaultWorkflow", () => {
+describe("saveConfigAndSetup", () => {
   beforeEach(() => {
     const config = createDefaultWindAnalysisConfig();
     config.site.hubHeightM = 150;
@@ -85,24 +102,12 @@ describe("prepareDefaultWorkflow", () => {
       capabilities: CAPABILITIES,
       workflowNodes: [],
       workflowEdges: [],
-      defaultWorkflowStatus: "idle",
-      activeTab: "setup",
+      activePhase: "prepare",
+      selectedStage: "data",
+      prepareSection: "data",
       brighthubReanalysis: null,
       busyLabel: null,
     });
-  });
-
-  it("persists the generated defaults and opens an editable canvas", async () => {
-    await useWorkspaceStore.getState().prepareDefaultWorkflow();
-
-    const state = useWorkspaceStore.getState();
-    expect(updateSessionConfig).toHaveBeenCalledOnce();
-    expect(state.config.ltc.algorithms).toEqual(["linear_least_squares", "variance_ratio"]);
-    expect(state.workflowNodes.map((node) => node.id)).toEqual(
-      expect.arrayContaining(["ltc_linear_least_squares", "ltc_variance_ratio", "ensemble"]),
-    );
-    expect(state.activeTab).toBe("workflow");
-    expect(state.defaultWorkflowStatus).toBe("ready");
   });
 
   it("asks for BrightHub credentials instead of downloading unauthenticated", async () => {
@@ -112,7 +117,9 @@ describe("prepareDefaultWorkflow", () => {
 
     const state = useWorkspaceStore.getState();
     expect(state.brighthubPromptRequired).toBe(true);
-    expect(state.activeTab).toBe("import");
+    expect(state.activePhase).toBe("prepare");
+    expect(state.selectedStage).toBe("data");
+    expect(state.prepareSection).toBe("data");
     expect(updateSessionConfig).not.toHaveBeenCalled();
     expect(fetchBrightHubReanalysisNodes).not.toHaveBeenCalled();
   });
@@ -130,11 +137,12 @@ describe("prepareDefaultWorkflow", () => {
     await useWorkspaceStore.getState().saveConfigAndSetup();
 
     const state = useWorkspaceStore.getState();
-    expect(state.activeTab).toBe("import");
+    expect(state.activePhase).toBe("prepare");
+    expect(state.selectedStage).toBe("data");
     expect(updateSessionConfig).not.toHaveBeenCalled();
   });
 
-  it("saves the planned config and starts reanalysis acquisition without running Canvas", async () => {
+  it("saves the planned config and starts reanalysis acquisition without touching Canvas", async () => {
     getBrightHubStatus.mockResolvedValue({ authenticated: true, has_token: true });
 
     await useWorkspaceStore.getState().saveConfigAndSetup();
@@ -143,13 +151,16 @@ describe("prepareDefaultWorkflow", () => {
     expect(updateSessionConfig).toHaveBeenCalledOnce();
     expect(fetchBrightHubReanalysisNodes).toHaveBeenCalledOnce();
     expect(streamWorkflowExecution).not.toHaveBeenCalled();
-    expect(state.activeTab).toBe("cleaning");
-    expect(state.defaultWorkflowStatus).toBe("ready");
-    expect(state.workflowNodes.map((node) => node.id)).toContain("brighthub_reanalysis");
+    expect(state.activePhase).toBe("prepare");
+    expect(state.selectedStage).toBe("cleaning");
+    expect(state.prepareSection).toBe("pipeline");
+    // Regression: saveConfigAndSetup used to also build a default Canvas graph as a side
+    // effect. Canvas is now populated only by explicitly loading a sweep scenario's config.
+    expect(state.workflowNodes).toEqual([]);
   });
 
   it("stays on Import with a reanalysis spinner until the download settles, then moves to Cleaning", async () => {
-    // Regression: activeTab used to jump to "cleaning" (and busyLabel to null) before the
+    // Regression: selectedStage used to jump to "cleaning" (and busyLabel to null) before the
     // reanalysis download was even requested, so the download's own progress labels flashed
     // in on a page that had already moved on. The transition to Cleaning must wait for
     // acquisition to finish, not race ahead of it.
@@ -172,7 +183,7 @@ describe("prepareDefaultWorkflow", () => {
     }
 
     const midFlight = useWorkspaceStore.getState();
-    expect(midFlight.activeTab).not.toBe("cleaning");
+    expect(midFlight.selectedStage).not.toBe("cleaning");
     expect(midFlight.busyLabel).toBeTruthy();
     expect(midFlight.busyLabel).toMatch(/reanalysis/i);
 
@@ -180,8 +191,42 @@ describe("prepareDefaultWorkflow", () => {
     await setupPromise;
 
     const settled = useWorkspaceStore.getState();
-    expect(settled.activeTab).toBe("cleaning");
+    expect(settled.selectedStage).toBe("cleaning");
+    expect(settled.prepareSection).toBe("pipeline");
     expect(settled.busyLabel).toBeNull();
+  });
+});
+
+describe("refreshWorkspace no longer auto-builds a Canvas graph", () => {
+  it("leaves the canvas empty and activePhase untouched, even when every old auto-build prerequisite is met", async () => {
+    // Regression: refreshWorkspace used to call prepareDefaultWorkflow whenever timeseries,
+    // a speed sensor and a positive hub height were all present — exactly the state seeded
+    // below. Canvas is now populated only by explicitly loading a sweep scenario's config.
+    getAnalysisSummary.mockResolvedValue({
+      completed_steps: ["timeseries", "datamodel", "config"],
+      timeseries_loaded: true,
+    });
+    getSessionConfig.mockResolvedValue({ hub_height_m: 150 });
+    getSensors.mockResolvedValue({ sensors: SENSORS });
+    getWorkflowCapabilities.mockResolvedValue({ capabilities: CAPABILITIES });
+    listScenarios.mockResolvedValue({ scenarios: [] });
+
+    useWorkspaceStore.setState({
+      session: { session_id: "session-1" } as never,
+      summary: { timeseries_loaded: true } as never,
+      sensors: SENSORS,
+      workflowNodes: [],
+      workflowEdges: [],
+      activePhase: "prepare",
+    });
+
+    await useWorkspaceStore.getState().refreshWorkspace();
+
+    const state = useWorkspaceStore.getState();
+    expect(state.summary?.timeseries_loaded).toBe(true);
+    expect(state.workflowNodes).toEqual([]);
+    expect(state.workflowEdges).toEqual([]);
+    expect(state.activePhase).toBe("prepare");
   });
 });
 

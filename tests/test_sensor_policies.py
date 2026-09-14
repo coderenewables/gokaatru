@@ -14,6 +14,8 @@ single height, a mast where nothing clears the availability floor.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -21,10 +23,14 @@ import pytest
 import server.main  # noqa: F401 — establishes tool-module import order
 from server.core.sensor_selection import (
     AVAILABILITY_90,
+    AVAILABILITY_BASIS_DATAMODEL,
+    AVAILABILITY_BASIS_RECORD,
+    AVAILABILITY_THRESHOLD_PCT,
     NEAREST_2,
     POLICIES,
     REDUNDANT_BOOM,
     WIDEST_LEVER,
+    availability_measure,
     availability_pct,
     available_policies,
     distinct_selections,
@@ -256,7 +262,141 @@ def test_selection_serialises_for_the_scenario_runconfig():
     assert record["available"] is True
 
 
-def test_availability_is_measured_against_total_records():
+def test_availability_is_measured_against_the_sensors_own_deployed_period():
+    """Scattered gaps still read as gaps — the denominator only excludes non-deployment.
+
+    A column whose losses are spread across the campaign has a period of record that
+    spans essentially the whole series, so this case is unchanged by the deployed-period
+    fix. What changes is the *contiguous leading* gap of a late install, below.
+    """
     state = _mast((80.0,), availability={80.0: 0.5})
-    assert availability_pct(state, "Spd_80m") == pytest.approx(50.0, abs=0.5)
+    assert availability_pct(state, "Spd_80m") == pytest.approx(50.0, abs=1.0)
     assert availability_pct(state, "Spd_999m") == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Deployed-period availability (§12.3) — a sensor is not charged for the campaign
+# it was not installed for.
+# ---------------------------------------------------------------------------
+
+
+def _install_late(state: SessionState, column: str, fraction: float) -> None:
+    """Blank the first `fraction` of a column, as a sensor installed mid-campaign would be."""
+    cut = int(len(state.timeseries_df) * fraction)
+    state.timeseries_df.loc[state.timeseries_df.index[:cut], column] = np.nan
+
+
+def test_a_late_installed_sensor_is_not_charged_for_the_campaign_before_it_existed():
+    """The §12.3 defect: availability measured against total records charges a sensor
+    for every record before it was installed, so a perfectly healthy late-added sensor
+    scores below the 90% floor and axis A silently loses a level."""
+    state = _mast((80.0,))
+    _install_late(state, "Spd_80m", 0.30)  # installed 30% into the campaign, no gaps after
+
+    # Against total records this sensor reads ~70% and fails the floor.
+    assert availability_measure(state, "Spd_80m").pct == pytest.approx(100.0, abs=0.5)
+
+
+def test_datamodel_deployment_dates_define_the_window_when_present():
+    state = _mast((80.0,))
+    _install_late(state, "Spd_80m", 0.30)
+    start = state.timeseries_df.index[int(len(state.timeseries_df) * 0.30)]
+    state.sensor_inventory["Spd_80m"]["date_from"] = start.isoformat()
+
+    measure = availability_measure(state, "Spd_80m")
+    assert measure.basis == AVAILABILITY_BASIS_DATAMODEL
+    assert measure.pct == pytest.approx(100.0, abs=0.5)
+
+
+def test_a_missing_datamodel_date_falls_back_to_the_columns_own_period_of_record():
+    state = _mast((80.0,))
+    _install_late(state, "Spd_80m", 0.30)
+    assert "date_from" not in state.sensor_inventory["Spd_80m"]
+
+    measure = availability_measure(state, "Spd_80m")
+    assert measure.basis == AVAILABILITY_BASIS_RECORD
+    assert measure.pct == pytest.approx(100.0, abs=0.5)
+
+
+def test_a_gap_inside_the_deployed_window_is_still_charged():
+    """The fix must not forgive real downtime — only non-deployment."""
+    state = _mast((80.0,))
+    frame = state.timeseries_df
+    _install_late(state, "Spd_80m", 0.20)
+    # A contiguous outage in the middle of the deployed period.
+    mid = slice(int(len(frame) * 0.50), int(len(frame) * 0.70))
+    frame.loc[frame.index[mid], "Spd_80m"] = np.nan
+
+    measure = availability_measure(state, "Spd_80m")
+    # Deployed window is the last 80%; a fifth of the campaign is missing inside it.
+    assert measure.pct == pytest.approx(75.0, abs=1.5)
+    assert measure.pct < AVAILABILITY_THRESHOLD_PCT
+
+
+def test_the_policy_reports_which_basis_each_sensor_used():
+    """Disclosure: a reader must be able to tell a deployed-period figure from a
+    whole-campaign one, because they are not comparable."""
+    state = _mast((80.0, 100.0))
+    _install_late(state, "Spd_80m", 0.30)
+    state.sensor_inventory["Spd_100m"]["date_from"] = state.timeseries_df.index[0].isoformat()
+
+    selection = resolve_policy(state, AVAILABILITY_90)
+    bases = selection.detail["availability_basis"]
+    assert bases["100.0"] == AVAILABILITY_BASIS_DATAMODEL
+    assert bases["80.0"] == AVAILABILITY_BASIS_RECORD
+
+
+def test_a_sensor_removed_early_is_not_charged_for_the_campaign_after_it_left():
+    state = _mast((80.0,))
+    frame = state.timeseries_df
+    cut = int(len(frame) * 0.70)
+    frame.loc[frame.index[cut:], "Spd_80m"] = np.nan
+    state.sensor_inventory["Spd_80m"]["date_to"] = frame.index[cut - 1].isoformat()
+
+    measure = availability_measure(state, "Spd_80m")
+    assert measure.basis == AVAILABILITY_BASIS_DATAMODEL
+    assert measure.pct == pytest.approx(100.0, abs=0.5)
+
+
+# ---------------------------------------------------------------------------
+# Deployment dates read from the real Task 43 datamodels
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def horns_rev_session():
+    """Horns Rev carries genuinely staggered installs — Spd_58m predates the rest by ~13 months."""
+    from server.state.session import session as _session
+    from server.tools.data_io import _parse_datamodel, _parse_timeseries
+
+    uploads = Path(__file__).resolve().parents[1] / "data" / "uploads"
+    _parse_timeseries(_session, str(uploads / "HornsRev-MAST_timeseries_data.csv"))
+    _parse_datamodel(_session, str(uploads / "HornsRev-MAST_data_model.json"))
+    return _session
+
+
+def test_deployment_dates_are_carried_from_the_datamodel_into_the_inventory(horns_rev_session):
+    """The datamodel states when each instrument went up; nothing read it before."""
+    entry = horns_rev_session.sensor_inventory["Spd_58m"]
+    assert entry["date_from"].startswith("1999-05-24")
+
+    later = horns_rev_session.sensor_inventory["Spd_62m"]
+    assert later["date_from"].startswith("2000-06-21")
+
+
+def test_a_real_late_installed_sensor_clears_the_floor_once_measured_over_its_own_deployment(
+    horns_rev_session,
+):
+    """Spd_62m went up ~13 months into the record. Charged for the whole campaign it fails
+    the 90% floor; measured over its own deployment it passes — this is the §12.3 defect
+    on real data, not a synthetic construction."""
+    measure = availability_measure(horns_rev_session, "Spd_62m")
+    assert measure.basis == AVAILABILITY_BASIS_DATAMODEL
+    assert measure.pct >= AVAILABILITY_THRESHOLD_PCT
+
+    whole_campaign = (
+        horns_rev_session.timeseries_df["Spd_62m"].notna().sum()
+        / len(horns_rev_session.timeseries_df)
+        * 100.0
+    )
+    assert whole_campaign < AVAILABILITY_THRESHOLD_PCT

@@ -5,7 +5,7 @@
 // workflowStatus.node_statuses. SSE live streaming is wired via the run action
 // (the store polls refreshWorkflowStatus after each run; long runs can be
 // stopped via the Stop control).
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import {
   Background,
   Controls,
@@ -25,9 +25,18 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
+import { useSweepStore } from "../store/useSweepStore";
 import type { WorkflowCanvasNode, WorkflowCanvasEdge, StageKind } from "../lib/workflow";
 import type { WorkflowExecutionStatusResponse } from "../types/analysis";
+import type { SweepManifestScenario } from "../types/sweep";
 import { RunButton } from "./common/RunButton";
+import { CompareView } from "./CompareView";
+
+function scenarioLabel(scenario: SweepManifestScenario): string {
+  return [scenario.shear_fit_policy, scenario.shear_model, scenario.reference_source, scenario.ltc_algorithm]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 const STAGE_COLORS: Record<StageKind, string> = {
   dataset: "#083434",
@@ -158,13 +167,51 @@ export function WorkflowView() {
   const serverRunconfig = useWorkspaceStore((state) => state.serverRunconfig);
   const replaceWorkflowRunConfig = useWorkspaceStore((state) => state.replaceWorkflowRunConfig);
   const refreshWorkflowRuns = useWorkspaceStore((state) => state.refreshWorkflowRuns);
+  const loadScenarioIntoCanvas = useWorkspaceStore((state) => state.loadScenarioIntoCanvas);
+  const sessionId = useWorkspaceStore((state) => state.session?.session_id ?? "");
+  const apiBaseUrl = useWorkspaceStore((state) => state.apiBaseUrl);
+  const sweeps = useSweepStore((state) => state.sweeps);
+  const refreshSweeps = useSweepStore((state) => state.refreshSweeps);
+  const previewSweepScenarios = useSweepStore((state) => state.previewSweepScenarios);
 
+  const [mode, setMode] = useState<"canvas" | "compare">("canvas");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [snapshotName, setSnapshotName] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [configEditorOpen, setConfigEditorOpen] = useState(false);
   const [configText, setConfigText] = useState("");
   const [configError, setConfigError] = useState<string | null>(null);
+  const [sweepLoaderOpen, setSweepLoaderOpen] = useState(false);
+  const [sweepLoaderSweepId, setSweepLoaderSweepId] = useState("");
+  const [sweepLoaderScenarios, setSweepLoaderScenarios] = useState<SweepManifestScenario[]>([]);
+  const [sweepLoaderConfigHash, setSweepLoaderConfigHash] = useState("");
+  const [sweepLoaderBusy, setSweepLoaderBusy] = useState(false);
+
+  const openSweepLoader = () => {
+    setSweepLoaderOpen(true);
+    setSweepLoaderSweepId("");
+    setSweepLoaderScenarios([]);
+    setSweepLoaderConfigHash("");
+    void refreshSweeps(apiBaseUrl, sessionId);
+  };
+
+  const chooseSweepToLoad = async (sweepId: string) => {
+    setSweepLoaderSweepId(sweepId);
+    setSweepLoaderConfigHash("");
+    setSweepLoaderScenarios(sweepId ? await previewSweepScenarios(apiBaseUrl, sessionId, sweepId) : []);
+  };
+
+  const confirmLoadScenario = async () => {
+    if (!sweepLoaderSweepId || !sweepLoaderConfigHash) return;
+    setSweepLoaderBusy(true);
+    try {
+      await loadScenarioIntoCanvas(sweepLoaderSweepId, sweepLoaderConfigHash);
+      setMode("canvas");
+    } finally {
+      setSweepLoaderBusy(false);
+      setSweepLoaderOpen(false);
+    }
+  };
 
   // React Flow local state mirrors the store; changes propagate back.
   const [rfNodes, setRfNodes] = useState(nodes);
@@ -249,6 +296,30 @@ export function WorkflowView() {
     setConfigEditorOpen(true);
   };
 
+  const configFileInputRef = useRef<HTMLInputElement>(null);
+
+  const openConfigFilePicker = () => configFileInputRef.current?.click();
+
+  const onConfigFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = ""; // let the same file be re-selected later
+    if (!file) return;
+    // FileReader rather than Blob#text(): more portable across jsdom/Node's differing
+    // File/Blob implementations, and this is the standard way to read a picked file anyway.
+    const text = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(reader.error ?? new Error("Could not read file"));
+      reader.readAsText(file);
+    });
+    // Load the raw text into the same editor "Edit config" uses, unvalidated — Save and
+    // run's existing JSON checks catch a bad file exactly as they would a bad paste. No
+    // second validation path to keep in sync with the first.
+    setConfigText(text);
+    setConfigError(null);
+    setConfigEditorOpen(true);
+  };
+
   const saveConfigAndRun = async () => {
     let parsed: unknown;
     try {
@@ -283,14 +354,30 @@ export function WorkflowView() {
           disabled={isRunning}
         />
         <RunButton label="Stop" variant="secondary" onClick={stopWorkflowGraph} disabled={!isRunning} />
+        <RunButton label="Load from sweep" variant="secondary" onClick={openSweepLoader} />
+        <RunButton label="Upload config" variant="secondary" onClick={openConfigFilePicker} disabled={isRunning} />
+        <input
+          ref={configFileInputRef}
+          type="file"
+          accept=".json,application/json"
+          onChange={(event) => void onConfigFileSelected(event)}
+          style={{ display: "none" }}
+        />
         <RunButton label="Edit config" variant="secondary" onClick={openConfigEditor} disabled={isRunning} />
         <RunButton label="Rebuild from config" variant="secondary" onClick={rebuildWorkflowGraph} />
+        <RunButton
+          label={mode === "canvas" ? "Compare runs" : "Back to canvas"}
+          variant="secondary"
+          onClick={() => setMode((current) => (current === "canvas" ? "compare" : "canvas"))}
+        />
         <span className="muted workflow-run-status">
           {isRunning ? "running" : workflowStatus?.run_id ? `run ${workflowStatus.run_id.slice(0, 8)}` : "no run yet"}
         </span>
       </div>
 
-      {(isRunning || workflowStatus?.events.length) ? (
+      {mode === "compare" ? <CompareView /> : null}
+
+      {mode === "canvas" && (isRunning || workflowStatus?.events.length) ? (
         <div className="workflow-progress" role="status">
           <span><strong>{progress.completed}/{progress.total}</strong> nodes complete</span>
           <span>Elapsed <strong>{formatDuration(progress.elapsedMs)}</strong></span>
@@ -298,6 +385,7 @@ export function WorkflowView() {
         </div>
       ) : null}
 
+      {mode === "canvas" ? (
       <div className="workflow-canvas-wrap">
         <ReactFlow
           nodes={rfNodes}
@@ -324,11 +412,12 @@ export function WorkflowView() {
         {canvasEmpty ? (
           <div className="workflow-empty-hint">
             <p>
-              The canvas is empty. Load measurement data and save a hub height in <strong>Data import</strong>;
-              GoKaatru will prepare a default workflow here for you to edit and run.
+              The canvas is empty. Use <strong>Load from sweep</strong> to bring in one
+              scenario&apos;s exact config from a completed sweep, edit it here, and run.
             </p>
             <p className="muted">
-              Use <strong>Rebuild from config</strong> to load the current configuration manually.
+              Or <strong>Upload config</strong> a saved runconfig file, or use
+              <strong> Edit config</strong> to build one by hand.
             </p>
           </div>
         ) : null}
@@ -341,7 +430,10 @@ export function WorkflowView() {
           />
         ) : null}
       </div>
+      ) : null}
 
+      {mode === "canvas" ? (
+      <>
       <div className="workflow-snapshots">
         <h4>Snapshots</h4>
         <div className="form-grid">
@@ -432,6 +524,73 @@ export function WorkflowView() {
               <div className="path-actions">
                 <RunButton label="Save and run" onClick={() => void saveConfigAndRun()} />
                 <RunButton label="Cancel" variant="secondary" onClick={() => setConfigEditorOpen(false)} />
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      </>
+      ) : null}
+
+      {sweepLoaderOpen ? (
+        <div className="modal-overlay" role="presentation">
+          <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="sweep-loader-title">
+            <header className="modal-head">
+              <h2 id="sweep-loader-title">Load from sweep</h2>
+              <button type="button" className="link-button" onClick={() => setSweepLoaderOpen(false)}>Close</button>
+            </header>
+            <div className="modal-body">
+              <label className="form-field">
+                <span>Sweep</span>
+                <select
+                  aria-label="Sweep"
+                  value={sweepLoaderSweepId}
+                  onChange={(event) => void chooseSweepToLoad(event.target.value)}
+                >
+                  <option value="">Select…</option>
+                  {sweeps.map((sweep) => (
+                    <option key={sweep.sweep_id} value={sweep.sweep_id}>
+                      {sweep.sweep_id} · {sweep.counts.admissible}/{sweep.counts.completed} admissible
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {sweepLoaderSweepId ? (
+                sweepLoaderScenarios.length === 0 ? (
+                  <p className="muted">No scenarios in this sweep.</p>
+                ) : (
+                  <ul className="workflow-run-list sweep-scenario-list">
+                    {sweepLoaderScenarios.map((scenario) => (
+                      <li key={scenario.config_hash}>
+                        <label className="workflow-run-option">
+                          <input
+                            type="radio"
+                            name="sweep-scenario"
+                            checked={sweepLoaderConfigHash === scenario.config_hash}
+                            onChange={() => setSweepLoaderConfigHash(scenario.config_hash)}
+                          />
+                          <span>
+                            <strong>{scenarioLabel(scenario)}</strong>
+                            <small>
+                              {scenario.config_hash.slice(0, 8)} ·{" "}
+                              {scenario.admissible ? "admissible" : "excluded"} · {scenario.status}
+                            </small>
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                )
+              ) : null}
+
+              <div className="path-actions">
+                <RunButton
+                  label={sweepLoaderBusy ? "Loading…" : "Load"}
+                  onClick={() => void confirmLoadScenario()}
+                  disabled={!sweepLoaderConfigHash || sweepLoaderBusy}
+                />
+                <RunButton label="Cancel" variant="secondary" onClick={() => setSweepLoaderOpen(false)} />
               </div>
             </div>
           </section>

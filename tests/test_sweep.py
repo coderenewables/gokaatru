@@ -28,7 +28,7 @@ from server.core.admissibility import (
 )
 from server.core.scenario_context import scenario_context
 from server.core.scenario_pipeline import ScenarioSpec, run_scenario
-from server.core.scenario_result import AXIS_COLUMNS, METRIC_COLUMNS
+from server.core.scenario_result import AXIS_COLUMNS, METRIC_COLUMNS, fixed_prefix_hash
 from server.core.sweep import (
     SweepSpec,
     list_sweeps,
@@ -37,6 +37,7 @@ from server.core.sweep import (
     run_sweep,
 )
 from server.state.session import SessionState
+from tests import oracles
 
 HEIGHTS = (40.0, 60.0, 80.0, 100.0)
 HUB_M = 120.0
@@ -509,6 +510,28 @@ def test_a_changed_fixed_prefix_changes_every_hash(tmp_path):
     assert {row["config_hash"] for row in before["results"]}.isdisjoint(
         row["config_hash"] for row in after["results"]
     )
+
+
+def test_fixed_prefix_hash_matches_an_independent_recomputation(tmp_path):
+    """Oracle check: the hash is exactly sha256(sorted-JSON of its seven inputs)[:16].
+
+    Guards the hash itself, independent of ``_stable_hash`` — a change to what the hash
+    covers or how it's encoded should break this test, not just the "changes when an
+    input changes" tests above.
+    """
+    base = _base_state(tmp_path)
+    base.cleaning_log = [{"rule": "icing", "removed": 120}]
+
+    expected = oracles.fixed_prefix_hash_oracle(
+        cleaning_log=base.cleaning_log,
+        reanalysis_identity=base.reanalysis_cache_identity,
+        reanalysis_sources=list(base.reanalysis_interpolated),
+        sensor_inventory=list(base.sensor_inventory or {}),
+        hub_height_m=base.get_hub_height_m(),
+        measurement_type=base.get_measurement_type(),
+        power_curve=base.get_power_curve_name(),
+    )
+    assert fixed_prefix_hash(base) == expected
 
 
 def test_progress_events_report_prefixes_and_scenarios(tmp_path):

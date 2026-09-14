@@ -9,7 +9,6 @@ vi.spyOn(globalThis, "fetch").mockResolvedValue(
 );
 
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
-import { PhaseTabs } from "../components/PhaseTabs";
 import { CleaningView } from "../components/stages/CleaningView";
 import { DataLoadView } from "../components/stages/DataLoadView";
 import { createDefaultWindAnalysisConfig } from "../lib/defaultConfig";
@@ -25,51 +24,35 @@ beforeEach(() => {
     summary: { completed_steps: [], hub_height_m: 120 } as never,
     busyLabel: null,
     sensors: SENSORS,
-    activeTab: "import",
+    activePhase: "prepare",
+    selectedStage: "data",
+    prepareSection: "data",
     config: createDefaultWindAnalysisConfig(),
   });
 });
 
-describe("PhaseTabs ordering", () => {
-  it("puts cleaning and the Analysis Engine ahead of Canvas and the Stepper", () => {
-    render(<PhaseTabs />);
-
-    const labels = screen
-      .getAllByRole("button")
-      .map((button) => button.textContent);
-
-    expect(labels).toEqual([
-      "Data import",
-      "Data cleaning",
-      "Analysis Engine",
-      "Canvas",
-      "Stepper",
-      "Results",
-      "Copilot",
-      "Sensor Overview",
-      "Compare",
-      "How To",
-    ]);
-  });
-
-  it("selects the cleaning tab when it is clicked", () => {
-    render(<PhaseTabs />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Data cleaning" }));
-
-    expect(useWorkspaceStore.getState().activeTab).toBe("cleaning");
-  });
-});
+// Top-level nav ordering/selection is covered by PhaseRail.test.tsx now that Data import
+// and Data cleaning are Prepare-phase sections rather than their own tabs.
 
 describe("Data cleaning is optional", () => {
-  it("offers a skip action that jumps straight to the Analysis Engine", () => {
-    useWorkspaceStore.setState({ activeTab: "cleaning" });
+  it("offers a skip action that jumps straight to the Run phase", () => {
+    useWorkspaceStore.setState({ activePhase: "prepare", selectedStage: "cleaning", prepareSection: "pipeline" });
     render(<CleaningView />);
 
     expect(screen.getByText("Data cleaning is optional")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /skip cleaning/i }));
 
-    expect(useWorkspaceStore.getState().activeTab).toBe("engine");
+    expect(useWorkspaceStore.getState().activePhase).toBe("run");
+  });
+
+  it("offers a link to sensor review that switches Prepare's section without leaving the phase", () => {
+    useWorkspaceStore.setState({ activePhase: "prepare", selectedStage: "cleaning", prepareSection: "pipeline" });
+    render(<CleaningView />);
+
+    fireEvent.click(screen.getByRole("button", { name: /open sensor review/i }));
+
+    expect(useWorkspaceStore.getState().activePhase).toBe("prepare");
+    expect(useWorkspaceStore.getState().prepareSection).toBe("sensors");
   });
 });
 

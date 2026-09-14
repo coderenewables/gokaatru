@@ -40,6 +40,15 @@ _ISO_DATE_PREFIX = re.compile(r"^\d{4}-\d{1,2}-\d{1,2}")
 # Epoch-second range for plausible wind-campaign data (1990-01-01 .. 2050-01-01).
 _EPOCH_SECOND_MIN = 631_152_000.0
 _EPOCH_SECOND_MAX = 2_524_608_000.0
+# How a boom pair was resolved, reported per resolution in runconfig's
+# site.sensor_resolution. RESOLUTION_COVERAGE_TIE is distinct from RESOLUTION_COVERAGE
+# because a coverage figure that did not actually decide anything must not read as if
+# it had: the name broke the tie, and only the name.
+RESOLUTION_PRIMARY = "primary_flag"
+RESOLUTION_COVERAGE = "coverage"
+RESOLUTION_COVERAGE_TIE = "coverage_tie_name_alphabetical"
+RESOLUTION_NAME = "name_alphabetical"
+
 CANONICAL_SENSOR_TYPES = {
     "air_temperature": "temperature",
     "air_pressure": "pressure",
@@ -112,6 +121,36 @@ def _extract_boom_orientation(point: dict[str, object]) -> float | None:
     return None
 
 
+def _extract_deployment_dates(point: dict[str, object]) -> tuple[str | None, str | None]:
+    """Read when a measurement point's instrument was installed and removed.
+
+    Task 43 records these on each ``sensor`` entry (and mirrors them on
+    ``logger_measurement_config``). A point can carry several sensors across a campaign
+    as instruments are swapped, so the deployment spans the earliest ``date_from`` to the
+    latest ``date_to``. A null ``date_to`` means "still installed" — every one of the
+    three reference campaigns leaves it null — and is reported as None rather than
+    guessed at, so the availability window falls back to the period of record.
+    """
+    starts: list[str] = []
+    ends: list[str] = []
+    for key in ("sensor", "logger_measurement_config"):
+        entries = point.get(key)
+        if isinstance(entries, dict):
+            entries = [entries]
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            start = entry.get("date_from")
+            end = entry.get("date_to")
+            if isinstance(start, str) and start.strip():
+                starts.append(start)
+            if isinstance(end, str) and end.strip():
+                ends.append(end)
+    return (min(starts) if starts else None, max(ends) if ends else None)
+
+
 def _build_sensor_inventory(points: list[dict[str, object]]) -> dict[str, dict[str, object]]:
     """Capture every named Task 43 measurement point for inventory presentation."""
     inventory: dict[str, dict[str, object]] = {}
@@ -128,6 +167,11 @@ def _build_sensor_inventory(points: list[dict[str, object]]) -> dict[str, dict[s
         boom_orientation = _extract_boom_orientation(point)
         if boom_orientation is not None:
             entry["boom_orientation_deg"] = boom_orientation
+        date_from, date_to = _extract_deployment_dates(point)
+        if date_from is not None:
+            entry["date_from"] = date_from
+        if date_to is not None:
+            entry["date_to"] = date_to
         inventory[sensor_name] = entry
     return inventory
 
@@ -563,26 +607,88 @@ def _resolve_boom_pair(
     # 1. Check for primary flag
     primary = [name for name, meta in candidates if meta.get("is_primary") is True]
     if len(primary) == 1:
-        return primary[0], "primary_flag"
+        return primary[0], RESOLUTION_PRIMARY
 
     # 2. Coverage-based fallback (requires timeseries)
     if timeseries_df is not None:
-        best_name = ""
-        best_count = -1
-        for name, _ in candidates:
-            if name in timeseries_df.columns:
-                count = int(timeseries_df[name].notna().sum())
-            else:
-                count = -1
-            if count > best_count:
-                best_count = count
-                best_name = name
-        if best_name:
-            return best_name, "coverage"
+        counts = {
+            name: int(timeseries_df[name].notna().sum()) if name in timeseries_df.columns else -1
+            for name, _ in candidates
+        }
+        best_count = max(counts.values())
+        if best_count >= 0:
+            # Both booms of a pair are normally logged on one channel schedule, so an
+            # exact coverage tie is the usual case rather than a corner one - every pair
+            # in Horns Rev and Launakalana ties. Taking the first candidate seen made the
+            # winner a function of document order, worth 1.15% of mean wind speed at Horns
+            # Rev 30 m. Ties fall through to the documented alphabetical rule, and say so.
+            tied = sorted(name for name, count in counts.items() if count == best_count)
+            if len(tied) == 1:
+                return tied[0], RESOLUTION_COVERAGE
+            return tied[0], RESOLUTION_COVERAGE_TIE
 
     # 3. Alphabetical name tie-break
     sorted_names = sorted(name for name, _ in candidates)
-    return sorted_names[0], "name_alphabetical"
+    return sorted_names[0], RESOLUTION_NAME
+
+
+def _declared_sd_column(point: dict[str, object]) -> str | None:
+    """Return the turbulence column a Task 43 point declares, if it declares one.
+
+    Task 43 records every logged channel on ``logger_measurement_config[].column_name``
+    with a ``statistic_type_id``, so the standard already says which column holds the
+    standard deviation. Reading it means a real export whose columns are named
+    ``WS_80m_Avg``/``WS_80m_SD`` is understood, where the ``{speed}_sd`` convention
+    could only ever pair ``Spd_80m`` with ``Spd_80m_sd``.
+    """
+    configs = point.get("logger_measurement_config")
+    if isinstance(configs, dict):
+        configs = [configs]
+    if not isinstance(configs, list):
+        return None
+    for config in configs:
+        if not isinstance(config, dict):
+            continue
+        columns = config.get("column_name")
+        if isinstance(columns, dict):
+            columns = [columns]
+        if not isinstance(columns, list):
+            continue
+        for column in columns:
+            if not isinstance(column, dict):
+                continue
+            if str(column.get("statistic_type_id", "")).strip().lower() != "sd":
+                continue
+            name = column.get("column_name")
+            if isinstance(name, str) and name.strip():
+                return name.strip()
+    return None
+
+
+def _resolve_sd_column(
+    speed_column: str,
+    point: dict[str, object],
+    timeseries_df: pd.DataFrame | None,
+) -> str | None:
+    """Resolve a height's turbulence column, preferring a declaration that actually exists.
+
+    The mapping used to set ``sd_col`` to ``f"{speed}_sd"`` unconditionally, whether or
+    not such a column was ever logged — Boxkite's mapping carried ``Spd_250m_sd`` against
+    a CSV with no standard-deviation channels at all. The reference was inert (the icing
+    rule skips a column it cannot find) but untrue, and it travelled into ``runconfig``.
+
+    A declaration is only trusted when the column it names is present: Horns Rev declares
+    ``wind_speed__sd__062__anemometer__201__m/s__201`` while its CSV holds ``Spd_62m_sd``,
+    so trusting declarations blindly would lose a real column. Existence cannot be checked
+    before the timeseries is loaded, so with no data the convention still applies.
+    """
+    declared = _declared_sd_column(point)
+    if timeseries_df is None:
+        return declared or f"{speed_column}_sd"
+    if declared is not None and declared in timeseries_df.columns:
+        return declared
+    conventional = f"{speed_column}_sd"
+    return conventional if conventional in timeseries_df.columns else None
 
 
 def _build_sensor_mapping(
@@ -653,17 +759,18 @@ def _build_sensor_mapping(
                     "chosen": chosen_name,
                     "resolution": method,
                 })
-                if method == "name_alphabetical":
+                if method in (RESOLUTION_NAME, RESOLUTION_COVERAGE_TIE):
                     logger.warning(
-                        "Boom-pair at %.1fm (%s): no primary flag and no timeseries "
-                        "coverage data; resolved alphabetically to '%s'",
+                        "Boom-pair at %.1fm (%s): no primary flag and coverage does not "
+                        "separate the candidates; resolved alphabetically to '%s'",
                         height,
                         field,
                         chosen_name,
                     )
             slots[field] = chosen_name
             if field == "speed_col":
-                slots["sd_col"] = f"{chosen_name}_sd"
+                chosen_meta = next(meta for name, meta in field_sensors if name == chosen_name)
+                slots["sd_col"] = _resolve_sd_column(chosen_name, chosen_meta, timeseries_df)
         if slots.get("speed_col") is not None:
             mapping[height] = slots
     return mapping, resolution_log

@@ -20,6 +20,7 @@ import type {
   ScenarioRow,
   SweepAxes,
   SweepManifest,
+  SweepManifestScenario,
   SweepProgressEvent,
   SweepRequestBody,
   SweepSummary,
@@ -120,6 +121,12 @@ interface SweepStore {
   stop: () => void;
   refreshSweeps: (baseUrl: string, sessionId: string) => Promise<void>;
   openSweep: (baseUrl: string, sessionId: string, sweepId: string) => Promise<void>;
+  /**
+   * Peek a sweep's scenario list without adopting it — unlike `openSweep`, this must not
+   * touch `manifest`/`rows`/`phase`, since Canvas's "Load from sweep" picker calls it while
+   * Run/Interrogate may already have a different sweep open.
+   */
+  previewSweepScenarios: (baseUrl: string, sessionId: string, sweepId: string) => Promise<SweepManifestScenario[]>;
   downloadRunconfig: (baseUrl: string, sessionId: string, configHash: string) => Promise<void>;
 
   setMetric: (metric: MetricColumn) => void;
@@ -359,6 +366,11 @@ export const useSweepStore = create<SweepStore>((set, get) => ({
     } catch (error) {
       set({ phase: "error", error: error instanceof Error ? error.message : String(error) });
     }
+  },
+
+  previewSweepScenarios: async (baseUrl, sessionId, sweepId) => {
+    const outcome = await getSweep(baseUrl, sessionId, sweepId);
+    return outcome.manifest.scenarios;
   },
 
   downloadRunconfig: async (baseUrl, sessionId, configHash) => {

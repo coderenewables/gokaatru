@@ -144,3 +144,38 @@ describe("gate chips on a result row", () => {
     expect(summariseGates([row]).map((entry) => entry.gate)).toEqual(["extrapolation_ratio"]);
   });
 });
+
+describe("previewSweepScenarios", () => {
+  // Canvas's "Load from sweep" picker peeks at a sweep's scenario list without disturbing
+  // whatever sweep Run/Interrogate currently have open — unlike openSweep, which is what
+  // those screens read from and would be silently hijacked by a picker peek.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useSweepStore.setState({
+      phase: "complete",
+      rows: [{ config_hash: "already-open" } as unknown as ScenarioRow],
+      manifest: { sweep_id: "already-open-sweep" } as unknown as SweepManifest,
+    });
+  });
+
+  it("returns the sweep's scenario list without touching rows, manifest or phase", async () => {
+    const scenarios = [
+      { config_hash: "s1", status: "ok", admissible: true, shear_fit_policy: "nearest_2" },
+      { config_hash: "s2", status: "failed", admissible: false, shear_fit_policy: "widest_lever" },
+    ];
+    getSweep.mockResolvedValue({
+      manifest: { sweep_id: "sweep-9", scenarios },
+      results: [],
+    });
+
+    const returned = await useSweepStore.getState().previewSweepScenarios("http://api", "session-1", "sweep-9");
+
+    expect(getSweep).toHaveBeenCalledWith("http://api", "session-1", "sweep-9");
+    expect(returned).toEqual(scenarios);
+
+    const state = useSweepStore.getState();
+    expect(state.rows).toEqual([{ config_hash: "already-open" }]);
+    expect(state.manifest).toEqual({ sweep_id: "already-open-sweep" });
+    expect(state.phase).toBe("complete");
+  });
+});

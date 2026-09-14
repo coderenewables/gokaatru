@@ -4,6 +4,7 @@
 // is already the largest in the frontend. Same conventions: the session header is derived
 // from the path, and a non-2xx response becomes an Error carrying the backend's `detail`.
 import type {
+  PrefixHash,
   SweepAxes,
   SweepEstimate,
   SweepManifest,
@@ -53,6 +54,11 @@ async function requestJson<T>(
 /** Which axis levels this session can actually run, and why not where it cannot. */
 export async function getSweepAxes(baseUrl: string, sessionId: string): Promise<SweepAxes> {
   return requestJson<SweepAxes>(baseUrl, sessionId, `/api/sessions/${sessionId}/sweep/axes`);
+}
+
+/** The stamped fixed-prefix hash, available before any sweep runs (design doc §2). */
+export async function getPrefixHash(baseUrl: string, sessionId: string): Promise<PrefixHash> {
+  return requestJson<PrefixHash>(baseUrl, sessionId, `/api/sessions/${sessionId}/sweep/prefix-hash`);
 }
 
 /** Price a specification without running it — the designer's cost counter (§9.1). */

@@ -72,7 +72,8 @@ export function CleaningView() {
   const applyCleaning = useWorkspaceStore((state) => state.applyCleaning);
   const undoCleaning = useWorkspaceStore((state) => state.undoCleaning);
   const refreshCleaningLog = useWorkspaceStore((state) => state.refreshCleaningLog);
-  const setActiveTab = useWorkspaceStore((state) => state.setActiveTab);
+  const setActivePhase = useWorkspaceStore((state) => state.setActivePhase);
+  const setPrepareSection = useWorkspaceStore((state) => state.setPrepareSection);
 
   const [log, setLog] = useState<CleaningLogEntry[]>([]);
 
@@ -146,7 +147,7 @@ export function CleaningView() {
             straight to the Analysis Engine.
           </p>
         </div>
-        <RunButton label="Skip cleaning →" variant="secondary" onClick={() => setActiveTab("engine")} />
+        <RunButton label="Skip cleaning →" variant="secondary" onClick={() => setActivePhase("run")} />
       </section>
 
       <section className="path-panel">
@@ -155,7 +156,7 @@ export function CleaningView() {
           Inspect per-sensor statistics (max / min / mean / Weibull), wind roses per height, combined
           diurnal profiles, the temperature diurnal profile, and the measured shear profile.
         </p>
-        <RunButton label="Open sensor review" onClick={() => setActiveTab("sensor_review")} />
+        <RunButton label="Open sensor review" onClick={() => setPrepareSection("sensors")} />
       </section>
 
       <section className="path-panel">

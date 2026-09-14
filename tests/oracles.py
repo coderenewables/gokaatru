@@ -10,6 +10,9 @@ the thing it verifies is not an oracle.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+
 import numpy as np
 import pandas as pd
 
@@ -333,3 +336,32 @@ def annual_maxima(series: pd.Series) -> dict[int, float]:
     """
     values = series.dropna()
     return {int(year): float(group.max()) for year, group in values.groupby(values.index.year)}
+
+
+def fixed_prefix_hash_oracle(
+    *,
+    cleaning_log: list,
+    reanalysis_identity: object,
+    reanalysis_sources: list,
+    sensor_inventory: list,
+    hub_height_m: float | None,
+    measurement_type: str | None,
+    power_curve: str | None,
+) -> str:
+    """Independently recompute the fixed-prefix hash from its seven inputs.
+
+    Reimplements the sha256-of-sorted-JSON scheme by hand rather than importing
+    ``server.core.scenario_result._stable_hash`` — an oracle that shares the hashing
+    code with the thing it verifies could not catch a change to that code itself.
+    """
+    payload = {
+        "cleaning_log": cleaning_log,
+        "reanalysis_identity": reanalysis_identity,
+        "reanalysis_sources": sorted(reanalysis_sources),
+        "sensor_inventory": sorted(sensor_inventory),
+        "hub_height_m": hub_height_m,
+        "measurement_type": measurement_type,
+        "power_curve": power_curve,
+    }
+    encoded = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:16]

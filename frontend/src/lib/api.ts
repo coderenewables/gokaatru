@@ -17,6 +17,8 @@ import type {
   SensorComparisonSummary,
   ApiHealthResponse,
   CoverageDetail,
+  DataModelDraft,
+  DataModelSpec,
   DatasetPreview,
   HttpMethod,
   LtcAlgorithm,
@@ -384,6 +386,26 @@ export async function uploadSessionFile(
   return requestJson(baseUrl, `/api/sessions/${sessionId}/uploads/${kind}`, {
     method: "POST",
     body: formData,
+  });
+}
+
+// Data model builder — the CSV-only path into a Task 43 data model.
+
+export async function getDataModelDraft(
+  baseUrl: string,
+  sessionId: string,
+): Promise<DataModelDraft> {
+  return requestJson<DataModelDraft>(baseUrl, `/api/sessions/${sessionId}/datamodel/draft`);
+}
+
+export async function buildDataModel(
+  baseUrl: string,
+  sessionId: string,
+  spec: DataModelSpec,
+): Promise<Record<string, unknown>> {
+  return requestJson(baseUrl, `/api/sessions/${sessionId}/datamodel/build`, {
+    method: "POST",
+    body: JSON.stringify(spec),
   });
 }
 

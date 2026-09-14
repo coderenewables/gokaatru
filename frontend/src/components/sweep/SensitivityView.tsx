@@ -9,12 +9,12 @@
 // not a recommendation**: the engine nominates no central estimate (§9.5), and changing
 // the anchor moves the bars without moving the reported spread, which is computed over
 // the whole admissible set and is anchor-independent.
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
-import { useSweepStore } from "../../store/useSweepStore";
+import { useSweepStore, spreadKey } from "../../store/useSweepStore";
+import { useWorkspaceStore } from "../../store/useWorkspaceStore";
 import {
   admissibleRows,
-  decomposeVariance,
   filterRows,
   formatMetric,
   spreadStats,
@@ -26,20 +26,42 @@ export function SensitivityView() {
   const metric = useSweepStore((state) => state.metric);
   const filters = useSweepStore((state) => state.filters);
 
+  const sweepId = useSweepStore((state) => state.manifest?.sweep_id ?? "");
+  const spread = useSweepStore((state) => state.spread);
+  const loadSpread = useSweepStore((state) => state.loadSpread);
+  const apiBaseUrl = useWorkspaceStore((state) => state.apiBaseUrl);
+  const session = useWorkspaceStore((state) => state.session);
+
   const good = useMemo(() => admissibleRows(filterRows(rows, filters)), [rows, filters]);
-  const contributions = useMemo(() => decomposeVariance(good, metric), [good, metric]);
+  const hashes = useMemo(() => good.map((row) => row.config_hash), [good]);
   const stats = useMemo(() => spreadStats(good, metric), [good, metric]);
+
+  // The decomposition is computed server-side (server/core/sweep_analysis.py) so that one
+  // implementation of it exists rather than two. Cached per sweep+metric+selection, so a
+  // metric switch or filter toggle re-fetches only what it has not already seen.
+  useEffect(() => {
+    if (!session || hashes.length < 2) return;
+    void loadSpread(apiBaseUrl, session.session_id, metric, hashes);
+  }, [apiBaseUrl, session, metric, hashes, loadSpread]);
+
+  const contributions = spread[spreadKey(sweepId, metric, hashes)] ?? [];
 
   if (rows.length === 0) {
     return <p className="muted">Run a sweep to decompose its spread.</p>;
   }
-  if (contributions.length === 0 || good.length < 2) {
+  if (good.length < 2) {
     return (
       <p className="muted">
         A decomposition needs at least two admissible scenarios carrying{" "}
         {METRIC_META[metric].label}. This sweep has {good.length}.
       </p>
     );
+  }
+  if (contributions.length === 0) {
+    // Distinct from the case above: there are rows to decompose, the answer is in
+    // flight. Reporting "not enough scenarios" here would be a false statement about
+    // the data rather than a statement about the request.
+    return <p className="muted">Decomposing the spread…</p>;
   }
 
   const meta = METRIC_META[metric];
@@ -119,7 +141,7 @@ export function SensitivityView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {entry.levelMeans.map((level) => (
+                  {entry.level_means.map((level) => (
                     <tr key={level.level}>
                       <td>{level.level.replace(/_/g, " ")}</td>
                       <td>{formatMetric(level.mean, metric)}</td>

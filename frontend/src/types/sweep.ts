@@ -313,3 +313,24 @@ export const LTC_ALGORITHMS = [
   "speedsort",
   "xgboost",
 ] as const;
+
+
+/**
+ * One axis's contribution to a metric's spread, as returned by
+ * `POST /sessions/{id}/sweep/{sweep_id}/spread`.
+ *
+ * Computed server-side in `server/core/sweep_analysis.py`. It used to be computed here,
+ * which left the statistic unreachable from anything but this page — including the
+ * Copilot, which then answered questions about a spread it could not see.
+ */
+export interface AxisContribution {
+  axis: string;
+  /** Distinct levels present in the rows analysed. An axis with 1 has no share by
+   *  construction: it was not varied, which is not the same as not mattering. */
+  levels: number;
+  /** Share of total variance explained by this axis, 0-1. */
+  share: number;
+  /** Spread between the best and worst level means, in metric units. */
+  swing: number;
+  level_means: Array<{ level: string; mean: number; count: number }>;
+}

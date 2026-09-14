@@ -135,4 +135,6 @@ def test_all_tools_registered() -> None:
     # screen; the sweep engine's HTTP route and this tool converge on the same core fn).
     # 227 + draft_data_model/build_data_model (2026-09: a campaign delivered as a bare CSV
     # had no way to reach a sensor mapping at all).
-    assert len(tools) == 229
+    # 229 + list_sweeps/get_sweep_summary/analyze_sweep_spread (2026-09: the sweep engine
+    # was HTTP-only, so the assistant could not see a sweep and answered about one anyway).
+    assert len(tools) == 232

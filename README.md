@@ -4,7 +4,7 @@
 
 GoKaatru ships as two parts that work together:
 
-- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **226 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration, and WindKit.
+- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **232 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration, and WindKit.
 - **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison. (The backend WindKit tool surface remains available via the API/MCP server, but the frontend no longer ships a dedicated WindKit tab.)
 
 State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The frontend's convenience fields are **derived mirrors** of canonical backend keys, not independent state — the mapping is defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
@@ -153,6 +153,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/sessions/{id}/config/import` | POST | Import a complete runconfig JSON payload |
 | `/sessions/{id}/summary` | GET | Workflow progress and analysis readiness |
 | `/sessions/{id}/uploads/{timeseries\|datamodel}` | POST | Upload a file (multipart) |
+| `/sessions/{id}/sweep/{sweep_id}/spread` | POST | Decompose one sweep metric's variance across the five scenario axes |
 | `/sessions/{id}/datamodel/draft` | GET | Draft a Task 43 reading of the loaded timeseries columns (header inference, for review) |
 | `/sessions/{id}/datamodel/build` | POST | Build a minimal Task 43 data model from declared columns, persist it, and load it |
 | `/sessions/{id}/sensors` | GET | Sensor inventory |
@@ -198,6 +199,11 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 
 ### Configuration
 - `get_run_config`, `update_run_config`, `save_run_config`, `load_run_config`, `get_analysis_summary`
+
+### Scenario sweep (Analysis Engine)
+- `get_fixed_prefix_hash`, `list_sweeps`, `get_sweep_summary`, `analyze_sweep_spread`
+- The rest of the sweep engine remains HTTP-only; these four are the read surface an
+  assistant needs to answer questions about a completed sweep instead of guessing.
 
 ### Data I/O
 - `parse_timeseries`, `parse_datamodel`, `list_sensors`, `get_period_of_record`, `get_data_coverage`
@@ -296,6 +302,7 @@ invites use:
 | Fewer than **six complete annual means** for clipping | After the completeness gate below. |
 | Inferred timestep not in `{1, 2, 5, 10, 15, 30, 60}` minutes | A silently repaired cadence propagates into gap statistics, diurnal aggregation and ERA5 alignment with no trace. |
 | Datamodel declares no timezone | A wrong assumption here is silent and corrupts every LTC. Provide `timezone` (IANA) or `offset_from_utc_hrs` in `logger_main_config`. The data model builder refuses to emit a document without one, for the same reason. |
+| No hub-height series when an LTC is requested | The LTC corrects the series at the height the answer is reported at. Correcting a raw sensor instead publishes a measurement from a different height under a hub-height label, which nothing downstream can detect. Extrapolate to hub height first; the refusal names the missing column. |
 | A built data model column with no declared height | `build_data_model` names the column instead of defaulting. 0 m is a real height, and a sensor silently placed on the ground is not detectable in any downstream result. |
 | Degenerate (vertical) relationship in total least squares | The slope is genuinely undefined; the old code returned a `1e12` sentinel. |
 
@@ -309,6 +316,9 @@ invites use:
 | SpeedSort binning | **12 sectors × 30°**, min **200** records/sector | Sparse sectors fall back to the all-sector fit; `independent_sectors` and the per-sector `sector_models` report where the fit is thin. |
 | Mast-shadow speed gate | **4.0 m/s**, min **50** records/sector | Detection is two-sided: a low ratio means `sensor_b` is shadowed, a high ratio means `sensor_a` is. Sparse sectors are reported but not flagged. |
 | `range_check` bounds | **Derived from sensor type** | wind_speed 0–50 m/s, wind_direction 0–360°, temperature −60–60 °C, pressure 80 000–110 000 Pa, humidity 0–100%. An unknown type falls back to that sensor's own data range, which makes the rule a **no-op** — an intentional fail-safe, reported as `bounds_source: "sensor_data_range"`. Explicit `min`/`max` always win. |
+| LTC measured column | **The hub-height series**, refused if absent | Was "the highest-height speed sensor in `sensor_mapping`" — and a hub column is never in that mapping (extrapolation appends it to `timeseries_df`), so the resolver could not return one at any site. The sweep therefore computed the hub series and discarded it, fitting every LTC on the top sensor. Measured on a 167 m lidar campaign with sensors at 140/160/180/200 m: the LTC ran on `Spd_200m`, whose measured level is **+0.185 m/s (+2.05%)** above the 167 m hub level (9.2166 vs 9.0316 m/s), and that level propagated into `long_term_mean_speed_mps`, the indicative AEP and the capacity factor. It also made axes A1, A2 and B unable to move any published metric, because everything downstream of the shear and extrapolation stages was bypassed — the Interrogate page attributed 100% of the spread to the LTC axis, the only axis still able to vary. |
+| SpeedSort directional binning in a sweep | **On** (12 sectors × 30°) | The sweep called every non-XGBoost algorithm as `runner(state, short, long)`, so SpeedSort's `long_dir_col` defaulted to empty and it ran direction-agnostically in every sweep ever executed, losing the per-sector transfer functions that are the reason to choose it — while XGBoost kept its directional feature, so axis D compared them on unequal terms. All three dispatch sites now share `DIRECTIONAL_LTC_ALGORITHMS`. |
+| Variance-decomposition axis with one level | **0% share, reported with `levels`** | An axis that was not varied has its group mean equal to the grand mean, so its between-group sum of squares is exactly zero. That renders identically to "this choice was tested and does not matter", which is a much stronger claim — so the level count travels with every share, and `single_level_axes` names them explicitly. |
 | Boom-pair tie-break | **Alphabetical**, after coverage | Resolution order is unchanged — primary flag, then coverage, then name — but a coverage *tie* now falls through to the name instead of keeping whichever candidate the document happened to list first. Ties are the normal case, not a corner one: every boom pair in Horns Rev and Launakalana ties exactly, because both booms are logged on one channel schedule. Ordering therefore decided the mast's representative sensor, worth **+1.15%** of mean wind speed at Horns Rev 30 m (8.302 → 8.398 m/s) and **−0.21%** at Launakalana 60 m. Reported as `resolution: "coverage_tie_name_alphabetical"` in `runconfig.site.sensor_resolution`, distinct from `"coverage"`, so a coverage figure that decided nothing does not read as if it had. |
 | Turbulence (`sd_col`) column | **Declared column if present, else `{speed}_sd` if present, else none** | Previously `f"{speed}_sd"` unconditionally, whether or not such a column was ever logged — Boxkite's mapping named `Spd_250m_sd` against a CSV with no standard-deviation channels at all. Inert downstream (the icing rule skips a column it cannot find) but it travelled into `runconfig` as fact. A Task 43 `logger_measurement_config[].column_name` declaration with `statistic_type_id: "sd"` is now preferred, **but only when that column exists in the loaded data**: Horns Rev declares `wind_speed__sd__062__…` while its CSV holds `Spd_62m_sd`, so trusting declarations blindly would lose a real column. With no timeseries loaded yet, existence cannot be checked and the suffix convention still applies. |
 | Built data model provenance | **Recorded in the artifact** | A data model produced by `build_data_model` carries a note on its `measurement_location` stating that column roles and heights were drafted by header inference and declared by the analyst, not taken from an instrument record. Nothing is defaulted during a build: a column with no readable height, an unknown measurement type, a duplicate name, a statistic column absent from the data, or a missing timezone is refused by name rather than filled in. |
@@ -525,10 +535,10 @@ model's authority.
 
 | Tier | Count | Exposed when |
 |---|---|---|
-| Read-only — query, compute, plot | 48 | always |
+| Read-only — query, compute, plot | 51 | always |
 | Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty | 27 | only with `allow_mutating_tools: true` |
 
-The remaining 154 of the 229 registered tools are deliberately unclassified and
+The remaining 154 of the 232 registered tools are deliberately unclassified and
 therefore unreachable from chat: the WindKit wrappers, and every BrightHub /
 EarthDataHub tool — the read-only tier's contract is "no session mutation, no
 filesystem, **no network**", and the credential tools would additionally hand an

@@ -7,13 +7,12 @@
 // So the statistics here are presented as a description of the scenario set, never
 // captioned as a result, and the export is per-scenario: the analyst picks the one they
 // will stand behind and takes its runconfig away.
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
-import { useSweepStore } from "../../store/useSweepStore";
+import { useSweepStore, spreadKey } from "../../store/useSweepStore";
 import { useWorkspaceStore } from "../../store/useWorkspaceStore";
 import {
   admissibleRows,
-  decomposeVariance,
   failedRows,
   filterRows,
   formatMetric,
@@ -65,18 +64,30 @@ export function SpreadSummaryView() {
   const good = useMemo(() => admissibleRows(filtered), [filtered]);
   const excluded = useMemo(() => inadmissibleRows(filtered), [filtered]);
   const failed = useMemo(() => failedRows(filtered), [filtered]);
-  const contributions = useMemo(() => decomposeVariance(good, metric), [good, metric]);
+  const sweepId = useSweepStore((state) => state.manifest?.sweep_id ?? "");
+  const spread = useSweepStore((state) => state.spread);
+  const loadSpread = useSweepStore((state) => state.loadSpread);
+
+  const hashes = useMemo(() => good.map((row) => row.config_hash), [good]);
+
+  // Two decompositions: the selected metric for the headline, and the uncertainty
+  // percentage for the substitution below, which is only meaningful in points.
+  useEffect(() => {
+    if (!session || hashes.length < 2) return;
+    void loadSpread(apiBaseUrl, session.session_id, metric, hashes);
+    void loadSpread(apiBaseUrl, session.session_id, "total_uncertainty_pct", hashes);
+  }, [apiBaseUrl, session, metric, hashes, loadSpread]);
+
+  const contributions = spread[spreadKey(sweepId, metric, hashes)] ?? [];
 
   const substitutionRows = useMemo(() => {
     const components = {
       u_mcp_pct: meanOf(good, "u_mcp_pct"),
       u_vertical_pct: meanOf(good, "u_vertical_pct"),
     };
-    // The substitution is expressed in percentage points, so it is only meaningful once
-    // the decomposition is run against a percentage metric.
-    const pctContributions = decomposeVariance(good, "total_uncertainty_pct");
+    const pctContributions = spread[spreadKey(sweepId, "total_uncertainty_pct", hashes)] ?? [];
     return buildSubstitutionRows(pctContributions, components);
-  }, [good]);
+  }, [good, spread, sweepId, hashes]);
 
   if (rows.length === 0) {
     return <p className="muted">Run a sweep, or open a saved one, to summarise its spread.</p>;

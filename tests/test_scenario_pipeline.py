@@ -172,6 +172,39 @@ def test_axis_a_changes_the_hub_series():
     assert near.era5_interpolated_df is not wide.era5_interpolated_df
 
 
+def test_axis_a_changes_the_long_term_answer():
+    """The counterpart of the axis C and D tests below, and the one that was missing.
+
+    Axis A was only ever asserted to change the *hub series* (above). Nothing checked
+    that the hub series reaches the published answer — and it did not: the LTC re-derived
+    its measured column as the highest mapped sensor, so the extrapolation stage's output
+    was computed and discarded. Every A and B level therefore produced a bit-identical
+    result, which is what made the Interrogate page attribute 100% of the spread to the
+    LTC axis on a real campaign.
+    """
+    # `_base_state` is an exact power law, so every fit pair recovers the same alpha and
+    # axis A provably cannot move anything. Real profiles have curvature; bending the
+    # lowest height away from the law is what makes the two fit pairs disagree.
+    base = _base_state()
+    base.timeseries_df = base.timeseries_df.copy()
+    base.timeseries_df["Spd_40m"] *= 1.05
+
+    _, near = _run(base, _spec(shear_fit_policy="nearest_2"))
+    _, wide = _run(base, _spec(shear_fit_policy="widest_lever"))
+
+    assert near.shear_table.to_numpy().mean() != wide.shear_table.to_numpy().mean()
+    assert _long_term_mean(near, "variance_ratio") != _long_term_mean(wide, "variance_ratio")
+
+
+def test_the_ltc_corrects_the_hub_series_not_a_raw_sensor():
+    """Hub height is 120 m and the mast tops out at 100 m, so a raw-sensor LTC would be
+    correcting a measurement 20 m below the answer it is labelled with."""
+    base = _base_state()
+    record, scenario = _run(base, _spec())
+    assert record["stages"]["run_ltc"]["short_column"] == "Spd_120m_hub"
+    assert "Spd_120m_hub" in scenario.timeseries_df.columns
+
+
 def test_axis_b_changes_the_shear_table():
     base = _base_state()
     _, mean_table = _run(base, _spec(shear_model="power_law_mean"))

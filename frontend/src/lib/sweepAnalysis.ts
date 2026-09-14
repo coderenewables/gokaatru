@@ -8,7 +8,6 @@
 // scenarios stay in the table and render as a ghost layer, but they never enter a
 // percentile — that distinction is the whole reason the gates exist.
 import {
-  AXIS_COLUMNS,
   METRIC_META,
   type AxisColumn,
   type GateStatus,
@@ -88,75 +87,10 @@ export function spreadStats(rows: ScenarioRow[], metric: MetricColumn): SpreadSt
   };
 }
 
-export interface AxisContribution {
-  axis: AxisColumn;
-  /** Distinct levels present in the rows analysed. */
-  levels: number;
-  /** Share of total variance explained by this axis, 0-1. */
-  share: number;
-  /** Spread between the best and worst level means, in metric units. */
-  swing: number;
-  /** Level means, for the tornado and the interaction heatmap. */
-  levelMeans: Array<{ level: string; mean: number; count: number }>;
-}
-
-/**
- * Decompose the variance of one metric across the axes (design doc §7.9).
- *
- * One-way between-group variance per axis, normalised so the shares sum to 1. This is a
- * first-order decomposition: it attributes nothing to interactions, so the shares
- * describe main effects and will not account for the whole spread when axes interact.
- * Stated rather than hidden, because §8.1 uses these shares to size the uncertainty
- * substitution and a reader needs to know what they do and do not cover.
- */
-export function decomposeVariance(
-  rows: ScenarioRow[],
-  metric: MetricColumn,
-): AxisContribution[] {
-  const usable = rows.filter((row) => {
-    const value = row[metric];
-    return typeof value === "number" && Number.isFinite(value);
-  });
-  if (usable.length < 2) return [];
-
-  const all = metricValues(usable, metric);
-  const grandMean = all.reduce((total, value) => total + value, 0) / all.length;
-
-  const raw = AXIS_COLUMNS.map<AxisContribution & { between: number }>((axis) => {
-    const groups = new Map<string, number[]>();
-    for (const row of usable) {
-      const level = String(row[axis] ?? "—");
-      const value = row[metric] as number;
-      const bucket = groups.get(level);
-      if (bucket) bucket.push(value);
-      else groups.set(level, [value]);
-    }
-    const levelMeans = [...groups.entries()]
-      .map(([level, values]) => ({
-        level,
-        mean: values.reduce((total, value) => total + value, 0) / values.length,
-        count: values.length,
-      }))
-      .sort((a, b) => b.mean - a.mean);
-
-    // Between-group sum of squares: how much of the spread this axis alone explains.
-    const between = levelMeans.reduce(
-      (total, entry) => total + entry.count * (entry.mean - grandMean) ** 2,
-      0,
-    );
-    const swing =
-      levelMeans.length < 2 ? 0 : levelMeans[0].mean - levelMeans[levelMeans.length - 1].mean;
-    return { axis, levels: groups.size, share: 0, swing, levelMeans, between };
-  });
-
-  const total = raw.reduce((sum, entry) => sum + entry.between, 0);
-  return raw
-    .map(({ between, ...entry }) => ({
-      ...entry,
-      share: total === 0 ? 0 : between / total,
-    }))
-    .sort((a, b) => b.share - a.share);
-}
+// The variance decomposition used to live here. It now lives in
+// `server/core/sweep_analysis.py`, reached via `getSweepSpread`, so there is one
+// implementation of it rather than two that have to agree. Row *filtering* stays here
+// deliberately — the server takes the config hashes this module selects.
 
 /** Distinct levels present for an axis, in stable order. */
 export function axisLevels(rows: ScenarioRow[], axis: AxisColumn): string[] {

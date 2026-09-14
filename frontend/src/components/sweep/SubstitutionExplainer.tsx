@@ -7,7 +7,7 @@
 import { useState } from "react";
 import clsx from "clsx";
 
-import type { AxisContribution } from "../../lib/sweepAnalysis";
+import type { AxisContribution } from "../../types/sweep";
 import { AXIS_LABELS, type AxisColumn } from "../../types/sweep";
 
 /** Below this many levels an axis spread is under-resolved and cannot displace anything. */

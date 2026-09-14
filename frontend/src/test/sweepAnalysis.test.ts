@@ -9,7 +9,6 @@ import { describe, expect, it } from "vitest";
 import {
   admissibleRows,
   axisLevels,
-  decomposeVariance,
   failedRows,
   filterRows,
   formatMetric,
@@ -106,51 +105,9 @@ describe("percentile", () => {
   });
 });
 
-describe("decomposeVariance", () => {
-  it("attributes the spread to the axis that actually moves the answer", () => {
-    // Speed depends only on the LTC method here; the shear model is noise-free constant.
-    const rows = [
-      row({ config_hash: "a", ltc_algorithm: "variance_ratio", long_term_mean_speed_mps: 8 }),
-      row({ config_hash: "b", ltc_algorithm: "variance_ratio", long_term_mean_speed_mps: 8 }),
-      row({ config_hash: "c", ltc_algorithm: "linear_least_squares", long_term_mean_speed_mps: 10 }),
-      row({ config_hash: "d", ltc_algorithm: "linear_least_squares", long_term_mean_speed_mps: 10 }),
-    ];
-    const contributions = decomposeVariance(rows, "long_term_mean_speed_mps");
-    expect(contributions[0].axis).toBe("ltc_algorithm");
-    expect(contributions[0].share).toBeCloseTo(1, 6);
-    expect(contributions[0].swing).toBeCloseTo(2, 6);
-  });
-
-  it("gives a single-level axis no share", () => {
-    const rows = [
-      row({ config_hash: "a", long_term_mean_speed_mps: 8 }),
-      row({ config_hash: "b", long_term_mean_speed_mps: 9 }),
-    ];
-    const shear = decomposeVariance(rows, "long_term_mean_speed_mps").find(
-      (entry) => entry.axis === "shear_model",
-    );
-    expect(shear!.levels).toBe(1);
-    expect(shear!.share).toBe(0);
-  });
-
-  it("returns nothing when there is not enough to decompose", () => {
-    expect(decomposeVariance([row({ config_hash: "a" })], "long_term_mean_speed_mps")).toEqual([]);
-  });
-
-  it("reports level means with the count behind each", () => {
-    const rows = [
-      row({ config_hash: "a", reference_source: "era5", long_term_mean_speed_mps: 8 }),
-      row({ config_hash: "b", reference_source: "merra2", long_term_mean_speed_mps: 9 }),
-      row({ config_hash: "c", reference_source: "merra2", long_term_mean_speed_mps: 11 }),
-    ];
-    const entry = decomposeVariance(rows, "long_term_mean_speed_mps").find(
-      (item) => item.axis === "reference_source",
-    )!;
-    const merra = entry.levelMeans.find((level) => level.level === "merra2")!;
-    expect(merra.mean).toBe(10);
-    expect(merra.count).toBe(2);
-  });
-});
+// The decomposition's tests moved to `tests/test_sweep_analysis.py` along with the
+// implementation. `sweepSpread.test.ts` covers what remains here: that this module no
+// longer exports it, and that the store fetches it instead.
 
 describe("filtering", () => {
   const rows = [

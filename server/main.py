@@ -34,6 +34,7 @@ import server.tools.map  # noqa: F401,E402
 import server.tools.scenario_result  # noqa: F401,E402
 import server.tools.shear  # noqa: F401,E402
 import server.tools.statistics  # noqa: F401,E402
+import server.tools.sweep_analysis  # noqa: F401,E402
 import server.tools.uncertainty  # noqa: F401,E402
 import server.tools.visualization  # noqa: F401,E402
 import server.tools.windkit.climate  # noqa: F401,E402

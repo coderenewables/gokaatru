@@ -112,6 +112,14 @@ _READ_ONLY_TOOLS: frozenset[str] = frozenset({
     "compute_wind_ramps",
     # The fixed-prefix identity — what makes two sweeps comparable.
     "get_fixed_prefix_hash",
+    # Reading and explaining a persisted sweep. These read files, which the tier contract
+    # otherwise excludes: they are admitted because the only path they can address is the
+    # session's own sweeps directory, through the confined `_sweep_dir`, and a sweep id is
+    # the sole input. Without them the assistant cannot see a sweep at all, and answers
+    # about one from session state that never held it.
+    "list_sweeps",
+    "get_sweep_summary",
+    "analyze_sweep_spread",
     # Proposes a reading of the loaded column headers; writes nothing. Its counterpart
     # build_data_model writes a file and replaces the sensor mapping, so that one is
     # mutating.
@@ -289,12 +297,13 @@ def _build_registries() -> tuple[list[dict[str, Any]], dict[str, Any]]:
     import server.tools.scenario_result as _scen
     import server.tools.shear as _sh
     import server.tools.statistics as _st
+    import server.tools.sweep_analysis as _swa
     import server.tools.uncertainty as _unc
     import server.tools.visualization as _viz
 
     all_modules = [
         _ad, _adv, _atm, _cl, _clip, _cfg, _diag, _dio, _dmb, _ens, _era5, _ext, _hom,
-        _ltc, _lml, _mp, _scen, _sh, _st, _unc, _viz,
+        _ltc, _lml, _mp, _scen, _sh, _st, _swa, _unc, _viz,
     ]
     module_names: dict[str, Any] = {}
     for mod in all_modules:

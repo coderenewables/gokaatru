@@ -139,7 +139,20 @@ ProgressCallback = Callable[[SweepProgress], None]
 
 
 def _sweep_dir(state: Any, sweep_id: str) -> Path:
-    return Path(state.get_data_dir()) / "sweeps" / sweep_id
+    """Resolve a sweep's directory, refusing an id that leaves the sweeps root.
+
+    A sweep id addresses a path and is now reachable from the chat tool surface, where
+    it can originate in model output rather than from the UI. Unconfined, an id of
+    ``../../<other session>/sweeps/<id>`` read another session's results — the manifest
+    and every scenario runconfig in it. Mirrors ``_confined_file_path`` in
+    ``server/tools/data_io.py``: resolve the base, resolve the candidate, verify
+    containment.
+    """
+    root = (Path(state.get_data_dir()) / "sweeps").resolve()
+    candidate = (root / sweep_id).resolve()
+    if candidate != root and not candidate.is_relative_to(root):
+        raise ValueError(f"Sweep '{sweep_id}' is not available")
+    return candidate
 
 
 def run_sweep(

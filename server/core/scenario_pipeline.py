@@ -264,7 +264,7 @@ def extrapolate(state: Any, spec: ScenarioSpec, reference: SensorSelection) -> S
 
 def run_ltc(state: Any, spec: ScenarioSpec) -> StageResult:
     """Run the scenario's long-term correction against its chosen reference (axes C, D)."""
-    from server.api.routes.analysis import LTC_ALGORITHMS, _resolve_ltc_columns
+    from server.api.routes.analysis import LTC_ALGORITHMS, _resolve_ltc_columns, run_ltc_algorithm
 
     state.set_active_reference_source(spec.reference_source)
     algorithm = spec.ltc_algorithm
@@ -274,10 +274,9 @@ def run_ltc(state: Any, spec: ScenarioSpec) -> StageResult:
             "run_ltc", f"unknown LTC algorithm '{algorithm}'; expected one of {sorted(LTC_ALGORITHMS)}"
         )
     short_col, long_col, short_dir_col, long_dir_col = _resolve_ltc_columns(state)
-    if algorithm == "xgboost":
-        result = runner(state, short_col, long_col, short_dir_col, long_dir_col)
-    else:
-        result = runner(state, short_col, long_col)
+    result = run_ltc_algorithm(
+        state, algorithm, runner, short_col, long_col, short_dir_col, long_dir_col
+    )
     metrics = result.get("metrics", {})
     return StageResult(
         "run_ltc",

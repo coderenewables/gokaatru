@@ -68,6 +68,7 @@ from server.tools.era5 import (
 from server.tools.extrapolation import (
     _add_shear_to_timeseries,
     _extrapolate_to_hub_height,
+    _hub_column_name,
 )
 from server.tools.homogeneity import _analyze_homogeneity, _apply_homogeneity_cutoff
 from server.tools.ltc import (
@@ -97,6 +98,28 @@ LTC_ALGORITHMS: dict[str, Callable[..., dict]] = {
     "variance_ratio": _run_ltc_variance_ratio,
     "xgboost": _run_ltc_xgboost,
 }
+
+#: Algorithms that take direction columns as well as speed columns. Three call sites used
+#: to test the algorithm name inline and one of them drifted: the sweep passed direction
+#: only to XGBoost, so SpeedSort ran direction-agnostically in every sweep ever executed —
+#: losing the per-sector transfer functions that are the whole reason to choose it, while
+#: XGBoost kept its directional feature. Axis D was comparing them on unequal terms.
+DIRECTIONAL_LTC_ALGORITHMS: frozenset[str] = frozenset({"speedsort", "xgboost"})
+
+
+def run_ltc_algorithm(
+    state: SessionState,
+    algorithm: str,
+    runner: Callable[..., dict],
+    short_col: str,
+    long_col: str,
+    short_dir_col: str = "",
+    long_dir_col: str = "",
+) -> dict:
+    """Call one LTC algorithm with the arguments its signature actually accepts."""
+    if algorithm in DIRECTIONAL_LTC_ALGORITHMS:
+        return runner(state, short_col, long_col, short_dir_col, long_dir_col)
+    return runner(state, short_col, long_col)
 
 
 def _scenario_frame_mean(frame_like: object, column: str) -> float:
@@ -195,20 +218,42 @@ def _import_runconfig(state: SessionState, runconfig: dict[str, object]) -> dict
 
 
 def _resolve_ltc_columns(state: SessionState) -> tuple[str, str, str, str]:
-    """Guess the short/long and direction columns from the current session state."""
-    # Short column: highest-height speed sensor
-    short_col = ""
-    for _height, mapping in sorted(state.sensor_mapping.items(), reverse=True):
-        if isinstance(mapping.get("speed_col"), str):
-            short_col = str(mapping["speed_col"])
-            break
-    if not short_col:
-        raise ValueError("No speed sensor available in the session. Upload timeseries and datamodel first.")
-    # Direction column (optional)
+    """Resolve the measured/reference speed and direction columns for an LTC run.
+
+    The measured column is the **hub-height series**, because that is the height the
+    corrected answer is reported at. This used to be "the highest-height speed sensor in
+    ``sensor_mapping``" — a hub column is never in the mapping (extrapolation appends it
+    to ``timeseries_df``), so the function could not return one at any site, and the
+    extrapolation stage's output was computed and discarded. On a real 167 m campaign the
+    sweep fitted every LTC on ``Spd_200m`` and published it as the hub answer: a measured
+    level 2.05% high, and axes A1/A2/B unable to move any metric because everything
+    downstream of them was bypassed.
+
+    A missing hub series is refused rather than substituted (convention 1). Silently
+    correcting a sensor from a different height is undetectable in every number that
+    follows it, which is precisely how this survived so long.
+    """
+    hub_height_m = state.get_hub_height_m()
+    if hub_height_m is None:
+        raise ValueError(
+            "Hub height is not set, so there is no hub-height series to correct. Set "
+            "hub_height_m and extrapolate the measured data to it before running an LTC."
+        )
+    short_col = _hub_column_name(float(hub_height_m))
+    if state.timeseries_df is None or short_col not in state.timeseries_df.columns:
+        raise ValueError(
+            f"The hub-height series '{short_col}' has not been built. Extrapolate the "
+            "measured data to hub height before running an LTC — correcting a raw sensor "
+            "instead reports a measurement from a different height as the hub answer, "
+            "which nothing downstream can detect."
+        )
+    # Direction is optional and stays sensor-based: the hub series carries speed only.
+    # The slot is ``dir_col``; this asked for ``direction_col``, so it returned "" at
+    # every site that has ever run.
     short_dir_col = ""
     for _height, mapping in sorted(state.sensor_mapping.items(), reverse=True):
-        if isinstance(mapping.get("direction_col"), str):
-            short_dir_col = str(mapping["direction_col"])
+        if isinstance(mapping.get("dir_col"), str):
+            short_dir_col = str(mapping["dir_col"])
             break
     # Resolved from the active reference source rather than hardcoded to ERA5's 100 m
     # columns: MERRA-2 is served at 50 m, so a fixed `Spd_100m` made it impossible to
@@ -243,10 +288,9 @@ def _run_scenario_pipeline(
         ltc_fn = LTC_ALGORITHMS.get(algorithm_name)
         if ltc_fn is None:
             raise ValueError(f"Unknown LTC algorithm '{algorithm_name}'")
-        if algorithm_name == "xgboost":
-            ltc_fn(state, short_col, long_col, short_dir_col, long_dir_col)
-        else:
-            ltc_fn(state, short_col, long_col)
+        run_ltc_algorithm(
+            state, algorithm_name, ltc_fn, short_col, long_col, short_dir_col, long_dir_col
+        )
         steps_completed.append(f"ltc:{algorithm_name}")
 
     # --- 4. Ensemble (when multiple algorithms) ---
@@ -768,12 +812,15 @@ def run_ltc(
     if ltc_function is None:
         raise to_bad_request(ValueError(f"Unknown LTC algorithm '{algorithm}'"))
     try:
-        if algorithm == "xgboost":
-            result = ltc_function(state, body.short_col, body.long_col, body.short_dir_col, body.long_dir_col)
-        elif algorithm == "speedsort":
-            result = ltc_function(state, body.short_col, body.long_col, body.short_dir_col, body.long_dir_col)
-        else:
-            result = ltc_function(state, body.short_col, body.long_col)
+        result = run_ltc_algorithm(
+            state,
+            algorithm,
+            ltc_function,
+            body.short_col,
+            body.long_col,
+            body.short_dir_col,
+            body.long_dir_col,
+        )
     except ValueError as exc:
         raise to_bad_request(exc) from exc
     state.touch()

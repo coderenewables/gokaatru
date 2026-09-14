@@ -1,13 +1,14 @@
 // Interrogate phase (design doc: Interrogate) — Spread, Gates, Sensitivity and Summary
 // as one scrolling report under a single metric switch. Composes SpreadSummaryView,
 // SpreadExplorer, SensitivityView and GateReportView unchanged; nothing here re-derives
-// their statistics (see sweepAnalysis.test.ts for that coverage).
+// their statistics (see sweepAnalysis.test.ts, and tests/test_sweep_analysis.py for the
+// variance decomposition, which now lives server-side).
 import { describe, expect, it, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import { InterrogateView } from "../components/InterrogateView";
-import { useSweepStore } from "../store/useSweepStore";
-import type { ScenarioRow, SweepManifest } from "../types/sweep";
+import { useSweepStore, spreadKey } from "../store/useSweepStore";
+import type { AxisContribution, ScenarioRow, SweepManifest } from "../types/sweep";
 
 function row(overrides: Partial<ScenarioRow> & { config_hash: string }): ScenarioRow {
   return {
@@ -41,6 +42,24 @@ const MANIFEST = {
   counts: { planned: 3, run: 3, completed: 3, admissible: 3, excluded: 0, failed: 0 },
 } as unknown as SweepManifest;
 
+// The decomposition is computed server-side now, so the store holds it rather than
+// deriving it on render. Seeded here under the key the views look it up by.
+const CONTRIBUTIONS: AxisContribution[] = [
+  {
+    axis: "reference_source",
+    levels: 2,
+    share: 1,
+    swing: 0.3,
+    level_means: [
+      { level: "merra2", mean: 8.3, count: 1 },
+      { level: "era5", mean: 8.0, count: 2 },
+    ],
+  },
+  { axis: "ltc_algorithm", levels: 1, share: 0, swing: 0, level_means: [] },
+];
+
+const HASHES = ROWS.map((entry) => entry.config_hash);
+
 beforeEach(() => {
   useSweepStore.setState({
     rows: ROWS,
@@ -49,7 +68,12 @@ beforeEach(() => {
     filters: {},
     showInadmissible: true,
     selectedScenario: null,
-  });
+    spread: {
+      [spreadKey("sweep-1", "long_term_mean_speed_mps", HASHES)]: CONTRIBUTIONS,
+      [spreadKey("sweep-1", "total_uncertainty_pct", HASHES)]: CONTRIBUTIONS,
+    },
+    spreadPending: {},
+  } as never);
 });
 
 describe("InterrogateView", () => {

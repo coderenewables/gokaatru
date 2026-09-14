@@ -4,6 +4,7 @@
 // is already the largest in the frontend. Same conventions: the session header is derived
 // from the path, and a non-2xx response becomes an Error carrying the backend's `detail`.
 import type {
+  AxisContribution,
   PrefixHash,
   SweepAxes,
   SweepEstimate,
@@ -169,4 +170,22 @@ export async function streamSweep(
     }
   }
   return manifest;
+}
+
+/**
+ * Decompose one sweep metric's variance across the five axes.
+ *
+ * `configHashes` carries this page's own filtered selection: the server deliberately
+ * does not re-implement the client's axis filtering, so the rows are named explicitly.
+ */
+export async function getSweepSpread(
+  baseUrl: string,
+  sessionId: string,
+  sweepId: string,
+  payload: { metric: string; config_hashes: string[] },
+): Promise<{ contributions: AxisContribution[]; scenarios_analysed?: number }> {
+  return requestJson(baseUrl, sessionId, `/api/sessions/${sessionId}/sweep/${sweepId}/spread`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

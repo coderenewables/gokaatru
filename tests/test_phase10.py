@@ -210,6 +210,11 @@ def _seed_pipeline_ready_state(state: SessionState) -> None:
         index=index,
     )
     state.set_hub_height_m(150.0)
+    # The LTC corrects the hub-height series, so a genuinely pipeline-ready state has one.
+    # This fixture set a hub height and never built the series, and the run succeeded
+    # anyway because the resolver silently fell back to the highest raw sensor.
+    state.timeseries_df["Spd_150m_hub"] = speed_100 * (150.0 / 100.0) ** 0.14
+    state.raw_timeseries_df = state.timeseries_df.copy()
     state.set_project_name("Pipeline test")
 
 
@@ -245,7 +250,7 @@ def test_run_scenario_pipeline(api_client: tuple[TestClient, SessionManager]) ->
         headers=headers,
         json={
             "name": "Pipeline scenario",
-            "runconfig": {"hub_height_m": 160.0},
+            "runconfig": {"hub_height_m": 150.0},
             "ltc_algorithms": ["speedsort"],
         },
     )
@@ -259,7 +264,34 @@ def test_run_scenario_pipeline(api_client: tuple[TestClient, SessionManager]) ->
     assert "scenario_saved" in payload["steps_completed"]
     assert len(state.scenarios) == 1
     assert state.scenarios[0]["results"]["total_uncertainty_pct"] > 0
-    assert state.get_hub_height_m() == 160.0
+    # The imported runconfig is applied; it now has to agree with the hub series the
+    # session actually holds (see the refusal test below).
+    assert state.get_hub_height_m() == 150.0
+
+
+def test_moving_hub_height_without_re_extrapolating_is_refused(
+    api_client: tuple[TestClient, SessionManager],
+) -> None:
+    """`/scenarios/run` imports a runconfig but never extrapolates. Accepting a new hub
+    height while correcting the series built for the old one would publish an answer
+    labelled with a height it was never computed at."""
+    client, manager = api_client
+    session_id = client.post("/api/sessions").json()["session_id"]
+    headers = {"X-GoKaatru-Session": session_id}
+    _seed_pipeline_ready_state(manager.get_session(session_id))
+
+    response = client.post(
+        f"/api/sessions/{session_id}/scenarios/run",
+        headers=headers,
+        json={
+            "name": "Moved hub",
+            "runconfig": {"hub_height_m": 160.0},
+            "ltc_algorithms": ["speedsort"],
+        },
+    )
+
+    assert response.status_code == 400
+    assert "Spd_160m_hub" in response.json()["detail"]
 
 
 def test_run_scenario_with_explicit_uncertainty(api_client: tuple[TestClient, SessionManager]) -> None:

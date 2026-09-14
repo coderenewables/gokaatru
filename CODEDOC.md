@@ -41,10 +41,10 @@ README's "Deployment model" section first.
 |------|--------|
 | Backend Python | ~25.6k LOC across 85 files |
 | Frontend TS/TSX | ~17.6k LOC |
-| MCP tools registered | **226** (84 native GoKaatru + 142 WindKit pass-throughs) |
+| MCP tools registered | **232** (90 native GoKaatru + 142 WindKit pass-throughs) |
 | FastAPI endpoints | ~200 across 14 route files |
-| Backend tests | 74 pytest files (incl. an independent oracle harness) |
-| Frontend tests | 19 vitest files |
+| Backend tests | 77 pytest files (incl. an independent oracle harness) |
+| Frontend tests | 30 vitest files |
 
 ---
 
@@ -145,6 +145,7 @@ The interface-free heart. Nothing here imports FastAPI or FastMCP.
 | `scenario_context.py` | Runs one scenario without disturbing the session it came from (ContextVar-bound isolation). |
 | `scenario_pipeline.py` | One scenario expressed as composable stages, from shear to uncertainty. |
 | `scenario_result.py` | One flat, hashable record per scenario (the sweep table row shape). |
+| `sweep_analysis.py` | Decomposes a sweep metric's variance across the five axes (design doc §7.9). Ported from `frontend/src/lib/sweepAnalysis.ts`, which was deleted — the statistic now has one implementation, reachable from both the Interrogate page and the chat tools. |
 | `sensor_selection.py` | Resolves a sensor-selection *policy* (e.g. `availability_90`, `widest_lever`) to concrete sensors. |
 | `datamodel_builder.py` | Builds a minimal IEA Task 43 data model from CSV column headers alone, for campaigns delivered without one. Header inference (`draft_columns`), spec validation and Task 43 emission (`build_datamodel`); emits a *document*, never session state. |
 | `uncertainty_inputs.py` | Derives a scenario's uncertainty inputs from its own results. |
@@ -152,13 +153,14 @@ The interface-free heart. Nothing here imports FastAPI or FastMCP.
 ### 4.3 `server/tools/` — analytics (the MCP tool surface)
 
 Each module owns one analysis area and exposes a handful of `@mcp.tool()` functions plus the
-private helpers behind them. The GoKaatru-native tools total **87**; the WindKit
+private helpers behind them. The GoKaatru-native tools total **90**; the WindKit
 pass-throughs add **142**.
 
 | Module | Tools | Area |
 |--------|:----:|------|
 | `data_io.py` | 5 | Phase-1 timeseries + datamodel loading, sensor inventory, coverage. |
 | `datamodel_builder.py` | 2 | Draft a Task 43 reading of the loaded columns, and build/persist/load the declared data model (`server/core/datamodel_builder.py` does the work). |
+| `sweep_analysis.py` | 3 | Read and explain a persisted sweep: `list_sweeps`, `get_sweep_summary` (which axes varied, which the gates collapsed), `analyze_sweep_spread`. The rest of the sweep engine is still HTTP-only. |
 | `config.py` | 5 | Run-configuration management (get/update/save/load/summary). |
 | `cleaning.py` | 4 | Rule-based timeseries cleaning (list/apply/log/undo). |
 | `statistics.py` | 9 | Weibull, wind climate, turbulence, windrose, diurnal/monthly, MoMM, scatter. |
@@ -232,7 +234,7 @@ logic as the MCP tools, and shape the response with the Pydantic models in `sche
 | `analysis.py` | 37 | Workflow analysis (statistics, shear, extrapolation, ERA5, ensemble, clipping, homogeneity, uncertainty, scenarios). |
 | `workflow_execution.py` | 14 | Phase-3 Canvas DAG execution, snapshots, run comparison, branching. |
 | `brighthub.py` | 8 | BrightHub login/logout/status, location browsing, reanalysis, import. |
-| `sweep.py` | 7 | Scenario-sweep engine surface (axes, estimate, run, **run/stream** SSE, list, get, runconfig). |
+| `sweep.py` | 8 | Scenario-sweep engine surface (axes, estimate, run, **run/stream** SSE, list, get, runconfig, **spread**). |
 | `datasets.py` | 6 | Shared dataset-pool CRUD + load-into-session. |
 | `uploads.py` | 7 | Timeseries/datamodel upload, the data model builder (draft/build), sensor inventory + coverage, delete. |
 | `results.py` | 5 | LTC/ensemble results, plots, site map, runconfig export. |
@@ -425,7 +427,7 @@ These are enforced by review and by tests, not by style tooling. Match them when
 
 ## 9. Testing
 
-### Backend (`tests/`, pytest — 75 files)
+### Backend (`tests/`, pytest — 77 files)
 
 - `tests/oracles.py` is an **independent-implementation oracle harness**: it imports nothing
   from `server/`, so a passing oracle test is real corroboration, not a tautology.
@@ -444,7 +446,7 @@ python -m pytest tests/ -v
 python -c "import asyncio; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())), 'tools')"
 ```
 
-### Frontend (`frontend/src/test/`, vitest — 29 files)
+### Frontend (`frontend/src/test/`, vitest — 30 files)
 
 Covers the stores, the workflow/DAG builder, stage-status logic, the sweep lifecycle and
 analysis, disclosure rendering, and the stage/results views.

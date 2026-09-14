@@ -33,6 +33,7 @@ from server.core.sweep import (
     run_sweep,
 )
 from server.state.session import SessionState
+from server.tools.sweep_analysis import _sweep_spread
 
 router = APIRouter(prefix="/sessions/{session_id}/sweep", tags=["sweep"])
 
@@ -245,6 +246,34 @@ def get_sweep(
     del session_id
     try:
         return load_sweep(state, sweep_id)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+
+
+class SweepSpreadRequest(BaseModel):
+    """Which metric to decompose, and optionally which rows to decompose it over.
+
+    ``config_hashes`` carries the caller's own row selection — the Interrogate page
+    applies its axis filters client-side, and re-implementing that filtering here would
+    be a second copy of logic that has to agree. Omitted, the whole admissible set is
+    used, which is what a tool caller with no UI state wants.
+    """
+
+    metric: str = Field(default="long_term_mean_speed_mps", min_length=1)
+    config_hashes: list[str] | None = None
+
+
+@router.post("/{sweep_id}/spread")
+def get_sweep_spread(
+    session_id: str,
+    sweep_id: str,
+    body: SweepSpreadRequest,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> dict[str, Any]:
+    """Decompose one sweep metric's variance across the five scenario axes."""
+    del session_id
+    try:
+        return _sweep_spread(state, sweep_id, body.metric, body.config_hashes)
     except ValueError as exc:
         raise to_bad_request(exc) from exc
 

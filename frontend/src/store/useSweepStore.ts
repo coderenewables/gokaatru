@@ -10,6 +10,7 @@ import {
   getScenarioRunconfig,
   getSweep,
   getSweepAxes,
+  getSweepSpread,
   listSweeps,
   streamSweep,
 } from "../lib/sweepApi";
@@ -26,6 +27,7 @@ import type {
   SweepSummary,
 } from "../types/sweep";
 import type { AxisFilters } from "../lib/sweepAnalysis";
+import type { AxisContribution } from "../types/sweep";
 import type { MetricColumn } from "../types/sweep";
 
 /** What the designer holds while the analyst assembles a sweep. */
@@ -109,6 +111,9 @@ interface SweepStore {
 
   metric: MetricColumn;
   filters: AxisFilters;
+  /** Server-computed variance decompositions, keyed by sweep+metric+row selection. */
+  spread: Record<string, AxisContribution[]>;
+  spreadPending: Record<string, boolean>;
   showInadmissible: boolean;
   selectedScenario: string | null;
 
@@ -130,6 +135,7 @@ interface SweepStore {
   downloadRunconfig: (baseUrl: string, sessionId: string, configHash: string) => Promise<void>;
 
   setMetric: (metric: MetricColumn) => void;
+  loadSpread: (baseUrl: string, sessionId: string, metric: string, configHashes: string[]) => Promise<void>;
   setFilter: (axis: AxisColumn, levels: string[]) => void;
   clearFilters: () => void;
   setShowInadmissible: (value: boolean) => void;
@@ -229,6 +235,11 @@ export function requiresAnalystShear(selection: SweepSelection, axes: SweepAxes 
 
 let activeController: AbortController | null = null;
 
+/** Cache key for one decomposition: a sweep, a metric, and the exact rows selected. */
+export function spreadKey(sweepId: string, metric: string, configHashes: string[]): string {
+  return `${sweepId}|${metric}|${[...configHashes].sort().join(",")}`;
+}
+
 export const useSweepStore = create<SweepStore>((set, get) => ({
   axes: null,
   axesError: null,
@@ -246,6 +257,8 @@ export const useSweepStore = create<SweepStore>((set, get) => ({
   sweeps: [],
 
   metric: "long_term_mean_speed_mps",
+  spread: {},
+  spreadPending: {},
   filters: {},
   showInadmissible: false,
   selectedScenario: null,
@@ -387,6 +400,31 @@ export const useSweepStore = create<SweepStore>((set, get) => ({
   },
 
   setMetric: (metric) => set({ metric }),
+
+  loadSpread: async (baseUrl, sessionId, metric, configHashes) => {
+    const sweepId = get().manifest?.sweep_id;
+    if (!sweepId) return;
+    const key = spreadKey(sweepId, metric, configHashes);
+    // Already held or already in flight: a metric switch and a filter toggle both land
+    // here, and the decomposition is deterministic for a given selection.
+    if (get().spread[key] || get().spreadPending[key]) return;
+    set((state) => ({ spreadPending: { ...state.spreadPending, [key]: true } }));
+    try {
+      const response = await getSweepSpread(baseUrl, sessionId, sweepId, {
+        metric,
+        config_hashes: configHashes,
+      });
+      set((state) => ({
+        spread: { ...state.spread, [key]: response.contributions ?? [] },
+        spreadPending: { ...state.spreadPending, [key]: false },
+      }));
+    } catch (error) {
+      set((state) => ({
+        spreadPending: { ...state.spreadPending, [key]: false },
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    }
+  },
   setFilter: (axis, levels) =>
     set((state) => ({ filters: { ...state.filters, [axis]: levels } })),
   clearFilters: () => set({ filters: {} }),

@@ -13,7 +13,7 @@ IEC 61400-12-1 / 61400-12-2 conventions and is built for **bankable rigor** — 
 bank's technical advisor will try to break.
 
 Two parts, one logic core:
-- **`server/`** — Python MCP server (FastMCP) + FastAPI web API. 227 tools across ingest,
+- **`server/`** — Python MCP server (FastMCP) + FastAPI web API. 232 tools across ingest,
   cleaning, statistics, shear/extrapolation, ERA5+MERRA-2 reanalysis, homogeneity, 5 LTC/MCP
   algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration,
   a scenario **sweep/Analysis Engine**, and a WindKit tool surface (~180 tools).
@@ -172,9 +172,9 @@ cd frontend && npm run test          # vitest
 cd frontend && npm run build         # tsc --noEmit && vite build
 ```
 
-Current baseline (verified 2026-09-08, after the data model builder below):
-1016 backend tests passing / 2 skipped, 251 frontend tests passing, frontend typecheck clean,
-229 MCP tools registered, and `ruff check server/ tests/` clean. These numbers move as the project
+Current baseline (verified 2026-09-14, after the LTC-column / SpeedSort / sweep-tools fixes):
+1048 backend tests passing / 2 skipped, 255 frontend tests passing, frontend typecheck clean,
+232 MCP tools registered, and `ruff check server/ tests/` clean. These numbers move as the project
 grows — `validate-gokaatru` always re-derives the live count rather than trusting any written
 baseline, this one included. Backend count assumes the gitignored `data/uploads/` fixtures are
 present (see the `tests/` layout note above); without them, expect setup errors on the tests
@@ -184,7 +184,73 @@ that use them, not a lower clean pass count.
 3 F841, 1 F811) had accumulated because `ruff>=0.1` is unpinned and the check was not being
 run to zero. They are all fixed now; keep it at zero rather than letting a second wall build.
 
-## Current state (last verified 2026-09-08)
+## Current state (last verified 2026-09-14)
+
+**2026-09-14: the sweep's LTC was correcting the wrong series, and three fixes followed.**
+Found by investigating a user's question about the Interrogate page — "why is LTC method
+the only contributor to the variance?" — on a real 167 m lidar campaign with sensors at
+140/160/180/200 m. The page showed LTC (D) at 100% and the other four axes at 0.0%. Three
+of those axes genuinely had one level among the admissible set (and axis B had two
+*designed* — every `log_law_momm` scenario was rejected by the `roughness_clipping` gate),
+so 0% was correct for them by construction. Axis A1 had two real levels, produced
+genuinely different shear (α 0.086518 vs 0.084952), and still showed **0.000 swing with
+every downstream number bit-identical to 16 digits**. That was a defect, not a finding.
+
+1. **`_resolve_ltc_columns` re-derived the measured column as "the highest-height speed
+   sensor in `sensor_mapping`".** A hub column is never in that mapping — extrapolation
+   appends it to `timeseries_df` — so the resolver could not return one at any site, ever.
+   The sweep computed the hub series in `extrapolate` and then fitted every LTC on
+   `Spd_200m`, publishing the result as the hub answer. Measured: the 200 m level is
+   **+0.185 m/s (+2.05%)** above the 167 m hub level (9.2166 vs 9.0316 m/s), and it
+   propagated into `long_term_mean_speed_mps`, the indicative AEP and the capacity factor.
+   It also made axes A1, A2 and B unable to move *any* published metric, because
+   everything downstream of shear and extrapolation was bypassed — which is precisely why
+   the page attributed 100% to the one axis still able to vary. Now the hub series is
+   used, and a missing one is **refused by name** rather than substituted (convention 1;
+   confirmed with the user before choosing refusal over a disclosed fallback). This also
+   hit `/scenarios/run`, which never extrapolates at all: moving hub height there without
+   re-extrapolating is now a 400 naming the missing column, pinned by a test.
+2. **SpeedSort ran direction-agnostically in every sweep ever executed.** The sweep called
+   every non-XGBoost algorithm as `runner(state, short, long)`, so `long_dir_col`
+   defaulted to empty and SpeedSort lost the per-sector transfer functions that are the
+   reason to choose it — while XGBoost kept its directional feature, so axis D was
+   comparing them on unequal terms. Three call sites dispatched on the algorithm name
+   independently and this was the one that drifted; they now share
+   `DIRECTIONAL_LTC_ALGORITHMS` and a test asserts no inline name dispatch remains.
+   Separately, `mapping.get("direction_col")` never matched (the slot is `dir_col`), so
+   the measured direction column was always "" — latent, since nothing in that path
+   consumed it, and now fixed.
+3. **The Copilot could not see a sweep at all.** Asked the question above it answered from
+   live session state — where a sweep leaves no trace, each leaf running in a forked
+   context that never writes back — and confabulated an explanation about the spread
+   between anemometers, including the true-but-irrelevant "LTC algorithms run: none". The
+   variance decomposition existed only in `frontend/src/lib/sweepAnalysis.ts`. It is now
+   `server/core/sweep_analysis.py`, exposed as `POST /sessions/{id}/sweep/{id}/spread` plus
+   three read-only tools (`list_sweeps`, `get_sweep_summary`, `analyze_sweep_spread`), and
+   **the TypeScript copy is deleted** — the Interrogate page fetches it, so there is one
+   implementation rather than two that must agree. Tool count 229 → 232; read-only tier
+   48 → 51.
+
+`get_sweep_summary` deliberately reports `levels_designed` vs `levels_admissible` per axis
+and the gate tally, because the original confusion was reading "0.0%" as "this choice does
+not matter" when it meant "this choice was never varied among the admissible set".
+
+**A security fix fell out of #3**: `_sweep_dir` did no path confinement, so a sweep id of
+`../../<other session>/sweeps/<id>` read another session's manifest and every scenario
+runconfig in it. Only reachable from an authenticated route before — but a sweep id is now
+an input to a chat tool, where it can originate in model output. Confined the same way as
+`_confined_file_path`, with traversal tests.
+
+**Caveat, documented rather than enforced** (the user's call): fixes 1 and 2 change the
+numbers every previously-stored sweep produced. There is no version stamp on the manifest,
+so **any sweep run before 2026-09-14 is not comparable with one run after** — its LTC was
+fitted on the top sensor rather than the hub series, and its SpeedSort was
+direction-agnostic. Re-run rather than compare.
+
+One deliberate UX regression: the decomposition was a synchronous `useMemo` and is now a
+round-trip, so a metric switch or filter toggle is no longer instant. Cached per
+sweep+metric+row-selection in `useSweepStore.spread`, so each distinct view is fetched once.
+
 
 **2026-09-08: a CSV-only campaign can now be analysed — minimal Task 43 data model**
 **builder.** Without a data model nothing populates `sensor_mapping` or `state.timezone`

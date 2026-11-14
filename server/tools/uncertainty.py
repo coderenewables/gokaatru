@@ -28,6 +28,15 @@ from server.state.session import SessionState, session
 K_SHEAR_ASSUMED_POWER_LAW = 0.03
 K_SHEAR_LOG_LAW = 0.05
 K_SHEAR_ANALYST_SUPPLIED = 0.05
+# Must match CalculateUncertaintyRequest.shear_method in server/api/schemas.py; the MCP tool
+# has no Pydantic layer, so without this an unknown name would silently take the 0.03 branch.
+VALID_SHEAR_METHODS = (
+    "calculate_shear",
+    "simple_power_law",
+    "log_law",
+    "analyst_supplied",
+    "power_law",
+)
 
 # Generic inter-annual variability used only when the site's own value is unknown.
 # Treated as a sentinel: an explicit caller value other than this is respected, while
@@ -205,6 +214,10 @@ def _calculate_uncertainty(
     Valid shear_method values: "calculate_shear", "simple_power_law", "log_law",
     "analyst_supplied", "power_law" (alias for simple_power_law).
     """
+    if shear_method not in VALID_SHEAR_METHODS:
+        raise ValueError(
+            f"Unknown shear_method {shear_method!r}; expected one of {', '.join(VALID_SHEAR_METHODS)}"
+        )
     # Normalize alias: "power_law" is accepted as synonym for "simple_power_law".
     normalized_shear = "simple_power_law" if shear_method == "power_law" else shear_method
     u_meas = float(measurement_uncertainty_pct)
@@ -232,8 +245,8 @@ def _calculate_uncertainty(
             k_shear = K_SHEAR_ANALYST_SUPPLIED
             k_shear_basis = "analyst_supplied"
         else:
-            # "simple_power_law", a fitted request with no measured dispersion, and any
-            # other validated method all take the assumed power-law constant.
+            # "simple_power_law" and a fitted request with no measured dispersion take the
+            # assumed power-law constant.
             k_shear = K_SHEAR_ASSUMED_POWER_LAW
             k_shear_basis = "assumed_power_law"
         u_vert = float(k_shear * abs(math.log(hub_height_m / measurement_height_m)) * 100.0)
@@ -393,6 +406,9 @@ def calculate_uncertainty(
     component_correlation: float = DEFAULT_COMPONENT_CORRELATION,
 ) -> dict:
     """Calculate total uncertainty by root-sum-square combination of measurement, vertical, MCP, and future terms.
+
+    ``shear_method`` must be one of "calculate_shear", "simple_power_law", "log_law",
+    "analyst_supplied" or "power_law" (alias for simple_power_law); any other value is refused.
 
     ``project_life_years`` sets the horizon over which inter-annual variability averages out
     (``u_future = iav / sqrt(life)``); a 15-year life gives 1.55% where the 20-year default

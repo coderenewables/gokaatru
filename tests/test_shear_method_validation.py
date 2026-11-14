@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import math
+import typing
 
 import pytest
 from pydantic import ValidationError
 
 from server.api.schemas import CalculateUncertaintyRequest
 from server.state.session import SessionState
-from server.tools.uncertainty import _calculate_uncertainty
+from server.tools.uncertainty import VALID_SHEAR_METHODS, _calculate_uncertainty
 
 # ---------------------------------------------------------------------------
 # Pydantic schema validation
@@ -55,6 +56,41 @@ class TestSchemaValidation:
     def test_invalid_shear_method_rejected(self) -> None:
         with pytest.raises(ValidationError):
             CalculateUncertaintyRequest(**self._base(shear_method="invalid_method"))
+
+    def test_schema_literal_matches_tool_whitelist(self) -> None:
+        """The HTTP Literal and the MCP-path whitelist must name the same methods."""
+        literal = typing.get_args(CalculateUncertaintyRequest.model_fields["shear_method"].annotation)
+        assert set(literal) == set(VALID_SHEAR_METHODS)
+
+
+class TestUnknownShearMethodRefused:
+    """The MCP path has no Pydantic layer; an unknown name must raise, not take 0.03."""
+
+    @pytest.mark.parametrize("method", ["invalid_method", "", "Log_Law", "roughness"])
+    def test_unknown_method_raises(self, method: str) -> None:
+        with pytest.raises(ValueError, match="Unknown shear_method"):
+            _calculate_uncertainty(
+                _make_state(),
+                measurement_uncertainty_pct=2.0,
+                measurement_height_m=80.0,
+                hub_height_m=120.0,
+                shear_method=method,
+                mcp_r_squared=0.85,
+                concurrent_hours=8760.0,
+            )
+
+    def test_unknown_method_refused_even_when_hub_interpolated(self) -> None:
+        with pytest.raises(ValueError, match="Unknown shear_method"):
+            _calculate_uncertainty(
+                _make_state(),
+                measurement_uncertainty_pct=2.0,
+                measurement_height_m=80.0,
+                hub_height_m=120.0,
+                shear_method="invalid_method",
+                mcp_r_squared=0.85,
+                concurrent_hours=8760.0,
+                is_interpolation=True,
+            )
 
 
 # ---------------------------------------------------------------------------

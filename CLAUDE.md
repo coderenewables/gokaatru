@@ -186,6 +186,17 @@ run to zero. They are all fixed now; keep it at zero rather than letting a secon
 
 ## Current state (last verified 2026-09-14)
 
+**2026-11-14: hub extrapolation no longer drops sub-gate records (T1, decision D1, pending owner sign-off).**
+The 3.0 m/s shear gate was applied to the extrapolation output as well as the fit: `computed[below_gate] = np.nan`
+deleted every record whose reference speed was below it, so the hub series lost its low end and every long-term
+correction was fitted on a truncated series (Launakalana at 120 m: 25% of records, long-term mean +5.8% to +12.8%).
+The gate now governs the fit only; sub-gate records are extrapolated with the table's exponent and counted in
+`below_shear_gate` / `records_below_extrapolation_gate`. Measured by a new held-out-height oracle
+(`tests/test_heldout_height.py`, predicting a withheld sensor from the two below it, before → after): Launakalana 80 m
++23.08% → -0.43%, coverage 69.7% → 100%; Boxkite 250 m +4.91% → -0.40%, coverage 93.7% → 100%. Hub series and
+`extrapolated` counts change on every campaign, so sweeps and LTC results produced before this change are not
+comparable with ones after it. The shear fit gate itself is unchanged.
+
 **2026-09-14: the sweep's LTC was correcting the wrong series, and three fixes followed.**
 Found by investigating a user's question about the Interrogate page — "why is LTC method
 the only contributor to the variance?" — on a real 167 m lidar campaign with sensors at

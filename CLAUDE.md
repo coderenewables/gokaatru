@@ -197,6 +197,15 @@ The gate now governs the fit only; sub-gate records are extrapolated with the ta
 `extrapolated` counts change on every campaign, so sweeps and LTC results produced before this change are not
 comparable with ones after it. The shear fit gate itself is unchanged.
 
+**2026-11-14: SpeedSort fits through rank-sorted pairs (T3).** Each SpeedSort fit (fallback, per-sector and
+non-directional) now goes through `_speedsort_fit`, which sorts the reference and measured speeds independently,
+then applies the threshold to the sorted reference. Previously the fit was time-paired, which overshot the slope
+when the correlation was modest. Launakalana, hub 120 m from 60 m and 80 m, ERA5 reference, concurrent mean bias
+before → after: non-directional -0.3975 → -0.0933 m/s (long-term mean 4.490 → 4.826 m/s); directional -0.3947 →
+-0.1845 m/s (long-term mean 4.406 → 4.659 m/s). Responses carry `fit_basis: "rank_sorted"`. Prediction, the dog-leg
+segment and the thresholds are unchanged; the remaining bias sits in the dog-leg segment and is a method decision.
+**Sweeps and LTC results produced before this change are not comparable with ones after it.**
+
 **2026-09-14: the sweep's LTC was correcting the wrong series, and three fixes followed.**
 Found by investigating a user's question about the Interrogate page — "why is LTC method
 the only contributor to the variance?" — on a real 167 m lidar campaign with sensors at

@@ -352,6 +352,7 @@ invites use:
 |---|---|---|
 | `records_clamped`, `clamped_fraction` | every shear response | How often α hit the [−1, 1] backstop. A clamped α = 1.0 turns 8.7 m/s at 150 m into 15.0 m/s. Above 5% the response carries an explicit `warning`. |
 | `measured_resampled_to_hourly`, `resampling_note` | every LTC response | Measured data is averaged to hourly means while the reanalysis reference is instantaneous. This removes within-hour variance from the measured side only, biasing `variance_ratio` low. Slope-based methods are far less affected. |
+| `fit_basis` | `run_ltc_speedsort` | `"rank_sorted"`: the SpeedSort fit pairs sorted reference and measured speeds, not time-paired records. Stored sweeps and LTC results from before 2026-11-14 used the time-paired fit and are not comparable. |
 | `negative_predictions_clipped` | every LTC response | Corrected speeds truncated at zero. A non-trivial count means the transfer function is bad. |
 | `n_above_training_max`, `fraction_above_training_max` | `run_ltc_xgboost` | Long-term records above the campaign maximum. Trees are piecewise-constant and cannot extrapolate, so these collapse onto the model's highest leaf. **Do not use XGBoost alone for extreme-wind estimation** — it biases GEV/Gumbel annual maxima low. |
 | `years_used`, `years_excluded`, `excluded_reason` | `run_clipping_analysis` | Which calendar years passed the completeness gate. |
@@ -449,10 +450,17 @@ availability, electrical-loss and flow-modelling terms — none of which GoKaatr
   would be better and longer-range dependence is not captured, so the result is
   still a lower bound on the true uncertainty. Pass
   `autocorrelation_corrected=False` for the uncorrected interval.
-- **`speedsort` is directional but not published SpeedSort.** It bins by
+- **`speedsort` is directional, and fits through rank-sorted pairs.** It bins by
   reference direction and fits per-sector dog-leg transfer functions, which
-  earns its lower MCP uncertainty coefficient, but it is not a reimplementation
-  of the windPRO/Windographer algorithm.
+  earns its lower MCP uncertainty coefficient. Each fit sorts the reference and
+  measured speeds independently and fits through the ranked pairs, as the
+  published method does (`fit_basis: "rank_sorted"`); the previous time-paired
+  fit overshot the slope when the correlation was modest. Measured on
+  Launakalana (hub 120 m from 60 m and 80 m, ERA5 reference): concurrent mean
+  bias -0.40 → -0.09 m/s non-directional and -0.40 → -0.18 m/s directional, long-term
+  mean 4.49 → 4.83 and 4.41 → 4.66 m/s. The remaining bias sits in the dog-leg
+  segment below the threshold, a method choice not yet made. It is still not a
+  reimplementation of the windPRO/Windographer software.
 - **IDW interpolation is a fallback only.** `interpolate_spatial` prefers
   bilinear whenever the four ERA5 nodes form a 2×2 cell containing the site,
   which is the normal case.

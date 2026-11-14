@@ -112,15 +112,16 @@ def _height_sensors_json(selection: SensorSelection) -> str:
     )
 
 
-def resolve_sensors(state: Any, spec: ScenarioSpec) -> tuple[SensorSelection, SensorSelection]:
-    """Resolve axis A1 and A2, refusing the scenario if either policy does not apply here."""
-    hub = spec.hub_height_m
-    fit = resolve_policy(state, spec.shear_fit_policy, hub)
-    reference = resolve_policy(state, spec.reference_policy, hub)
+def resolve_fit(state: Any, spec: ScenarioSpec) -> SensorSelection:
+    """Resolve axis A1, refusing the scenario if its shear-fit policy cannot fit a profile.
+
+    Split from the reference policy because the shear table is shared by every leaf with
+    the same fit policy: refusing on a reference policy here would fail siblings that
+    never asked for it.
+    """
+    fit = resolve_policy(state, spec.shear_fit_policy, spec.hub_height_m)
     if not fit.available:
         raise ScenarioError("resolve_sensors", f"shear-fit policy unusable: {fit.reason}")
-    if not reference.available:
-        raise ScenarioError("resolve_sensors", f"reference policy unusable: {reference.reason}")
     if not fit.can_fit_shear and spec.analyst_shear_alpha is None:
         raise ScenarioError(
             "resolve_sensors",
@@ -128,7 +129,20 @@ def resolve_sensors(state: Any, spec: ScenarioSpec) -> tuple[SensorSelection, Se
             f"{len(fit.heights_m)} height(s); a shear exponent cannot be fitted from fewer "
             "than two, so the scenario must supply one (design doc §3.A.1)",
         )
-    return fit, reference
+    return fit
+
+
+def resolve_reference(state: Any, spec: ScenarioSpec) -> SensorSelection:
+    """Resolve axis A2, refusing the scenario if its extrapolation-reference policy is unusable."""
+    reference = resolve_policy(state, spec.reference_policy, spec.hub_height_m)
+    if not reference.available:
+        raise ScenarioError("resolve_sensors", f"reference policy unusable: {reference.reason}")
+    return reference
+
+
+def resolve_sensors(state: Any, spec: ScenarioSpec) -> tuple[SensorSelection, SensorSelection]:
+    """Resolve axis A1 and A2, refusing the scenario if either policy does not apply here."""
+    return resolve_fit(state, spec), resolve_reference(state, spec)
 
 
 def _constant_shear_table(alpha: float) -> pd.DataFrame:

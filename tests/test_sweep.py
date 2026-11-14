@@ -313,6 +313,37 @@ def test_a_leaf_cannot_disturb_the_prefix_its_siblings_reuse(tmp_path):
         )
 
 
+def test_an_unusable_reference_policy_does_not_fail_its_siblings(tmp_path):
+    """The shear prefix is shared, so it must not depend on any one leaf's reference policy.
+
+    With no sensor inventory ``redundant_boom`` is unavailable while ``nearest_2`` is not.
+    The usable leaves must come out identical whichever policy is listed first, and only
+    the unusable leaves may fail — at the stage that refused them.
+    """
+    base = _base_state(tmp_path)
+    base.sensor_inventory = {}
+
+    forward = run_sweep(base, _small_spec(reference_policies=("redundant_boom", "nearest_2")))
+    reverse = run_sweep(base, _small_spec(reference_policies=("nearest_2", "redundant_boom")))
+
+    def usable(rows):
+        selected = [row for row in rows if row["reference_policy"] == "nearest_2"]
+        return sorted(selected, key=lambda row: (row["reference_source"], row["ltc_algorithm"]))
+
+    forward_ok = usable(forward["results"])
+    reverse_ok = usable(reverse["results"])
+    assert len(forward_ok) == 4
+    assert all(row["status"] == "ok" for row in forward_ok)
+    assert forward_ok == reverse_ok
+
+    unusable = [row for row in forward["results"] if row["reference_policy"] == "redundant_boom"]
+    assert len(unusable) == 4
+    for row in unusable:
+        assert row["status"] == "failed"
+        assert row["failed_gates"] == "stage:resolve_sensors"
+        assert "reference policy unusable" in row["error"]
+
+
 # ---------------------------------------------------------------------------
 # Gates
 # ---------------------------------------------------------------------------

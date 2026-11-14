@@ -35,6 +35,7 @@ from server.core.scenario_pipeline import (
     ScenarioSpec,
     build_shear,
     extrapolate,
+    resolve_fit,
     resolve_sensors,
     run_ltc,
     run_uncertainty,
@@ -198,7 +199,7 @@ def run_sweep(
         emit("prefix_started", shear_prefix=list(shear_key))
         try:
             with scenario_context(base_state) as prefix_state:
-                fit, _reference = resolve_sensors(prefix_state, group[0])
+                fit = resolve_fit(prefix_state, group[0])
                 build_shear(prefix_state, group[0], fit)
                 emit("prefix_completed", shear_prefix=list(shear_key))
                 for leaf in group:

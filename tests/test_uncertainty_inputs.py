@@ -195,10 +195,28 @@ def test_analyst_supplied_shear_takes_the_assumed_branch():
     state = _state(shear_values=values, ltc_metrics={"r_squared": 0.8})
     inputs = derive_uncertainty_inputs(state, "variance_ratio", shear_source="analyst_supplied")
 
-    assert inputs["shear_method"] == "simple_power_law"
+    assert inputs["shear_method"] == "analyst_supplied"
     assert inputs["shear_std"] == 0.0
     assert inputs["provenance"]["shear_source"] == "analyst_supplied"
-    assert "assumed-shear branch" in inputs["provenance"]["shear_method_basis"]
+    assert "analyst-supplied constant" in inputs["provenance"]["shear_method_basis"]
+
+
+def test_roughness_derived_profile_takes_the_log_law_constant():
+    """A roughness table with no power-law table is a log-law profile, whatever the dispersion."""
+    state = _state(ltc_metrics={"r_squared": 0.8})
+    state.roughness_table = pd.DataFrame({"z0": [0.03]})
+    state.shear_table = None
+    inputs = derive_uncertainty_inputs(state, "variance_ratio")
+    assert inputs["shear_method"] == "log_law"
+    assert "log-law constant" in inputs["provenance"]["shear_method_basis"]
+
+
+def test_shear_table_present_keeps_the_fitted_branch_over_a_roughness_table():
+    state = _state(ltc_metrics={"r_squared": 0.8})
+    state.roughness_table = pd.DataFrame({"z0": [0.03]})
+    state.shear_table = pd.DataFrame({"alpha": [0.14]})
+    inputs = derive_uncertainty_inputs(state, "variance_ratio")
+    assert inputs["shear_method"] == "simple_power_law"
 
 
 def test_a_fitted_request_without_dispersion_degrades_to_assumed_shear():

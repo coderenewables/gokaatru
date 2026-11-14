@@ -174,7 +174,7 @@ def derive_uncertainty_inputs(
 
     ``shear_source`` distinguishes a fitted profile from an analyst-supplied exponent
     (design doc §3.A.1). A supplied exponent has no measured dispersion, so it must take
-    the *assumed*-shear branch and carry its larger `u_vert`; left implicit it would
+    the analyst-supplied branch and carry its larger `u_vert`; left implicit it would
     inherit a fitted-shear uncertainty from a sibling scenario and under-report.
     """
     if shear_source not in {"fitted", "analyst_supplied"}:
@@ -189,10 +189,17 @@ def derive_uncertainty_inputs(
     interpolated = is_hub_interpolated(state, hub)
 
     if shear_source == "analyst_supplied":
-        shear_method = "simple_power_law"
+        shear_method = "analyst_supplied"
         shear_std = DerivedInput(
             0.0, False, "analyst-supplied exponent has no measured dispersion"
         )
+    elif (
+        getattr(state, "roughness_table", None) is not None
+        and getattr(state, "shear_table", None) is None
+    ):
+        # A roughness-derived profile has no power-law exponent table, so the log-law
+        # constant is the one that applies.
+        shear_method = "log_law"
     elif shear_std.derived:
         shear_method = "calculate_shear"
     else:
@@ -221,8 +228,10 @@ def derive_uncertainty_inputs(
         "measurement_height_m": height.as_record(),
         "shear_source": shear_source,
         "shear_method_basis": (
-            "analyst-supplied exponent, so the assumed-shear branch applies"
+            "analyst-supplied exponent, so the analyst-supplied constant applies"
             if shear_source == "analyst_supplied"
+            else "roughness-derived profile, so the log-law constant applies"
+            if shear_method == "log_law"
             else "fitted profile with measured dispersion"
             if shear_method == "calculate_shear"
             else "fitted profile requested but no dispersion measured, so assumed-shear applies"

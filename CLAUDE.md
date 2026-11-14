@@ -197,6 +197,18 @@ The gate now governs the fit only; sub-gate records are extrapolated with the ta
 `extrapolated` counts change on every campaign, so sweeps and LTC results produced before this change are not
 comparable with ones after it. The shear fit gate itself is unchanged.
 
+**2026-11-14: vertical uncertainty has an INTERIM rule so measuring never scores worse than assuming (T4, decision D2, NEEDS OWNER SIGN-OFF).**
+A fitted profile used `k_shear = shear_std` (the scatter of 10-minute exponents), which measured 8.03% of vertical
+uncertainty against 1.22% for an analyst-typed exponent or the log law, so measuring the shear made the answer worse.
+The rule now takes `k_shear = min(shear_std, K_SHEAR_ASSUMED_POWER_LAW)`, and the three constants are named in
+`server/tools/uncertainty.py`: `K_SHEAR_ASSUMED_POWER_LAW = 0.03`, `K_SHEAR_LOG_LAW = 0.05`,
+`K_SHEAR_ANALYST_SUPPLIED = 0.05`. A new `shear_method: "analyst_supplied"` takes the analyst constant;
+`derive_uncertainty_inputs` now selects `log_law` for a roughness-derived profile with no shear table. The response
+reports `inputs.k_shear` and `inputs.k_shear_basis`. **This is interim: the constants are the values the code already
+used, not an evidence-based vertical term.** The evidence-based version (from the held-out height error) is deferred and
+replaces this rule once designed. Fitted u_vert changes on every scenario whose measured scatter differs from 0.03, so stored
+uncertainty results and sweeps from before this change are not comparable with ones after it.
+
 **2026-11-14: SpeedSort fits through rank-sorted pairs (T3).** Each SpeedSort fit (fallback, per-sector and
 non-directional) now goes through `_speedsort_fit`, which sorts the reference and measured speeds independently,
 then applies the threshold to the sorted reference. Previously the fit was time-paired, which overshot the slope

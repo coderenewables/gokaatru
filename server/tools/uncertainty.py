@@ -21,6 +21,14 @@ from server.core.powercurve import (
 from server.main import mcp
 from server.state.session import SessionState, session
 
+# Shear constants k in u_vert = k * |ln(H/z)| * 100.  Interim values (decision D2, 2026-11-14):
+# the constants the code already used, promoted to names.  A fitted profile takes
+# min(measured dispersion, K_SHEAR_ASSUMED_POWER_LAW), so measuring cannot score worse than
+# assuming.  The evidence-based replacement is not built and needs owner sign-off.
+K_SHEAR_ASSUMED_POWER_LAW = 0.03
+K_SHEAR_LOG_LAW = 0.05
+K_SHEAR_ANALYST_SUPPLIED = 0.05
+
 # Generic inter-annual variability used only when the site's own value is unknown.
 # Treated as a sentinel: an explicit caller value other than this is respected, while
 # this value means "no preference", so a measured IAV can take its place.
@@ -195,23 +203,39 @@ def _calculate_uncertainty(
     """Calculate total uncertainty by root-sum-square combination of measurement, vertical, MCP, and future terms.
 
     Valid shear_method values: "calculate_shear", "simple_power_law", "log_law",
-    "power_law" (alias for simple_power_law).
+    "analyst_supplied", "power_law" (alias for simple_power_law).
     """
     # Normalize alias: "power_law" is accepted as synonym for "simple_power_law".
     normalized_shear = "simple_power_law" if shear_method == "power_law" else shear_method
     u_meas = float(measurement_uncertainty_pct)
+    k_shear: float | None
     if is_interpolation:
         u_vert = 1.0
+        k_shear = None
+        k_shear_basis = "not_applied_hub_interpolated"
     elif measurement_height_m <= 0.0 or hub_height_m <= 0.0:
         u_vert = 5.0
+        k_shear = None
+        k_shear_basis = "not_applied_invalid_heights"
     else:
         if normalized_shear == "calculate_shear" and shear_std > 0.0:
-            k_shear = float(shear_std)
+            k_shear = min(float(shear_std), K_SHEAR_ASSUMED_POWER_LAW)
+            k_shear_basis = (
+                "measured_dispersion_capped"
+                if float(shear_std) > K_SHEAR_ASSUMED_POWER_LAW
+                else "measured_dispersion"
+            )
         elif normalized_shear == "log_law":
-            k_shear = 0.05
+            k_shear = K_SHEAR_LOG_LAW
+            k_shear_basis = "log_law"
+        elif normalized_shear == "analyst_supplied":
+            k_shear = K_SHEAR_ANALYST_SUPPLIED
+            k_shear_basis = "analyst_supplied"
         else:
-            # "simple_power_law" and any validated method get standard k.
-            k_shear = 0.03
+            # "simple_power_law", a fitted request with no measured dispersion, and any
+            # other validated method all take the assumed power-law constant.
+            k_shear = K_SHEAR_ASSUMED_POWER_LAW
+            k_shear_basis = "assumed_power_law"
         u_vert = float(k_shear * abs(math.log(hub_height_m / measurement_height_m)) * 100.0)
     if project_life_years <= 0.0:
         raise ValueError(f"project_life_years must be positive, got {project_life_years}")
@@ -306,6 +330,8 @@ def _calculate_uncertainty(
             "measurement_height_m": float(measurement_height_m),
             "hub_height_m": float(hub_height_m),
             "shear_method": shear_method,
+            "k_shear": None if k_shear is None else round(float(k_shear), 4),
+            "k_shear_basis": k_shear_basis,
             "mcp_r_squared": r_squared,
             # Report the value the arithmetic used, not the uncapped input: u_mcp applies
             # min(months, 12), so disclosing 60 for a five-year campaign made the response

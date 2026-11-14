@@ -10,6 +10,7 @@ must reuse one shear computation, which is what makes the leaf count affordable 
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -28,7 +29,12 @@ from server.core.admissibility import (
 )
 from server.core.scenario_context import scenario_context
 from server.core.scenario_pipeline import ScenarioSpec, run_scenario
-from server.core.scenario_result import AXIS_COLUMNS, METRIC_COLUMNS, fixed_prefix_hash
+from server.core.scenario_result import (
+    AXIS_COLUMNS,
+    ENGINE_VERSION,
+    METRIC_COLUMNS,
+    fixed_prefix_hash,
+)
 from server.core.sweep import (
     SweepSpec,
     list_sweeps,
@@ -530,8 +536,31 @@ def test_fixed_prefix_hash_matches_an_independent_recomputation(tmp_path):
         hub_height_m=base.get_hub_height_m(),
         measurement_type=base.get_measurement_type(),
         power_curve=base.get_power_curve_name(),
+        engine_version=ENGINE_VERSION,
     )
     assert fixed_prefix_hash(base) == expected
+
+
+def test_manifest_carries_the_engine_version(tmp_path):
+    """Sweeps from different engine versions must be distinguishable on disk."""
+    base = _base_state(tmp_path)
+    outcome = run_sweep(base, _small_spec(), sweep_id="versioned")
+    assert outcome["manifest"]["engine_version"] == ENGINE_VERSION
+    assert load_sweep(base, "versioned")["manifest"]["engine_version"] == ENGINE_VERSION
+
+
+def test_a_manifest_without_the_engine_version_loads_unchanged(tmp_path):
+    """Sweeps stored before the stamp existed must read back exactly as they were written."""
+    base = _base_state(tmp_path)
+    run_sweep(base, _small_spec(), sweep_id="legacy")
+    path = Path(base.get_data_dir()) / "sweeps" / "legacy" / "manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    del manifest["engine_version"]
+    path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    loaded = load_sweep(base, "legacy")
+    assert "engine_version" not in loaded["manifest"]
+    assert loaded["manifest"] == manifest
 
 
 def test_progress_events_report_prefixes_and_scenarios(tmp_path):

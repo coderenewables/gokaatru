@@ -347,8 +347,9 @@ def fixed_prefix_hash_oracle(
     hub_height_m: float | None,
     measurement_type: str | None,
     power_curve: str | None,
+    engine_version: str,
 ) -> str:
-    """Independently recompute the fixed-prefix hash from its seven inputs.
+    """Independently recompute the fixed-prefix hash from its eight inputs.
 
     Reimplements the sha256-of-sorted-JSON scheme by hand rather than importing
     ``server.core.scenario_result._stable_hash`` — an oracle that shares the hashing
@@ -362,6 +363,7 @@ def fixed_prefix_hash_oracle(
         "hub_height_m": hub_height_m,
         "measurement_type": measurement_type,
         "power_curve": power_curve,
+        "engine_version": engine_version,
     }
     encoded = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()[:16]

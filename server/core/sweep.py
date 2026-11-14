@@ -40,6 +40,7 @@ from server.core.scenario_pipeline import (
     run_uncertainty,
 )
 from server.core.scenario_result import (
+    ENGINE_VERSION,
     ScenarioResult,
     build_result,
     failed_result,
@@ -347,6 +348,7 @@ def _manifest(
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "stopped_early": stopped,
         "fixed_prefix_hash": prefix,
+        "engine_version": ENGINE_VERSION,
         "spec": spec.as_runconfig(),
         "thresholds": thresholds.as_runconfig(),
         "counts": {

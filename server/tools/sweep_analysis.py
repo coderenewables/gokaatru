@@ -85,6 +85,8 @@ def _sweep_summary(state: SessionState, sweep_id: str) -> dict:
     return {
         "sweep_id": sweep_id,
         "fixed_prefix_hash": (payload.get("manifest") or {}).get("fixed_prefix_hash"),
+        # Absent on sweeps stored before the version was stamped; None, not an error.
+        "engine_version": (payload.get("manifest") or {}).get("engine_version"),
         "scenarios_total": len(rows),
         "scenarios_admissible": len(good),
         "axes": axes,

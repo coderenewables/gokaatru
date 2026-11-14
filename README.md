@@ -384,6 +384,7 @@ invites use:
 | `years_excluded`, `min_year_coverage` | `compute_extreme_winds` | Calendar years covering too little of the calendar to hold an annual maximum, with their day coverage, months and the partial maximum they would have contributed. |
 | `density_normalisation` | `calculate_uncertainty`, `compute_energy_sensitivity` | Whether speeds were normalised to the power curve's reference density per IEC 61400-12-1 before the sensitivity factor was measured. Requires a recorded site density; without one it reports `applied: false` rather than assuming standard conditions. |
 | `upstream_processing` | `brighthub_import_location` | BrightHub cleaning, calibration and offsets applied **before** GoKaatru saw the data. Recorded as a non-undoable entry at the head of the cleaning log: coverage and recovery figures describe the data as received, not the raw campaign. |
+| `engine_version` | sweep `manifest.json`, `get_sweep_summary`, `fixed_prefix_hash` | The engine release that produced the numbers (`ENGINE_VERSION`, currently `"2026.11"`), also hashed into the fixed-prefix hash, so every config hash moves with it. Sweeps stored before the stamp read as `null`. The 2026.11 changes (sub-gate records extrapolated, SpeedSort rank-sorted fit, interim vertical-uncertainty rule) moved the numbers, so a `null` or older version is not comparable with a current sweep. Re-run rather than compare. |
 
 ### Uncertainty is reported on a wind-speed basis — converting it to energy
 

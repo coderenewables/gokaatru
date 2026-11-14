@@ -244,23 +244,25 @@ def build_shear(state: Any, spec: ScenarioSpec, fit: SensorSelection) -> StageRe
 
 
 def extrapolate(state: Any, spec: ScenarioSpec, reference: SensorSelection) -> StageResult:
-    """Carry the measured series and both reanalyses to hub height (axes A2, C)."""
-    from server.tools.extrapolation import (
-        _extrapolate_all_reanalysis_nodes,
-        _extrapolate_to_hub_height,
-    )
+    """Carry the measured series to hub height (axes A2, C).
+
+    The reanalysis is deliberately not carried up here: the sweep's LTC reads the native
+    ``Spd_100m`` / ``Spd_50m`` columns, never a hub-height reanalysis column, so extrapolating
+    all eight node frames per leaf was pure cost.
+    """
+    from server.tools.extrapolation import _extrapolate_to_hub_height
 
     hub = spec.hub_height_m if spec.hub_height_m is not None else state.get_hub_height_m()
     if hub is None:
         raise ScenarioError("extrapolate", "hub height is not set")
     shear_model = "log_law" if spec.shear_model.startswith("log_law") else "power_law"
     measured = _extrapolate_to_hub_height(
-        state, float(hub), shear_model, reference_columns=list(reference.columns)
+        state,
+        float(hub),
+        shear_model,
+        reference_columns=list(reference.columns),
+        extrapolate_reanalysis=False,
     )
-    # Same profile for the reference as for the measurement: correlating a
-    # power-law-extrapolated reanalysis with a log-law-extrapolated site series would
-    # be an internally inconsistent pair.
-    reanalysis = _extrapolate_all_reanalysis_nodes(state, float(hub), shear_model=shear_model)
     return StageResult(
         "extrapolate",
         True,
@@ -270,8 +272,8 @@ def extrapolate(state: Any, spec: ScenarioSpec, reference: SensorSelection) -> S
             "method_counts": measured.get("method_counts"),
             "extrapolation_ratio": measured.get("extrapolation_ratio"),
             "extrapolation_warning": measured.get("warning"),
-            "reanalysis_status": reanalysis.get("status"),
-            "reanalysis_skipped": reanalysis.get("skipped_nodes"),
+            "reanalysis_status": "not_run",
+            "reanalysis_skipped": None,
         },
     )
 

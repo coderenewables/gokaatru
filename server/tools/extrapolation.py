@@ -221,6 +221,7 @@ def _extrapolate_to_hub_height(
     hub_height_m: float,
     shear_model: str = "power_law",
     reference_columns: list[str] | None = None,
+    extrapolate_reanalysis: bool = True,
 ) -> dict:
     """Create a hub-height wind-speed series using power-law or log-law shear per IEC 61400-12-1 Annex B."""
     if shear_model not in {"power_law", "log_law"}:
@@ -302,7 +303,13 @@ def _extrapolate_to_hub_height(
     # available. It used to be wrapped in a bare `except: pass`, so a genuine failure was
     # as silent as a legitimate skip (F-22); the reason is now reported either way.
     reanalysis_result: dict[str, object] | None = None
-    if state.shear_table is None:
+    if not extrapolate_reanalysis:
+        reanalysis_result = {
+            "status": "skipped",
+            "reason": "not_requested",
+            "wrote_hub_column": False,
+        }
+    elif state.shear_table is None:
         reanalysis_result = {
             "status": "skipped",
             "reason": "no_shear_table",

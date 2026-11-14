@@ -33,8 +33,10 @@ from server.core.scenario_result import (
     AXIS_COLUMNS,
     ENGINE_VERSION,
     METRIC_COLUMNS,
+    config_hash,
     fixed_prefix_hash,
 )
+from server.core.sensor_selection import resolve_policy
 from server.core.sweep import (
     SweepSpec,
     list_sweeps,
@@ -342,6 +344,121 @@ def test_an_unusable_reference_policy_does_not_fail_its_siblings(tmp_path):
         assert row["status"] == "failed"
         assert row["failed_gates"] == "stage:resolve_sensors"
         assert "reference policy unusable" in row["error"]
+
+
+def _two_sensor_state(tmp_path) -> SessionState:
+    """The fixture mast with only its two top sensors, so every policy resolves to them.
+
+    On four sensors the policies all differ. With two there is one sensor pair, and
+    ``nearest_2``, ``widest_lever`` and ``availability_90`` all resolve to it.
+    """
+    base = _base_state(tmp_path)
+    for height in (40.0, 60.0):
+        column = f"Spd_{int(height)}m"
+        del base.sensor_mapping[height]
+        del base.sensor_inventory[column]
+        base.timeseries_df = base.timeseries_df.drop(columns=column)
+        base.raw_timeseries_df = base.raw_timeseries_df.drop(columns=column)
+    return base
+
+
+def test_policies_resolving_to_the_same_sensors_run_once(tmp_path):
+    """Two names for one computation: one row, and the second is listed as a duplicate."""
+    base = _two_sensor_state(tmp_path)
+    resolved = {policy: resolve_policy(base, policy, HUB_M).columns for policy in ("nearest_2", "availability_90")}
+    assert resolved["nearest_2"] == resolved["availability_90"] != ()
+
+    spec = _small_spec(
+        reference_policies=("nearest_2", "availability_90"),
+        reference_sources=("era5",),
+        ltc_algorithms=("variance_ratio",),
+    )
+    events: list = []
+    outcome = run_sweep(base, spec, on_progress=events.append, persist=False)
+    manifest = outcome["manifest"]
+    rows = outcome["results"]
+
+    assert len(rows) == 1
+    assert rows[0]["status"] == "ok"
+    assert manifest["duplicates_skipped"] == [
+        {
+            "shear_fit_policy": "nearest_2",
+            "reference_policy": "availability_90",
+            "same_as": rows[0]["config_hash"],
+        }
+    ]
+    assert manifest["counts"]["duplicates_skipped"] == 1
+    assert manifest["counts"]["planned"] == 2
+
+    assert [event.event for event in events].count("scenario_skipped_duplicate") == 1
+    assert events[-1].event == "sweep_finished"
+    assert (events[-1].completed, events[-1].total) == (2, 2)
+
+
+def test_duplicates_are_found_across_shear_fit_prefixes(tmp_path):
+    """Different fit policies build different shear prefixes; the duplicate still matches."""
+    base = _two_sensor_state(tmp_path)
+    spec = _small_spec(
+        shear_fit_policies=("nearest_2", "availability_90"),
+        reference_policies=("nearest_2",),
+        reference_sources=("era5",),
+        ltc_algorithms=("variance_ratio",),
+    )
+    outcome = run_sweep(base, spec, persist=False)
+
+    assert len(outcome["results"]) == 1
+    skipped = outcome["manifest"]["duplicates_skipped"]
+    assert [(entry["shear_fit_policy"], entry["reference_policy"]) for entry in skipped] == [
+        ("availability_90", "nearest_2")
+    ]
+    assert skipped[0]["same_as"] == outcome["results"][0]["config_hash"]
+
+
+def test_distinct_policies_are_not_deduplicated(tmp_path):
+    base = _base_state(tmp_path)
+    spec = _small_spec(reference_policies=("nearest_2", "widest_lever"))
+    outcome = run_sweep(base, spec, persist=False)
+
+    assert len(outcome["results"]) == spec.leaf_count() == 8
+    assert outcome["manifest"]["duplicates_skipped"] == []
+    assert outcome["manifest"]["counts"]["duplicates_skipped"] == 0
+
+
+def test_an_unusable_policy_is_never_matched_to_a_sibling(tmp_path):
+    """Both leaves are refused at resolution; neither is merged into the other."""
+    base = _base_state(tmp_path)
+    base.sensor_inventory = {}
+    spec = _small_spec(
+        reference_policies=("redundant_boom", "redundant_boom"),
+        reference_sources=("era5",),
+        ltc_algorithms=("variance_ratio",),
+    )
+    outcome = run_sweep(base, spec, persist=False)
+
+    assert outcome["manifest"]["duplicates_skipped"] == []
+    assert [row["status"] for row in outcome["results"]] == ["failed", "failed"]
+
+
+def test_config_hash_ignores_policy_names_but_not_resolved_columns():
+    """The hash names the computation: labels are out, the resolved sensors are in."""
+
+    def record(fit_name: str, columns: list[str]) -> dict:
+        return {
+            "spec": {
+                "sensor_selection": {"shear_fit": fit_name, "extrapolation_reference": fit_name},
+                "shear_model": "power_law_mean",
+                "reference_source": "era5",
+                "ltc_algorithm": "variance_ratio",
+            },
+            "sensor_selection": {
+                "shear_fit": {"resolved_columns": columns},
+                "extrapolation_reference": {"resolved_columns": columns},
+            },
+        }
+
+    same_sensors = config_hash(record("nearest_2", ["Spd_80m"]), "prefix")
+    assert same_sensors == config_hash(record("availability_90", ["Spd_80m"]), "prefix")
+    assert same_sensors != config_hash(record("nearest_2", ["Spd_100m"]), "prefix")
 
 
 # ---------------------------------------------------------------------------

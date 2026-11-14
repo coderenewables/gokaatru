@@ -48,6 +48,7 @@ from server.core.scenario_result import (
     fixed_prefix_hash,
     scenario_runconfig,
 )
+from server.core.sensor_selection import resolve_policy
 
 
 @dataclass(frozen=True)
@@ -177,6 +178,10 @@ def run_sweep(
     prefix = fixed_prefix_hash(base_state)
     results: list[ScenarioResult] = []
     runconfigs: dict[str, dict[str, Any]] = {}
+    duplicates: list[dict[str, Any]] = []
+    # Computation key -> config_hash of the first leaf that ran it. Only completed runs are
+    # registered: a failed first leaf is not evidence that its duplicate would fail too.
+    first_run: dict[tuple[Any, ...], str] = {}
     started_at = datetime.now(timezone.utc)
 
     def emit(
@@ -186,9 +191,18 @@ def run_sweep(
         manifest: dict[str, Any] | None = None,
         **detail: Any,
     ) -> None:
+        # A skipped duplicate is still a leaf the sweep has accounted for, so the progress
+        # bar counts it; otherwise a sweep with duplicates would never reach its total.
         if on_progress is not None:
             on_progress(
-                SweepProgress(event, len(results), len(leaves), config_hash, detail, manifest)
+                SweepProgress(
+                    event,
+                    len(results) + len(duplicates),
+                    len(leaves),
+                    config_hash,
+                    detail,
+                    manifest,
+                )
             )
 
     emit("sweep_started")
@@ -207,10 +221,28 @@ def run_sweep(
                         stopped = True
                         emit("sweep_stopped")
                         break
+                    key = _execution_key(prefix_state, leaf)
+                    if key is not None and key in first_run:
+                        duplicates.append(
+                            {
+                                "shear_fit_policy": leaf.shear_fit_policy,
+                                "reference_policy": leaf.reference_policy,
+                                "same_as": first_run[key],
+                            }
+                        )
+                        emit(
+                            "scenario_skipped_duplicate",
+                            shear_fit_policy=leaf.shear_fit_policy,
+                            reference_policy=leaf.reference_policy,
+                            same_as=first_run[key],
+                        )
+                        continue
                     result, config = _run_leaf(prefix_state, leaf, prefix, thresholds)
                     results.append(result)
                     if config is not None:
                         runconfigs[result.config_hash] = config
+                    if key is not None and result.status == "ok":
+                        first_run.setdefault(key, result.config_hash)
                     emit(
                         "scenario_failed" if result.status == "failed" else "scenario_completed",
                         result.config_hash,
@@ -227,7 +259,14 @@ def run_sweep(
                 emit("scenario_failed", results[-1].config_hash, error=error.message)
 
     manifest = _manifest(
-        identifier, spec, thresholds, prefix, results, started_at, stopped=stopped
+        identifier,
+        spec,
+        thresholds,
+        prefix,
+        results,
+        started_at,
+        stopped=stopped,
+        duplicates=duplicates,
     )
     if persist:
         _persist(base_state, identifier, manifest, results, runconfigs)
@@ -249,6 +288,31 @@ def _by_shear_prefix(leaves: list[ScenarioSpec]) -> dict[tuple[Any, ...], list[S
         key = (leaf.shear_fit_policy, leaf.shear_model, leaf.analyst_shear_alpha)
         groups.setdefault(key, []).append(leaf)
     return groups
+
+
+def _execution_key(prefix_state: Any, leaf: ScenarioSpec) -> tuple[Any, ...] | None:
+    """Return what a leaf computes from, so leaves that compute the same thing run once.
+
+    Policy names are labels; the resolved sensor columns are what the computation reads.
+    Returns None when either policy is unavailable or cannot be resolved: such a leaf runs
+    anyway and reports its own refusal, rather than being matched to a sibling.
+    """
+    try:
+        fit = resolve_policy(prefix_state, leaf.shear_fit_policy, leaf.hub_height_m)
+        reference = resolve_policy(prefix_state, leaf.reference_policy, leaf.hub_height_m)
+    except Exception:  # noqa: BLE001 — de-duplication must never end the sweep
+        return None
+    if not (fit.available and reference.available):
+        return None
+    return (
+        fit.columns,
+        reference.columns,
+        leaf.shear_model,
+        leaf.reference_source,
+        leaf.ltc_algorithm,
+        leaf.hub_height_m,
+        leaf.analyst_shear_alpha,
+    )
 
 
 def _run_leaf(
@@ -313,8 +377,10 @@ def _manifest(
     started_at: datetime,
     *,
     stopped: bool,
+    duplicates: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build the mapping from result row to runconfig file (design doc §7.13)."""
+    duplicates = duplicates or []
     completed = [result for result in results if result.status == "ok"]
     admissible = [result for result in completed if result.admissible]
 
@@ -359,7 +425,11 @@ def _manifest(
             "failed": len(results) - len(completed),
             "admissible": len(admissible),
             "inadmissible": len(completed) - len(admissible),
+            "duplicates_skipped": len(duplicates),
         },
+        # Leaves that resolved to the same computation as an earlier one and were not run.
+        # Listed rather than dropped so a reader can see which policy names were merged.
+        "duplicates_skipped": duplicates,
         "gate_failures": dict(sorted(tally.items(), key=lambda item: -item[1])),
         "diagnosis": diagnosis,
         "scenarios": [

@@ -93,12 +93,23 @@ def fixed_prefix_hash(state: Any) -> str:
 
 
 def config_hash(scenario_record: dict[str, Any], prefix_hash: str) -> str:
-    """Hash a scenario's resolved configuration, including the prefix it was built on."""
+    """Hash what a scenario computes, including the prefix it was built on.
+
+    The policy names are left out of the spec: they are labels, and the resolved columns
+    already carry everything the computation reads. Hashing the names too would give two
+    policies that resolve to the same sensors different hashes, and the sweep's
+    de-duplication relies on the hash identifying the computation alone.
+    """
     selection = scenario_record.get("sensor_selection", {})
+    spec = {
+        key: value
+        for key, value in scenario_record.get("spec", {}).items()
+        if key != "sensor_selection"
+    }
     return _stable_hash(
         {
             "prefix": prefix_hash,
-            "spec": scenario_record.get("spec", {}),
+            "spec": spec,
             # Resolved columns, not policy names — see the module docstring.
             "shear_fit_columns": selection.get("shear_fit", {}).get("resolved_columns"),
             "reference_columns": selection.get("extrapolation_reference", {}).get(

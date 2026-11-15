@@ -145,8 +145,16 @@ def derive_measurement_height(state: Any, reference_heights: list[float] | None 
     return DerivedInput(80.0, False, "fallback: no mapped measurement height")
 
 
-def is_hub_interpolated(state: Any, hub_height_m: float | None = None) -> bool:
+def is_hub_interpolated(
+    state: Any,
+    hub_height_m: float | None = None,
+    reference_heights: list[float] | None = None,
+) -> bool:
     """Whether hub height sits *inside* the measured profile rather than above it.
+
+    The profile is the one the scenario extrapolated from (``reference_heights``, axis
+    A2), falling back to every mapped height. A scenario restricted to sensors below hub
+    is extrapolating even when another sensor above hub exists elsewhere on the mast.
 
     An interpolated hub carries far less vertical uncertainty than an extrapolated one,
     and ``_calculate_uncertainty`` already models that — but only if it is told. A
@@ -154,7 +162,7 @@ def is_hub_interpolated(state: Any, hub_height_m: float | None = None) -> bool:
     on every scenario.
     """
     hub = state.get_hub_height_m() if hub_height_m is None else float(hub_height_m)
-    heights = measurement_heights(state)
+    heights = sorted(reference_heights) if reference_heights else measurement_heights(state)
     if hub is None or len(heights) < 2:
         return False
     return heights[0] < float(hub) < heights[-1]
@@ -186,7 +194,7 @@ def derive_uncertainty_inputs(
     concurrent = derive_concurrent_hours(state, algorithm)
     shear_std = derive_shear_std(state)
     height = derive_measurement_height(state, reference_heights)
-    interpolated = is_hub_interpolated(state, hub)
+    interpolated = is_hub_interpolated(state, hub, reference_heights)
 
     if shear_source == "analyst_supplied":
         shear_method = "analyst_supplied"

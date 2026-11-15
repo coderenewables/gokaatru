@@ -345,7 +345,7 @@ def _run_leaf(
                 | {stage.stage: stage.detail for stage in stages},
             }
             report = evaluate_gates(scenario, record, thresholds)
-            result = build_result(scenario, record, report)
+            result = build_result(scenario, record, report, prefix)
             config = scenario_runconfig(scenario, record, result, thresholds)
             return result, config
     except ScenarioError as error:

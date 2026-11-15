@@ -632,6 +632,17 @@ def test_coverage_is_not_applicable_without_a_series():
 # ---------------------------------------------------------------------------
 
 
+def test_rows_carry_the_manifest_prefix_hash_when_hub_differs_from_the_session(tmp_path):
+    """A leaf's hub is its own, not the session's, but the prefix is fixed once per sweep."""
+    base = _base_state(tmp_path)
+    assert base.get_hub_height_m() == HUB_M
+    outcome = run_sweep(base, _small_spec(hub_height_m=100.0), persist=False)
+
+    assert outcome["results"]
+    for row in outcome["results"]:
+        assert row["fixed_prefix_hash"] == outcome["manifest"]["fixed_prefix_hash"]
+
+
 def test_identical_configurations_hash_identically(tmp_path):
     base = _base_state(tmp_path)
     first = run_sweep(base, _small_spec(), persist=False)

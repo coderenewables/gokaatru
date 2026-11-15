@@ -219,9 +219,14 @@ def build_result(
     state: Any,
     scenario_record: dict[str, Any],
     report: AdmissibilityReport,
+    prefix: str,
 ) -> ScenarioResult:
-    """Assemble one completed scenario into a table row."""
-    prefix = fixed_prefix_hash(state)
+    """Assemble one completed scenario into a table row.
+
+    ``prefix`` is the sweep's fixed-prefix hash, passed in rather than recomputed: the
+    scenario state's hub height can differ from the session's, which would give the row
+    a different hash from the manifest it belongs to.
+    """
     spec = scenario_record.get("spec", {})
     selection = spec.get("sensor_selection", {})
     return ScenarioResult(

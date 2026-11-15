@@ -11,6 +11,10 @@ from uuid import uuid4
 
 from server.state.session import SessionState
 
+#: Session identity and bookkeeping that a fork must not inherit. Every other
+#: SessionState attribute is cloned by ``_clone_session_state``.
+_CLONE_EXCLUDED = ("session_id", "workspace_dir", "created_at", "updated_at")
+
 
 class SessionManager:
     """Manage workspace-scoped SessionState instances for browser clients."""
@@ -109,6 +113,16 @@ class SessionManager:
             "events": [],
         }
         target.workflow_runs = copy.deepcopy(source.workflow_runs)
+
+        target.timezone = source.timezone
+        target.clipping_result = copy.deepcopy(source.clipping_result)
+        target.data_version = copy.deepcopy(source.data_version)
+        target.derived_versions = copy.deepcopy(source.derived_versions)
+        target.ltc_matching_disclosure = copy.deepcopy(source.ltc_matching_disclosure)
+        target.shear_clamp_stats = copy.deepcopy(source.shear_clamp_stats)
+        target.roughness_clip_stats = copy.deepcopy(source.roughness_clip_stats)
+        target.executed_nodes = copy.deepcopy(source.executed_nodes)
+        target.persist_result_files = source.persist_result_files
 
     def create_session(self) -> SessionState:
         """Create a new managed SessionState with its own workspace directory."""

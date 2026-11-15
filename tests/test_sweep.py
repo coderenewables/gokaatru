@@ -241,6 +241,131 @@ def test_a_persisted_sweep_can_be_read_back(tmp_path):
     assert config["scenario"]["ltc_algorithm"] in {"variance_ratio", "linear_least_squares"}
 
 
+def test_a_crash_mid_sweep_leaves_the_finished_groups_on_disk(monkeypatch, tmp_path):
+    """A killed server must not lose the groups it had already run (T12).
+
+    The crash is an unexpected exception, not a ScenarioError, so run_sweep does not
+    catch it and it propagates today; that behaviour is pinned rather than changed.
+    """
+    from server.core import sweep as sweep_module
+
+    spec = _small_spec(shear_fit_policies=("nearest_2", "widest_lever"))
+    groups = sweep_module._by_shear_prefix(spec.leaves())
+    first_key, second_key = list(groups)[:2]
+    real_run_leaf = sweep_module._run_leaf
+
+    def crash_in_second_group(prefix_state, leaf, prefix, thresholds):
+        key = (leaf.shear_fit_policy, leaf.shear_model, leaf.analyst_shear_alpha)
+        if key == second_key:
+            raise RuntimeError("simulated crash")
+        return real_run_leaf(prefix_state, leaf, prefix, thresholds)
+
+    monkeypatch.setattr(sweep_module, "_run_leaf", crash_in_second_group)
+
+    base = _base_state(tmp_path)
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        run_sweep(base, spec, sweep_id="crashed")
+
+    first_group_size = len(groups[first_key])
+    loaded = load_sweep(base, "crashed")
+    assert loaded["manifest"]["in_progress"] is True
+    assert loaded["manifest"]["counts"]["run"] == first_group_size
+    assert len(loaded["results"]) == first_group_size
+    assert all(row["status"] == "ok" for row in loaded["results"])
+
+    first_ok = next(e for e in loaded["manifest"]["scenarios"] if e["status"] == "ok")
+    config = load_scenario_runconfig(base, "crashed", first_ok["config_hash"])
+    assert config["scenario"]["config_hash"] == first_ok["config_hash"]
+
+    summaries = list_sweeps(base)
+    assert [entry["sweep_id"] for entry in summaries] == ["crashed"]
+
+
+def test_an_interim_manifest_carries_the_duplicates_found_so_far(monkeypatch, tmp_path):
+    """The checkpoint is a full manifest, not a bare row dump (T7 + T12).
+
+    nearest_2 and availability_90 resolve to the same two sensors, so the second leaf of
+    the first group is a duplicate. The crash in the second group must not lose it.
+    """
+    from server.core import sweep as sweep_module
+
+    base = _two_sensor_state(tmp_path)
+    spec = _small_spec(
+        shear_models=("power_law_mean", "power_law_momm"),
+        reference_policies=("nearest_2", "availability_90"),
+        reference_sources=("era5",),
+        ltc_algorithms=("variance_ratio",),
+    )
+    second_model = spec.leaves()[-1].shear_model
+    real_run_leaf = sweep_module._run_leaf
+
+    def crash_in_second_group(prefix_state, leaf, prefix, thresholds):
+        if leaf.shear_model == second_model:
+            raise RuntimeError("simulated crash")
+        return real_run_leaf(prefix_state, leaf, prefix, thresholds)
+
+    monkeypatch.setattr(sweep_module, "_run_leaf", crash_in_second_group)
+
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        run_sweep(base, spec, sweep_id="interim")
+
+    manifest = load_sweep(base, "interim")["manifest"]
+    assert manifest["in_progress"] is True
+    assert manifest["counts"]["run"] == 1
+    assert manifest["counts"]["duplicates_skipped"] == 1
+    assert [d["reference_policy"] for d in manifest["duplicates_skipped"]] == ["availability_90"]
+
+
+def test_a_completed_sweep_carries_no_in_progress_flag(tmp_path):
+    base = _base_state(tmp_path)
+    run_sweep(base, _small_spec(shear_fit_policies=("nearest_2", "widest_lever")), sweep_id="done")
+
+    manifest = load_sweep(base, "done")["manifest"]
+    assert "in_progress" not in manifest
+    assert manifest["counts"]["run"] == manifest["counts"]["planned"]
+
+
+def test_a_transiently_locked_file_is_replaced_on_retry(monkeypatch, tmp_path):
+    """Windows refuses a replace while a scanner holds the target; that must not end a sweep."""
+    import os
+
+    from server.core import sweep as sweep_module
+
+    real_replace = os.replace
+    refusals = {"left": 2}
+
+    def locked_twice(src, dst):
+        if refusals["left"] > 0:
+            refusals["left"] -= 1
+            raise PermissionError(5, "Access is denied")
+        return real_replace(src, dst)
+
+    delays: list[float] = []
+    monkeypatch.setattr(os, "replace", locked_twice)
+    monkeypatch.setattr(sweep_module.time, "sleep", delays.append)
+
+    target = tmp_path / "payload.json"
+    sweep_module._write_json_atomic(target, {"ok": True})
+
+    assert json.loads(target.read_text(encoding="utf-8")) == {"ok": True}
+    assert len(delays) == 2
+
+
+def test_a_file_locked_past_the_retries_is_raised_not_swallowed(monkeypatch, tmp_path):
+    import os
+
+    from server.core import sweep as sweep_module
+
+    def always_locked(src, dst):
+        raise PermissionError(5, "Access is denied")
+
+    monkeypatch.setattr(os, "replace", always_locked)
+    monkeypatch.setattr(sweep_module.time, "sleep", lambda _s: None)
+
+    with pytest.raises(PermissionError):
+        sweep_module._write_json_atomic(tmp_path / "payload.json", {"ok": True})
+
+
 def test_missing_sweeps_and_scenarios_are_refused_by_name(tmp_path):
     base = _base_state(tmp_path)
     with pytest.raises(ValueError, match="is not available"):

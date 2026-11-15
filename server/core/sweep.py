@@ -21,6 +21,7 @@ delete exactly the file the analyst turns out to need.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from itertools import product
@@ -205,6 +206,22 @@ def run_sweep(
                 )
             )
 
+    def checkpoint() -> None:
+        # Rewrites the whole sweep so far. Each call supersedes the last, so the files
+        # always hold a complete, loadable table; a crash loses at most the group in
+        # flight rather than the whole sweep.
+        interim = _manifest(
+            identifier,
+            spec,
+            thresholds,
+            prefix,
+            results,
+            started_at,
+            stopped=stopped,
+            duplicates=duplicates,
+        )
+        _persist(base_state, identifier, interim | {"in_progress": True}, results, runconfigs)
+
     emit("sweep_started")
     stopped = False
     for shear_key, group in _by_shear_prefix(leaves).items():
@@ -257,6 +274,8 @@ def run_sweep(
                     failed_result(leaf.as_runconfig(), prefix, error.stage, error.message)
                 )
                 emit("scenario_failed", results[-1].config_hash, error=error.message)
+        if persist:
+            checkpoint()
 
     manifest = _manifest(
         identifier,
@@ -455,17 +474,39 @@ def _persist(
     """Write the manifest, the result table and every scenario runconfig."""
     root = _sweep_dir(base_state, sweep_id)
     root.mkdir(parents=True, exist_ok=True)
-    (root / "manifest.json").write_text(json.dumps(manifest, indent=2, default=str), encoding="utf-8")
-    (root / "results.json").write_text(
-        json.dumps([result.as_row() for result in results], indent=2, default=str), encoding="utf-8"
-    )
+    _write_json_atomic(root / "manifest.json", manifest)
+    _write_json_atomic(root / "results.json", [result.as_row() for result in results])
     for config_hash, config in runconfigs.items():
         scenario_dir = root / "scenarios" / config_hash
         scenario_dir.mkdir(parents=True, exist_ok=True)
-        (scenario_dir / "runconfig.json").write_text(
-            json.dumps(config, indent=2, default=str), encoding="utf-8"
-        )
+        _write_json_atomic(scenario_dir / "runconfig.json", config)
     return root
+
+
+#: Windows refuses to replace a file another process still has open (a virus scanner or
+#: indexer reading it just after a checkpoint wrote it). That is transient, so the replace
+#: is retried briefly; a lock that outlasts the retries is raised, not swallowed.
+_REPLACE_ATTEMPTS = 10
+_REPLACE_RETRY_DELAY_S = 0.2
+
+
+def _write_json_atomic(path: Path, payload: Any) -> None:
+    """Replace a JSON file in one step, so an interrupted write cannot leave it truncated.
+
+    Checkpoints rewrite files that a previous checkpoint already wrote; a kill mid-write
+    would otherwise leave an unparseable manifest, which `list_sweeps` would then fail on
+    for every sweep, not just this one.
+    """
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+    for attempt in range(1, _REPLACE_ATTEMPTS + 1):
+        try:
+            temporary.replace(path)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_ATTEMPTS:
+                raise
+            time.sleep(_REPLACE_RETRY_DELAY_S)
 
 
 def load_sweep(base_state: Any, sweep_id: str) -> dict[str, Any]:
@@ -506,6 +547,8 @@ def list_sweeps(base_state: Any) -> list[dict[str, Any]]:
                 "finished_at": manifest.get("finished_at"),
                 "counts": manifest.get("counts", {}),
                 "fixed_prefix_hash": manifest.get("fixed_prefix_hash"),
+                # A checkpoint of a sweep still running, or one that died part-way.
+                "in_progress": bool(manifest.get("in_progress", False)),
             }
         )
     return sorted(summaries, key=lambda entry: str(entry.get("started_at")), reverse=True)

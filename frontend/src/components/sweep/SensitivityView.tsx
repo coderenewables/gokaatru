@@ -19,7 +19,12 @@ import {
   formatMetric,
   spreadStats,
 } from "../../lib/sweepAnalysis";
-import { AXIS_LABELS, METRIC_META, type AxisColumn } from "../../types/sweep";
+import {
+  AXIS_LABELS,
+  METRIC_META,
+  describeDuplicateLevels,
+  type AxisColumn,
+} from "../../types/sweep";
 
 export function SensitivityView() {
   const rows = useSweepStore((state) => state.rows);
@@ -82,6 +87,9 @@ export function SensitivityView() {
                 {AXIS_LABELS[entry.axis as AxisColumn]}
                 <small>
                   {entry.levels} level{entry.levels === 1 ? "" : "s"}
+                  {describeDuplicateLevels(entry).length > 0
+                    ? ` · same sensors: ${describeDuplicateLevels(entry).join("; ")}`
+                    : ""}
                 </small>
               </span>
               <span className="sweep-decomposition-track">

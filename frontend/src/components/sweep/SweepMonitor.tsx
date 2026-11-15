@@ -152,6 +152,12 @@ export function SweepMonitor() {
               <dt>Failed</dt>
               <dd>{manifest.counts.failed}</dd>
             </div>
+            {manifest.counts.duplicates_skipped ? (
+              <div>
+                <dt>Skipped as duplicates</dt>
+                <dd>{manifest.counts.duplicates_skipped}</dd>
+              </div>
+            ) : null}
           </dl>
         </section>
       ) : null}

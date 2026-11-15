@@ -90,4 +90,26 @@ describe("InterrogateView", () => {
     // SpreadSummaryView's own results table + export section.
     expect(screen.getByText("Take a scenario away")).toBeInTheDocument();
   });
+
+  it("names a level skipped as a duplicate instead of letting its axis read as not varied", () => {
+    const withDuplicate: AxisContribution[] = [
+      ...CONTRIBUTIONS,
+      {
+        axis: "reference_policy",
+        levels: 1,
+        share: 0,
+        swing: 0,
+        level_means: [{ level: "availability_90", mean: 8.1, count: 3 }],
+        duplicate_levels: { redundant_boom: { same_as: ["availability_90"], scenarios: 3 } },
+      },
+    ];
+    useSweepStore.setState({
+      spread: {
+        [spreadKey("sweep-1", "long_term_mean_speed_mps", HASHES)]: withDuplicate,
+      },
+    } as never);
+    render(<InterrogateView />);
+    // Sensitivity's axis label and the summary's coverage line both carry it.
+    expect(screen.getAllByText(/same sensors: redundant_boom = availability_90/).length).toBe(2);
+  });
 });

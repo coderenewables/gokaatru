@@ -194,6 +194,9 @@ export interface SweepCounts {
   failed: number;
   admissible: number;
   inadmissible: number;
+  /** Leaves not run because an earlier leaf resolved to the same sensors (absent on
+   *  sweeps run before duplicates were skipped). */
+  duplicates_skipped?: number;
 }
 
 export interface SweepManifestScenario {
@@ -225,6 +228,12 @@ export interface SweepManifest {
   thresholds: Record<string, number>;
   counts: SweepCounts;
   scenarios: SweepManifestScenario[];
+  /** One entry per skipped leaf: its two policies and the config hash it duplicated. */
+  duplicates_skipped?: Array<{
+    shear_fit_policy: string;
+    reference_policy: string;
+    same_as: string;
+  }>;
 }
 
 export interface SweepOutcome {
@@ -333,4 +342,14 @@ export interface AxisContribution {
   /** Spread between the best and worst level means, in metric units. */
   swing: number;
   level_means: Array<{ level: string; mean: number; count: number }>;
+  /** Levels that resolved to the same sensors as another level, so their scenarios were
+   *  not re-run and carry that level's results. Not counted in `levels`. */
+  duplicate_levels?: Record<string, { same_as: string[]; scenarios: number }>;
+}
+
+/** "redundant_boom = availability_90" for each duplicate level of one axis. */
+export function describeDuplicateLevels(entry: AxisContribution): string[] {
+  return Object.entries(entry.duplicate_levels ?? {}).map(
+    ([level, record]) => `${level} = ${record.same_as.join(", ")}`,
+  );
 }

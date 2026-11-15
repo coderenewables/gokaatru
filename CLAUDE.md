@@ -206,7 +206,7 @@ run to zero. They are all fixed now; keep it at zero rather than letting a secon
 - The SpeedSort dog-leg segment below the threshold leaves a residual negative mean bias (-0.09 m/s non-directional, -0.18 m/s directional at Launakalana, item 3). Removing it is an owner method decision and was not attempted.
 - D2 and D3 await owner sign-off (D1 accepted 2026-11-15).
 - T7 matches a duplicate only against a *completed* first run; a failed first leaf does not shadow its duplicate.
-- `SweepMonitor` does not show `duplicates_skipped` or the `scenario_skipped_duplicate` event.
+- `SweepMonitor`'s live event list does not show the `scenario_skipped_duplicate` event. (Fixed 2026-11-15, D3 follow-up: `get_sweep_summary` and the spread decomposition report `duplicate_levels` per policy axis, the Interrogate page labels them "same sensors: X = Y", and the Outcome panel counts `duplicates_skipped`.)
 - T12 checkpoints set `finished_at` to the checkpoint time, and `get_sweep_summary` / `analyze_sweep_spread` do not flag `in_progress` sweeps.
 - T12 rewrites every accumulated runconfig at each checkpoint: about 94,500 writes, roughly 5 minutes at 3.3 ms per write, for a 9,000-leaf, 20-group sweep. Writing only runconfigs not yet on disk would cut that to about 9,000 writes; not done.
 - The frontend `WorkflowView` "Upload config" test times out intermittently under full-suite load (it passes alone).

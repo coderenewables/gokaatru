@@ -145,7 +145,7 @@ The interface-free heart. Nothing here imports FastAPI or FastMCP.
 | `scenario_context.py` | Runs one scenario without disturbing the session it came from (ContextVar-bound isolation). |
 | `scenario_pipeline.py` | One scenario expressed as composable stages, from shear to uncertainty. `resolve_fit` (axis A1) and `resolve_reference` (axis A2) are split so the sweep's shear-prefix step refuses only on the fit policy; `resolve_sensors` calls both. The extrapolate stage carries the measured series only. |
 | `scenario_result.py` | One flat, hashable record per scenario (the sweep table row shape). `ENGINE_VERSION` (`2026.11`) is hashed into `fixed_prefix_hash`. `config_hash` leaves policy names out of the spec. `build_result` takes the sweep's prefix rather than recomputing it. |
-| `sweep_analysis.py` | Decomposes a sweep metric's variance across the five axes (design doc §7.9). Ported from `frontend/src/lib/sweepAnalysis.ts`, which was deleted — the statistic now has one implementation, reachable from both the Interrogate page and the chat tools. |
+| `sweep_analysis.py` | Decomposes a sweep metric's variance across the five axes (design doc §7.9). Ported from `frontend/src/lib/sweepAnalysis.ts`, which was deleted — the statistic now has one implementation, reachable from both the Interrogate page and the chat tools. `duplicate_levels(rows, duplicates)` maps each policy level skipped as a duplicate to the level whose rows it shares, so an axis varied between two policies that picked the same sensors does not read as single-level. |
 | `sensor_selection.py` | Resolves a sensor-selection *policy* (e.g. `availability_90`, `widest_lever`) to concrete sensors. |
 | `datamodel_builder.py` | Builds a minimal IEA Task 43 data model from CSV column headers alone, for campaigns delivered without one. Header inference (`draft_columns`), spec validation and Task 43 emission (`build_datamodel`); emits a *document*, never session state. |
 | `uncertainty_inputs.py` | Derives a scenario's uncertainty inputs from its own results. `is_hub_interpolated` takes the scenario's reference heights; `derive_uncertainty_inputs` selects `analyst_supplied` or `log_law` shear methods where the source is an analyst exponent or a roughness-only profile. |
@@ -160,7 +160,7 @@ pass-throughs add **142**.
 |--------|:----:|------|
 | `data_io.py` | 5 | Phase-1 timeseries + datamodel loading, sensor inventory, coverage. |
 | `datamodel_builder.py` | 2 | Draft a Task 43 reading of the loaded columns, and build/persist/load the declared data model (`server/core/datamodel_builder.py` does the work). |
-| `sweep_analysis.py` | 3 | Read and explain a persisted sweep: `list_sweeps`, `get_sweep_summary` (which axes varied, which the gates collapsed), `analyze_sweep_spread`. The rest of the sweep engine is still HTTP-only. |
+| `sweep_analysis.py` | 3 | Read and explain a persisted sweep: `list_sweeps`, `get_sweep_summary` (which axes varied, which the gates collapsed, which levels were duplicates of another), `analyze_sweep_spread`. The rest of the sweep engine is still HTTP-only. |
 | `config.py` | 5 | Run-configuration management (get/update/save/load/summary). |
 | `cleaning.py` | 4 | Rule-based timeseries cleaning (list/apply/log/undo). |
 | `statistics.py` | 9 | Weibull, wind climate, turbulence, windrose, diurnal/monthly, MoMM, scatter. |

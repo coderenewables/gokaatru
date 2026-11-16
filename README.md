@@ -578,9 +578,11 @@ offered. Tool results are wrapped in `<untrusted-tool-output>` tags and the
 system prompt instructs the model not to follow instructions found inside them —
 that mitigates prompt injection; the allowlist is the actual control.
 
-The Copilot UI sends `allow_mutating_tools: true` by default so the assistant can
-drive the workflow, and exposes a checkbox in its BYOK settings to make the
-assistant read-only. The API default is read-only.
+The Copilot UI sends `allow_mutating_tools: false` by default, and its BYOK
+settings carry an opt-in checkbox ("Allow the assistant to change session data").
+When on, the assistant can change session data without asking for each change;
+per-action approval is not built yet, so it is off until the user opts in. The API
+default is read-only as well.
 
 ## Validation
 

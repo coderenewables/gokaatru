@@ -18,6 +18,15 @@ export interface CopilotSettings {
   apiKey: string;
   /** Allow the assistant to modify the session (ingest, cleaning, config, LTC). */
   allowMutatingTools?: boolean;
+  /** Set on load when the saved provider is not supported; never persisted. */
+  replacedProvider?: string;
+}
+
+// Must equal the keys of _PROVIDER_URLS in server/api/routes/chat.py (pinned by tests on both sides).
+export const SUPPORTED_COPILOT_PROVIDERS = ["openai", "openrouter", "groq", "together"] as const;
+
+function isSupportedProvider(provider: string): boolean {
+  return (SUPPORTED_COPILOT_PROVIDERS as readonly string[]).includes(provider);
 }
 
 export interface CopilotMessage {
@@ -31,34 +40,39 @@ export interface CopilotMessage {
 const CHAT_SETTINGS_KEY = "gokaatru-chat-settings";
 
 export function readChatSettings(): CopilotSettings {
-  if (typeof window === "undefined") return { provider: "openai", model: "gpt-4o", apiKey: "" };
+  if (typeof window === "undefined") return { provider: "openai", model: "gpt-4o", apiKey: "", allowMutatingTools: false };
   try {
     const raw = window.localStorage.getItem(CHAT_SETTINGS_KEY);
-    if (!raw) return { provider: "openai", model: "gpt-4o", apiKey: "" };
+    if (!raw) return { provider: "openai", model: "gpt-4o", apiKey: "", allowMutatingTools: false };
     const parsed = JSON.parse(raw) as Partial<CopilotSettings>;
+    const saved = typeof parsed.provider === "string" ? parsed.provider : "openai";
+    const supported = isSupportedProvider(saved);
     return {
-      provider: typeof parsed.provider === "string" ? parsed.provider : "openai",
-      model: typeof parsed.model === "string" ? parsed.model : "gpt-4o",
+      provider: supported ? saved : "openai",
+      model: supported
+        ? typeof parsed.model === "string"
+          ? parsed.model
+          : "gpt-4o"
+        : defaultModelForProvider("openai"),
       apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
-      // Default on: the assistant is expected to drive the workflow, and the
-      // deployment model is single-user-local. Turn it off to make the
-      // assistant read-only (D23).
-      allowMutatingTools: parsed.allowMutatingTools !== false,
+      // Default off (owner decision 2026-11-17): assistant data changes need
+      // approval, and per-action approval does not exist yet.
+      allowMutatingTools: parsed.allowMutatingTools === true,
+      ...(supported ? {} : { replacedProvider: saved }),
     };
   } catch {
-    return { provider: "openai", model: "gpt-4o", apiKey: "" };
+    return { provider: "openai", model: "gpt-4o", apiKey: "", allowMutatingTools: false };
   }
 }
 
 export function writeChatSettings(settings: CopilotSettings): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(CHAT_SETTINGS_KEY, JSON.stringify(settings));
+  const { replacedProvider: _replaced, ...persisted } = settings;
+  window.localStorage.setItem(CHAT_SETTINGS_KEY, JSON.stringify(persisted));
 }
 
 export function defaultModelForProvider(provider: string): string {
   switch (provider) {
-    case "anthropic":
-      return "claude-3-5-sonnet-latest";
     case "openrouter":
       return "openai/gpt-4o";
     case "groq":
@@ -191,9 +205,9 @@ export async function streamCopilotReply(args: {
       provider: settings.provider,
       model: settings.model,
       messages,
-      // Without this the copilot can only read and plot: ingest, cleaning,
-      // config writes, ERA5 fetches and LTC runs are all gated (D23).
-      allow_mutating_tools: settings.allowMutatingTools !== false,
+      // Off unless explicitly enabled (owner decision 2026-11-17): data changes
+      // by the assistant need approval, and per-action approval does not exist yet.
+      allow_mutating_tools: settings.allowMutatingTools === true,
     });
     text = response.reply || "(no reply)";
     callbacks.onTextDelta?.(text);

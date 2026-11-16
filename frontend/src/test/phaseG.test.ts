@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { toMetricRows, flattenConfigDiff, formatMetricValue } from "../lib/scenarioCompare";
-import { readChatSettings, writeChatSettings, defaultModelForProvider } from "../lib/copilotAgent";
+import {
+  readChatSettings,
+  writeChatSettings,
+  defaultModelForProvider,
+  SUPPORTED_COPILOT_PROVIDERS,
+} from "../lib/copilotAgent";
 
 describe("scenarioCompare", () => {
   it("toMetricRows computes deltas vs the first session", () => {
@@ -35,8 +40,47 @@ describe("scenarioCompare", () => {
 describe("copilotAgent settings", () => {
   it("defaultModelForProvider returns known defaults", () => {
     expect(defaultModelForProvider("openai")).toBe("gpt-4o");
-    expect(defaultModelForProvider("anthropic")).toContain("claude");
     expect(defaultModelForProvider("groq")).toContain("llama");
+  });
+
+  it("supported providers equal the backend's _PROVIDER_URLS keys", () => {
+    // tests/test_chat_ssrf.py pins the same literal list on the backend.
+    expect([...SUPPORTED_COPILOT_PROVIDERS]).toEqual(["openai", "openrouter", "groq", "together"]);
+  });
+
+  it("a saved provider the backend does not support falls back to openai", () => {
+    window.localStorage.setItem(
+      "gokaatru-chat-settings",
+      JSON.stringify({ provider: "anthropic", model: "claude-x", apiKey: "sk-test" }),
+    );
+    const s = readChatSettings();
+    expect(s.provider).toBe("openai");
+    expect(s.model).toBe(defaultModelForProvider("openai"));
+    expect(s.apiKey).toBe("sk-test");
+    expect(s.replacedProvider).toBe("anthropic");
+    window.localStorage.clear();
+  });
+
+  it("a supported saved provider is kept and not flagged as replaced", () => {
+    writeChatSettings({ provider: "groq", model: "m", apiKey: "k" });
+    const s = readChatSettings();
+    expect(s.provider).toBe("groq");
+    expect(s.model).toBe("m");
+    expect(s.replacedProvider).toBeUndefined();
+    window.localStorage.clear();
+  });
+
+  it("assistant data changes are off unless the saved value is exactly true", () => {
+    for (const value of ["yes", 1, null, undefined]) {
+      window.localStorage.setItem(
+        "gokaatru-chat-settings",
+        JSON.stringify({ provider: "openai", model: "gpt-4o", apiKey: "k", allowMutatingTools: value }),
+      );
+      expect(readChatSettings().allowMutatingTools).toBe(false);
+    }
+    writeChatSettings({ provider: "openai", model: "gpt-4o", apiKey: "k", allowMutatingTools: true });
+    expect(readChatSettings().allowMutatingTools).toBe(true);
+    window.localStorage.clear();
   });
 
   it("readChatSettings falls back to defaults when localStorage empty", () => {
@@ -48,14 +92,14 @@ describe("copilotAgent settings", () => {
   });
 
   it("writeChatSettings round-trips through readChatSettings", () => {
-    writeChatSettings({ provider: "anthropic", model: "claude-x", apiKey: "sk-test" });
+    writeChatSettings({ provider: "openrouter", model: "x/y", apiKey: "sk-test" });
     const s = readChatSettings();
-    // allowMutatingTools defaults on for settings written before it existed (D23).
+    // allowMutatingTools is off for settings written without it (owner decision 2026-11-17).
     expect(s).toEqual({
-      provider: "anthropic",
-      model: "claude-x",
+      provider: "openrouter",
+      model: "x/y",
       apiKey: "sk-test",
-      allowMutatingTools: true,
+      allowMutatingTools: false,
     });
     window.localStorage.clear();
   });

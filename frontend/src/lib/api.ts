@@ -1058,7 +1058,7 @@ export async function chatSession(
     model: string;
     messages: ChatMessage[];
     // Opt in to session-mutating / filesystem / network tools. The backend
-    // defaults to read-only analysis and visualization (D23).
+    // defaults to read-only analysis and visualization.
     allow_mutating_tools?: boolean;
   },
 ): Promise<ChatResponse> {

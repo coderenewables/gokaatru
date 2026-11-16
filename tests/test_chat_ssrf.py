@@ -48,6 +48,26 @@ class TestCustomEndpointsRejected:
             assert provider in message
 
 
+class TestProviderListMatchesFrontend:
+    def test_supported_providers_are_exactly_the_four_the_ui_offers(self) -> None:
+        # frontend/src/test/phaseG.test.ts pins the same literal on the UI side.
+        assert set(_PROVIDER_URLS) == {"openai", "openrouter", "groq", "together"}
+
+    def test_unsupported_provider_error_names_it_and_lists_supported(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            _resolve_base_url("anthropic")
+        message = str(excinfo.value)
+        assert "'anthropic'" in message
+        for provider in ("openai", "openrouter", "groq", "together"):
+            assert provider in message
+
+    def test_request_default_is_read_only(self) -> None:
+        from server.api.routes.chat import ChatRequest
+
+        body = ChatRequest(api_key="k", messages=[{"role": "user", "content": "hi"}])
+        assert body.allow_mutating_tools is False
+
+
 class TestNamedProvidersStillWork:
     """The allowlist must not break the providers the UI actually offers."""
 

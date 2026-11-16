@@ -431,15 +431,16 @@ exceedances; using them directly on AEP understates the energy band by a factor 
 
 **S is not a constant.** It falls as a site sits higher on the power curve, because more
 hours at rated power means extra wind speed buys no extra energy. Measured against the
-generic curve GoKaatru ships:
+generic curve GoKaatru ships, on one synthetic 20-year hourly long-term series rescaled to
+each mean (`tests/test_readme_energy_table.py` recomputes every row):
 
 | site mean speed | gross CF | S |
 |---|---|---|
-| 5.5 m/s | 27% | **2.12** |
+| 5.5 m/s | 27% | **2.10** |
 | 6.5 m/s | 37% | 1.70 |
 | 7.5 m/s | 46% | 1.37 |
 | 8.5 m/s | 54% | 1.10 |
-| 10.5 m/s | 65% | **0.64** |
+| 10.5 m/s | 65% | **0.63** |
 
 The gap between the two bases is therefore **widest at marginal sites** — exactly where
 the P90 decides whether a project is financeable. A fixed multiplier would be wrong in
@@ -447,7 +448,7 @@ both directions.
 
 **Two caveats that matter.**
 
-The power curve is **generic** — a 4.2 MW, 150 m rotor machine at 238 W/m², roughly IEC
+The power curve is **generic** — a 3.0 MW, 130 m rotor machine at 226 W/m², roughly IEC
 class IIA — chosen to give the right shape and order, not to represent a specific turbine.
 S is turbine-specific, so recompute it with the project machine before publishing.
 
@@ -457,10 +458,11 @@ availability, electrical-loss and flow-modelling terms — none of which GoKaatr
 
 ### Known limitations
 
-- **No energy yield is computed.** GoKaatru characterises the wind *resource* and stops
-  short of the *yield*: there is no project AEP, no capacity factor and no loss model.
-  The energy sensitivity factor above exists to make the speed-to-energy conversion
-  explicit, not to substitute for an energy assessment.
+- **No project energy yield is computed.** An indicative gross AEP and capacity factor
+  (`indicative_aep_mwh`, `indicative_capacity_factor`) are computed off the generic curve
+  and labelled indicative. There is no project power curve, no loss model, no wakes, no
+  net energy and no energy-basis P50/P90. By the owner's decision of 2026-11-16 these will
+  not be built: the product's output is long-term-corrected wind data.
 - **Confidence intervals are approximate.** `ols_confidence_intervals` applies an
   AR(1) effective-sample-size correction estimated from the residuals' own lag-1
   autocorrelation, which on hourly wind widens the interval by roughly 3.5×

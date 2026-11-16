@@ -124,8 +124,8 @@ class TestShearMethodNormalization:
         # inputs reports original method
         assert result["inputs"]["shear_method"] == "power_law"
 
-    def test_log_law_uses_k_shear_005(self) -> None:
-        """'log_law' → k_shear = 0.05 (conservative)."""
+    def test_log_law_uses_k_shear_007(self) -> None:
+        """'log_law' → k_shear = 0.07, the worst-year held-out value (was 0.05 before 2026-11-16)."""
         result = _calculate_uncertainty(
             _make_state(),
             measurement_uncertainty_pct=2.0,
@@ -135,8 +135,9 @@ class TestShearMethodNormalization:
             mcp_r_squared=0.85,
             concurrent_hours=8760.0,
         )
-        expected = round(0.05 * abs(math.log(120.0 / 80.0)) * 100.0, 2)
+        expected = round(0.07 * abs(math.log(120.0 / 80.0)) * 100.0, 2)
         assert result["components"]["vertical_extrapolation"] == expected
+        assert result["inputs"]["k_shear"] == 0.07
         assert result["inputs"]["shear_method"] == "log_law"
 
     def test_simple_power_law_uses_k_shear_003(self) -> None:

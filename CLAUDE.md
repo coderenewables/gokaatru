@@ -84,7 +84,7 @@ frontend/src/
 │                         #   defaultWorkflowPlan, sweepApi, sweepAnalysis, copilotAgent
 └── types/analysis.ts     # canonical config schema + response interfaces
 
-tests/                    # 74 backend test files (pytest) — includes oracles.py, an
+tests/                    # 79 backend test files (pytest) — includes oracles.py, an
                            #   independent-implementation oracle harness used to verify
                            #   fixes without importing from server/. Some depend on
                            #   gitignored fixtures under data/uploads/ (e.g. Boxkite,
@@ -172,8 +172,9 @@ cd frontend && npm run test          # vitest
 cd frontend && npm run build         # tsc --noEmit && vite build
 ```
 
-Current baseline (verified 2026-11-15, after the 2026-11-14 handover T1–T12):
-1085 backend tests passing / 2 skipped, 256 frontend tests passing, frontend typecheck clean,
+Current baseline (backend, ruff and tool count verified 2026-11-16; frontend last run
+2026-11-15 after the D3 follow-up, with no frontend change since):
+1089 backend tests passing / 2 skipped, 258 frontend tests passing, frontend typecheck clean,
 232 MCP tools registered, and `ruff check server/ tests/` clean. These numbers move as the project
 grows — `validate-gokaatru` always re-derives the live count rather than trusting any written
 baseline, this one included. Backend count assumes the gitignored `data/uploads/` fixtures are
@@ -184,9 +185,17 @@ that use them, not a lower clean pass count.
 3 F841, 1 F811) had accumulated because `ruff>=0.1` is unpinned and the check was not being
 run to zero. They are all fixed now; keep it at zero rather than letting a second wall build.
 
-## Current state (last verified 2026-11-15)
+## Current state (last verified 2026-11-16)
 
-**2026-11-14 (handover T1–T12 and 11a671a; verified 2026-11-15): the hub series, SpeedSort, vertical uncertainty and sweep engine changed on purpose. Sweeps run before this work are not comparable with any run after it.** Sweep manifests now carry `engine_version: "2026.11"` (`ENGINE_VERSION` in `server/core/scenario_result.py`, also hashed into `fixed_prefix_hash`); manifests written earlier have no key and read as `None` in `get_sweep_summary`. Re-run rather than compare. **Owner decisions:** D1 (sub-gate records are extrapolated, not dropped) was **accepted by the owner on 2026-11-15**. D2 (the interim vertical-uncertainty rule, T4) is pending; its evidence-based replacement is designed in `docs/design/vertical-uncertainty.md`. D3 (duplicate scenarios are skipped and listed in the manifest; the row schema is unchanged) is pending.
+**2026-11-16: owner decisions, and the log-law vertical constant raised.**
+
+- **`K_SHEAR_LOG_LAW` 0.05 → 0.07 (D2, approved by the owner 2026-11-16).** The held-out height matrix (`docs/design/vertical-uncertainty.md`) measured the log law at 0.065 pooled and 0.070 in the worst year at Launakalana, 0.038 and 0.069 at Boxkite, so 0.05 understated a single-year campaign at both sites. Same heights (80 m measurement, 120 m hub): vertical term 2.03% → 2.84%. Only `shear_method: "log_law"` moves; the power-law and analyst-supplied constants are unchanged. Pinned value moved: `tests/test_shear_method_validation.py` log-law vertical 2.03 → 2.84. **`ENGINE_VERSION` is now `"2026.11.1"`**, because every log-law sweep leaf's `total_uncertainty_pct` moves; a sweep stamped `2026.11` is not comparable with one stamped `2026.11.1`. The evidence-based per-campaign rule in the design note is still not built.
+- **Scope (owner, 2026-11-16): the product's output is long-term-corrected wind data, not energy yield.** No losses chain, no net P50/P90. The "no AEP for the main pipeline" limitation below is a standing decision, not a gap to close.
+- **Deployment (owner, 2026-11-16): local, single user first.** Record who did each action so logins can be added later; do not build auth now.
+- **Standards (owner, 2026-11-16): trace against what is publicly available; a purchased standards text and an external benchmark are not required.** Claims must stay at "traced to", never "compliant with".
+- `handover-2026-11-14` was merged into `master` on 2026-11-16. The workbench redesign plan is `Claude outputs/WORKBENCH_PLAN.md` (untracked, local).
+
+**2026-11-14 (handover T1–T12 and 11a671a; verified 2026-11-15): the hub series, SpeedSort, vertical uncertainty and sweep engine changed on purpose. Sweeps run before this work are not comparable with any run after it.** Sweep manifests now carry `engine_version: "2026.11"` (`ENGINE_VERSION` in `server/core/scenario_result.py`, also hashed into `fixed_prefix_hash`); manifests written earlier have no key and read as `None` in `get_sweep_summary`. Re-run rather than compare. **Owner decisions:** D1 (sub-gate records are extrapolated, not dropped) was **accepted by the owner on 2026-11-15**. D2 (the interim vertical-uncertainty rule, T4): the owner approved raising the log-law constant on 2026-11-16 (see the 2026-11-16 entry above); the evidence-based replacement is designed in `docs/design/vertical-uncertainty.md` and not built. D3 (duplicate scenarios are skipped and listed in the manifest; the row schema is unchanged) is pending.
 
 1. **Hub extrapolation keeps sub-gate records (T1, D1, accepted by the owner 2026-11-15).** The 3.0 m/s shear gate governs the fit only. `computed[below_gate] = np.nan` had deleted every record below it from the hub series (Launakalana at 120 m: 25% of records lost, long-term mean +5.8% to +12.8%). Sub-gate records are now extrapolated with the table's exponent and counted in `below_shear_gate` / `records_below_extrapolation_gate`; `method_counts.extrapolated` includes them, and `extrapolation_gate_warning` says they were extrapolated. The shear fit gate is unchanged. The hub series changes on every campaign. Pinned values moved: Boxkite 150 m `method_counts.extrapolated` 689 → 757 (`below_shear_gate` stays 68) and hub mean 9.62020702747371 → 9.612528096642762 (`tests/test_uploaded_dataset.py`); the same campaign through HTTP (`tests/test_api_workflow.py`) 689 → 757.
 2. **Held-out height oracle (T2, `tests/test_heldout_height.py`).** Predicts a withheld sensor from the two below it and compares series means. Before → after: Launakalana 80 m from 40/60 m **+23.08% → -0.43%** (coverage 69.7% → 100%); Boxkite 250 m from 180/200 m **+4.91% → -0.40%** (coverage 93.7% → 100%). The handover expected -0.46% for Boxkite; the measured figure is -0.40%, inside the < 1% assertion.
@@ -204,7 +213,7 @@ run to zero. They are all fixed now; keep it at zero rather than letting a secon
 
 **Known residuals, not fixed here:**
 - The SpeedSort dog-leg segment below the threshold leaves a residual negative mean bias (-0.09 m/s non-directional, -0.18 m/s directional at Launakalana, item 3). Removing it is an owner method decision and was not attempted.
-- D2 and D3 await owner sign-off (D1 accepted 2026-11-15).
+- D3 awaits owner sign-off (D1 accepted 2026-11-15; D2's log-law raise approved 2026-11-16, its evidence-based rule not built).
 - T7 matches a duplicate only against a *completed* first run; a failed first leaf does not shadow its duplicate.
 - `SweepMonitor`'s live event list does not show the `scenario_skipped_duplicate` event. (Fixed 2026-11-15, D3 follow-up: `get_sweep_summary` and the spread decomposition report `duplicate_levels` per policy axis, the Interrogate page labels them "same sensors: X = Y", and the Outcome panel counts `duplicates_skipped`.)
 - T12 checkpoints set `finished_at` to the checkpoint time, and `get_sweep_summary` / `analyze_sweep_spread` do not flag `in_progress` sweeps.

@@ -26,7 +26,10 @@ from server.state.session import SessionState, session
 # min(measured dispersion, K_SHEAR_ASSUMED_POWER_LAW), so measuring cannot score worse than
 # assuming.  The evidence-based replacement is not built and needs owner sign-off.
 K_SHEAR_ASSUMED_POWER_LAW = 0.03
-K_SHEAR_LOG_LAW = 0.05
+# Raised from 0.05 on 2026-11-16 (owner decision D2).  Held-out height error for the log law
+# measured 0.065 pooled and 0.070 in the worst year at Launakalana, 0.038 and 0.069 at
+# Boxkite, so 0.05 understated a single-year campaign at both sites.
+K_SHEAR_LOG_LAW = 0.07
 K_SHEAR_ANALYST_SUPPLIED = 0.05
 # Must match CalculateUncertaintyRequest.shear_method in server/api/schemas.py; the MCP tool
 # has no Pydantic layer, so without this an unknown name would silently take the 0.03 branch.

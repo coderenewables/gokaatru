@@ -62,8 +62,9 @@ METRIC_COLUMNS: tuple[str, ...] = (
 
 #: Stamped into every fixed-prefix hash and every sweep manifest. Bump it whenever a change
 #: alters the numbers a sweep produces (the 2026.11 changes moved LTC and hub-height
-#: outputs), so a sweep run before the change cannot be read as comparable with one after.
-ENGINE_VERSION = "2026.11"
+#: outputs; 2026.11.1 raised the log-law vertical uncertainty constant), so a sweep run
+#: before the change cannot be read as comparable with one after.
+ENGINE_VERSION = "2026.11.1"
 
 
 def _stable_hash(payload: Any) -> str:

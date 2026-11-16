@@ -141,14 +141,14 @@ The interface-free heart. Nothing here imports FastAPI or FastMCP.
 | `executor.py` | Phase-3 workflow-execution orchestration: runs the Canvas DAG node by node. |
 | `brighthub.py` | BrightHub API auth + data-access client (used by both the MCP tool and the HTTP route layer). |
 | `admissibility.py` | Decides whether a scenario's result may enter the reported sweep spread (the sweep gates). |
-| `sweep.py` | Expands a scenario space, runs each leaf (grouped by prefix to reuse expensive upstream stages), and persists every scenario's record. |
+| `sweep.py` | Expands a scenario space, runs each leaf (grouped by prefix to reuse expensive upstream stages), and persists every scenario's record. Checkpoints after every shear-prefix group (`checkpoint`, an `in_progress` manifest via `_persist`); skips a leaf whose computation already ran (`_execution_key`, keyed on resolved columns); replaces every JSON file atomically (`_write_json_atomic`, `_REPLACE_ATTEMPTS` / `_REPLACE_RETRY_DELAY_S`). Manifests carry `engine_version` and `duplicates_skipped`. |
 | `scenario_context.py` | Runs one scenario without disturbing the session it came from (ContextVar-bound isolation). |
-| `scenario_pipeline.py` | One scenario expressed as composable stages, from shear to uncertainty. |
-| `scenario_result.py` | One flat, hashable record per scenario (the sweep table row shape). |
-| `sweep_analysis.py` | Decomposes a sweep metric's variance across the five axes (design doc §7.9). Ported from `frontend/src/lib/sweepAnalysis.ts`, which was deleted — the statistic now has one implementation, reachable from both the Interrogate page and the chat tools. |
+| `scenario_pipeline.py` | One scenario expressed as composable stages, from shear to uncertainty. `resolve_fit` (axis A1) and `resolve_reference` (axis A2) are split so the sweep's shear-prefix step refuses only on the fit policy; `resolve_sensors` calls both. The extrapolate stage carries the measured series only. |
+| `scenario_result.py` | One flat, hashable record per scenario (the sweep table row shape). `ENGINE_VERSION` (`2026.11`) is hashed into `fixed_prefix_hash`. `config_hash` leaves policy names out of the spec. `build_result` takes the sweep's prefix rather than recomputing it. |
+| `sweep_analysis.py` | Decomposes a sweep metric's variance across the five axes (design doc §7.9). Ported from `frontend/src/lib/sweepAnalysis.ts`, which was deleted — the statistic now has one implementation, reachable from both the Interrogate page and the chat tools. `duplicate_levels(rows, duplicates)` maps each policy level skipped as a duplicate to the level whose rows it shares, so an axis varied between two policies that picked the same sensors does not read as single-level. |
 | `sensor_selection.py` | Resolves a sensor-selection *policy* (e.g. `availability_90`, `widest_lever`) to concrete sensors. |
 | `datamodel_builder.py` | Builds a minimal IEA Task 43 data model from CSV column headers alone, for campaigns delivered without one. Header inference (`draft_columns`), spec validation and Task 43 emission (`build_datamodel`); emits a *document*, never session state. |
-| `uncertainty_inputs.py` | Derives a scenario's uncertainty inputs from its own results. |
+| `uncertainty_inputs.py` | Derives a scenario's uncertainty inputs from its own results. `is_hub_interpolated` takes the scenario's reference heights; `derive_uncertainty_inputs` selects `analyst_supplied` or `log_law` shear methods where the source is an analyst exponent or a roughness-only profile. |
 
 ### 4.3 `server/tools/` — analytics (the MCP tool surface)
 
@@ -160,21 +160,21 @@ pass-throughs add **142**.
 |--------|:----:|------|
 | `data_io.py` | 5 | Phase-1 timeseries + datamodel loading, sensor inventory, coverage. |
 | `datamodel_builder.py` | 2 | Draft a Task 43 reading of the loaded columns, and build/persist/load the declared data model (`server/core/datamodel_builder.py` does the work). |
-| `sweep_analysis.py` | 3 | Read and explain a persisted sweep: `list_sweeps`, `get_sweep_summary` (which axes varied, which the gates collapsed), `analyze_sweep_spread`. The rest of the sweep engine is still HTTP-only. |
+| `sweep_analysis.py` | 3 | Read and explain a persisted sweep: `list_sweeps`, `get_sweep_summary` (which axes varied, which the gates collapsed, which levels were duplicates of another), `analyze_sweep_spread`. The rest of the sweep engine is still HTTP-only. |
 | `config.py` | 5 | Run-configuration management (get/update/save/load/summary). |
 | `cleaning.py` | 4 | Rule-based timeseries cleaning (list/apply/log/undo). |
 | `statistics.py` | 9 | Weibull, wind climate, turbulence, windrose, diurnal/monthly, MoMM, scatter. |
 | `shear.py` | 7 | Shear/roughness time series and 12×24 lookup tables, sector + aggregated-MoMM tables. |
-| `extrapolation.py` | 2 | Hub-height extrapolation of measured masts and reanalysis. |
+| `extrapolation.py` | 2 | Hub-height extrapolation of measured masts and reanalysis. Sub-gate records are extrapolated and counted, not dropped (the gate governs the fit only); `extrapolate_reanalysis=False` skips the reanalysis side effect for sweep leaves. |
 | `air_density.py` | 2 | IEC moist-air density (point + time series). |
 | `atmosphere.py` | 1 | Measured atmospheric-condition summaries (Sensor Overview). |
 | `era5.py` | 7 | ERA5 node discovery, extraction, wind-speed compute, interpolation to site, plus the session-scoped EarthDataHub credential (`earthdatahub_set_credential`/`_clear_credential`/`_status`). |
 | `homogeneity.py` | 2 | Pettitt homogeneity screening of reanalysis + cutoff application. |
-| `ltc.py` | 4 | Deterministic long-term correction: linear LS, total LS, SpeedSort, variance ratio. |
+| `ltc.py` | 4 | Deterministic long-term correction: linear LS, total LS, SpeedSort, variance ratio. `_speedsort_fit` is the rank-sorted fit (sort, then threshold) used at every SpeedSort fit site. |
 | `ltc_ml.py` | 1 | XGBoost long-term correction (with truncation disclosure). |
 | `ensemble.py` | 1 | Multi-algorithm LTC blending. |
 | `clipping.py` | 1 | Long-term clipping vs. historic-climate-uncertainty tradeoff. |
-| `uncertainty.py` | 2 | Total uncertainty (RSS) + exceedance factors and energy sensitivity. |
+| `uncertainty.py` | 2 | Total uncertainty (RSS) + exceedance factors and energy sensitivity. Interim shear constants `K_SHEAR_ASSUMED_POWER_LAW`, `K_SHEAR_LOG_LAW`, `K_SHEAR_ANALYST_SUPPLIED`; `VALID_SHEAR_METHODS` refuses unknown methods on the MCP path. |
 | `diagnostics.py` | 4 | Sensor comparison, mast effects, QC diagnostics, MCP readiness. |
 | `advanced_analysis.py` | 4 | Energy metrics, extreme winds, ramps, persistence (Sensor Overview). |
 | `overview_summary.py` | — | Consolidated bankable Sensor Overview summary table. |
@@ -253,7 +253,7 @@ browser session and an MCP client can share the same live session state.
 | Module | Responsibility |
 |--------|----------------|
 | `session.py` | `SessionState` — the mutating singleton holding all working data for one analysis (loaded frames, derived tables, LTC results, runconfig). Bound per-session through a `ContextVar` (`session`). Carries `data_version` stamps: `stamp_derived()` / `staleness_report()` implement the **no-silent-recomputation** rule (derived artifacts are marked stale, never auto-recomputed). |
-| `manager.py` | `SessionManager` — the registry of browser workspaces (create / get / fork / delete). |
+| `manager.py` | `SessionManager` — the registry of browser workspaces (create / get / fork / delete). `_clone_session_state` copies every `SessionState` field; `_CLONE_EXCLUDED` names the identity fields a fork must not inherit. A coverage test enforces that every attribute is cloned or excluded. |
 | `dataset_pool.py` | Shared dataset-pool storage and metadata, so an ingested dataset can be reused across sessions. |
 
 ### 4.7 `server/schemas/`
@@ -297,6 +297,16 @@ defensible choices.
 
 - **`core/sweep.py`** expands the space and groups leaves by prefix so the expensive upstream
   stages (shear table, hub series) are computed once per group, not once per leaf.
+- **Checkpointing (T12).** With persistence on, `run_sweep` rewrites the manifest, results and
+  runconfigs after each shear-prefix group, with `in_progress: true` until the final write.
+  `list_sweeps` reports the flag; a crash loses at most the group in flight. Each checkpoint
+  rewrites the whole sweep, so cost grows with sweep size (about 94,500 runconfig writes on a
+  9,000-leaf, 20-group sweep).
+- **Duplicates (T7).** A leaf whose resolved computation (fit and reference columns, shear model,
+  reference source, LTC algorithm, hub height, analyst exponent) already completed in this sweep
+  is not run; it is listed in `manifest.duplicates_skipped` with `same_as`.
+- **Reanalysis (T8).** Sweep leaves never extrapolate the reanalysis to hub height; the LTC reads
+  the native `Spd_100m` / `Spd_50m` columns.
 - **`core/scenario_pipeline.py`** + **`core/scenario_context.py`** run each leaf in
   ContextVar-isolated state; **`core/scenario_result.py`** flattens each to one table row.
 - **`core/admissibility.py`** gates which results may enter the reported spread; nothing is
@@ -427,7 +437,14 @@ These are enforced by review and by tests, not by style tooling. Match them when
 
 ## 9. Testing
 
-### Backend (`tests/`, pytest — 77 files)
+### Backend (`tests/`, pytest — 79 files)
+
+- `tests/test_heldout_height.py` (T2): predicts a withheld sensor from the two below it on real
+  campaigns (Launakalana 80 m, Boxkite 250 m) and asserts the series-mean bias is under 1%.
+  Needs the gitignored `data/uploads/` fixtures; errors at setup without them.
+- `tests/test_speedsort_rank_sorted.py` (T3): SpeedSort mean-bias bands on Launakalana, and
+  agreement between the rank-sorted and time-paired fits on perfectly correlated data. The
+  Launakalana cases need the gitignored `data/uploads/` fixtures; the synthetic case does not.
 
 - `tests/oracles.py` is an **independent-implementation oracle harness**: it imports nothing
   from `server/`, so a passing oracle test is real corroboration, not a tautology.

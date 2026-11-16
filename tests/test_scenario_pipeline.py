@@ -128,6 +128,48 @@ def test_a_scenario_runs_every_stage_and_reports_each():
     assert scenario.latest_uncertainty is not None
 
 
+def test_the_sweep_extrapolate_stage_never_carries_the_reanalysis_to_hub_height():
+    """The LTC reads the native Spd_100m / Spd_50m columns, so the reanalysis hub columns
+    were computed for every leaf and never read. The stage now says so rather than
+    reporting an extrapolation that did not happen."""
+    base = _base_state()
+    record, scenario = _run(base, _spec())
+
+    stage = record["stages"]["extrapolate"]
+    assert stage["reanalysis_status"] == "not_run"
+    assert stage["reanalysis_skipped"] is None
+    assert "Spd_120m_hub" in scenario.timeseries_df.columns
+    for name, frame in scenario.reanalysis_interpolated.items():
+        assert "Spd_120m_hub" not in frame.columns, name
+
+
+def test_hub_extrapolation_can_skip_the_reanalysis_and_leaves_its_columns_unwritten():
+    from server.core.scenario_pipeline import _constant_shear_table
+    from server.tools.extrapolation import _extrapolate_to_hub_height
+
+    skipped = _base_state()
+    skipped.shear_table = _constant_shear_table(ALPHA)
+    response = _extrapolate_to_hub_height(skipped, HUB_M, extrapolate_reanalysis=False)
+
+    assert response["reanalysis"] == {
+        "status": "skipped",
+        "reason": "not_requested",
+        "wrote_hub_column": False,
+    }
+    assert "Spd_120m_hub" in skipped.timeseries_df.columns
+    assert skipped.reanalysis_interpolated, "fixture must carry reanalysis frames to check"
+    for name, frame in skipped.reanalysis_interpolated.items():
+        assert "Spd_120m_hub" not in frame.columns, name
+
+    default = _base_state()
+    default.shear_table = _constant_shear_table(ALPHA)
+    response = _extrapolate_to_hub_height(default, HUB_M)
+
+    assert response["reanalysis"]["status"] == "ok"
+    for name, frame in default.reanalysis_interpolated.items():
+        assert "Spd_120m_hub" in frame.columns, name
+
+
 def test_the_shear_fit_recovers_the_profile_it_was_built_from():
     """A sanity anchor: the mast is an exact power law, so the table must find its alpha."""
     base = _base_state()

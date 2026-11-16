@@ -575,9 +575,10 @@ def test_extrapolation_ignores_the_shear_speed_gate():
     leaving the hub series 5 256 records longer than the shear series with nothing in either
     response explaining the difference.
 
-    The fix aligns the extrapolation gate with the table's own calibration gate: a record
-    whose reference speed sits below it is left unextrapolated (NaN) and counted separately
-    rather than silently extrapolated from a model outside its calibration domain.
+    The gate governs the shear fit only. A record whose reference speed sits below it is
+    still extrapolated with the table's exponent (dropping it truncated the hub series and
+    biased every long-term correction fitted on it), and is counted separately so the
+    extrapolation is never silent about the speeds it covers.
     """
     rng = np.random.default_rng(4)
     index = pd.date_range(*YEAR, freq="10min", tz="UTC")
@@ -604,9 +605,9 @@ def test_extrapolation_ignores_the_shear_speed_gate():
     alpha = state.shear_timeseries_df["shear_coefficient"]
     hub = state.timeseries_df["Spd_100m_hub"]
 
-    assert int(alpha[calm].notna().sum()) == 0  # gate worked for shear, as before
-    assert int(hub[calm].notna().sum()) == 0  # ...and now also for extrapolation
-    assert int(hub.notna().sum()) == len(index) - int(calm.sum())
+    assert int(alpha[calm].notna().sum()) == 0  # gate still governs the shear fit
+    assert int(hub[calm].notna().sum()) == int(calm.sum())  # sub-gate records kept in the hub series
+    assert int(hub.notna().sum()) == len(index)
 
     assert result["extrapolation_speed_gate_mps"] == pytest.approx(3.0)
     assert result["records_below_extrapolation_gate"] == int(calm.sum())

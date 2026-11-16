@@ -122,6 +122,8 @@ export function EnsembleView() {
               <option value="calculate_shear">calculate_shear</option>
               <option value="simple_power_law">simple_power_law</option>
               <option value="power_law">power_law</option>
+              <option value="log_law">log_law</option>
+              <option value="analyst_supplied">analyst_supplied</option>
             </select>
           </label>
           <NumberField label="MCP R²" value={u.mcpRSquared} step="0.01" min={0} max={1}

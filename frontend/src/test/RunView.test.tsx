@@ -70,6 +70,23 @@ describe("RunView", () => {
     expect(screen.queryByText(/smoke test/i)).toBeNull();
   });
 
+  it("counts scenarios skipped as duplicates in the outcome, so planned adds up", async () => {
+    useSweepStore.setState({
+      phase: "complete",
+      manifest: {
+        sweep_id: "sweep-1",
+        counts: {
+          planned: 4, run: 4, completed: 2, failed: 0, admissible: 2, inadmissible: 0,
+          duplicates_skipped: 2,
+        },
+        scenarios: [],
+      } as never,
+    });
+    render(<RunView />);
+    const label = await screen.findByText("Skipped as duplicates");
+    expect(label.nextElementSibling?.textContent).toBe("2");
+  });
+
   it("shows no ETA figure anywhere, idle or running", async () => {
     render(<RunView />);
     await screen.findByRole("button", { name: "Run sweep" });

@@ -183,7 +183,9 @@ class CalculateUncertaintyRequest(BaseModel):
     measurement_uncertainty_pct: float = Field(..., ge=0)
     measurement_height_m: float = Field(..., gt=0)
     hub_height_m: float = Field(..., gt=0)
-    shear_method: Literal["calculate_shear", "simple_power_law", "log_law", "power_law"]
+    shear_method: Literal[
+        "calculate_shear", "simple_power_law", "log_law", "analyst_supplied", "power_law"
+    ]
     mcp_r_squared: float = Field(..., ge=0, le=1)
     concurrent_hours: float = Field(..., gt=0)
     algorithm: str = "speedsort"

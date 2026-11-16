@@ -124,17 +124,18 @@ def test_uploaded_dataset_statistics_shear_and_extrapolation(uploaded_dataset_se
 
     assert extrapolation["status"] == "ok"
     assert extrapolation["column_name"] == "Spd_150m_hub"
-    # Re-baselined for F-23 (extrapolation now honours the shear table's own 3.0 m/s
-    # calibration gate): 68 near-calm records that previously received a hub speed from an
-    # alpha fit calibrated exclusively above 3 m/s are now left unextrapolated instead.
+    # The 3.0 m/s shear gate governs the fit, not the prediction: the 68 near-calm records
+    # below it are still extrapolated (counted as "extrapolated" and again as below_shear_gate).
+    # Re-baselined from 689 extrapolated, which dropped them; see the F-23 comment in
+    # server/tools/extrapolation.py.
     assert extrapolation["method_counts"] == {
         "direct": 0,
         "interpolated": 65519,
-        "extrapolated": 689,
+        "extrapolated": 757,
         "below_shear_gate": 68,
     }
     assert extrapolation["extrapolation_speed_gate_mps"] == pytest.approx(3.0)
     assert extrapolation["records_below_extrapolation_gate"] == 68
-    assert hub_series.mean() == pytest.approx(9.62020702747371)
+    assert hub_series.mean() == pytest.approx(9.612528096642762)
     assert hub_series.min() == pytest.approx(0.5296561162417128)
     assert hub_series.max() == pytest.approx(31.42907866480829)

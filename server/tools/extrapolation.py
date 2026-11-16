@@ -221,6 +221,7 @@ def _extrapolate_to_hub_height(
     hub_height_m: float,
     shear_model: str = "power_law",
     reference_columns: list[str] | None = None,
+    extrapolate_reanalysis: bool = True,
 ) -> dict:
     """Create a hub-height wind-speed series using power-law or log-law shear per IEC 61400-12-1 Annex B."""
     if shear_model not in {"power_law", "log_law"}:
@@ -264,12 +265,11 @@ def _extrapolate_to_hub_height(
             counts["interpolated"] = int(interp_rows.sum())
     # F-23: the shear/roughness table is fitted only on records above the shear speed gate
     # (SHEAR_MIN_SPEED_MPS by default, 3.0 m/s - below it ln(v2/v1) is anemometer noise, not
-    # profile), but this mask has always been a fixed > 0.1 m/s regardless of that gate. A
-    # near-calm reference record therefore received a hub speed built from an alpha/z0 fit on
-    # data it does not resemble, and the hub series came out longer than the shear series with
-    # nothing explaining why. Records whose own reference speed sits below the table's gate are
-    # now left unextrapolated and counted separately instead of silently extrapolated from a
-    # model outside its calibration domain.
+    # profile). That gate governs the fit, not the prediction: a near-calm record is still
+    # extrapolated with the table's exponent, because dropping it truncates the hub series and
+    # biases every long-term correction fitted on it (measured on Launakalana at 120 m: 25% of
+    # records lost, long-term mean +5.8% to +12.8%). Records below the gate are counted separately
+    # so the extrapolation is never silent about the speeds it covers.
     extrapolation_gate_mps = state.get_shear_min_speed_mps(SHEAR_MIN_SPEED_MPS)
     below_shear_gate_count = 0
     extrap_rows = np.isnan(result) & valid_mask.any(axis=1)
@@ -287,11 +287,9 @@ def _extrapolate_to_hub_height(
                 raise ValueError("Log-law extrapolation requires session.roughness_table")
             params = _lookup_table_values(state.timeseries_df.index[extrap_rows], state.roughness_table)
             computed = _log_extrapolate_array(ref_speeds, ref_heights, hub_height_m, params)
-        below_gate = ref_speeds < extrapolation_gate_mps
-        below_shear_gate_count = int(np.count_nonzero(below_gate))
-        computed[below_gate] = np.nan
+        below_shear_gate_count = int(np.count_nonzero(ref_speeds < extrapolation_gate_mps))
         result[extrap_rows] = computed
-        counts["extrapolated"] = int(np.count_nonzero(~below_gate))
+        counts["extrapolated"] = int(np.count_nonzero(extrap_rows))
     counts["below_shear_gate"] = below_shear_gate_count
     column_name = _hub_column_name(hub_height_m)
     state.timeseries_df[column_name] = result
@@ -305,7 +303,13 @@ def _extrapolate_to_hub_height(
     # available. It used to be wrapped in a bare `except: pass`, so a genuine failure was
     # as silent as a legitimate skip (F-22); the reason is now reported either way.
     reanalysis_result: dict[str, object] | None = None
-    if state.shear_table is None:
+    if not extrapolate_reanalysis:
+        reanalysis_result = {
+            "status": "skipped",
+            "reason": "not_requested",
+            "wrote_hub_column": False,
+        }
+    elif state.shear_table is None:
         reanalysis_result = {
             "status": "skipped",
             "reason": "no_shear_table",
@@ -377,12 +381,10 @@ def _extrapolate_to_hub_height(
     if below_shear_gate_count:
         response["extrapolation_gate_warning"] = (
             f"{below_shear_gate_count:,} record(s) had a reference speed below the "
-            f"{extrapolation_gate_mps:g} m/s shear-table gate and were left unextrapolated "
-            "(no hub value) rather than extrapolated from a shear/roughness fit calibrated "
-            "exclusively on faster records. This shortens the hub series relative to earlier "
-            "versions that extrapolated every record with a finite reference reading; the "
-            "excluded records are near-calm and the effect on long-term mean speed is small, "
-            "but downstream completeness and LTC pair-count checks will now see fewer records."
+            f"{extrapolation_gate_mps:g} m/s shear-table gate. They WERE extrapolated, using an "
+            "exponent or roughness fitted on faster records only, so their hub speeds rest on a "
+            "model outside its calibration domain; the gate governs the fit, not this output. "
+            "Their hub values are included in the series and in every long-term correction."
         )
     if _alpha_reclamp_count:
         response["alpha_clamp_warning"] = (

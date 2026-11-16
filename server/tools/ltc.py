@@ -283,6 +283,21 @@ def _pearson_correlation(x: np.ndarray, y: np.ndarray) -> float:
     return float(np.sum(centered_x * centered_y) / denominator)
 
 
+def _speedsort_fit(reference: np.ndarray, measured: np.ndarray, threshold: float) -> tuple[float, float] | None:
+    """Fit through rank-sorted pairs at or above the threshold (sort first, then mask).
+
+    SpeedSort pairs the reference and measured speeds by rank, not by time: the published
+    method sorts each series independently. Masking before sorting leaves the high-speed
+    tail of the measured series unpaired with the reference tail, which biases the slope.
+    """
+    ref_sorted = np.sort(reference)
+    meas_sorted = np.sort(measured)
+    above = ref_sorted >= threshold
+    if not np.any(above):
+        return None
+    return total_least_squares_fit(ref_sorted[above], meas_sorted[above])
+
+
 def _result_frame(reference_df: pd.DataFrame, corrected: np.ndarray) -> pd.DataFrame:
     """Build the standard LTC result dataframe with timestamp and corrected wind speeds.
 
@@ -497,9 +512,9 @@ def _run_ltc_speedsort(
             min(SPEEDSORT_THRESHOLD_CEILING_MPS, SPEEDSORT_THRESHOLD_FRACTION * float(np.mean(reference)))
         )
         fallback_model: dict[str, float] | None = None
-        mask_all = reference >= threshold
-        if np.any(mask_all):
-            slope_all, intercept_all = total_least_squares_fit(reference[mask_all], measured[mask_all])
+        fit_all = _speedsort_fit(reference, measured, threshold)
+        if fit_all is not None:
+            slope_all, intercept_all = fit_all
             dog_leg_all = (
                 float((slope_all * threshold + intercept_all) / threshold) if threshold > 0 else float(slope_all)
             )
@@ -523,12 +538,12 @@ def _run_ltc_speedsort(
             s_ref = reference[s_mask]
             s_meas = measured[s_mask]
             s_thresh = float(min(4.0, 0.5 * float(np.mean(s_ref))))
-            above = s_ref >= s_thresh
-            if not np.any(above):
+            fit = _speedsort_fit(s_ref, s_meas, s_thresh)
+            if fit is None:
                 if fallback_model is not None:
                     sector_models[s] = dict(fallback_model)
                 continue
-            slope, intercept = total_least_squares_fit(s_ref[above], s_meas[above])
+            slope, intercept = fit
             dog_leg = float((slope * s_thresh + intercept) / s_thresh) if s_thresh > 0 else float(slope)
             sector_models[s] = {
                 "slope": slope,
@@ -593,6 +608,7 @@ def _run_ltc_speedsort(
                 "threshold_basis": "concurrent_reference_mean",
                 "threshold_fraction": SPEEDSORT_THRESHOLD_FRACTION,
                 "threshold_ceiling_mps": SPEEDSORT_THRESHOLD_CEILING_MPS,
+                "fit_basis": "rank_sorted",
                 "independent_sectors": independent_count,
                 "reference_direction_missing": int(directionless.sum()),
                 "unmodelled_records": unmodelled,
@@ -619,10 +635,10 @@ def _run_ltc_speedsort(
     # 3.191). The concurrent basis is the defensible one: the threshold characterises the
     # data the transfer function was fitted to, not the data it is later applied to.
     threshold = float(min(SPEEDSORT_THRESHOLD_CEILING_MPS, SPEEDSORT_THRESHOLD_FRACTION * np.mean(reference)))
-    mask = reference >= threshold
-    if not np.any(mask):
+    fit = _speedsort_fit(reference, measured, threshold)
+    if fit is None:
         raise ValueError("SpeedSort found no concurrent points above the threshold")
-    slope, intercept = total_least_squares_fit(reference[mask], measured[mask])
+    slope, intercept = fit
     dog_leg_slope = float((slope * threshold + intercept) / threshold) if threshold > 0 else float(slope)
     predicted = np.where(reference >= threshold, reference * slope + intercept, reference * dog_leg_slope)
     full_reference = long_df[REFERENCE_COLUMN].to_numpy(dtype=float)
@@ -641,6 +657,7 @@ def _run_ltc_speedsort(
             "threshold_basis": "concurrent_reference_mean",
             "threshold_fraction": SPEEDSORT_THRESHOLD_FRACTION,
             "threshold_ceiling_mps": SPEEDSORT_THRESHOLD_CEILING_MPS,
+            "fit_basis": "rank_sorted",
             "dog_leg_slope": dog_leg_slope,
             "concurrent_points": int(len(concurrent)),
             "total_corrected_points": int(len(long_df)),

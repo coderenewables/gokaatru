@@ -142,6 +142,27 @@ def test_hub_inside_a_profiling_lidar_is_interpolated():
     assert is_hub_interpolated(_state(heights=heights, hub_height_m=150.0)) is True
 
 
+def test_interpolation_flag_follows_the_scenarios_own_reference_heights():
+    """The flag must describe the profile the scenario actually extrapolated from.
+
+    A mast with sensors at 40, 60, 80 and 100 m and a 90 m hub. A scenario that
+    extrapolates from 40 and 60 m only is outside its own profile, even though the
+    mast as a whole brackets the hub.
+    """
+    state = _state(heights=(40.0, 60.0, 80.0, 100.0), hub_height_m=90.0)
+    assert is_hub_interpolated(state, 90.0, reference_heights=[40.0, 60.0]) is False
+    assert is_hub_interpolated(state, 90.0, reference_heights=[80.0, 100.0]) is True
+
+    low = derive_uncertainty_inputs(
+        state, "variance_ratio", hub_height_m=90.0, reference_heights=[40.0, 60.0]
+    )
+    high = derive_uncertainty_inputs(
+        state, "variance_ratio", hub_height_m=90.0, reference_heights=[80.0, 100.0]
+    )
+    assert low["is_interpolation"] is False
+    assert high["is_interpolation"] is True
+
+
 def test_interpolated_hub_reports_lower_vertical_uncertainty_than_extrapolated():
     """The flag has to reach the model, not just the record — this checks it bites."""
     shared = dict(
@@ -195,10 +216,28 @@ def test_analyst_supplied_shear_takes_the_assumed_branch():
     state = _state(shear_values=values, ltc_metrics={"r_squared": 0.8})
     inputs = derive_uncertainty_inputs(state, "variance_ratio", shear_source="analyst_supplied")
 
-    assert inputs["shear_method"] == "simple_power_law"
+    assert inputs["shear_method"] == "analyst_supplied"
     assert inputs["shear_std"] == 0.0
     assert inputs["provenance"]["shear_source"] == "analyst_supplied"
-    assert "assumed-shear branch" in inputs["provenance"]["shear_method_basis"]
+    assert "analyst-supplied constant" in inputs["provenance"]["shear_method_basis"]
+
+
+def test_roughness_derived_profile_takes_the_log_law_constant():
+    """A roughness table with no power-law table is a log-law profile, whatever the dispersion."""
+    state = _state(ltc_metrics={"r_squared": 0.8})
+    state.roughness_table = pd.DataFrame({"z0": [0.03]})
+    state.shear_table = None
+    inputs = derive_uncertainty_inputs(state, "variance_ratio")
+    assert inputs["shear_method"] == "log_law"
+    assert "log-law constant" in inputs["provenance"]["shear_method_basis"]
+
+
+def test_shear_table_present_keeps_the_fitted_branch_over_a_roughness_table():
+    state = _state(ltc_metrics={"r_squared": 0.8})
+    state.roughness_table = pd.DataFrame({"z0": [0.03]})
+    state.shear_table = pd.DataFrame({"alpha": [0.14]})
+    inputs = derive_uncertainty_inputs(state, "variance_ratio")
+    assert inputs["shear_method"] == "simple_power_law"
 
 
 def test_a_fitted_request_without_dispersion_degrades_to_assumed_shear():

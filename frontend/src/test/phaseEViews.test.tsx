@@ -168,4 +168,14 @@ describe("EnsembleView", () => {
     render(<EnsembleView />);
     expect(screen.getByText("Baseline")).toBeInTheDocument();
   });
+
+  it("offers every shear method the uncertainty backend accepts", () => {
+    seedStore({ ltcResults: LTC_RESULTS });
+    render(<EnsembleView />);
+    const select = screen.getByLabelText("Shear method") as HTMLSelectElement;
+    const values = Array.from(select.options).map((o) => o.value).sort();
+    expect(values).toEqual(
+      ["analyst_supplied", "calculate_shear", "log_law", "power_law", "simple_power_law"],
+    );
+  });
 });

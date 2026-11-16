@@ -10,6 +10,7 @@ must reuse one shear computation, which is what makes the leaf count affordable 
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -28,7 +29,14 @@ from server.core.admissibility import (
 )
 from server.core.scenario_context import scenario_context
 from server.core.scenario_pipeline import ScenarioSpec, run_scenario
-from server.core.scenario_result import AXIS_COLUMNS, METRIC_COLUMNS, fixed_prefix_hash
+from server.core.scenario_result import (
+    AXIS_COLUMNS,
+    ENGINE_VERSION,
+    METRIC_COLUMNS,
+    config_hash,
+    fixed_prefix_hash,
+)
+from server.core.sensor_selection import resolve_policy
 from server.core.sweep import (
     SweepSpec,
     list_sweeps,
@@ -233,6 +241,131 @@ def test_a_persisted_sweep_can_be_read_back(tmp_path):
     assert config["scenario"]["ltc_algorithm"] in {"variance_ratio", "linear_least_squares"}
 
 
+def test_a_crash_mid_sweep_leaves_the_finished_groups_on_disk(monkeypatch, tmp_path):
+    """A killed server must not lose the groups it had already run (T12).
+
+    The crash is an unexpected exception, not a ScenarioError, so run_sweep does not
+    catch it and it propagates today; that behaviour is pinned rather than changed.
+    """
+    from server.core import sweep as sweep_module
+
+    spec = _small_spec(shear_fit_policies=("nearest_2", "widest_lever"))
+    groups = sweep_module._by_shear_prefix(spec.leaves())
+    first_key, second_key = list(groups)[:2]
+    real_run_leaf = sweep_module._run_leaf
+
+    def crash_in_second_group(prefix_state, leaf, prefix, thresholds):
+        key = (leaf.shear_fit_policy, leaf.shear_model, leaf.analyst_shear_alpha)
+        if key == second_key:
+            raise RuntimeError("simulated crash")
+        return real_run_leaf(prefix_state, leaf, prefix, thresholds)
+
+    monkeypatch.setattr(sweep_module, "_run_leaf", crash_in_second_group)
+
+    base = _base_state(tmp_path)
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        run_sweep(base, spec, sweep_id="crashed")
+
+    first_group_size = len(groups[first_key])
+    loaded = load_sweep(base, "crashed")
+    assert loaded["manifest"]["in_progress"] is True
+    assert loaded["manifest"]["counts"]["run"] == first_group_size
+    assert len(loaded["results"]) == first_group_size
+    assert all(row["status"] == "ok" for row in loaded["results"])
+
+    first_ok = next(e for e in loaded["manifest"]["scenarios"] if e["status"] == "ok")
+    config = load_scenario_runconfig(base, "crashed", first_ok["config_hash"])
+    assert config["scenario"]["config_hash"] == first_ok["config_hash"]
+
+    summaries = list_sweeps(base)
+    assert [entry["sweep_id"] for entry in summaries] == ["crashed"]
+
+
+def test_an_interim_manifest_carries_the_duplicates_found_so_far(monkeypatch, tmp_path):
+    """The checkpoint is a full manifest, not a bare row dump (T7 + T12).
+
+    nearest_2 and availability_90 resolve to the same two sensors, so the second leaf of
+    the first group is a duplicate. The crash in the second group must not lose it.
+    """
+    from server.core import sweep as sweep_module
+
+    base = _two_sensor_state(tmp_path)
+    spec = _small_spec(
+        shear_models=("power_law_mean", "power_law_momm"),
+        reference_policies=("nearest_2", "availability_90"),
+        reference_sources=("era5",),
+        ltc_algorithms=("variance_ratio",),
+    )
+    second_model = spec.leaves()[-1].shear_model
+    real_run_leaf = sweep_module._run_leaf
+
+    def crash_in_second_group(prefix_state, leaf, prefix, thresholds):
+        if leaf.shear_model == second_model:
+            raise RuntimeError("simulated crash")
+        return real_run_leaf(prefix_state, leaf, prefix, thresholds)
+
+    monkeypatch.setattr(sweep_module, "_run_leaf", crash_in_second_group)
+
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        run_sweep(base, spec, sweep_id="interim")
+
+    manifest = load_sweep(base, "interim")["manifest"]
+    assert manifest["in_progress"] is True
+    assert manifest["counts"]["run"] == 1
+    assert manifest["counts"]["duplicates_skipped"] == 1
+    assert [d["reference_policy"] for d in manifest["duplicates_skipped"]] == ["availability_90"]
+
+
+def test_a_completed_sweep_carries_no_in_progress_flag(tmp_path):
+    base = _base_state(tmp_path)
+    run_sweep(base, _small_spec(shear_fit_policies=("nearest_2", "widest_lever")), sweep_id="done")
+
+    manifest = load_sweep(base, "done")["manifest"]
+    assert "in_progress" not in manifest
+    assert manifest["counts"]["run"] == manifest["counts"]["planned"]
+
+
+def test_a_transiently_locked_file_is_replaced_on_retry(monkeypatch, tmp_path):
+    """Windows refuses a replace while a scanner holds the target; that must not end a sweep."""
+    import os
+
+    from server.core import sweep as sweep_module
+
+    real_replace = os.replace
+    refusals = {"left": 2}
+
+    def locked_twice(src, dst):
+        if refusals["left"] > 0:
+            refusals["left"] -= 1
+            raise PermissionError(5, "Access is denied")
+        return real_replace(src, dst)
+
+    delays: list[float] = []
+    monkeypatch.setattr(os, "replace", locked_twice)
+    monkeypatch.setattr(sweep_module.time, "sleep", delays.append)
+
+    target = tmp_path / "payload.json"
+    sweep_module._write_json_atomic(target, {"ok": True})
+
+    assert json.loads(target.read_text(encoding="utf-8")) == {"ok": True}
+    assert len(delays) == 2
+
+
+def test_a_file_locked_past_the_retries_is_raised_not_swallowed(monkeypatch, tmp_path):
+    import os
+
+    from server.core import sweep as sweep_module
+
+    def always_locked(src, dst):
+        raise PermissionError(5, "Access is denied")
+
+    monkeypatch.setattr(os, "replace", always_locked)
+    monkeypatch.setattr(sweep_module.time, "sleep", lambda _s: None)
+
+    with pytest.raises(PermissionError):
+        sweep_module._write_json_atomic(tmp_path / "payload.json", {"ok": True})
+
+
 def test_missing_sweeps_and_scenarios_are_refused_by_name(tmp_path):
     base = _base_state(tmp_path)
     with pytest.raises(ValueError, match="is not available"):
@@ -305,6 +438,152 @@ def test_a_leaf_cannot_disturb_the_prefix_its_siblings_reuse(tmp_path):
         assert alone["results"][0]["long_term_mean_speed_mps"] == pytest.approx(
             speeds[source], rel=1e-12
         )
+
+
+def test_an_unusable_reference_policy_does_not_fail_its_siblings(tmp_path):
+    """The shear prefix is shared, so it must not depend on any one leaf's reference policy.
+
+    With no sensor inventory ``redundant_boom`` is unavailable while ``nearest_2`` is not.
+    The usable leaves must come out identical whichever policy is listed first, and only
+    the unusable leaves may fail — at the stage that refused them.
+    """
+    base = _base_state(tmp_path)
+    base.sensor_inventory = {}
+
+    forward = run_sweep(base, _small_spec(reference_policies=("redundant_boom", "nearest_2")))
+    reverse = run_sweep(base, _small_spec(reference_policies=("nearest_2", "redundant_boom")))
+
+    def usable(rows):
+        selected = [row for row in rows if row["reference_policy"] == "nearest_2"]
+        return sorted(selected, key=lambda row: (row["reference_source"], row["ltc_algorithm"]))
+
+    forward_ok = usable(forward["results"])
+    reverse_ok = usable(reverse["results"])
+    assert len(forward_ok) == 4
+    assert all(row["status"] == "ok" for row in forward_ok)
+    assert forward_ok == reverse_ok
+
+    unusable = [row for row in forward["results"] if row["reference_policy"] == "redundant_boom"]
+    assert len(unusable) == 4
+    for row in unusable:
+        assert row["status"] == "failed"
+        assert row["failed_gates"] == "stage:resolve_sensors"
+        assert "reference policy unusable" in row["error"]
+
+
+def _two_sensor_state(tmp_path) -> SessionState:
+    """The fixture mast with only its two top sensors, so every policy resolves to them.
+
+    On four sensors the policies all differ. With two there is one sensor pair, and
+    ``nearest_2``, ``widest_lever`` and ``availability_90`` all resolve to it.
+    """
+    base = _base_state(tmp_path)
+    for height in (40.0, 60.0):
+        column = f"Spd_{int(height)}m"
+        del base.sensor_mapping[height]
+        del base.sensor_inventory[column]
+        base.timeseries_df = base.timeseries_df.drop(columns=column)
+        base.raw_timeseries_df = base.raw_timeseries_df.drop(columns=column)
+    return base
+
+
+def test_policies_resolving_to_the_same_sensors_run_once(tmp_path):
+    """Two names for one computation: one row, and the second is listed as a duplicate."""
+    base = _two_sensor_state(tmp_path)
+    resolved = {policy: resolve_policy(base, policy, HUB_M).columns for policy in ("nearest_2", "availability_90")}
+    assert resolved["nearest_2"] == resolved["availability_90"] != ()
+
+    spec = _small_spec(
+        reference_policies=("nearest_2", "availability_90"),
+        reference_sources=("era5",),
+        ltc_algorithms=("variance_ratio",),
+    )
+    events: list = []
+    outcome = run_sweep(base, spec, on_progress=events.append, persist=False)
+    manifest = outcome["manifest"]
+    rows = outcome["results"]
+
+    assert len(rows) == 1
+    assert rows[0]["status"] == "ok"
+    assert manifest["duplicates_skipped"] == [
+        {
+            "shear_fit_policy": "nearest_2",
+            "reference_policy": "availability_90",
+            "same_as": rows[0]["config_hash"],
+        }
+    ]
+    assert manifest["counts"]["duplicates_skipped"] == 1
+    assert manifest["counts"]["planned"] == 2
+
+    assert [event.event for event in events].count("scenario_skipped_duplicate") == 1
+    assert events[-1].event == "sweep_finished"
+    assert (events[-1].completed, events[-1].total) == (2, 2)
+
+
+def test_duplicates_are_found_across_shear_fit_prefixes(tmp_path):
+    """Different fit policies build different shear prefixes; the duplicate still matches."""
+    base = _two_sensor_state(tmp_path)
+    spec = _small_spec(
+        shear_fit_policies=("nearest_2", "availability_90"),
+        reference_policies=("nearest_2",),
+        reference_sources=("era5",),
+        ltc_algorithms=("variance_ratio",),
+    )
+    outcome = run_sweep(base, spec, persist=False)
+
+    assert len(outcome["results"]) == 1
+    skipped = outcome["manifest"]["duplicates_skipped"]
+    assert [(entry["shear_fit_policy"], entry["reference_policy"]) for entry in skipped] == [
+        ("availability_90", "nearest_2")
+    ]
+    assert skipped[0]["same_as"] == outcome["results"][0]["config_hash"]
+
+
+def test_distinct_policies_are_not_deduplicated(tmp_path):
+    base = _base_state(tmp_path)
+    spec = _small_spec(reference_policies=("nearest_2", "widest_lever"))
+    outcome = run_sweep(base, spec, persist=False)
+
+    assert len(outcome["results"]) == spec.leaf_count() == 8
+    assert outcome["manifest"]["duplicates_skipped"] == []
+    assert outcome["manifest"]["counts"]["duplicates_skipped"] == 0
+
+
+def test_an_unusable_policy_is_never_matched_to_a_sibling(tmp_path):
+    """Both leaves are refused at resolution; neither is merged into the other."""
+    base = _base_state(tmp_path)
+    base.sensor_inventory = {}
+    spec = _small_spec(
+        reference_policies=("redundant_boom", "redundant_boom"),
+        reference_sources=("era5",),
+        ltc_algorithms=("variance_ratio",),
+    )
+    outcome = run_sweep(base, spec, persist=False)
+
+    assert outcome["manifest"]["duplicates_skipped"] == []
+    assert [row["status"] for row in outcome["results"]] == ["failed", "failed"]
+
+
+def test_config_hash_ignores_policy_names_but_not_resolved_columns():
+    """The hash names the computation: labels are out, the resolved sensors are in."""
+
+    def record(fit_name: str, columns: list[str]) -> dict:
+        return {
+            "spec": {
+                "sensor_selection": {"shear_fit": fit_name, "extrapolation_reference": fit_name},
+                "shear_model": "power_law_mean",
+                "reference_source": "era5",
+                "ltc_algorithm": "variance_ratio",
+            },
+            "sensor_selection": {
+                "shear_fit": {"resolved_columns": columns},
+                "extrapolation_reference": {"resolved_columns": columns},
+            },
+        }
+
+    same_sensors = config_hash(record("nearest_2", ["Spd_80m"]), "prefix")
+    assert same_sensors == config_hash(record("availability_90", ["Spd_80m"]), "prefix")
+    assert same_sensors != config_hash(record("nearest_2", ["Spd_100m"]), "prefix")
 
 
 # ---------------------------------------------------------------------------
@@ -478,6 +757,17 @@ def test_coverage_is_not_applicable_without_a_series():
 # ---------------------------------------------------------------------------
 
 
+def test_rows_carry_the_manifest_prefix_hash_when_hub_differs_from_the_session(tmp_path):
+    """A leaf's hub is its own, not the session's, but the prefix is fixed once per sweep."""
+    base = _base_state(tmp_path)
+    assert base.get_hub_height_m() == HUB_M
+    outcome = run_sweep(base, _small_spec(hub_height_m=100.0), persist=False)
+
+    assert outcome["results"]
+    for row in outcome["results"]:
+        assert row["fixed_prefix_hash"] == outcome["manifest"]["fixed_prefix_hash"]
+
+
 def test_identical_configurations_hash_identically(tmp_path):
     base = _base_state(tmp_path)
     first = run_sweep(base, _small_spec(), persist=False)
@@ -530,8 +820,31 @@ def test_fixed_prefix_hash_matches_an_independent_recomputation(tmp_path):
         hub_height_m=base.get_hub_height_m(),
         measurement_type=base.get_measurement_type(),
         power_curve=base.get_power_curve_name(),
+        engine_version=ENGINE_VERSION,
     )
     assert fixed_prefix_hash(base) == expected
+
+
+def test_manifest_carries_the_engine_version(tmp_path):
+    """Sweeps from different engine versions must be distinguishable on disk."""
+    base = _base_state(tmp_path)
+    outcome = run_sweep(base, _small_spec(), sweep_id="versioned")
+    assert outcome["manifest"]["engine_version"] == ENGINE_VERSION
+    assert load_sweep(base, "versioned")["manifest"]["engine_version"] == ENGINE_VERSION
+
+
+def test_a_manifest_without_the_engine_version_loads_unchanged(tmp_path):
+    """Sweeps stored before the stamp existed must read back exactly as they were written."""
+    base = _base_state(tmp_path)
+    run_sweep(base, _small_spec(), sweep_id="legacy")
+    path = Path(base.get_data_dir()) / "sweeps" / "legacy" / "manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    del manifest["engine_version"]
+    path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    loaded = load_sweep(base, "legacy")
+    assert "engine_version" not in loaded["manifest"]
+    assert loaded["manifest"] == manifest
 
 
 def test_progress_events_report_prefixes_and_scenarios(tmp_path):

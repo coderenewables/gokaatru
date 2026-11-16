@@ -21,9 +21,11 @@ from typing import Any
 
 from server.core.sweep_analysis import (
     AXIS_COLUMNS,
+    DUPLICATE_LEVEL_NOTE,
     SINGLE_LEVEL_NOTE,
     admissible_rows,
     decompose_variance,
+    duplicate_levels,
     spread_summary,
 )
 from server.main import mcp
@@ -59,16 +61,26 @@ def _sweep_summary(state: SessionState, sweep_id: str) -> dict:
     from server.core.sweep import load_sweep
 
     payload = load_sweep(state, sweep_id)
+    manifest = payload.get("manifest") or {}
     rows = _rows_of(payload)
     good = admissible_rows(rows)
+    duplicates = manifest.get("duplicates_skipped") or []
+    dup_all = duplicate_levels(rows, duplicates)
+    dup_good = duplicate_levels(good, duplicates)
 
     axes: dict[str, Any] = {}
     for axis in AXIS_COLUMNS:
-        designed = sorted({str(row.get(axis)) for row in rows if row.get(axis) is not None})
+        designed = sorted(
+            {str(row.get(axis)) for row in rows if row.get(axis) is not None}
+            | set(dup_all.get(axis, {}))
+        )
         surviving = sorted({str(row.get(axis)) for row in good if row.get(axis) is not None})
         axes[axis] = {
             "levels_designed": designed,
             "levels_admissible": surviving,
+            # A duplicate level has no rows of its own, so it is not in levels_admissible;
+            # it is listed here with the admissible level whose results it shares.
+            "duplicate_levels": dup_good.get(axis, {}),
             "collapsed_to_one_level": len(surviving) < 2,
         }
 
@@ -85,11 +97,15 @@ def _sweep_summary(state: SessionState, sweep_id: str) -> dict:
     return {
         "sweep_id": sweep_id,
         "fixed_prefix_hash": (payload.get("manifest") or {}).get("fixed_prefix_hash"),
+        # Absent on sweeps stored before the version was stamped; None, not an error.
+        "engine_version": (payload.get("manifest") or {}).get("engine_version"),
         "scenarios_total": len(rows),
         "scenarios_admissible": len(good),
+        "duplicates_skipped": len(duplicates),
         "axes": axes,
         "gate_failures": dict(failed.most_common()),
         "note": SINGLE_LEVEL_NOTE,
+        "duplicate_note": DUPLICATE_LEVEL_NOTE,
     }
 
 
@@ -102,12 +118,18 @@ def _sweep_spread(
     """Decompose a sweep metric's variance across the five axes."""
     from server.core.sweep import load_sweep
 
-    rows = admissible_rows(_rows_of(load_sweep(state, sweep_id)))
+    payload = load_sweep(state, sweep_id)
+    rows = admissible_rows(_rows_of(payload))
     if config_hashes is not None:
         wanted = set(config_hashes)
         rows = [row for row in rows if str(row.get("config_hash")) in wanted]
 
     contributions = decompose_variance(rows, metric)
+    duplicates = duplicate_levels(
+        rows, (payload.get("manifest") or {}).get("duplicates_skipped") or []
+    )
+    for entry in contributions:
+        entry["duplicate_levels"] = duplicates.get(entry["axis"], {})
     collapsed = [entry["axis"] for entry in contributions if entry["levels"] < 2]
     return {
         "sweep_id": sweep_id,
@@ -122,6 +144,7 @@ def _sweep_spread(
             "axes interact."
         ),
         "single_level_note": SINGLE_LEVEL_NOTE,
+        "duplicate_note": DUPLICATE_LEVEL_NOTE,
         "spread": spread_summary(rows, metric),
     }
 

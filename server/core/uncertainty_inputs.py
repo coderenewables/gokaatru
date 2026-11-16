@@ -145,8 +145,16 @@ def derive_measurement_height(state: Any, reference_heights: list[float] | None 
     return DerivedInput(80.0, False, "fallback: no mapped measurement height")
 
 
-def is_hub_interpolated(state: Any, hub_height_m: float | None = None) -> bool:
+def is_hub_interpolated(
+    state: Any,
+    hub_height_m: float | None = None,
+    reference_heights: list[float] | None = None,
+) -> bool:
     """Whether hub height sits *inside* the measured profile rather than above it.
+
+    The profile is the one the scenario extrapolated from (``reference_heights``, axis
+    A2), falling back to every mapped height. A scenario restricted to sensors below hub
+    is extrapolating even when another sensor above hub exists elsewhere on the mast.
 
     An interpolated hub carries far less vertical uncertainty than an extrapolated one,
     and ``_calculate_uncertainty`` already models that — but only if it is told. A
@@ -154,7 +162,7 @@ def is_hub_interpolated(state: Any, hub_height_m: float | None = None) -> bool:
     on every scenario.
     """
     hub = state.get_hub_height_m() if hub_height_m is None else float(hub_height_m)
-    heights = measurement_heights(state)
+    heights = sorted(reference_heights) if reference_heights else measurement_heights(state)
     if hub is None or len(heights) < 2:
         return False
     return heights[0] < float(hub) < heights[-1]
@@ -174,7 +182,7 @@ def derive_uncertainty_inputs(
 
     ``shear_source`` distinguishes a fitted profile from an analyst-supplied exponent
     (design doc §3.A.1). A supplied exponent has no measured dispersion, so it must take
-    the *assumed*-shear branch and carry its larger `u_vert`; left implicit it would
+    the analyst-supplied branch and carry its larger `u_vert`; left implicit it would
     inherit a fitted-shear uncertainty from a sibling scenario and under-report.
     """
     if shear_source not in {"fitted", "analyst_supplied"}:
@@ -186,13 +194,20 @@ def derive_uncertainty_inputs(
     concurrent = derive_concurrent_hours(state, algorithm)
     shear_std = derive_shear_std(state)
     height = derive_measurement_height(state, reference_heights)
-    interpolated = is_hub_interpolated(state, hub)
+    interpolated = is_hub_interpolated(state, hub, reference_heights)
 
     if shear_source == "analyst_supplied":
-        shear_method = "simple_power_law"
+        shear_method = "analyst_supplied"
         shear_std = DerivedInput(
             0.0, False, "analyst-supplied exponent has no measured dispersion"
         )
+    elif (
+        getattr(state, "roughness_table", None) is not None
+        and getattr(state, "shear_table", None) is None
+    ):
+        # A roughness-derived profile has no power-law exponent table, so the log-law
+        # constant is the one that applies.
+        shear_method = "log_law"
     elif shear_std.derived:
         shear_method = "calculate_shear"
     else:
@@ -221,8 +236,10 @@ def derive_uncertainty_inputs(
         "measurement_height_m": height.as_record(),
         "shear_source": shear_source,
         "shear_method_basis": (
-            "analyst-supplied exponent, so the assumed-shear branch applies"
+            "analyst-supplied exponent, so the analyst-supplied constant applies"
             if shear_source == "analyst_supplied"
+            else "roughness-derived profile, so the log-law constant applies"
+            if shear_method == "log_law"
             else "fitted profile with measured dispersion"
             if shear_method == "calculate_shear"
             else "fitted profile requested but no dispersion measured, so assumed-shear applies"

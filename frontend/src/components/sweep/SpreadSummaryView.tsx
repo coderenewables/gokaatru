@@ -23,6 +23,7 @@ import {
 import {
   HEADLINE_METRICS,
   METRIC_META,
+  describeDuplicateLevels,
   type MetricColumn,
   type ScenarioRow,
 } from "../../types/sweep";
@@ -184,7 +185,11 @@ export function SpreadSummaryView() {
         <p className="muted">
           Axis coverage this number was earned on:{" "}
           {contributions
-            .map((entry) => `${entry.levels} level${entry.levels === 1 ? "" : "s"}`)
+            .map((entry) => {
+              const base = `${entry.levels} level${entry.levels === 1 ? "" : "s"}`;
+              const dups = describeDuplicateLevels(entry);
+              return dups.length > 0 ? `${base} (same sensors: ${dups.join("; ")})` : base;
+            })
             .join(", ") || "—"}
           .
         </p>

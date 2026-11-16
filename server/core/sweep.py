@@ -21,6 +21,7 @@ delete exactly the file the analyst turns out to need.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from itertools import product
@@ -35,17 +36,20 @@ from server.core.scenario_pipeline import (
     ScenarioSpec,
     build_shear,
     extrapolate,
+    resolve_fit,
     resolve_sensors,
     run_ltc,
     run_uncertainty,
 )
 from server.core.scenario_result import (
+    ENGINE_VERSION,
     ScenarioResult,
     build_result,
     failed_result,
     fixed_prefix_hash,
     scenario_runconfig,
 )
+from server.core.sensor_selection import resolve_policy
 
 
 @dataclass(frozen=True)
@@ -175,6 +179,10 @@ def run_sweep(
     prefix = fixed_prefix_hash(base_state)
     results: list[ScenarioResult] = []
     runconfigs: dict[str, dict[str, Any]] = {}
+    duplicates: list[dict[str, Any]] = []
+    # Computation key -> config_hash of the first leaf that ran it. Only completed runs are
+    # registered: a failed first leaf is not evidence that its duplicate would fail too.
+    first_run: dict[tuple[Any, ...], str] = {}
     started_at = datetime.now(timezone.utc)
 
     def emit(
@@ -184,10 +192,35 @@ def run_sweep(
         manifest: dict[str, Any] | None = None,
         **detail: Any,
     ) -> None:
+        # A skipped duplicate is still a leaf the sweep has accounted for, so the progress
+        # bar counts it; otherwise a sweep with duplicates would never reach its total.
         if on_progress is not None:
             on_progress(
-                SweepProgress(event, len(results), len(leaves), config_hash, detail, manifest)
+                SweepProgress(
+                    event,
+                    len(results) + len(duplicates),
+                    len(leaves),
+                    config_hash,
+                    detail,
+                    manifest,
+                )
             )
+
+    def checkpoint() -> None:
+        # Rewrites the whole sweep so far. Each call supersedes the last, so the files
+        # always hold a complete, loadable table; a crash loses at most the group in
+        # flight rather than the whole sweep.
+        interim = _manifest(
+            identifier,
+            spec,
+            thresholds,
+            prefix,
+            results,
+            started_at,
+            stopped=stopped,
+            duplicates=duplicates,
+        )
+        _persist(base_state, identifier, interim | {"in_progress": True}, results, runconfigs)
 
     emit("sweep_started")
     stopped = False
@@ -197,7 +230,7 @@ def run_sweep(
         emit("prefix_started", shear_prefix=list(shear_key))
         try:
             with scenario_context(base_state) as prefix_state:
-                fit, _reference = resolve_sensors(prefix_state, group[0])
+                fit = resolve_fit(prefix_state, group[0])
                 build_shear(prefix_state, group[0], fit)
                 emit("prefix_completed", shear_prefix=list(shear_key))
                 for leaf in group:
@@ -205,10 +238,28 @@ def run_sweep(
                         stopped = True
                         emit("sweep_stopped")
                         break
+                    key = _execution_key(prefix_state, leaf)
+                    if key is not None and key in first_run:
+                        duplicates.append(
+                            {
+                                "shear_fit_policy": leaf.shear_fit_policy,
+                                "reference_policy": leaf.reference_policy,
+                                "same_as": first_run[key],
+                            }
+                        )
+                        emit(
+                            "scenario_skipped_duplicate",
+                            shear_fit_policy=leaf.shear_fit_policy,
+                            reference_policy=leaf.reference_policy,
+                            same_as=first_run[key],
+                        )
+                        continue
                     result, config = _run_leaf(prefix_state, leaf, prefix, thresholds)
                     results.append(result)
                     if config is not None:
                         runconfigs[result.config_hash] = config
+                    if key is not None and result.status == "ok":
+                        first_run.setdefault(key, result.config_hash)
                     emit(
                         "scenario_failed" if result.status == "failed" else "scenario_completed",
                         result.config_hash,
@@ -223,9 +274,18 @@ def run_sweep(
                     failed_result(leaf.as_runconfig(), prefix, error.stage, error.message)
                 )
                 emit("scenario_failed", results[-1].config_hash, error=error.message)
+        if persist:
+            checkpoint()
 
     manifest = _manifest(
-        identifier, spec, thresholds, prefix, results, started_at, stopped=stopped
+        identifier,
+        spec,
+        thresholds,
+        prefix,
+        results,
+        started_at,
+        stopped=stopped,
+        duplicates=duplicates,
     )
     if persist:
         _persist(base_state, identifier, manifest, results, runconfigs)
@@ -247,6 +307,31 @@ def _by_shear_prefix(leaves: list[ScenarioSpec]) -> dict[tuple[Any, ...], list[S
         key = (leaf.shear_fit_policy, leaf.shear_model, leaf.analyst_shear_alpha)
         groups.setdefault(key, []).append(leaf)
     return groups
+
+
+def _execution_key(prefix_state: Any, leaf: ScenarioSpec) -> tuple[Any, ...] | None:
+    """Return what a leaf computes from, so leaves that compute the same thing run once.
+
+    Policy names are labels; the resolved sensor columns are what the computation reads.
+    Returns None when either policy is unavailable or cannot be resolved: such a leaf runs
+    anyway and reports its own refusal, rather than being matched to a sibling.
+    """
+    try:
+        fit = resolve_policy(prefix_state, leaf.shear_fit_policy, leaf.hub_height_m)
+        reference = resolve_policy(prefix_state, leaf.reference_policy, leaf.hub_height_m)
+    except Exception:  # noqa: BLE001 — de-duplication must never end the sweep
+        return None
+    if not (fit.available and reference.available):
+        return None
+    return (
+        fit.columns,
+        reference.columns,
+        leaf.shear_model,
+        leaf.reference_source,
+        leaf.ltc_algorithm,
+        leaf.hub_height_m,
+        leaf.analyst_shear_alpha,
+    )
 
 
 def _run_leaf(
@@ -279,7 +364,7 @@ def _run_leaf(
                 | {stage.stage: stage.detail for stage in stages},
             }
             report = evaluate_gates(scenario, record, thresholds)
-            result = build_result(scenario, record, report)
+            result = build_result(scenario, record, report, prefix)
             config = scenario_runconfig(scenario, record, result, thresholds)
             return result, config
     except ScenarioError as error:
@@ -311,8 +396,10 @@ def _manifest(
     started_at: datetime,
     *,
     stopped: bool,
+    duplicates: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build the mapping from result row to runconfig file (design doc §7.13)."""
+    duplicates = duplicates or []
     completed = [result for result in results if result.status == "ok"]
     admissible = [result for result in completed if result.admissible]
 
@@ -347,6 +434,7 @@ def _manifest(
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "stopped_early": stopped,
         "fixed_prefix_hash": prefix,
+        "engine_version": ENGINE_VERSION,
         "spec": spec.as_runconfig(),
         "thresholds": thresholds.as_runconfig(),
         "counts": {
@@ -356,7 +444,11 @@ def _manifest(
             "failed": len(results) - len(completed),
             "admissible": len(admissible),
             "inadmissible": len(completed) - len(admissible),
+            "duplicates_skipped": len(duplicates),
         },
+        # Leaves that resolved to the same computation as an earlier one and were not run.
+        # Listed rather than dropped so a reader can see which policy names were merged.
+        "duplicates_skipped": duplicates,
         "gate_failures": dict(sorted(tally.items(), key=lambda item: -item[1])),
         "diagnosis": diagnosis,
         "scenarios": [
@@ -382,17 +474,39 @@ def _persist(
     """Write the manifest, the result table and every scenario runconfig."""
     root = _sweep_dir(base_state, sweep_id)
     root.mkdir(parents=True, exist_ok=True)
-    (root / "manifest.json").write_text(json.dumps(manifest, indent=2, default=str), encoding="utf-8")
-    (root / "results.json").write_text(
-        json.dumps([result.as_row() for result in results], indent=2, default=str), encoding="utf-8"
-    )
+    _write_json_atomic(root / "manifest.json", manifest)
+    _write_json_atomic(root / "results.json", [result.as_row() for result in results])
     for config_hash, config in runconfigs.items():
         scenario_dir = root / "scenarios" / config_hash
         scenario_dir.mkdir(parents=True, exist_ok=True)
-        (scenario_dir / "runconfig.json").write_text(
-            json.dumps(config, indent=2, default=str), encoding="utf-8"
-        )
+        _write_json_atomic(scenario_dir / "runconfig.json", config)
     return root
+
+
+#: Windows refuses to replace a file another process still has open (a virus scanner or
+#: indexer reading it just after a checkpoint wrote it). That is transient, so the replace
+#: is retried briefly; a lock that outlasts the retries is raised, not swallowed.
+_REPLACE_ATTEMPTS = 10
+_REPLACE_RETRY_DELAY_S = 0.2
+
+
+def _write_json_atomic(path: Path, payload: Any) -> None:
+    """Replace a JSON file in one step, so an interrupted write cannot leave it truncated.
+
+    Checkpoints rewrite files that a previous checkpoint already wrote; a kill mid-write
+    would otherwise leave an unparseable manifest, which `list_sweeps` would then fail on
+    for every sweep, not just this one.
+    """
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+    for attempt in range(1, _REPLACE_ATTEMPTS + 1):
+        try:
+            temporary.replace(path)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_ATTEMPTS:
+                raise
+            time.sleep(_REPLACE_RETRY_DELAY_S)
 
 
 def load_sweep(base_state: Any, sweep_id: str) -> dict[str, Any]:
@@ -433,6 +547,8 @@ def list_sweeps(base_state: Any) -> list[dict[str, Any]]:
                 "finished_at": manifest.get("finished_at"),
                 "counts": manifest.get("counts", {}),
                 "fixed_prefix_hash": manifest.get("fixed_prefix_hash"),
+                # A checkpoint of a sweep still running, or one that died part-way.
+                "in_progress": bool(manifest.get("in_progress", False)),
             }
         )
     return sorted(summaries, key=lambda entry: str(entry.get("started_at")), reverse=True)

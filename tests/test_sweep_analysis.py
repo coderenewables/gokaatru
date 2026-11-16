@@ -243,6 +243,75 @@ class TestSweepReadingSurface:
         assert "xgboost" not in summary["axes"]["ltc_algorithm"]["levels_admissible"]
 
 
+class TestDuplicateLevels:
+    """D3 follow-up: a level whose every leaf was a duplicate has no rows of its own, so
+    without this it reads as never designed and its axis as 'not varied'."""
+
+    def _dup(self, same_as: str, fit: str = "nearest_2", ref: str = "redundant_boom") -> dict:
+        return {"shear_fit_policy": fit, "reference_policy": ref, "same_as": same_as}
+
+    def test_a_skipped_level_names_the_level_whose_results_it_shares(self) -> None:
+        from server.core.sweep_analysis import duplicate_levels
+
+        rows = [
+            _row("h1", reference_policy="availability_90"),
+            _row("h2", reference_policy="availability_90", ltc_algorithm="speedsort"),
+        ]
+        found = duplicate_levels(rows, [self._dup("h1"), self._dup("h2")])
+        assert found == {
+            "reference_policy": {
+                "redundant_boom": {"same_as": ["availability_90"], "scenarios": 2}
+            }
+        }
+
+    def test_an_axis_where_the_policies_agree_reports_nothing(self) -> None:
+        from server.core.sweep_analysis import duplicate_levels
+
+        rows = [_row("h1", reference_policy="availability_90")]
+        assert "shear_fit_policy" not in duplicate_levels(rows, [self._dup("h1")])
+
+    def test_a_duplicate_of_a_row_out_of_view_is_not_counted(self) -> None:
+        """Filtered out or inadmissible: its results are not in what is being analysed."""
+        from server.core.sweep_analysis import duplicate_levels
+
+        rows = [_row("h1", reference_policy="availability_90")]
+        assert duplicate_levels(rows, [self._dup("elsewhere")]) == {}
+
+    def test_summary_and_spread_report_duplicates_from_a_real_sweep(self, tmp_path: Path) -> None:
+        """End to end: run_sweep persists the duplicate, and both readers surface it."""
+        from server.core.sweep import run_sweep
+        from server.tools.sweep_analysis import _sweep_spread, _sweep_summary
+        from tests.test_sweep import _small_spec, _two_sensor_state
+
+        base = _two_sensor_state(tmp_path)
+        spec = _small_spec(
+            reference_policies=("nearest_2", "availability_90"),
+            reference_sources=("era5", "merra2"),
+            ltc_algorithms=("variance_ratio",),
+        )
+        outcome = run_sweep(base, spec, persist=True)
+        sweep_id = outcome["manifest"]["sweep_id"]
+        assert outcome["manifest"]["counts"]["duplicates_skipped"] == 2
+
+        summary = _sweep_summary(base, sweep_id)
+        reference = summary["axes"]["reference_policy"]
+        assert summary["duplicates_skipped"] == 2
+        assert reference["levels_designed"] == ["availability_90", "nearest_2"]
+        assert reference["levels_admissible"] == ["nearest_2"]
+        assert reference["duplicate_levels"] == {
+            "availability_90": {"same_as": ["nearest_2"], "scenarios": 2}
+        }
+
+        spread = _sweep_spread(base, sweep_id)
+        by_axis = {entry["axis"]: entry for entry in spread["contributions"]}
+        assert by_axis["reference_policy"]["levels"] == 1
+        assert by_axis["reference_policy"]["duplicate_levels"] == {
+            "availability_90": {"same_as": ["nearest_2"], "scenarios": 2}
+        }
+        assert by_axis["ltc_algorithm"]["duplicate_levels"] == {}
+        assert "duplicate_note" in spread and "duplicate_note" in summary
+
+
 class TestDualInterfaceParity:
     def test_the_sweep_reading_tools_are_registered(self) -> None:
         import asyncio

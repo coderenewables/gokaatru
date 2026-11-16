@@ -112,15 +112,16 @@ def _height_sensors_json(selection: SensorSelection) -> str:
     )
 
 
-def resolve_sensors(state: Any, spec: ScenarioSpec) -> tuple[SensorSelection, SensorSelection]:
-    """Resolve axis A1 and A2, refusing the scenario if either policy does not apply here."""
-    hub = spec.hub_height_m
-    fit = resolve_policy(state, spec.shear_fit_policy, hub)
-    reference = resolve_policy(state, spec.reference_policy, hub)
+def resolve_fit(state: Any, spec: ScenarioSpec) -> SensorSelection:
+    """Resolve axis A1, refusing the scenario if its shear-fit policy cannot fit a profile.
+
+    Split from the reference policy because the shear table is shared by every leaf with
+    the same fit policy: refusing on a reference policy here would fail siblings that
+    never asked for it.
+    """
+    fit = resolve_policy(state, spec.shear_fit_policy, spec.hub_height_m)
     if not fit.available:
         raise ScenarioError("resolve_sensors", f"shear-fit policy unusable: {fit.reason}")
-    if not reference.available:
-        raise ScenarioError("resolve_sensors", f"reference policy unusable: {reference.reason}")
     if not fit.can_fit_shear and spec.analyst_shear_alpha is None:
         raise ScenarioError(
             "resolve_sensors",
@@ -128,7 +129,20 @@ def resolve_sensors(state: Any, spec: ScenarioSpec) -> tuple[SensorSelection, Se
             f"{len(fit.heights_m)} height(s); a shear exponent cannot be fitted from fewer "
             "than two, so the scenario must supply one (design doc §3.A.1)",
         )
-    return fit, reference
+    return fit
+
+
+def resolve_reference(state: Any, spec: ScenarioSpec) -> SensorSelection:
+    """Resolve axis A2, refusing the scenario if its extrapolation-reference policy is unusable."""
+    reference = resolve_policy(state, spec.reference_policy, spec.hub_height_m)
+    if not reference.available:
+        raise ScenarioError("resolve_sensors", f"reference policy unusable: {reference.reason}")
+    return reference
+
+
+def resolve_sensors(state: Any, spec: ScenarioSpec) -> tuple[SensorSelection, SensorSelection]:
+    """Resolve axis A1 and A2, refusing the scenario if either policy does not apply here."""
+    return resolve_fit(state, spec), resolve_reference(state, spec)
 
 
 def _constant_shear_table(alpha: float) -> pd.DataFrame:
@@ -230,23 +244,25 @@ def build_shear(state: Any, spec: ScenarioSpec, fit: SensorSelection) -> StageRe
 
 
 def extrapolate(state: Any, spec: ScenarioSpec, reference: SensorSelection) -> StageResult:
-    """Carry the measured series and both reanalyses to hub height (axes A2, C)."""
-    from server.tools.extrapolation import (
-        _extrapolate_all_reanalysis_nodes,
-        _extrapolate_to_hub_height,
-    )
+    """Carry the measured series to hub height (axes A2, C).
+
+    The reanalysis is deliberately not carried up here: the sweep's LTC reads the native
+    ``Spd_100m`` / ``Spd_50m`` columns, never a hub-height reanalysis column, so extrapolating
+    all eight node frames per leaf was pure cost.
+    """
+    from server.tools.extrapolation import _extrapolate_to_hub_height
 
     hub = spec.hub_height_m if spec.hub_height_m is not None else state.get_hub_height_m()
     if hub is None:
         raise ScenarioError("extrapolate", "hub height is not set")
     shear_model = "log_law" if spec.shear_model.startswith("log_law") else "power_law"
     measured = _extrapolate_to_hub_height(
-        state, float(hub), shear_model, reference_columns=list(reference.columns)
+        state,
+        float(hub),
+        shear_model,
+        reference_columns=list(reference.columns),
+        extrapolate_reanalysis=False,
     )
-    # Same profile for the reference as for the measurement: correlating a
-    # power-law-extrapolated reanalysis with a log-law-extrapolated site series would
-    # be an internally inconsistent pair.
-    reanalysis = _extrapolate_all_reanalysis_nodes(state, float(hub), shear_model=shear_model)
     return StageResult(
         "extrapolate",
         True,
@@ -256,8 +272,8 @@ def extrapolate(state: Any, spec: ScenarioSpec, reference: SensorSelection) -> S
             "method_counts": measured.get("method_counts"),
             "extrapolation_ratio": measured.get("extrapolation_ratio"),
             "extrapolation_warning": measured.get("warning"),
-            "reanalysis_status": reanalysis.get("status"),
-            "reanalysis_skipped": reanalysis.get("skipped_nodes"),
+            "reanalysis_status": "not_run",
+            "reanalysis_skipped": None,
         },
     )
 

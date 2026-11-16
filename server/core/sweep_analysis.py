@@ -41,6 +41,51 @@ SINGLE_LEVEL_NOTE = (
 )
 
 
+#: The axes a duplicate can differ on: two leaves are duplicates when their sensor
+#: policies resolve to the same columns, so only the policy names can disagree.
+POLICY_AXES: tuple[str, ...] = ("shear_fit_policy", "reference_policy")
+
+DUPLICATE_LEVEL_NOTE = (
+    "A level listed under duplicate_levels resolved to the same sensors as the level it "
+    "names, so its scenarios were not run again and carry that level's results. It was "
+    "varied and gave identical numbers; it was not left out."
+)
+
+
+def duplicate_levels(
+    rows: Sequence[dict[str, Any]], duplicates: Iterable[dict[str, Any]]
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """Map each policy level a sweep skipped as a duplicate to the level whose rows it shares.
+
+    Without this, a level whose every leaf was a duplicate has no rows, so it reads as a
+    level that was never designed, and an axis can read as single-level ("not varied")
+    when it was varied and found identical. A duplicate whose ``same_as`` row is not in
+    ``rows`` (filtered out, or inadmissible) is not counted: its results are not in view.
+    """
+    by_hash = {str(row.get("config_hash")): row for row in rows}
+    found: dict[str, dict[str, dict[str, Any]]] = {}
+    for entry in duplicates:
+        kept = by_hash.get(str(entry.get("same_as")))
+        if kept is None:
+            continue
+        for axis in POLICY_AXES:
+            skipped_level, kept_level = entry.get(axis), kept.get(axis)
+            if skipped_level is None or kept_level is None or skipped_level == kept_level:
+                continue
+            record = found.setdefault(axis, {}).setdefault(
+                str(skipped_level), {"same_as": set(), "scenarios": 0}
+            )
+            record["same_as"].add(str(kept_level))
+            record["scenarios"] += 1
+    return {
+        axis: {
+            level: {"same_as": sorted(record["same_as"]), "scenarios": record["scenarios"]}
+            for level, record in sorted(levels.items())
+        }
+        for axis, levels in found.items()
+    }
+
+
 def _metric_value(row: dict[str, Any], metric: str) -> float | None:
     """Return a row's metric as a finite float, or None when it cannot enter a statistic."""
     value = row.get(metric)

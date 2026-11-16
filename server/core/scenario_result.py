@@ -60,6 +60,12 @@ METRIC_COLUMNS: tuple[str, ...] = (
 )
 
 
+#: Stamped into every fixed-prefix hash and every sweep manifest. Bump it whenever a change
+#: alters the numbers a sweep produces (the 2026.11 changes moved LTC and hub-height
+#: outputs), so a sweep run before the change cannot be read as comparable with one after.
+ENGINE_VERSION = "2026.11"
+
+
 def _stable_hash(payload: Any) -> str:
     """Return a short content hash over a JSON-serialisable payload.
 
@@ -81,17 +87,29 @@ def fixed_prefix_hash(state: Any) -> str:
             "hub_height_m": state.get_hub_height_m(),
             "measurement_type": state.get_measurement_type(),
             "power_curve": state.get_power_curve_name(),
+            "engine_version": ENGINE_VERSION,
         }
     )
 
 
 def config_hash(scenario_record: dict[str, Any], prefix_hash: str) -> str:
-    """Hash a scenario's resolved configuration, including the prefix it was built on."""
+    """Hash what a scenario computes, including the prefix it was built on.
+
+    The policy names are left out of the spec: they are labels, and the resolved columns
+    already carry everything the computation reads. Hashing the names too would give two
+    policies that resolve to the same sensors different hashes, and the sweep's
+    de-duplication relies on the hash identifying the computation alone.
+    """
     selection = scenario_record.get("sensor_selection", {})
+    spec = {
+        key: value
+        for key, value in scenario_record.get("spec", {}).items()
+        if key != "sensor_selection"
+    }
     return _stable_hash(
         {
             "prefix": prefix_hash,
-            "spec": scenario_record.get("spec", {}),
+            "spec": spec,
             # Resolved columns, not policy names — see the module docstring.
             "shear_fit_columns": selection.get("shear_fit", {}).get("resolved_columns"),
             "reference_columns": selection.get("extrapolation_reference", {}).get(
@@ -201,9 +219,14 @@ def build_result(
     state: Any,
     scenario_record: dict[str, Any],
     report: AdmissibilityReport,
+    prefix: str,
 ) -> ScenarioResult:
-    """Assemble one completed scenario into a table row."""
-    prefix = fixed_prefix_hash(state)
+    """Assemble one completed scenario into a table row.
+
+    ``prefix`` is the sweep's fixed-prefix hash, passed in rather than recomputed: the
+    scenario state's hub height can differ from the session's, which would give the row
+    a different hash from the manifest it belongs to.
+    """
     spec = scenario_record.get("spec", {})
     selection = spec.get("sensor_selection", {})
     return ScenarioResult(

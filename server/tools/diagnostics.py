@@ -7,6 +7,7 @@ import pandas as pd
 from server.core.validators import to_utc_index
 from server.main import mcp
 from server.state.session import SessionState, session
+from server.tools.cleaning import _resolve_range_bounds
 from server.tools.ltc import MIN_CONCURRENT_HOURS
 
 COMPASS_16 = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
@@ -233,11 +234,15 @@ def _compute_qc_diagnostics(state: SessionState) -> dict:
     rows = []
     for sensor in _speed_candidates(state):
         values = raw[sensor].astype(float)
+        range_min, range_max, bounds_source, _ = _resolve_range_bounds(state, raw, sensor, {})
         removed = int((raw[sensor].notna() & frame[sensor].isna()).sum()) if sensor in frame.columns else 0
         rows.append(
             {
                 "sensor": sensor,
-                "range_failures": int(((values < 0) | (values > 50)).fillna(False).sum()),
+                "range_failures": int(((values < range_min) | (values > range_max)).sum()),
+                "range_min": range_min,
+                "range_max": range_max,
+                "range_bounds_source": bounds_source,
                 "flatline_records": _flatline_count(values),
                 "removed_after_cleaning": removed,
             }

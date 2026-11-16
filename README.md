@@ -599,6 +599,11 @@ python -m pytest tests/test_sensor_selection.py tests/test_uploaded_dataset.py -
 python -c "import asyncio, json; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())), 'tools')"
 ```
 
+Tests that read the real reference campaigns (Boxkite, Horns Rev, Launakalana) need files
+under the gitignored `data/uploads/` (set `GOKAATRU_TEST_UPLOADS_DIR` to read them from
+elsewhere). Without them those tests skip with a message naming the missing file; they do
+not error.
+
 Frontend (Vitest coverage across types, store, import, stages, Canvas, copilot, compare, and WindKit):
 
 ```bash

@@ -32,17 +32,15 @@ from server.core.datamodel_builder import (
 )
 from server.state.session import session
 from server.tools.data_io import _build_sensor_mapping, _parse_datamodel, _parse_timeseries
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-UPLOADS_DIR = REPO_ROOT / "data" / "uploads"
+from tests.conftest import UPLOADS_DIR, require_campaign_file
 
 
 def _campaign_paths(stem: str) -> tuple[Path, Path]:
     """Return the (timeseries, datamodel) pair for a reference campaign."""
-    csv = sorted(UPLOADS_DIR.glob(f"{stem}*.csv"))
-    datamodel = sorted(UPLOADS_DIR.glob(f"{stem}*.json"))
-    assert csv and datamodel, f"reference campaign fixtures missing for {stem}"
-    return csv[0], datamodel[0]
+    return (
+        require_campaign_file(f"{stem}_timeseries_data.csv"),
+        require_campaign_file(f"{stem}_data_model.json"),
+    )
 
 
 def _draft_by_name(columns: list[str]) -> dict[str, object]:
@@ -482,4 +480,5 @@ class TestDualInterfaceParity:
 def test_reference_campaign_fixtures_are_present() -> None:
     """These tests measure against real data; a fresh clone without the gitignored
     fixtures should say so rather than silently passing on nothing."""
+    require_campaign_file("HKW-B-FLS-Boxkite_timeseries_data.csv")
     assert glob.glob(str(UPLOADS_DIR / "*.csv"))

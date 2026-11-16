@@ -18,6 +18,7 @@ from server.tools.data_io import (
     _parse_datamodel,
     _parse_timeseries,
 )
+from tests.conftest import require_campaign_file
 
 
 def _make_points(
@@ -179,11 +180,9 @@ class TestBuildSensorMapping:
 class TestSdColumnOnRealCampaigns:
     """``sd_col`` is now resolved against the data rather than asserted from a suffix."""
 
-    UPLOADS = Path(__file__).resolve().parents[1] / "data" / "uploads"
-
     def _load(self, stem: str) -> None:
-        csv = sorted(self.UPLOADS.glob(f"{stem}*.csv"))[0]
-        datamodel = sorted(self.UPLOADS.glob(f"{stem}*.json"))[0]
+        csv = require_campaign_file(f"{stem}_timeseries_data.csv")
+        datamodel = require_campaign_file(f"{stem}_data_model.json")
         _parse_timeseries(session, str(csv))
         _parse_datamodel(session, str(datamodel))
 

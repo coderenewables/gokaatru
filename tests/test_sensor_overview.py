@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import math
-from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -50,6 +49,7 @@ from server.tools.visualization import (
     _plot_turbulence_intensity,
     _plot_wind_veer,
 )
+from tests.conftest import require_campaign_file
 
 
 def test_wind_climate_summary_returns_bankable_speed_and_direction_metrics(uploaded_dataset_session) -> None:
@@ -132,9 +132,8 @@ def test_turbulence_metrics_and_plot_use_matching_standard_deviation_channel(sam
 @pytest.fixture
 def horns_rev_dataset_session():
     """Load the checked-in Horns Rev mast fixture, including measured atmospheric channels."""
-    uploads_dir = Path(__file__).resolve().parents[1] / "data" / "uploads"
-    _parse_timeseries(session, str(uploads_dir / "HornsRev-MAST_timeseries_data.csv"))
-    _parse_datamodel(session, str(uploads_dir / "HornsRev-MAST_data_model.json"))
+    _parse_timeseries(session, str(require_campaign_file("HornsRev-MAST_timeseries_data.csv")))
+    _parse_datamodel(session, str(require_campaign_file("HornsRev-MAST_data_model.json")))
     return session
 
 
@@ -322,9 +321,8 @@ def test_p7_overview_summary_consolidates_available_and_unavailable_metrics(horn
 
 def test_wb_esmap_coverage_uses_dominant_ten_minute_timestamp_phase() -> None:
     """A partial first interval and sub-minute clock drift must not invalidate an otherwise complete series."""
-    uploads_dir = Path(__file__).resolve().parents[1] / "data" / "uploads"
-    _parse_timeseries(session, str(uploads_dir / "WB-ESMAP_Launakalana_timeseries_data.csv"))
-    _parse_datamodel(session, str(uploads_dir / "WB-ESMAP_Launakalana_data_model.json"))
+    _parse_timeseries(session, str(require_campaign_file("WB-ESMAP_Launakalana_timeseries_data.csv")))
+    _parse_datamodel(session, str(require_campaign_file("WB-ESMAP_Launakalana_data_model.json")))
     coverage = _get_data_coverage(session, "Spd1_80m_25deg")
 
     assert coverage["total_records"] == 54532

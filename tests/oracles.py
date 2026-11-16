@@ -41,6 +41,16 @@ def dry_air_density(pressure_pa: float, temperature_k: float) -> float:
     return pressure_pa / (287.05 * temperature_k)
 
 
+def equal_kinetic_power_speed(speed: np.ndarray, air_density: np.ndarray) -> np.ndarray:
+    """Return the speed that carries the same kinetic power at the reference density.
+
+    Solves ``0.5 * rho_0 * U_n^3 = 0.5 * rho * U^3`` for ``U_n`` from the flux itself, so a
+    wrong exponent or an inverted density ratio in the tool under test shows up as a mismatch.
+    """
+    flux = 0.5 * np.asarray(air_density, dtype=float) * np.asarray(speed, dtype=float) ** 3
+    return np.power(flux / (0.5 * ISA_DRY_DENSITY), 1.0 / 3.0)
+
+
 def magnus_saturation_vapour_pressure_pa(temperature_c: float) -> float:
     """Return saturation vapour pressure over water (Magnus/Tetens, hPa form scaled to Pa).
 

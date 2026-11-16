@@ -258,32 +258,33 @@ REFERENCE_AIR_DENSITY = 1.225
 def normalise_speed_to_reference_density(
     speed,
     air_density,
-    regulation: str = "stall",
+    regulation: str = "pitch",
 ):
     """Normalise measured wind speed to the power curve's reference density (IEC 61400-12-1).
 
-    For a **stall-regulated** machine the standard treats the density difference as a speed
-    correction, ``U_n = U (rho / rho_0)^(1/3)``: the cube root is there because power scales
-    with ``rho U^3``, so an equal-power speed at the reference density is what the curve
+    For a turbine with **active power control** (pitch-regulated) the standard's air-density
+    normalisation is applied to the wind speed, ``U_n = U (rho / rho_0)^(1/3)``: power scales
+    with ``rho U^3``, so the equal-power speed at the reference density is what the curve
     should be read at.
 
-    For a **pitch-regulated** machine the standard corrects the power *curve* rather than the
-    speed, because below rated the machine tracks the same tip-speed ratio and above rated it
-    holds power flat regardless of density.  Applying the speed correction to a pitch machine
-    would move the rated knee, so this function refuses rather than quietly doing the wrong
-    thing.
+    For a **stall-regulated** turbine with constant pitch and constant rotational speed the
+    standard normalises the measured *power output* instead, ``P_n = P rho_0 / rho``.  That is
+    a correction to power, not to speed, so this function refuses it rather than returning a
+    speed the standard does not define.
 
-    Nothing in the pipeline applied any of this before: ``density_correction_factor`` was
-    computed in ``atmosphere.py``, displayed in the Sensor Overview, and applied to nothing.
-    It became live the moment an indicative AEP existed.
+    Until 2026-11-17 the two labels were the wrong way round here: the speed correction ran
+    under the name "stall" and "pitch" was refused.  The arithmetic was the one that applies
+    to the generic pitch-regulated curves, so no number moved when the labels were corrected.
+    The pitch-regulated rule was checked against a public ECN/TNO report that applies it and
+    cites the standard; the clause text itself has not been read.
     """
     if regulation not in {"stall", "pitch"}:
         raise ValueError(f"regulation must be 'stall' or 'pitch', got '{regulation}'")
-    if regulation == "pitch":
+    if regulation == "stall":
         raise ValueError(
-            "IEC 61400-12-1 corrects the power curve, not the wind speed, for a "
-            "pitch-regulated machine. Normalising the speed would move the rated knee. Use "
-            "the measured density against a density-corrected power curve instead."
+            "IEC 61400-12-1 normalises the power output, not the wind speed, for a "
+            "stall-regulated machine with constant pitch and rotational speed. Normalise the "
+            "measured power as P * rho_0 / rho instead."
         )
     values = np.asarray(speed, dtype=float)
     density = np.asarray(air_density, dtype=float)

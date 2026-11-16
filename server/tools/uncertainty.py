@@ -110,19 +110,20 @@ def _density_normalised(
             "reference_density_kgm3": REFERENCE_AIR_DENSITY,
         }
     normalised = normalise_speed_to_reference_density(
-        speed, np.full(speed.shape, float(density)), regulation="stall"
+        speed, np.full(speed.shape, float(density)), regulation="pitch"
     )
     return normalised, {
         "applied": True,
-        "method": "iec_61400_12_1_stall",
+        "method": "iec_61400_12_1_wind_speed_normalisation",
+        "turbine_regulation": "pitch",
         "site_density_kgm3": round(float(density), 4),
         "reference_density_kgm3": REFERENCE_AIR_DENSITY,
         "speed_factor": round(float((density / REFERENCE_AIR_DENSITY) ** (1.0 / 3.0)), 6),
         "note": (
             "Speeds were normalised to the curve's reference density as U*(rho/rho0)^(1/3), "
-            "which is the IEC treatment for a stall-regulated machine. A pitch-regulated "
-            "machine is handled by correcting the power curve instead, which needs the "
-            "project turbine."
+            "which is the IEC 61400-12-1 treatment for a turbine with active power control "
+            "(pitch-regulated), as the generic curves are. A stall-regulated machine has its "
+            "power output normalised instead, which this tool does not do."
         ),
     }
 

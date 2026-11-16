@@ -339,6 +339,9 @@ export interface McpReadinessSummary {
   record_count: number;
   long_term_adjustment_factor: number;
   ready: boolean;
+  not_ready_reasons?: string[];
+  min_concurrent_hours?: number;
+  min_r_squared?: number;
 }
 
 export interface OverviewSummary {

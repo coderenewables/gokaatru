@@ -20,8 +20,9 @@ mechanisms that wire it all together.
 
 GoKaatru ("Wind" in Tamil) is an **open-source Wind Resource Assessment (WRA) platform**.
 It turns a measured wind campaign into a long-term-corrected, hub-height, ensemble-blended
-wind-resource characterization suitable for feeding an Energy Yield Assessment, following
-IEC 61400-12-1 / 61400-12-2 conventions and built for **bankable rigor**.
+wind-resource characterization suitable for feeding an Energy Yield Assessment, built for
+**bankable rigor**. It makes no standards-conformance claim: methods cite the IEC 61400
+clause they draw on, and those citations are not yet verified against the clause text.
 
 It ships as two cooperating parts over one logic core:
 
@@ -144,7 +145,7 @@ The interface-free heart. Nothing here imports FastAPI or FastMCP.
 | `sweep.py` | Expands a scenario space, runs each leaf (grouped by prefix to reuse expensive upstream stages), and persists every scenario's record. Checkpoints after every shear-prefix group (`checkpoint`, an `in_progress` manifest via `_persist`); skips a leaf whose computation already ran (`_execution_key`, keyed on resolved columns); replaces every JSON file atomically (`_write_json_atomic`, `_REPLACE_ATTEMPTS` / `_REPLACE_RETRY_DELAY_S`). Manifests carry `engine_version` and `duplicates_skipped`. |
 | `scenario_context.py` | Runs one scenario without disturbing the session it came from (ContextVar-bound isolation). |
 | `scenario_pipeline.py` | One scenario expressed as composable stages, from shear to uncertainty. `resolve_fit` (axis A1) and `resolve_reference` (axis A2) are split so the sweep's shear-prefix step refuses only on the fit policy; `resolve_sensors` calls both. The extrapolate stage carries the measured series only. |
-| `scenario_result.py` | One flat, hashable record per scenario (the sweep table row shape). `ENGINE_VERSION` (`2026.11.1`) is hashed into `fixed_prefix_hash`. `config_hash` leaves policy names out of the spec. `build_result` takes the sweep's prefix rather than recomputing it. |
+| `scenario_result.py` | One flat, hashable record per scenario (the sweep table row shape). `ENGINE_VERSION` (`2026.11.2`) is hashed into `fixed_prefix_hash`. `config_hash` leaves policy names out of the spec. `build_result` takes the sweep's prefix rather than recomputing it. |
 | `sweep_analysis.py` | Decomposes a sweep metric's variance across the five axes (design doc §7.9). Ported from `frontend/src/lib/sweepAnalysis.ts`, which was deleted — the statistic now has one implementation, reachable from both the Interrogate page and the chat tools. `duplicate_levels(rows, duplicates)` maps each policy level skipped as a duplicate to the level whose rows it shares, so an axis varied between two policies that picked the same sensors does not read as single-level. |
 | `sensor_selection.py` | Resolves a sensor-selection *policy* (e.g. `availability_90`, `widest_lever`) to concrete sensors. |
 | `datamodel_builder.py` | Builds a minimal IEA Task 43 data model from CSV column headers alone, for campaigns delivered without one. Header inference (`draft_columns`), spec validation and Task 43 emission (`build_datamodel`); emits a *document*, never session state. |

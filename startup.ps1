@@ -118,7 +118,7 @@ if (($InstallFrontendDeps -or -not (Test-Path $frontendNodeModules)) -and $PSCmd
 
 $apiCommand = "& '$pythonExe' -m uvicorn server.api.main:app --reload --port 8000"
 $frontendCommand = "& '$npmCmd' --prefix frontend run dev"
-$mcpCommand = "& '$pythonExe' -m server.main --transport sse --host 0.0.0.0 --port 8080"
+$mcpCommand = "& '$pythonExe' -m server.main --transport sse --host 127.0.0.1 --port 8080"
 
 Start-GoKaatruWindow -Title "GoKaatru API" -CommandText $apiCommand
 Start-GoKaatruWindow -Title "GoKaatru Frontend" -CommandText $frontendCommand

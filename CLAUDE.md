@@ -8,9 +8,11 @@ audit passes) have checked for by hand.
 
 GoKaatru ("Wind" in Tamil) is an **open-source Wind Resource Assessment (WRA) platform**:
 it turns a measured wind campaign into a long-term-corrected, hub-height, ensemble-blended
-wind resource characterization suitable for feeding an Energy Yield Assessment. It follows
-IEC 61400-12-1 / 61400-12-2 conventions and is built for **bankable rigor** — numbers a
-bank's technical advisor will try to break.
+wind resource characterization suitable for feeding an Energy Yield Assessment. It is built
+for **bankable rigor** — numbers a bank's technical advisor will try to break. It makes **no
+standards-conformance claim**: individual methods cite the IEC 61400 clause they draw on,
+those citations have not been checked against the clause text, and the only wording allowed
+is "traced to", never "compliant with" or "follows".
 
 Two parts, one logic core:
 - **`server/`** — Python MCP server (FastMCP) + FastAPI web API. 232 tools across ingest,
@@ -185,7 +187,14 @@ that use them, not a lower clean pass count.
 3 F841, 1 F811) had accumulated because `ruff>=0.1` is unpinned and the check was not being
 run to zero. They are all fixed now; keep it at zero rather than letting a second wall build.
 
-## Current state (last verified 2026-11-16)
+## Current state (last verified 2026-11-17)
+
+**2026-11-17: owner decisions for the workbench build, and the analyst-supplied constant raised.**
+
+- **`K_SHEAR_ANALYST_SUPPLIED` 0.05 → 0.07 (owner, 2026-11-17).** A typed-in exponent has no measured dispersion, so it takes the largest assumed constant and never scores better than the log law. Same heights (80 m, 120 m hub): 2.03% → 2.84%. Pinned value moved: `tests/test_shear_method_validation.py` analyst `k_shear` 0.05 → 0.07. **`ENGINE_VERSION` is now `"2026.11.2"`.**
+- **D3 accepted (owner, 2026-11-17):** duplicate scenarios are skipped and listed in the manifest. D1, D2's constants and D3 are now all accepted; the per-campaign vertical rule in `docs/design/vertical-uncertainty.md` is approved with the note's recommended values (12-month blocks, floor 0.015, one estimate per campaign and shear model, no small-sample correction, interpolated hub stays 1%) and is not built.
+- **The product's deliverable (owner, 2026-11-17): a long-term-corrected dataset carrying wind speed, wind direction and temperature for at least one hub height.** Today only speed is long-term corrected; direction and temperature correction are new methods to design, measure and disclose before building.
+- **Workbench build decisions (owner, 2026-11-17), full list in `Claude outputs/WORKBENCH_PLAN.md` §8:** the old interface is retired once the new one passes its gates; Anthropic and OpenAI-compatible providers first; API keys in the OS keychain; own models as a Python plugin or an ONNX file; every assistant data change needs approval; local server in the browser, Windows first; existing sessions and sweeps are not migrated; standards traced to IEC and MEASNET only. Work runs on branch `phase0-stabilise`.
 
 **2026-11-16: owner decisions, and the log-law vertical constant raised.**
 
@@ -213,7 +222,7 @@ run to zero. They are all fixed now; keep it at zero rather than letting a secon
 
 **Known residuals, not fixed here:**
 - The SpeedSort dog-leg segment below the threshold leaves a residual negative mean bias (-0.09 m/s non-directional, -0.18 m/s directional at Launakalana, item 3). Removing it is an owner method decision and was not attempted.
-- D3 awaits owner sign-off (D1 accepted 2026-11-15; D2's log-law raise approved 2026-11-16, its evidence-based rule not built).
+- D1, D2 and D3 are all accepted (2026-11-15 to 2026-11-17); D2's evidence-based rule is approved and not built.
 - T7 matches a duplicate only against a *completed* first run; a failed first leaf does not shadow its duplicate.
 - `SweepMonitor`'s live event list does not show the `scenario_skipped_duplicate` event. (Fixed 2026-11-15, D3 follow-up: `get_sweep_summary` and the spread decomposition report `duplicate_levels` per policy axis, the Interrogate page labels them "same sensors: X = Y", and the Outcome panel counts `duplicates_skipped`.)
 - T12 checkpoints set `finished_at` to the checkpoint time, and `get_sweep_summary` / `analyze_sweep_spread` do not flag `in_progress` sweeps.

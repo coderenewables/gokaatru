@@ -30,7 +30,9 @@ K_SHEAR_ASSUMED_POWER_LAW = 0.03
 # measured 0.065 pooled and 0.070 in the worst year at Launakalana, 0.038 and 0.069 at
 # Boxkite, so 0.05 understated a single-year campaign at both sites.
 K_SHEAR_LOG_LAW = 0.07
-K_SHEAR_ANALYST_SUPPLIED = 0.05
+# Raised from 0.05 on 2026-11-17 (owner decision) to match the log-law constant: a typed-in
+# exponent has no measured dispersion, so it must not score better than any assumed profile.
+K_SHEAR_ANALYST_SUPPLIED = 0.07
 # Must match CalculateUncertaintyRequest.shear_method in server/api/schemas.py; the MCP tool
 # has no Pydantic layer, so without this an unknown name would silently take the 0.03 branch.
 VALID_SHEAR_METHODS = (

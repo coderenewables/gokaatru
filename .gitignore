@@ -20,3 +20,5 @@ CODE_REVIEW_LOG.md
 WORKFLOW_FRONTEND_SPEC.md
 SENSOR_OVERVIEW_REWRITE_PLAN.md
 docs/
+frontend/test-results/
+frontend/playwright-report/

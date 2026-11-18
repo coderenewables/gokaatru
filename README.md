@@ -609,6 +609,8 @@ Frontend (Vitest coverage across types, store, import, stages, Canvas, copilot, 
 ```bash
 cd frontend && npm run test
 cd frontend && npm run build    # tsc --noEmit && vite build
+cd frontend && npx playwright install chromium   # once
+cd frontend && npm run test:e2e # Playwright smoke test; starts its own backend (:8011) and Vite (:5183)
 ```
 
 Smoke checks:

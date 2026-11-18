@@ -47,6 +47,9 @@ question rather than guessing from this file alone:
   checked, unlike `docs/`.
 - **`README.md`** — the functional spec: full tool/endpoint inventory and every disclosed
   default with its measured magnitude.
+- **`decisions/`** — committed architecture and scope decision records for the workbench
+  rebuild, each with its status (owner, measured, or proposed) and its evidence. Read the
+  index before changing anything they cover.
 
 ## Core architectural principle: dual-interface, single logic
 
@@ -206,7 +209,9 @@ run to zero. They are all fixed now; keep it at zero rather than letting a secon
 - **P0-7 `6748e02` (F5):** README described a 4.2 MW curve and said no AEP or capacity factor is computed. It now describes the default `generic-3.0MW-130m-IIA` (3.0 MW, 130 m, 226 W/m²) and the sensitivity table is re-measured on it, pinned by `tests/test_readme_energy_table.py` against the oracle.
 - **P0-8 `d35ead6`, P0-9 `782545d`, P0-10 `ec2824a`:** campaign-dependent tests skip when files are absent; CI workflow; Playwright harness and smoke test. The CI workflow has not yet run on GitHub. The smoke test allow-lists one known error: `GET /sessions/{id}/sensors` returns 400 on a new, empty session.
 - **P0-11 `7cc16dd`:** chart-library spike, `spikes/chart-libraries/FINDINGS.md`. At one channel of 262,800 points, uPlot renders in 62 ms and brushes in 19.7 ms (Plotly 455 / 478, ECharts 123 / 245); regl-scatterplot renders 252,665 points in 256 ms and brushes in 50 ms (Plotly 407 / 182, ECharts 663 / 922). Plotly spends over 100 ms before its own selection callback. Recommendation: uPlot for time series, regl-scatterplot for scatters, server-side decimation with refetch on zoom, selections resolved on the server from the drawn bounds, Plotly only for the existing static figures.
-- **Next:** P0-12 docking-layout spike, P0-13 decision records. Open owner decisions: the six in `docs/design/long-term-direction-temperature.md` §9.
+- **P0-12 `e0987cb`, `40b31ba`:** docking-layout spike, `spikes/docking-layout/FINDINGS.md`. Dockview 8.9.1 and FlexLayout 0.11.2 behaved the same on every functional check under React 19; Dockview chosen on maintenance (70 releases in 12 months against 17), with a custom tab component to remove its `nested-interactive` axe violation.
+- **P0-13:** twelve decision records in `decisions/`. Eight are decided (by the owner or by measurement); four are proposed and must be confirmed before Phase 1: the operation registry (0009), the project store with flags (0010), server-side selections (0011), and the frontend stack (0012).
+- **Open owner decisions:** records 0009-0012, and the six in `docs/design/long-term-direction-temperature.md` §9.
 
 **2026-11-17: owner decisions for the workbench build, and the analyst-supplied constant raised.**
 

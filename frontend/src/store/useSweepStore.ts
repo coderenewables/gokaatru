@@ -27,7 +27,7 @@ import type {
   SweepSummary,
 } from "../types/sweep";
 import type { AxisFilters } from "../lib/sweepAnalysis";
-import type { AxisContribution } from "../types/sweep";
+import type { AxisContribution, UncertaintySubstitution } from "../types/sweep";
 import type { MetricColumn } from "../types/sweep";
 
 /** What the designer holds while the analyst assembles a sweep. */
@@ -113,6 +113,8 @@ interface SweepStore {
   filters: AxisFilters;
   /** Server-computed variance decompositions, keyed by sweep+metric+row selection. */
   spread: Record<string, AxisContribution[]>;
+  /** The uncertainty substitution computed over the same row selection, same keys. */
+  substitution: Record<string, UncertaintySubstitution>;
   spreadPending: Record<string, boolean>;
   showInadmissible: boolean;
   selectedScenario: string | null;
@@ -258,6 +260,7 @@ export const useSweepStore = create<SweepStore>((set, get) => ({
 
   metric: "long_term_mean_speed_mps",
   spread: {},
+  substitution: {},
   spreadPending: {},
   filters: {},
   showInadmissible: false,
@@ -416,6 +419,9 @@ export const useSweepStore = create<SweepStore>((set, get) => ({
       });
       set((state) => ({
         spread: { ...state.spread, [key]: response.contributions ?? [] },
+        substitution: response.uncertainty_substitution
+          ? { ...state.substitution, [key]: response.uncertainty_substitution }
+          : state.substitution,
         spreadPending: { ...state.spreadPending, [key]: false },
       }));
     } catch (error) {

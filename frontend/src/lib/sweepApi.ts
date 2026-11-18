@@ -13,6 +13,7 @@ import type {
   SweepProgressEvent,
   SweepRequestBody,
   SweepSummary,
+  UncertaintySubstitution,
 } from "../types/sweep";
 
 const SESSION_HEADER_NAME = "X-GoKaatru-Session";
@@ -183,7 +184,11 @@ export async function getSweepSpread(
   sessionId: string,
   sweepId: string,
   payload: { metric: string; config_hashes: string[] },
-): Promise<{ contributions: AxisContribution[]; scenarios_analysed?: number }> {
+): Promise<{
+  contributions: AxisContribution[];
+  scenarios_analysed?: number;
+  uncertainty_substitution?: UncertaintySubstitution;
+}> {
   return requestJson(baseUrl, sessionId, `/api/sessions/${sessionId}/sweep/${sweepId}/spread`, {
     method: "POST",
     body: JSON.stringify(payload),

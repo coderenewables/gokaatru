@@ -25,21 +25,8 @@ import {
   METRIC_META,
   describeDuplicateLevels,
   type MetricColumn,
-  type ScenarioRow,
 } from "../../types/sweep";
-import {
-  SubstitutionBadge,
-  SubstitutionExplainer,
-  buildSubstitutionRows,
-} from "./SubstitutionExplainer";
-
-function meanOf(rows: ScenarioRow[], column: string): number | null {
-  const values = rows
-    .map((row) => row[column])
-    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-  if (values.length === 0) return null;
-  return values.reduce((total, value) => total + value, 0) / values.length;
-}
+import { SubstitutionBadge, SubstitutionExplainer } from "./SubstitutionExplainer";
 
 function download(name: string, content: string, type: string): void {
   const blob = new Blob([content], { type });
@@ -67,28 +54,22 @@ export function SpreadSummaryView() {
   const failed = useMemo(() => failedRows(filtered), [filtered]);
   const sweepId = useSweepStore((state) => state.manifest?.sweep_id ?? "");
   const spread = useSweepStore((state) => state.spread);
+  const substitutionByKey = useSweepStore((state) => state.substitution);
   const loadSpread = useSweepStore((state) => state.loadSpread);
 
   const hashes = useMemo(() => good.map((row) => row.config_hash), [good]);
 
-  // Two decompositions: the selected metric for the headline, and the uncertainty
-  // percentage for the substitution below, which is only meaningful in points.
+  // One request carries both the decomposition and the uncertainty substitution; the
+  // substitution is read off the long-term speed whatever metric is selected.
   useEffect(() => {
     if (!session || hashes.length < 2) return;
     void loadSpread(apiBaseUrl, session.session_id, metric, hashes);
-    void loadSpread(apiBaseUrl, session.session_id, "total_uncertainty_pct", hashes);
   }, [apiBaseUrl, session, metric, hashes, loadSpread]);
 
-  const contributions = spread[spreadKey(sweepId, metric, hashes)] ?? [];
-
-  const substitutionRows = useMemo(() => {
-    const components = {
-      u_mcp_pct: meanOf(good, "u_mcp_pct"),
-      u_vertical_pct: meanOf(good, "u_vertical_pct"),
-    };
-    const pctContributions = spread[spreadKey(sweepId, "total_uncertainty_pct", hashes)] ?? [];
-    return buildSubstitutionRows(pctContributions, components);
-  }, [good, spread, sweepId, hashes]);
+  const key = spreadKey(sweepId, metric, hashes);
+  const contributions = spread[key] ?? [];
+  const substitution = substitutionByKey[key];
+  const minLevels = substitution?.min_levels ?? 3;
 
   if (rows.length === 0) {
     return <p className="muted">Run a sweep, or open a saved one, to summarise its spread.</p>;
@@ -178,10 +159,27 @@ export function SpreadSummaryView() {
           Where the sweep&apos;s empirical spread displaced a parametric term, and where it
           added one the model does not otherwise carry.
         </p>
-        {substitutionRows.map((row) => (
-          <SubstitutionBadge key={row.component} row={row} />
-        ))}
-        <SubstitutionExplainer />
+        {substitution?.available && substitution.components ? (
+          substitution.components.map((entry) => (
+            <SubstitutionBadge key={entry.component} entry={entry} minLevels={minLevels} />
+          ))
+        ) : (
+          <p className="muted">{substitution?.reason ?? "The budget is computed on the server once the spread loads."}</p>
+        )}
+        {substitution?.available && substitution.totals?.parametric && substitution.totals.substituted ? (
+          <p>
+            Total uncertainty, median over {substitution.totals.scenarios} scenarios:{" "}
+            <strong>{substitution.totals.substituted.median.toFixed(2)}%</strong> with the sweep
+            spread folded in, against {substitution.totals.parametric.median.toFixed(2)}% from the
+            parametric model alone. The spread raised the total for{" "}
+            {substitution.totals.raised} of them
+            {substitution.totals.scenarios_missing_components > 0
+              ? `; ${substitution.totals.scenarios_missing_components} lacked a parametric component and are not counted`
+              : ""}
+            .
+          </p>
+        ) : null}
+        <SubstitutionExplainer minLevels={minLevels} />
         <p className="muted">
           Axis coverage this number was earned on:{" "}
           {contributions

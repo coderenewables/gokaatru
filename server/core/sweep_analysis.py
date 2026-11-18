@@ -161,6 +161,174 @@ def decompose_variance(
     return sorted(raw, key=lambda entry: entry["share"], reverse=True)
 
 
+#: The sweep's empirical uncertainty is read off the answer itself, the long-term mean
+#: speed. The browser copy used the swing of ``total_uncertainty_pct``, which is a spread
+#: of the uncertainty figure rather than of the answer (F9).
+SUBSTITUTION_METRIC = "long_term_mean_speed_mps"
+
+#: Below this many levels an axis's spread is a range across one or two points, not a
+#: dispersion estimate, so it can neither displace a parametric term nor add one.
+MIN_LEVELS_FOR_EMPIRICAL = 3
+
+#: (component, parametric column, axes that measure it, treatment). "substitute" takes
+#: max(parametric, empirical) per scenario; "add" has no parametric counterpart (two
+#: independent references disagreeing is carried nowhere else in the model).
+SUBSTITUTION_RULES: tuple[tuple[str, str | None, tuple[str, ...], str], ...] = (
+    ("mcp", "u_mcp_pct", ("ltc_algorithm",), "substitute"),
+    (
+        "vertical_extrapolation",
+        "u_vertical_pct",
+        ("shear_fit_policy", "reference_policy", "shear_model"),
+        "substitute",
+    ),
+    ("long_term_reference", None, ("reference_source",), "add"),
+)
+
+#: Parametric terms the sweep has no axis for; they enter every total unchanged.
+PARAMETRIC_ONLY: tuple[tuple[str, str], ...] = (
+    ("measurement", "u_measurement_pct"),
+    ("future_variability", "u_future_pct"),
+)
+
+SUBSTITUTION_NOTE = (
+    "Each axis's empirical spread is the sample standard deviation of the long-term mean "
+    "speed across its level means, as a percentage of the sweep's mean speed. A component "
+    "measured by several axes combines their spreads in quadrature. An axis needs at least "
+    f"{MIN_LEVELS_FOR_EMPIRICAL} levels. Per scenario, max(parametric, empirical) replaces "
+    "the MCP and vertical terms, the reference-source spread is added, and everything is "
+    "combined in quadrature as the scenario's own total is. max() never reports less than "
+    "the parametric model alone and is biased upward by design, and a narrow sweep gives a "
+    "smaller empirical term, so read the totals beside the axis coverage."
+)
+
+
+def _axis_spread(rows: Sequence[dict[str, Any]], axis: str, grand_mean: float) -> dict[str, Any]:
+    """Return an axis's level count and its level-mean spread, or None when under-resolved."""
+    groups: dict[str, list[float]] = {}
+    for row in rows:
+        level = str(row.get(axis) if row.get(axis) is not None else "—")
+        groups.setdefault(level, []).append(_metric_value(row, SUBSTITUTION_METRIC))  # type: ignore[arg-type]
+    means = [sum(group) / len(group) for group in groups.values()]
+    spread = None
+    if len(means) >= MIN_LEVELS_FOR_EMPIRICAL and grand_mean > 0.0:
+        centre = sum(means) / len(means)
+        variance = sum((mean - centre) ** 2 for mean in means) / (len(means) - 1)
+        spread = math.sqrt(variance) / grand_mean * 100.0
+    return {"levels": len(means), "spread_pct": spread}
+
+
+def _distribution(values: Sequence[float]) -> dict[str, float] | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    median = ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+    return {
+        "min": ordered[0],
+        "median": median,
+        "max": ordered[-1],
+        "mean": sum(ordered) / len(ordered),
+    }
+
+
+def uncertainty_substitution(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Fold the sweep's empirical spread into each scenario's uncertainty (design doc §8.1).
+
+    The empirical terms are sweep-level constants computed from the rows given, so the
+    caller's own row selection decides them; each scenario's total then combines them with
+    its own parametric terms.
+    """
+    usable = [row for row in rows if _metric_value(row, SUBSTITUTION_METRIC) is not None]
+    if len(usable) < 2:
+        return {
+            "available": False,
+            "reason": f"At least two scenarios with {SUBSTITUTION_METRIC} are needed.",
+            "metric": SUBSTITUTION_METRIC,
+        }
+    grand_mean = sum(_metric_value(row, SUBSTITUTION_METRIC) for row in usable) / len(usable)  # type: ignore[misc]
+    axes = {axis: _axis_spread(usable, axis, grand_mean) for axis in AXIS_COLUMNS}
+
+    components: list[dict[str, Any]] = []
+    empirical_by_component: dict[str, float | None] = {}
+    for name, column, axis_set, treatment in SUBSTITUTION_RULES:
+        used = [axis for axis in axis_set if axes[axis]["spread_pct"] is not None]
+        thin = [axis for axis in axis_set if axes[axis]["spread_pct"] is None and axes[axis]["levels"] >= 2]
+        not_varied = [axis for axis in axis_set if axes[axis]["levels"] < 2]
+        empirical = math.sqrt(sum(axes[axis]["spread_pct"] ** 2 for axis in used)) if used else None
+        empirical_by_component[name] = empirical
+        parametric_values = [
+            value for value in (_metric_value(row, column) for row in usable) if value is not None
+        ] if column else []
+        parametric_mean = sum(parametric_values) / len(parametric_values) if parametric_values else None
+        if treatment == "add":
+            applied, basis = (empirical, "added") if empirical is not None else (None, "not_resolved")
+        elif empirical is not None and (parametric_mean is None or empirical > parametric_mean):
+            applied, basis = empirical, "empirical"
+        else:
+            applied, basis = parametric_mean, "parametric"
+        components.append(
+            {
+                "component": name,
+                "treatment": treatment,
+                "axes": list(axis_set),
+                "axes_used": used,
+                "axes_under_resolved": thin,
+                "axes_not_varied": not_varied,
+                "parametric_mean_pct": parametric_mean,
+                "empirical_pct": empirical,
+                "applied_pct": applied,
+                "basis": basis,
+            }
+        )
+
+    parametric_totals: list[float] = []
+    substituted_totals: list[float] = []
+    missing = 0
+    raised = 0
+    for row in usable:
+        own = {column: _metric_value(row, column) for column in (
+            "u_measurement_pct", "u_vertical_pct", "u_mcp_pct", "u_future_pct"
+        )}
+        if any(value is None for value in own.values()):
+            missing += 1
+            continue
+        base_terms = [own["u_measurement_pct"], own["u_vertical_pct"], own["u_mcp_pct"], own["u_future_pct"]]
+        terms = [own["u_measurement_pct"], own["u_future_pct"]]
+        for name, column, _axes, treatment in SUBSTITUTION_RULES:
+            empirical = empirical_by_component[name]
+            if treatment == "add":
+                if empirical is not None:
+                    terms.append(empirical)
+            else:
+                terms.append(own[column] if empirical is None else max(own[column], empirical))  # type: ignore[index, type-var]
+        parametric_total = math.sqrt(sum(term**2 for term in base_terms))  # type: ignore[operator]
+        substituted_total = math.sqrt(sum(term**2 for term in terms))  # type: ignore[operator]
+        parametric_totals.append(parametric_total)
+        substituted_totals.append(substituted_total)
+        if substituted_total > parametric_total:
+            raised += 1
+
+    return {
+        "available": True,
+        "metric": SUBSTITUTION_METRIC,
+        "statistic": "sample_std_of_level_means_pct_of_grand_mean",
+        "min_levels": MIN_LEVELS_FOR_EMPIRICAL,
+        "grand_mean": grand_mean,
+        "axes": axes,
+        "components": components,
+        "parametric_only": [name for name, _column in PARAMETRIC_ONLY],
+        "totals": {
+            "scenarios": len(parametric_totals),
+            "scenarios_missing_components": missing,
+            "raised": raised,
+            "parametric": _distribution(parametric_totals),
+            "substituted": _distribution(substituted_totals),
+            "combination": "quadrature",
+        },
+        "note": SUBSTITUTION_NOTE,
+    }
+
+
 def spread_summary(rows: Sequence[dict[str, Any]], metric: str) -> dict[str, Any]:
     """Summarise the metric's spread over the rows given, for a caller that cannot see
     the table itself — the Copilot's whole view of a sweep."""

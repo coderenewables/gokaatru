@@ -27,6 +27,7 @@ from server.core.sweep_analysis import (
     decompose_variance,
     duplicate_levels,
     spread_summary,
+    uncertainty_substitution,
 )
 from server.main import mcp
 from server.state.session import SessionState, session
@@ -146,6 +147,7 @@ def _sweep_spread(
         "single_level_note": SINGLE_LEVEL_NOTE,
         "duplicate_note": DUPLICATE_LEVEL_NOTE,
         "spread": spread_summary(rows, metric),
+        "uncertainty_substitution": uncertainty_substitution(rows),
     }
 
 

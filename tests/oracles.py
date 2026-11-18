@@ -51,6 +51,19 @@ def equal_kinetic_power_speed(speed: np.ndarray, air_density: np.ndarray) -> np.
     return np.power(flux / (0.5 * ISA_DRY_DENSITY), 1.0 / 3.0)
 
 
+def level_mean_spread_pct(levels: list[str], values: list[float]) -> float:
+    """Sample standard deviation of the per-level means, as a percentage of the grand mean.
+
+    The grand mean is over every value, not over the level means, so a level with more
+    scenarios weighs more in the denominator and the same in the numerator.
+    """
+    groups: dict[str, list[float]] = {}
+    for level, value in zip(levels, values):
+        groups.setdefault(level, []).append(float(value))
+    means = np.array([np.mean(group) for group in groups.values()])
+    return float(np.std(means, ddof=1) / np.mean(np.asarray(values, dtype=float)) * 100.0)
+
+
 def magnus_saturation_vapour_pressure_pa(temperature_c: float) -> float:
     """Return saturation vapour pressure over water (Magnus/Tetens, hPa form scaled to Pa).
 

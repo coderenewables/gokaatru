@@ -1,0 +1,24 @@
+{
+  "name": "gokaatru-chart-library-spike",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "bench": "node run.mjs"
+  },
+  "dependencies": {
+    "plotly.js-dist-min": "4.3.0",
+    "plotly-v2": "npm:plotly.js-dist-min@2.35.3",
+    "echarts": "6.1.0",
+    "uplot": "1.6.32",
+    "regl-scatterplot": "1.16.0",
+    "regl": "2.1.1",
+    "pub-sub-es": "3.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "typescript": "5.9.3",
+    "vite": "6.4.3"
+  }
+}

@@ -20,9 +20,9 @@ from server.tools.era5 import _era5_key, _interpolate_era5_to_site, _store_coord
 from server.tools.extrapolation import _extrapolate_to_hub_height
 from server.tools.ltc import _run_ltc_speedsort, _speedsort_fit
 from server.tools.shear import _build_shear_table, _calculate_shear_timeseries
+from tests.conftest import require_campaign_file, require_fixture_file
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-UPLOADS_DIR = REPO_ROOT / "data" / "uploads"
 REANALYSIS_CACHE = REPO_ROOT / "data" / "e2e-real" / "brighthub_cache"
 LAUNAKALANA_NODES = [(-9.977, 147.656), (-9.977, 147.938), (-9.696, 147.656), (-9.696, 147.938)]
 LAUNAKALANA_SITE = (-9.925861, 147.78058)
@@ -69,16 +69,14 @@ class TestSpeedSortFitHelper:
 
 def _load_launakalana_hub120() -> tuple[object, str]:
     """Launakalana with ERA5 interpolated to site and the 120 m hub extrapolated from 60 m and 80 m."""
-    for path in [
-        UPLOADS_DIR / "WB-ESMAP_Launakalana_timeseries_data.csv",
-        UPLOADS_DIR / "WB-ESMAP_Launakalana_data_model.json",
-        *[REANALYSIS_CACHE / f"ERA5_{la}_{lo}.parquet" for la, lo in LAUNAKALANA_NODES],
-    ]:
-        assert path.exists(), f"missing fixture {path}"
+    timeseries = require_campaign_file("WB-ESMAP_Launakalana_timeseries_data.csv")
+    datamodel = require_campaign_file("WB-ESMAP_Launakalana_data_model.json")
+    for la, lo in LAUNAKALANA_NODES:
+        require_fixture_file(REANALYSIS_CACHE / f"ERA5_{la}_{lo}.parquet")
 
     session.reset()
-    _parse_timeseries(session, str(UPLOADS_DIR / "WB-ESMAP_Launakalana_timeseries_data.csv"))
-    _parse_datamodel(session, str(UPLOADS_DIR / "WB-ESMAP_Launakalana_data_model.json"))
+    _parse_timeseries(session, str(timeseries))
+    _parse_datamodel(session, str(datamodel))
     _store_coordinate(session, *LAUNAKALANA_SITE)
     session.era5_nodes = [{"latitude": la, "longitude": lo} for la, lo in LAUNAKALANA_NODES]
     session.era5_data = {

@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from server.api.deps import get_session_manager
 from server.api.main import create_app
 from server.state.manager import SessionManager
+from tests.conftest import require_campaign_file
 
 
 @pytest.fixture
@@ -255,14 +256,12 @@ def test_api_workflow(
 
 
 def test_api_atmosphere_workflow(
-    uploaded_timeseries_path: Path,
     api_client: tuple[TestClient, SessionManager],
 ) -> None:
     """Verify P4 atmospheric analysis and density plotting through the browser-facing session API."""
     client, manager = api_client
-    uploads_dir = uploaded_timeseries_path.parent
-    timeseries_path = uploads_dir / "HornsRev-MAST_timeseries_data.csv"
-    datamodel_path = uploads_dir / "HornsRev-MAST_data_model.json"
+    timeseries_path = require_campaign_file("HornsRev-MAST_timeseries_data.csv")
+    datamodel_path = require_campaign_file("HornsRev-MAST_data_model.json")
     create_response = client.post("/api/sessions")
     assert create_response.status_code == 200
     session_id = create_response.json()["session_id"]

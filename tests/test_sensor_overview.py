@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import math
-from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -23,6 +22,7 @@ from server.tools.diagnostics import (
     _compute_qc_diagnostics,
     _compute_sensor_comparison,
 )
+from server.tools.ltc import MIN_CONCURRENT_HOURS
 from server.tools.overview_summary import _compute_overview_summary
 from server.tools.shear import _compute_vertical_structure
 from server.tools.statistics import _compute_turbulence_analysis, _compute_wind_climate
@@ -49,6 +49,7 @@ from server.tools.visualization import (
     _plot_turbulence_intensity,
     _plot_wind_veer,
 )
+from tests.conftest import require_campaign_file
 
 
 def test_wind_climate_summary_returns_bankable_speed_and_direction_metrics(uploaded_dataset_session) -> None:
@@ -131,9 +132,8 @@ def test_turbulence_metrics_and_plot_use_matching_standard_deviation_channel(sam
 @pytest.fixture
 def horns_rev_dataset_session():
     """Load the checked-in Horns Rev mast fixture, including measured atmospheric channels."""
-    uploads_dir = Path(__file__).resolve().parents[1] / "data" / "uploads"
-    _parse_timeseries(session, str(uploads_dir / "HornsRev-MAST_timeseries_data.csv"))
-    _parse_datamodel(session, str(uploads_dir / "HornsRev-MAST_data_model.json"))
+    _parse_timeseries(session, str(require_campaign_file("HornsRev-MAST_timeseries_data.csv")))
+    _parse_datamodel(session, str(require_campaign_file("HornsRev-MAST_data_model.json")))
     return session
 
 
@@ -253,8 +253,9 @@ def test_p6_comparison_mast_effects_and_qc_use_real_mast_records(horns_rev_datas
 
 
 def test_p6_mcp_readiness_uses_hourly_concurrent_era5(horns_rev_dataset_session) -> None:
-    """MCP readiness reports correlation and adjustment using hourly measured/reference overlap."""
-    hourly = horns_rev_dataset_session.timeseries_df[["Spd_58m"]].resample("h").mean().dropna().iloc[:1000]
+    """MCP readiness uses hourly measured/reference overlap, with the correction's own floor."""
+    hourly_all = horns_rev_dataset_session.timeseries_df[["Spd_58m"]].resample("h").mean().dropna()
+    hourly = hourly_all.iloc[:1000]
     horns_rev_dataset_session.era5_interpolated_df = pd.DataFrame(
         {"Spd_100m": hourly["Spd_58m"].to_numpy(dtype=float) * 0.96 + 0.35},
         index=hourly.index,
@@ -263,7 +264,20 @@ def test_p6_mcp_readiness_uses_hourly_concurrent_era5(horns_rev_dataset_session)
 
     assert readiness["concurrent_hours"] == len(hourly)
     assert readiness["r_squared"] > 0.99
+    assert readiness["ready"] is False
+    assert readiness["min_concurrent_hours"] == MIN_CONCURRENT_HOURS
+    hour_reasons = [r for r in readiness["not_ready_reasons"] if "1000" in r and str(MIN_CONCURRENT_HOURS) in r]
+    assert len(readiness["not_ready_reasons"]) == 1 and len(hour_reasons) == 1
+
+    assert len(hourly_all) >= MIN_CONCURRENT_HOURS
+    full = hourly_all.iloc[:MIN_CONCURRENT_HOURS]
+    horns_rev_dataset_session.era5_interpolated_df = pd.DataFrame(
+        {"Spd_100m": full["Spd_58m"].to_numpy(dtype=float) * 0.96 + 0.35},
+        index=full.index,
+    )
+    readiness = _compute_mcp_readiness(horns_rev_dataset_session, "Spd_58m")
     assert readiness["ready"] is True
+    assert readiness["not_ready_reasons"] == []
 
 
 @pytest.mark.parametrize(
@@ -307,9 +321,8 @@ def test_p7_overview_summary_consolidates_available_and_unavailable_metrics(horn
 
 def test_wb_esmap_coverage_uses_dominant_ten_minute_timestamp_phase() -> None:
     """A partial first interval and sub-minute clock drift must not invalidate an otherwise complete series."""
-    uploads_dir = Path(__file__).resolve().parents[1] / "data" / "uploads"
-    _parse_timeseries(session, str(uploads_dir / "WB-ESMAP_Launakalana_timeseries_data.csv"))
-    _parse_datamodel(session, str(uploads_dir / "WB-ESMAP_Launakalana_data_model.json"))
+    _parse_timeseries(session, str(require_campaign_file("WB-ESMAP_Launakalana_timeseries_data.csv")))
+    _parse_datamodel(session, str(require_campaign_file("WB-ESMAP_Launakalana_data_model.json")))
     coverage = _get_data_coverage(session, "Spd1_80m_25deg")
 
     assert coverage["total_records"] == 54532

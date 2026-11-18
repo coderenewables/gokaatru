@@ -91,6 +91,59 @@ describe("InterrogateView", () => {
     expect(screen.getByText("Take a scenario away")).toBeInTheDocument();
   });
 
+  it("shows the uncertainty budget the server computed, not one of its own", () => {
+    const key = spreadKey("sweep-1", "long_term_mean_speed_mps", HASHES);
+    useSweepStore.setState({
+      substitution: {
+        [key]: {
+          available: true,
+          metric: "long_term_mean_speed_mps",
+          min_levels: 3,
+          components: [
+            {
+              component: "mcp",
+              treatment: "substitute",
+              axes: ["ltc_algorithm"],
+              axes_used: ["ltc_algorithm"],
+              axes_under_resolved: [],
+              axes_not_varied: [],
+              parametric_mean_pct: 2.13,
+              empirical_pct: 2.76,
+              applied_pct: 2.76,
+              basis: "empirical",
+            },
+            {
+              component: "long_term_reference",
+              treatment: "add",
+              axes: ["reference_source"],
+              axes_used: [],
+              axes_under_resolved: ["reference_source"],
+              axes_not_varied: [],
+              parametric_mean_pct: null,
+              empirical_pct: null,
+              applied_pct: null,
+              basis: "not_resolved",
+            },
+          ],
+          totals: {
+            scenarios: 3,
+            scenarios_missing_components: 0,
+            raised: 2,
+            parametric: { min: 3.1, median: 3.33, max: 3.7, mean: 3.37 },
+            substituted: { min: 3.2, median: 3.61, max: 3.9, mean: 3.6 },
+          },
+        },
+      },
+    } as never);
+    render(<InterrogateView />);
+    expect(screen.getByText("2.76%")).toBeInTheDocument();
+    expect(screen.getByText("empirical")).toBeInTheDocument();
+    expect(screen.getByText("not resolved")).toBeInTheDocument();
+    expect(screen.getByText(/covered fewer than 3 levels/)).toBeInTheDocument();
+    expect(screen.getByText("3.61%")).toBeInTheDocument();
+    expect(screen.getByText(/raised the total for 2 of them/)).toBeInTheDocument();
+  });
+
   it("names a level skipped as a duplicate instead of letting its axis read as not varied", () => {
     const withDuplicate: AxisContribution[] = [
       ...CONTRIBUTIONS,

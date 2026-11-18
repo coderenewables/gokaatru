@@ -28,9 +28,7 @@ from server.tools.windkit._serializers import (
     geojson_to_gdf,
     windkit_file_path,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-UPLOADS_DIR = REPO_ROOT / "data" / "uploads"
+from tests.conftest import require_campaign_file
 
 
 @pytest.fixture(autouse=True)
@@ -1073,18 +1071,14 @@ class TestWithSampleData:
 
     @pytest.fixture
     def boxkite_df(self) -> pd.DataFrame:
-        path = UPLOADS_DIR / "HKW-B-FLS-Boxkite_timeseries_data.csv"
-        if not path.exists():
-            pytest.skip("Boxkite sample data not found")
+        path = require_campaign_file("HKW-B-FLS-Boxkite_timeseries_data.csv")
         df = pd.read_csv(path, parse_dates=["Timestamp"])
         df = df.set_index("Timestamp")
         return df
 
     @pytest.fixture
     def hornsrev_df(self) -> pd.DataFrame:
-        path = UPLOADS_DIR / "HornsRev-MAST_timeseries_data.csv"
-        if not path.exists():
-            pytest.skip("HornsRev sample data not found")
+        path = require_campaign_file("HornsRev-MAST_timeseries_data.csv")
         df = pd.read_csv(path, parse_dates=["Timestamp"])
         df = df.set_index("Timestamp")
         return df

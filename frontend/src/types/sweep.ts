@@ -332,6 +332,47 @@ export const LTC_ALGORITHMS = [
  * which left the statistic unreachable from anything but this page — including the
  * Copilot, which then answered questions about a spread it could not see.
  */
+/** One uncertainty component after the sweep's spread was folded in (server, §8.1). */
+export interface SubstitutedComponent {
+  component: "mcp" | "vertical_extrapolation" | "long_term_reference";
+  treatment: "substitute" | "add";
+  axes: AxisColumn[];
+  /** Axes with at least `min_levels` levels, whose spreads were combined. */
+  axes_used: AxisColumn[];
+  /** Axes varied over two levels: too few to estimate a spread from. */
+  axes_under_resolved: AxisColumn[];
+  axes_not_varied: AxisColumn[];
+  parametric_mean_pct: number | null;
+  empirical_pct: number | null;
+  applied_pct: number | null;
+  basis: "empirical" | "parametric" | "added" | "not_resolved";
+}
+
+export interface UncertaintyDistribution {
+  min: number;
+  median: number;
+  max: number;
+  mean: number;
+}
+
+export interface UncertaintySubstitution {
+  available: boolean;
+  reason?: string;
+  metric: string;
+  statistic?: string;
+  min_levels?: number;
+  components?: SubstitutedComponent[];
+  totals?: {
+    scenarios: number;
+    scenarios_missing_components: number;
+    /** Scenarios whose total rose because an empirical term exceeded their own. */
+    raised: number;
+    parametric: UncertaintyDistribution | null;
+    substituted: UncertaintyDistribution | null;
+  };
+  note?: string;
+}
+
 export interface AxisContribution {
   axis: string;
   /** Distinct levels present in the rows analysed. An axis with 1 has no share by

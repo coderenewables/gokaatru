@@ -1,0 +1,8056 @@
+{
+ "tag": "headed",
+ "mode": "headed",
+ "runsPerCase": 5,
+ "env": {
+  "gpu": {
+   "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x00009B41) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+   "vendor": "Google Inc. (Intel)",
+   "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+  },
+  "barrierFloorMs": 17.5,
+  "chromeGpuPage": "",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/159.0.0.0 Safari/537.36",
+  "browserVersion": "159.0.8154.6",
+  "cpu": "Intel(R) Core(TM) i5-10210U CPU @ 1.60GHz",
+  "logicalCpus": 8,
+  "ramGB": 15.78,
+  "os": "Windows_NT 10.0.26200",
+  "node": "v22.17.0",
+  "gpuAdapter": "Intel(R) UHD Graphics"
+ },
+ "bundles": {
+  "echarts-D0jwktEw.js": {
+   "bytes": 3266,
+   "gzipBytes": 1485
+  },
+  "index-gEhWyUm9.js": {
+   "bytes": 10094,
+   "gzipBytes": 4320
+  },
+  "lib-echarts-C6MEAltV.js": {
+   "bytes": 544229,
+   "gzipBytes": 185173
+  },
+  "lib-plotly2-DcHWPPhA.js": {
+   "bytes": 4681845,
+   "gzipBytes": 1417821
+  },
+  "lib-plotly4-Cmw99Lnu.js": {
+   "bytes": 4804355,
+   "gzipBytes": 1484051
+  },
+  "lib-regl-scatterplot-CDLtMwGQ.js": {
+   "bytes": 224198,
+   "gzipBytes": 76960
+  },
+  "lib-uplot-B-ockqki.js": {
+   "bytes": 52273,
+   "gzipBytes": 23278
+  },
+  "lib-uplot-Saz_VHki.css": {
+   "bytes": 1627,
+   "gzipBytes": 696
+  },
+  "plotly-ConZSTay.js": {
+   "bytes": 1971,
+   "gzipBytes": 999
+  },
+  "plotly2-C8Oh8TT-.js": {
+   "bytes": 187,
+   "gzipBytes": 151
+  },
+  "plotly4-Dj1dOh6k.js": {
+   "bytes": 153,
+   "gzipBytes": 140
+  },
+  "regl-Db6Y2Kys.js": {
+   "bytes": 1279,
+   "gzipBytes": 757
+  },
+  "uplot-XD9VYj8a.js": {
+   "bytes": 1534,
+   "gzipBytes": 883
+  }
+ },
+ "results": [
+  {
+   "lib": "plotly4",
+   "case": "timeline-1",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 106.89999997615814,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 710.0999999940395,
+      "libReturnMs": 629.2000000178814
+     },
+     "brush": {
+      "latencyMs": 549.6000000238419,
+      "callbackMs": 112,
+      "indicesMs": 2.800000011920929,
+      "paintMs": 434.80000001192093,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 300.39999997615814,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 175.5
+     },
+     "heap": {
+      "heapBefore": 19101815,
+      "heapAfter": 91904963,
+      "heapDelta": 72803148
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 104.2000000178814,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 515,
+      "libReturnMs": 455.30000001192093
+     },
+     "brush": {
+      "latencyMs": 518.8000000119209,
+      "callbackMs": 111.80000001192093,
+      "indicesMs": 2.4000000059604645,
+      "paintMs": 404.59999999403954,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 290.5,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 184.2999999821186
+     },
+     "heap": {
+      "heapBefore": 19101631,
+      "heapAfter": 91901259,
+      "heapDelta": 72799628
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 108.80000001192093,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 464,
+      "libReturnMs": 401.59999999403954
+     },
+     "brush": {
+      "latencyMs": 554.1999999880791,
+      "callbackMs": 117.19999998807907,
+      "indicesMs": 3.600000023841858,
+      "paintMs": 433.39999997615814,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 361.30000001192093,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 148.69999998807907
+     },
+     "heap": {
+      "heapBefore": 19101755,
+      "heapAfter": 91921851,
+      "heapDelta": 72820096
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 92.59999999403954,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 455.10000002384186,
+      "libReturnMs": 391.90000000596046
+     },
+     "brush": {
+      "latencyMs": 465.59999999403954,
+      "callbackMs": 103.59999999403954,
+      "indicesMs": 1.7000000178813934,
+      "paintMs": 360.2999999821186,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 257.5,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 179.30000001192093
+     },
+     "heap": {
+      "heapBefore": 19101791,
+      "heapAfter": 91901915,
+      "heapDelta": 72800124
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 93.40000000596046,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 452.90000000596046,
+      "libReturnMs": 399.2000000178814
+     },
+     "brush": {
+      "latencyMs": 478.19999998807907,
+      "callbackMs": 105.69999998807907,
+      "indicesMs": 1.699999988079071,
+      "paintMs": 370.80000001192093,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 259,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 169
+     },
+     "heap": {
+      "heapBefore": 19101815,
+      "heapAfter": 91900627,
+      "heapDelta": 72798812
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 94.10000002384186,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 437.59999999403954,
+      "libReturnMs": 381.59999999403954
+     },
+     "brush": {
+      "latencyMs": 476.2000000178814,
+      "callbackMs": 110.60000002384186,
+      "indicesMs": 1.7999999821186066,
+      "paintMs": 363.80000001192093,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 285.69999998807907,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 142.40000000596046
+     },
+     "heap": {
+      "heapBefore": 19101791,
+      "heapAfter": 91911347,
+      "heapDelta": 72809556
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 455.10000002384186,
+     "min": 437.59999999403954,
+     "max": 515,
+     "values": [
+      515,
+      464,
+      455.10000002384186,
+      452.90000000596046,
+      437.59999999403954
+     ]
+    },
+    "libReturnMs": {
+     "median": 399.2000000178814,
+     "min": 381.59999999403954,
+     "max": 455.30000001192093,
+     "values": [
+      455.30000001192093,
+      401.59999999403954,
+      391.90000000596046,
+      399.2000000178814,
+      381.59999999403954
+     ]
+    },
+    "highlightMs": {
+     "median": 285.69999998807907,
+     "min": 257.5,
+     "max": 361.30000001192093,
+     "values": [
+      290.5,
+      361.30000001192093,
+      257.5,
+      259,
+      285.69999998807907
+     ]
+    },
+    "zoomMs": {
+     "median": 169,
+     "min": 142.40000000596046,
+     "max": 184.2999999821186,
+     "values": [
+      184.2999999821186,
+      148.69999998807907,
+      179.30000001192093,
+      169,
+      142.40000000596046
+     ]
+    },
+    "heapAfterMB": {
+     "median": 87.6444959640503,
+     "min": 87.64326763153076,
+     "max": 87.66350841522217,
+     "values": [
+      87.64387035369873,
+      87.66350841522217,
+      87.6444959640503,
+      87.64326763153076,
+      87.65349102020264
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 69.42760848999023,
+     "min": 69.42635726928711,
+     "max": 69.4466552734375,
+     "values": [
+      69.4271354675293,
+      69.4466552734375,
+      69.42760848999023,
+      69.42635726928711,
+      69.43660354614258
+     ]
+    },
+    "info": {
+     "genMs": 104.2000000178814,
+     "decimateMs": 0,
+     "pointsPerChannel": 262800,
+     "channels": 1,
+     "totalPoints": 262800
+    },
+    "genMs": {
+     "median": 94.10000002384186,
+     "min": 92.59999999403954,
+     "max": 108.80000001192093,
+     "values": [
+      104.2000000178814,
+      108.80000001192093,
+      92.59999999403954,
+      93.40000000596046,
+      94.10000002384186
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 478.19999998807907,
+     "min": 465.59999999403954,
+     "max": 554.1999999880791,
+     "values": [
+      518.8000000119209,
+      554.1999999880791,
+      465.59999999403954,
+      478.19999998807907,
+      476.2000000178814
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 110.60000002384186,
+     "min": 103.59999999403954,
+     "max": 117.19999998807907,
+     "values": [
+      111.80000001192093,
+      117.19999998807907,
+      103.59999999403954,
+      105.69999998807907,
+      110.60000002384186
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 1.7999999821186066,
+     "min": 1.699999988079071,
+     "max": 3.600000023841858,
+     "values": [
+      2.4000000059604645,
+      3.600000023841858,
+      1.7000000178813934,
+      1.699999988079071,
+      1.7999999821186066
+     ]
+    },
+    "brushPaintMs": {
+     "median": 370.80000001192093,
+     "min": 360.2999999821186,
+     "max": 433.39999997615814,
+     "values": [
+      404.59999999403954,
+      433.39999997615814,
+      360.2999999821186,
+      370.80000001192093,
+      363.80000001192093
+     ]
+    },
+    "selection": {
+     "source": "range, indices computed here",
+     "nSelected": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nDelivered": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nReference": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nMissing": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nExtra": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nativeCount": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "allAgree": true
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  },
+  {
+   "lib": "plotly4",
+   "case": "timeline-6",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 206.89999997615814,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 1188.7999999821186,
+      "libReturnMs": 1075
+     },
+     "brush": {
+      "latencyMs": 1506.199999988079,
+      "callbackMs": 11.699999988079071,
+      "indicesMs": 4.4000000059604645,
+      "paintMs": 1490.0999999940395,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 1187.0999999940395,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 552.5
+     },
+     "heap": {
+      "heapBefore": 24372463,
+      "heapAfter": 435760111,
+      "heapDelta": 411387648
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 220.40000000596046,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 1147.2000000178814,
+      "libReturnMs": 1007.2000000178814
+     },
+     "brush": {
+      "latencyMs": 1716.7999999821186,
+      "callbackMs": 7.5,
+      "indicesMs": 3.199999988079071,
+      "paintMs": 1706.0999999940395,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 1188.0999999940395,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 554.2999999821186
+     },
+     "heap": {
+      "heapBefore": 24372543,
+      "heapAfter": 435755015,
+      "heapDelta": 411382472
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 255.5,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 1423,
+      "libReturnMs": 1253.9000000059605
+     },
+     "brush": {
+      "latencyMs": 2077.199999988079,
+      "callbackMs": 10.800000011920929,
+      "indicesMs": 6,
+      "paintMs": 2060.399999976158,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 1619.7999999821186,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 666.7000000178814
+     },
+     "heap": {
+      "heapBefore": 24372475,
+      "heapAfter": 435757967,
+      "heapDelta": 411385492
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 201.2999999821186,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 1273.7999999821186,
+      "libReturnMs": 1111.7999999821186
+     },
+     "brush": {
+      "latencyMs": 1578.7999999821186,
+      "callbackMs": 109.2999999821186,
+      "indicesMs": 2.5999999940395355,
+      "paintMs": 1466.9000000059605,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 1164.800000011921,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 570.1999999880791
+     },
+     "heap": {
+      "heapBefore": 24372371,
+      "heapAfter": 435722967,
+      "heapDelta": 411350596
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 327.09999999403954,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 1218,
+      "libReturnMs": 1073.5999999940395
+     },
+     "brush": {
+      "latencyMs": 1527.5999999940395,
+      "callbackMs": 7.5,
+      "indicesMs": 2.2999999821186066,
+      "paintMs": 1517.800000011921,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 1179.800000011921,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 559.6999999880791
+     },
+     "heap": {
+      "heapBefore": 24372463,
+      "heapAfter": 435756471,
+      "heapDelta": 411384008
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 239.2000000178814,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 1151.5,
+      "libReturnMs": 1031.7000000178814
+     },
+     "brush": {
+      "latencyMs": 1583.8999999761581,
+      "callbackMs": 8.599999994039536,
+      "indicesMs": 2.699999988079071,
+      "paintMs": 1572.5999999940395,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 1184.699999988079,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 749.2999999821186
+     },
+     "heap": {
+      "heapBefore": 24372475,
+      "heapAfter": 435761506,
+      "heapDelta": 411389031
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 1218,
+     "min": 1147.2000000178814,
+     "max": 1423,
+     "values": [
+      1147.2000000178814,
+      1423,
+      1273.7999999821186,
+      1218,
+      1151.5
+     ]
+    },
+    "libReturnMs": {
+     "median": 1073.5999999940395,
+     "min": 1007.2000000178814,
+     "max": 1253.9000000059605,
+     "values": [
+      1007.2000000178814,
+      1253.9000000059605,
+      1111.7999999821186,
+      1073.5999999940395,
+      1031.7000000178814
+     ]
+    },
+    "highlightMs": {
+     "median": 1184.699999988079,
+     "min": 1164.800000011921,
+     "max": 1619.7999999821186,
+     "values": [
+      1188.0999999940395,
+      1619.7999999821186,
+      1164.800000011921,
+      1179.800000011921,
+      1184.699999988079
+     ]
+    },
+    "zoomMs": {
+     "median": 570.1999999880791,
+     "min": 554.2999999821186,
+     "max": 749.2999999821186,
+     "values": [
+      554.2999999821186,
+      666.7000000178814,
+      570.1999999880791,
+      559.6999999880791,
+      749.2999999821186
+     ]
+    },
+    "heapAfterMB": {
+     "median": 415.5697546005249,
+     "min": 415.537802696228,
+     "max": 415.574556350708,
+     "values": [
+      415.5683660507202,
+      415.57118129730225,
+      415.537802696228,
+      415.5697546005249,
+      415.574556350708
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 392.3263626098633,
+     "min": 392.2944984436035,
+     "max": 392.3311529159546,
+     "values": [
+      392.3248977661133,
+      392.3277778625488,
+      392.2944984436035,
+      392.3263626098633,
+      392.3311529159546
+     ]
+    },
+    "info": {
+     "genMs": 220.40000000596046,
+     "decimateMs": 0,
+     "pointsPerChannel": 262800,
+     "channels": 6,
+     "totalPoints": 1576800
+    },
+    "genMs": {
+     "median": 239.2000000178814,
+     "min": 201.2999999821186,
+     "max": 327.09999999403954,
+     "values": [
+      220.40000000596046,
+      255.5,
+      201.2999999821186,
+      327.09999999403954,
+      239.2000000178814
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 1583.8999999761581,
+     "min": 1527.5999999940395,
+     "max": 2077.199999988079,
+     "values": [
+      1716.7999999821186,
+      2077.199999988079,
+      1578.7999999821186,
+      1527.5999999940395,
+      1583.8999999761581
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 8.599999994039536,
+     "min": 7.5,
+     "max": 109.2999999821186,
+     "values": [
+      7.5,
+      10.800000011920929,
+      109.2999999821186,
+      7.5,
+      8.599999994039536
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 2.699999988079071,
+     "min": 2.2999999821186066,
+     "max": 6,
+     "values": [
+      3.199999988079071,
+      6,
+      2.5999999940395355,
+      2.2999999821186066,
+      2.699999988079071
+     ]
+    },
+    "brushPaintMs": {
+     "median": 1572.5999999940395,
+     "min": 1466.9000000059605,
+     "max": 2060.399999976158,
+     "values": [
+      1706.0999999940395,
+      2060.399999976158,
+      1466.9000000059605,
+      1517.800000011921,
+      1572.5999999940395
+     ]
+    },
+    "selection": {
+     "source": "range, indices computed here",
+     "nSelected": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nDelivered": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nReference": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nMissing": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nExtra": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nativeCount": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "allAgree": true
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  },
+  {
+   "lib": "plotly4",
+   "case": "timeline-60-decimated",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1433.699999988079,
+      "decimateMs": 81.80000001192093,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 720.1999999880791,
+      "libReturnMs": 370.39999997615814
+     },
+     "brush": {
+      "latencyMs": 1386.0999999940395,
+      "callbackMs": 18.400000005960464,
+      "indicesMs": 0.699999988079071,
+      "paintMs": 1367,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 699.7000000178814,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 310
+     },
+     "heap": {
+      "heapBefore": 18874606,
+      "heapAfter": 52573994,
+      "heapDelta": 33699388
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1289.0000000596046,
+      "decimateMs": 73.8999999165535,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 572.6999999880791,
+      "libReturnMs": 378.69999998807907
+     },
+     "brush": {
+      "latencyMs": 1379.6000000238419,
+      "callbackMs": 11.900000005960464,
+      "indicesMs": 0.7000000178813934,
+      "paintMs": 1367,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 696.3000000119209,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 365.2999999821186
+     },
+     "heap": {
+      "heapBefore": 18874598,
+      "heapAfter": 52575030,
+      "heapDelta": 33700432
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1462.6999999284744,
+      "decimateMs": 79.30000007152557,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 588.8000000119209,
+      "libReturnMs": 383.19999998807907
+     },
+     "brush": {
+      "latencyMs": 1415.2999999821186,
+      "callbackMs": 15.599999994039536,
+      "indicesMs": 0.800000011920929,
+      "paintMs": 1398.8999999761581,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 793.6999999880791,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 387.5
+     },
+     "heap": {
+      "heapBefore": 18873398,
+      "heapAfter": 52559170,
+      "heapDelta": 33685772
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1443.6999999284744,
+      "decimateMs": 79.70000007748604,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 610.4000000059605,
+      "libReturnMs": 400.7000000178814
+     },
+     "brush": {
+      "latencyMs": 1444.199999988079,
+      "callbackMs": 20.799999982118607,
+      "indicesMs": 1.100000023841858,
+      "paintMs": 1422.2999999821186,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 852.4000000059605,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 385
+     },
+     "heap": {
+      "heapBefore": 18872278,
+      "heapAfter": 52558118,
+      "heapDelta": 33685840
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1366.8000001311302,
+      "decimateMs": 79.59999987483025,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 600.6999999880791,
+      "libReturnMs": 385.30000001192093
+     },
+     "brush": {
+      "latencyMs": 1396.0999999940395,
+      "callbackMs": 14.799999982118607,
+      "indicesMs": 0.7000000178813934,
+      "paintMs": 1380.5999999940395,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 846.4000000059605,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 384.10000002384186
+     },
+     "heap": {
+      "heapBefore": 18874678,
+      "heapAfter": 52571054,
+      "heapDelta": 33696376
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1445.6999999284744,
+      "decimateMs": 82.90000006556511,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 582.2999999821186,
+      "libReturnMs": 384.69999998807907
+     },
+     "brush": {
+      "latencyMs": 1375.2000000178814,
+      "callbackMs": 14.200000017881393,
+      "indicesMs": 0.8999999761581421,
+      "paintMs": 1360.1000000238419,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 705.5,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 317.2999999821186
+     },
+     "heap": {
+      "heapBefore": 18872886,
+      "heapAfter": 52573034,
+      "heapDelta": 33700148
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 588.8000000119209,
+     "min": 572.6999999880791,
+     "max": 610.4000000059605,
+     "values": [
+      572.6999999880791,
+      588.8000000119209,
+      610.4000000059605,
+      600.6999999880791,
+      582.2999999821186
+     ]
+    },
+    "libReturnMs": {
+     "median": 384.69999998807907,
+     "min": 378.69999998807907,
+     "max": 400.7000000178814,
+     "values": [
+      378.69999998807907,
+      383.19999998807907,
+      400.7000000178814,
+      385.30000001192093,
+      384.69999998807907
+     ]
+    },
+    "highlightMs": {
+     "median": 793.6999999880791,
+     "min": 696.3000000119209,
+     "max": 852.4000000059605,
+     "values": [
+      696.3000000119209,
+      793.6999999880791,
+      852.4000000059605,
+      846.4000000059605,
+      705.5
+     ]
+    },
+    "zoomMs": {
+     "median": 384.10000002384186,
+     "min": 317.2999999821186,
+     "max": 387.5,
+     "values": [
+      365.2999999821186,
+      387.5,
+      385,
+      384.10000002384186,
+      317.2999999821186
+     ]
+    },
+    "heapAfterMB": {
+     "median": 50.135663986206055,
+     "min": 50.12332725524902,
+     "max": 50.139455795288086,
+     "values": [
+      50.139455795288086,
+      50.12433052062988,
+      50.12332725524902,
+      50.135663986206055,
+      50.13755226135254
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 32.13536834716797,
+     "min": 32.1252555847168,
+     "max": 32.13923645019531,
+     "values": [
+      32.13923645019531,
+      32.1252555847168,
+      32.12532043457031,
+      32.13536834716797,
+      32.13896560668945
+     ]
+    },
+    "info": {
+     "genMs": 1289.0000000596046,
+     "decimateMs": 73.8999999165535,
+     "pointsPerChannel": 3200,
+     "channels": 60,
+     "totalPoints": 192000
+    },
+    "genMs": {
+     "median": 1443.6999999284744,
+     "min": 1289.0000000596046,
+     "max": 1462.6999999284744,
+     "values": [
+      1289.0000000596046,
+      1462.6999999284744,
+      1443.6999999284744,
+      1366.8000001311302,
+      1445.6999999284744
+     ]
+    },
+    "decimateMs": {
+     "median": 79.59999987483025,
+     "min": 73.8999999165535,
+     "max": 82.90000006556511,
+     "values": [
+      73.8999999165535,
+      79.30000007152557,
+      79.70000007748604,
+      79.59999987483025,
+      82.90000006556511
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 1396.0999999940395,
+     "min": 1375.2000000178814,
+     "max": 1444.199999988079,
+     "values": [
+      1379.6000000238419,
+      1415.2999999821186,
+      1444.199999988079,
+      1396.0999999940395,
+      1375.2000000178814
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 14.799999982118607,
+     "min": 11.900000005960464,
+     "max": 20.799999982118607,
+     "values": [
+      11.900000005960464,
+      15.599999994039536,
+      20.799999982118607,
+      14.799999982118607,
+      14.200000017881393
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 0.800000011920929,
+     "min": 0.7000000178813934,
+     "max": 1.100000023841858,
+     "values": [
+      0.7000000178813934,
+      0.800000011920929,
+      1.100000023841858,
+      0.7000000178813934,
+      0.8999999761581421
+     ]
+    },
+    "brushPaintMs": {
+     "median": 1380.5999999940395,
+     "min": 1360.1000000238419,
+     "max": 1422.2999999821186,
+     "values": [
+      1367,
+      1398.8999999761581,
+      1422.2999999821186,
+      1380.5999999940395,
+      1360.1000000238419
+     ]
+    },
+    "selection": {
+     "source": "range, indices computed here",
+     "nSelected": [
+      640,
+      640,
+      640,
+      640,
+      640
+     ],
+     "nDelivered": [
+      640,
+      640,
+      640,
+      640,
+      640
+     ],
+     "nReference": [
+      640,
+      640,
+      640,
+      640,
+      640
+     ],
+     "nMissing": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nExtra": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nativeCount": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "allAgree": true
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  },
+  {
+   "lib": "plotly4",
+   "case": "scatter-1",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 124,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 418.69999998807907,
+      "libReturnMs": 357.5
+     },
+     "brush": {
+      "latencyMs": 175.09999999403954,
+      "callbackMs": 149.5,
+      "indicesMs": 0,
+      "paintMs": 25.599999994039536,
+      "source": "library indices",
+      "nDelivered": 53828,
+      "nSelected": 53828,
+      "nReference": 53817,
+      "nMissing": 0,
+      "nExtra": 11,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        5.54054054054054,
+        7.4324324324324325
+       ],
+       "y": [
+        5.592105263157895,
+        7.5
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 312.80000001192093,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 140.19999998807907
+     },
+     "heap": {
+      "heapBefore": 20081710,
+      "heapAfter": 93497471,
+      "heapDelta": 73415761
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 130.7000000178814,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 407,
+      "libReturnMs": 349.5
+     },
+     "brush": {
+      "latencyMs": 177.30000001192093,
+      "callbackMs": 149.40000000596046,
+      "indicesMs": 0,
+      "paintMs": 27.900000005960464,
+      "source": "library indices",
+      "nDelivered": 53828,
+      "nSelected": 53828,
+      "nReference": 53817,
+      "nMissing": 0,
+      "nExtra": 11,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        5.54054054054054,
+        7.4324324324324325
+       ],
+       "y": [
+        5.592105263157895,
+        7.5
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 325.30000001192093,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 150.80000001192093
+     },
+     "heap": {
+      "heapBefore": 20081714,
+      "heapAfter": 93497211,
+      "heapDelta": 73415497
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 125.80000001192093,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 462.60000002384186,
+      "libReturnMs": 397.90000000596046
+     },
+     "brush": {
+      "latencyMs": 182.30000001192093,
+      "callbackMs": 155.5,
+      "indicesMs": 0,
+      "paintMs": 26.80000001192093,
+      "source": "library indices",
+      "nDelivered": 53828,
+      "nSelected": 53828,
+      "nReference": 53817,
+      "nMissing": 0,
+      "nExtra": 11,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        5.54054054054054,
+        7.4324324324324325
+       ],
+       "y": [
+        5.592105263157895,
+        7.5
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 327.40000000596046,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 148.89999997615814
+     },
+     "heap": {
+      "heapBefore": 20081722,
+      "heapAfter": 93498167,
+      "heapDelta": 73416445
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 120.5,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 417.30000001192093,
+      "libReturnMs": 356.40000000596046
+     },
+     "brush": {
+      "latencyMs": 186.09999999403954,
+      "callbackMs": 157.40000000596046,
+      "indicesMs": 0.09999999403953552,
+      "paintMs": 28.599999994039536,
+      "source": "library indices",
+      "nDelivered": 53828,
+      "nSelected": 53828,
+      "nReference": 53817,
+      "nMissing": 0,
+      "nExtra": 11,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        5.54054054054054,
+        7.4324324324324325
+       ],
+       "y": [
+        5.592105263157895,
+        7.5
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 344.90000000596046,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 144.5
+     },
+     "heap": {
+      "heapBefore": 20081722,
+      "heapAfter": 93500375,
+      "heapDelta": 73418653
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 117.59999999403954,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 400.19999998807907,
+      "libReturnMs": 340.09999999403954
+     },
+     "brush": {
+      "latencyMs": 188.30000001192093,
+      "callbackMs": 161.90000000596046,
+      "indicesMs": 0,
+      "paintMs": 26.400000005960464,
+      "source": "library indices",
+      "nDelivered": 53828,
+      "nSelected": 53828,
+      "nReference": 53817,
+      "nMissing": 0,
+      "nExtra": 11,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        5.54054054054054,
+        7.4324324324324325
+       ],
+       "y": [
+        5.592105263157895,
+        7.5
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 325.90000000596046,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 144.5
+     },
+     "heap": {
+      "heapBefore": 20081734,
+      "heapAfter": 93500295,
+      "heapDelta": 73418561
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 120.5,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 407,
+      "libReturnMs": 347.09999999403954
+     },
+     "brush": {
+      "latencyMs": 178,
+      "callbackMs": 151.7999999821186,
+      "indicesMs": 0,
+      "paintMs": 26.200000017881393,
+      "source": "library indices",
+      "nDelivered": 53828,
+      "nSelected": 53828,
+      "nReference": 53817,
+      "nMissing": 0,
+      "nExtra": 11,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        5.54054054054054,
+        7.4324324324324325
+       ],
+       "y": [
+        5.592105263157895,
+        7.5
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 319.40000000596046,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 148.69999998807907
+     },
+     "heap": {
+      "heapBefore": 20081746,
+      "heapAfter": 93498243,
+      "heapDelta": 73416497
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 407,
+     "min": 400.19999998807907,
+     "max": 462.60000002384186,
+     "values": [
+      407,
+      462.60000002384186,
+      417.30000001192093,
+      400.19999998807907,
+      407
+     ]
+    },
+    "libReturnMs": {
+     "median": 349.5,
+     "min": 340.09999999403954,
+     "max": 397.90000000596046,
+     "values": [
+      349.5,
+      397.90000000596046,
+      356.40000000596046,
+      340.09999999403954,
+      347.09999999403954
+     ]
+    },
+    "highlightMs": {
+     "median": 325.90000000596046,
+     "min": 319.40000000596046,
+     "max": 344.90000000596046,
+     "values": [
+      325.30000001192093,
+      327.40000000596046,
+      344.90000000596046,
+      325.90000000596046,
+      319.40000000596046
+     ]
+    },
+    "zoomMs": {
+     "median": 148.69999998807907,
+     "min": 144.5,
+     "max": 150.80000001192093,
+     "values": [
+      150.80000001192093,
+      148.89999997615814,
+      144.5,
+      144.5,
+      148.69999998807907
+     ]
+    },
+    "heapAfterMB": {
+     "median": 89.16687297821045,
+     "min": 89.16588878631592,
+     "max": 89.16890621185303,
+     "values": [
+      89.16588878631592,
+      89.1668004989624,
+      89.16890621185303,
+      89.16882991790771,
+      89.16687297821045
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 70.0154275894165,
+     "min": 70.0144739151001,
+     "max": 70.01748371124268,
+     "values": [
+      70.0144739151001,
+      70.01537799835205,
+      70.01748371124268,
+      70.01739597320557,
+      70.0154275894165
+     ]
+    },
+    "info": {
+     "genMs": 130.7000000178814,
+     "decimateMs": 0,
+     "pointsPerChannel": 252665,
+     "channels": 1,
+     "totalPoints": 252665
+    },
+    "genMs": {
+     "median": 120.5,
+     "min": 117.59999999403954,
+     "max": 130.7000000178814,
+     "values": [
+      130.7000000178814,
+      125.80000001192093,
+      120.5,
+      117.59999999403954,
+      120.5
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 182.30000001192093,
+     "min": 177.30000001192093,
+     "max": 188.30000001192093,
+     "values": [
+      177.30000001192093,
+      182.30000001192093,
+      186.09999999403954,
+      188.30000001192093,
+      178
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 155.5,
+     "min": 149.40000000596046,
+     "max": 161.90000000596046,
+     "values": [
+      149.40000000596046,
+      155.5,
+      157.40000000596046,
+      161.90000000596046,
+      151.7999999821186
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 0,
+     "min": 0,
+     "max": 0.09999999403953552,
+     "values": [
+      0,
+      0,
+      0.09999999403953552,
+      0,
+      0
+     ]
+    },
+    "brushPaintMs": {
+     "median": 26.80000001192093,
+     "min": 26.200000017881393,
+     "max": 28.599999994039536,
+     "values": [
+      27.900000005960464,
+      26.80000001192093,
+      28.599999994039536,
+      26.400000005960464,
+      26.200000017881393
+     ]
+    },
+    "selection": {
+     "source": "library indices",
+     "nSelected": [
+      53828,
+      53828,
+      53828,
+      53828,
+      53828
+     ],
+     "nDelivered": [
+      53828,
+      53828,
+      53828,
+      53828,
+      53828
+     ],
+     "nReference": [
+      53817,
+      53817,
+      53817,
+      53817,
+      53817
+     ],
+     "nMissing": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nExtra": [
+      11,
+      11,
+      11,
+      11,
+      11
+     ],
+     "nativeCount": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "allAgree": false
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  },
+  {
+   "lib": "plotly2",
+   "case": "timeline-1",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 85,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 482.90000000596046,
+      "libReturnMs": 413.40000000596046
+     },
+     "brush": {
+      "latencyMs": 463.69999998807907,
+      "callbackMs": 114.19999998807907,
+      "indicesMs": 2.5999999940395355,
+      "paintMs": 346.90000000596046,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 247,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 110.7000000178814
+     },
+     "heap": {
+      "heapBefore": 30132928,
+      "heapAfter": 102906657,
+      "heapDelta": 72773729
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 80.69999998807907,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 452.09999999403954,
+      "libReturnMs": 391.19999998807907
+     },
+     "brush": {
+      "latencyMs": 460.39999997615814,
+      "callbackMs": 117,
+      "indicesMs": 2.5,
+      "paintMs": 340.89999997615814,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 263.2999999821186,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 114.30000001192093
+     },
+     "heap": {
+      "heapBefore": 30133056,
+      "heapAfter": 102907233,
+      "heapDelta": 72774177
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 95,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 488.80000001192093,
+      "libReturnMs": 430.40000000596046
+     },
+     "brush": {
+      "latencyMs": 514.3000000119209,
+      "callbackMs": 108.80000001192093,
+      "indicesMs": 2.199999988079071,
+      "paintMs": 403.30000001192093,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 269,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 138.59999999403954
+     },
+     "heap": {
+      "heapBefore": 30133204,
+      "heapAfter": 102906789,
+      "heapDelta": 72773585
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 90.19999998807907,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 483.2999999821186,
+      "libReturnMs": 424.19999998807907
+     },
+     "brush": {
+      "latencyMs": 486.09999999403954,
+      "callbackMs": 105.19999998807907,
+      "indicesMs": 2.5,
+      "paintMs": 378.40000000596046,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 265.7999999821186,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 117.19999998807907
+     },
+     "heap": {
+      "heapBefore": 30132808,
+      "heapAfter": 102855713,
+      "heapDelta": 72722905
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 107.90000000596046,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 528.0999999940395,
+      "libReturnMs": 463.69999998807907
+     },
+     "brush": {
+      "latencyMs": 546.2999999821186,
+      "callbackMs": 109.69999998807907,
+      "indicesMs": 2.800000011920929,
+      "paintMs": 433.7999999821186,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 276.59999999403954,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 139.89999997615814
+     },
+     "heap": {
+      "heapBefore": 30132912,
+      "heapAfter": 102855533,
+      "heapDelta": 72722621
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 99.7999999821186,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 505.19999998807907,
+      "libReturnMs": 445.40000000596046
+     },
+     "brush": {
+      "latencyMs": 470.59999999403954,
+      "callbackMs": 101.90000000596046,
+      "indicesMs": 2.4000000059604645,
+      "paintMs": 366.2999999821186,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 266.90000000596046,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 127.40000000596046
+     },
+     "heap": {
+      "heapBefore": 30132912,
+      "heapAfter": 102855505,
+      "heapDelta": 72722593
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 488.80000001192093,
+     "min": 452.09999999403954,
+     "max": 528.0999999940395,
+     "values": [
+      452.09999999403954,
+      488.80000001192093,
+      483.2999999821186,
+      528.0999999940395,
+      505.19999998807907
+     ]
+    },
+    "libReturnMs": {
+     "median": 430.40000000596046,
+     "min": 391.19999998807907,
+     "max": 463.69999998807907,
+     "values": [
+      391.19999998807907,
+      430.40000000596046,
+      424.19999998807907,
+      463.69999998807907,
+      445.40000000596046
+     ]
+    },
+    "highlightMs": {
+     "median": 266.90000000596046,
+     "min": 263.2999999821186,
+     "max": 276.59999999403954,
+     "values": [
+      263.2999999821186,
+      269,
+      265.7999999821186,
+      276.59999999403954,
+      266.90000000596046
+     ]
+    },
+    "zoomMs": {
+     "median": 127.40000000596046,
+     "min": 114.30000001192093,
+     "max": 139.89999997615814,
+     "values": [
+      114.30000001192093,
+      138.59999999403954,
+      117.19999998807907,
+      139.89999997615814,
+      127.40000000596046
+     ]
+    },
+    "heapAfterMB": {
+     "median": 98.09085178375244,
+     "min": 98.09065341949463,
+     "max": 98.13998508453369,
+     "values": [
+      98.13998508453369,
+      98.1395616531372,
+      98.09085178375244,
+      98.09068012237549,
+      98.09065341949463
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 69.35396671295166,
+     "min": 69.35366916656494,
+     "max": 69.40286350250244,
+     "values": [
+      69.40286350250244,
+      69.40229892730713,
+      69.35396671295166,
+      69.3536958694458,
+      69.35366916656494
+     ]
+    },
+    "info": {
+     "genMs": 80.69999998807907,
+     "decimateMs": 0,
+     "pointsPerChannel": 262800,
+     "channels": 1,
+     "totalPoints": 262800
+    },
+    "genMs": {
+     "median": 95,
+     "min": 80.69999998807907,
+     "max": 107.90000000596046,
+     "values": [
+      80.69999998807907,
+      95,
+      90.19999998807907,
+      107.90000000596046,
+      99.7999999821186
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 486.09999999403954,
+     "min": 460.39999997615814,
+     "max": 546.2999999821186,
+     "values": [
+      460.39999997615814,
+      514.3000000119209,
+      486.09999999403954,
+      546.2999999821186,
+      470.59999999403954
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 108.80000001192093,
+     "min": 101.90000000596046,
+     "max": 117,
+     "values": [
+      117,
+      108.80000001192093,
+      105.19999998807907,
+      109.69999998807907,
+      101.90000000596046
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 2.5,
+     "min": 2.199999988079071,
+     "max": 2.800000011920929,
+     "values": [
+      2.5,
+      2.199999988079071,
+      2.5,
+      2.800000011920929,
+      2.4000000059604645
+     ]
+    },
+    "brushPaintMs": {
+     "median": 378.40000000596046,
+     "min": 340.89999997615814,
+     "max": 433.7999999821186,
+     "values": [
+      340.89999997615814,
+      403.30000001192093,
+      378.40000000596046,
+      433.7999999821186,
+      366.2999999821186
+     ]
+    },
+    "selection": {
+     "source": "range, indices computed here",
+     "nSelected": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nDelivered": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nReference": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nMissing": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nExtra": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nativeCount": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "allAgree": true
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  },
+  {
+   "lib": "plotly2",
+   "case": "timeline-6",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 246.30000001192093,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 1297,
+      "libReturnMs": 1141.800000011921
+     },
+     "brush": {
+      "latencyMs": 1627.800000011921,
+      "callbackMs": 9.099999994039536,
+      "indicesMs": 2.5,
+      "paintMs": 1616.2000000178814,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 1166.300000011921,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 591.0999999940395
+     },
+     "heap": {
+      "heapBefore": 35403792,
+      "heapAfter": 446762165,
+      "heapDelta": 411358373
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 236.69999998807907,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 1224.4000000059605,
+      "libReturnMs": 1085.199999988079
+     },
+     "brush": {
+      "latencyMs": 1597.5,
+      "callbackMs": 8.300000011920929,
+      "indicesMs": 2.300000011920929,
+      "paintMs": 1586.8999999761581,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 1174.5,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 554.6999999880791
+     },
+     "heap": {
+      "heapBefore": 35403556,
+      "heapAfter": 446755429,
+      "heapDelta": 411351873
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 220.7999999821186,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 1239.300000011921,
+      "libReturnMs": 1074.5999999940395
+     },
+     "brush": {
+      "latencyMs": 1582.1000000238419,
+      "callbackMs": 7.5,
+      "indicesMs": 2.100000023841858,
+      "paintMs": 1572.5,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 1192.9000000059605,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 595.5
+     },
+     "heap": {
+      "heapBefore": 35403968,
+      "heapAfter": 446742101,
+      "heapDelta": 411338133
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 209.90000000596046,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 1225.5,
+      "libReturnMs": 1068
+     },
+     "brush": {
+      "latencyMs": 1543.0999999940395,
+      "callbackMs": 7.299999982118607,
+      "indicesMs": 2.4000000059604645,
+      "paintMs": 1533.4000000059605,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 1144.9000000059605,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 601
+     },
+     "heap": {
+      "heapBefore": 35404012,
+      "heapAfter": 446741721,
+      "heapDelta": 411337709
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 209.2000000178814,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 1212.4000000059605,
+      "libReturnMs": 1093.0999999940395
+     },
+     "brush": {
+      "latencyMs": 1551.2999999821186,
+      "callbackMs": 7.5,
+      "indicesMs": 2.199999988079071,
+      "paintMs": 1541.5999999940395,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 1136.699999988079,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 493.09999999403954
+     },
+     "heap": {
+      "heapBefore": 35403644,
+      "heapAfter": 446741473,
+      "heapDelta": 411337829
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 230.30000001192093,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 1244.9000000059605,
+      "libReturnMs": 1111
+     },
+     "brush": {
+      "latencyMs": 1676.699999988079,
+      "callbackMs": 108.80000001192093,
+      "indicesMs": 2.699999988079071,
+      "paintMs": 1565.199999988079,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 1249.800000011921,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 507.7999999821186
+     },
+     "heap": {
+      "heapBefore": 35404052,
+      "heapAfter": 446731517,
+      "heapDelta": 411327465
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 1225.5,
+     "min": 1212.4000000059605,
+     "max": 1244.9000000059605,
+     "values": [
+      1224.4000000059605,
+      1239.300000011921,
+      1225.5,
+      1212.4000000059605,
+      1244.9000000059605
+     ]
+    },
+    "libReturnMs": {
+     "median": 1085.199999988079,
+     "min": 1068,
+     "max": 1111,
+     "values": [
+      1085.199999988079,
+      1074.5999999940395,
+      1068,
+      1093.0999999940395,
+      1111
+     ]
+    },
+    "highlightMs": {
+     "median": 1174.5,
+     "min": 1136.699999988079,
+     "max": 1249.800000011921,
+     "values": [
+      1174.5,
+      1192.9000000059605,
+      1144.9000000059605,
+      1136.699999988079,
+      1249.800000011921
+     ]
+    },
+    "zoomMs": {
+     "median": 554.6999999880791,
+     "min": 493.09999999403954,
+     "max": 601,
+     "values": [
+      554.6999999880791,
+      595.5,
+      601,
+      493.09999999403954,
+      507.7999999821186
+     ]
+    },
+    "heapAfterMB": {
+     "median": 426.04610538482666,
+     "min": 426.03637409210205,
+     "max": 426.05917835235596,
+     "values": [
+      426.05917835235596,
+      426.0464677810669,
+      426.04610538482666,
+      426.0458688735962,
+      426.03637409210205
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 392.28232288360596,
+     "min": 392.2724390029907,
+     "max": 392.29571628570557,
+     "values": [
+      392.29571628570557,
+      392.28261280059814,
+      392.282208442688,
+      392.28232288360596,
+      392.2724390029907
+     ]
+    },
+    "info": {
+     "genMs": 236.69999998807907,
+     "decimateMs": 0,
+     "pointsPerChannel": 262800,
+     "channels": 6,
+     "totalPoints": 1576800
+    },
+    "genMs": {
+     "median": 220.7999999821186,
+     "min": 209.2000000178814,
+     "max": 236.69999998807907,
+     "values": [
+      236.69999998807907,
+      220.7999999821186,
+      209.90000000596046,
+      209.2000000178814,
+      230.30000001192093
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 1582.1000000238419,
+     "min": 1543.0999999940395,
+     "max": 1676.699999988079,
+     "values": [
+      1597.5,
+      1582.1000000238419,
+      1543.0999999940395,
+      1551.2999999821186,
+      1676.699999988079
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 7.5,
+     "min": 7.299999982118607,
+     "max": 108.80000001192093,
+     "values": [
+      8.300000011920929,
+      7.5,
+      7.299999982118607,
+      7.5,
+      108.80000001192093
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 2.300000011920929,
+     "min": 2.100000023841858,
+     "max": 2.699999988079071,
+     "values": [
+      2.300000011920929,
+      2.100000023841858,
+      2.4000000059604645,
+      2.199999988079071,
+      2.699999988079071
+     ]
+    },
+    "brushPaintMs": {
+     "median": 1565.199999988079,
+     "min": 1533.4000000059605,
+     "max": 1586.8999999761581,
+     "values": [
+      1586.8999999761581,
+      1572.5,
+      1533.4000000059605,
+      1541.5999999940395,
+      1565.199999988079
+     ]
+    },
+    "selection": {
+     "source": "range, indices computed here",
+     "nSelected": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nDelivered": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nReference": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nMissing": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nExtra": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nativeCount": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "allAgree": true
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  },
+  {
+   "lib": "plotly2",
+   "case": "timeline-60-decimated",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1487.4999998807907,
+      "decimateMs": 76.70000010728836,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 661.7999999821186,
+      "libReturnMs": 391.69999998807907
+     },
+     "brush": {
+      "latencyMs": 1505.3999999761581,
+      "callbackMs": 18.5,
+      "indicesMs": 0.699999988079071,
+      "paintMs": 1486.199999988079,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 771,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 399.90000000596046
+     },
+     "heap": {
+      "heapBefore": 29905750,
+      "heapAfter": 63564567,
+      "heapDelta": 33658817
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1525.799999922514,
+      "decimateMs": 86.6000000834465,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 627.9000000059605,
+      "libReturnMs": 406.09999999403954
+     },
+     "brush": {
+      "latencyMs": 1424.699999988079,
+      "callbackMs": 16.799999982118607,
+      "indicesMs": 0.7000000178813934,
+      "paintMs": 1407.199999988079,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 852.5,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 393.80000001192093
+     },
+     "heap": {
+      "heapBefore": 29905782,
+      "heapAfter": 63557803,
+      "heapDelta": 33652021
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1519.299999922514,
+      "decimateMs": 86.1000000834465,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 634.2000000178814,
+      "libReturnMs": 394.80000001192093
+     },
+     "brush": {
+      "latencyMs": 1416.3999999761581,
+      "callbackMs": 18,
+      "indicesMs": 0.7999999821186066,
+      "paintMs": 1397.5999999940395,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 779.9000000059605,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 405
+     },
+     "heap": {
+      "heapBefore": 29905734,
+      "heapAfter": 63557087,
+      "heapDelta": 33651353
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1745.1999999284744,
+      "decimateMs": 96.80000007152557,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 615,
+      "libReturnMs": 380
+     },
+     "brush": {
+      "latencyMs": 1441,
+      "callbackMs": 17.099999994039536,
+      "indicesMs": 0.699999988079071,
+      "paintMs": 1423.2000000178814,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 745.7999999821186,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 331.39999997615814
+     },
+     "heap": {
+      "heapBefore": 29905714,
+      "heapAfter": 63556647,
+      "heapDelta": 33650933
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1350.6999999582767,
+      "decimateMs": 77.90000003576279,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 590,
+      "libReturnMs": 364.40000000596046
+     },
+     "brush": {
+      "latencyMs": 1425.0999999940395,
+      "callbackMs": 13.699999988079071,
+      "indicesMs": 0.5999999940395355,
+      "paintMs": 1410.800000011921,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 688,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 334.69999998807907
+     },
+     "heap": {
+      "heapBefore": 29905678,
+      "heapAfter": 63558035,
+      "heapDelta": 33652357
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1286.4000000059605,
+      "decimateMs": 74.80000001192093,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 597.4000000059605,
+      "libReturnMs": 383.09999999403954
+     },
+     "brush": {
+      "latencyMs": 1355.9000000059605,
+      "callbackMs": 13.5,
+      "indicesMs": 0.5999999940395355,
+      "paintMs": 1341.800000011921,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ],
+       "y": [
+        0,
+        26
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 663.3000000119209,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 309.2000000178814
+     },
+     "heap": {
+      "heapBefore": 29905714,
+      "heapAfter": 63557151,
+      "heapDelta": 33651437
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 615,
+     "min": 590,
+     "max": 634.2000000178814,
+     "values": [
+      627.9000000059605,
+      634.2000000178814,
+      615,
+      590,
+      597.4000000059605
+     ]
+    },
+    "libReturnMs": {
+     "median": 383.09999999403954,
+     "min": 364.40000000596046,
+     "max": 406.09999999403954,
+     "values": [
+      406.09999999403954,
+      394.80000001192093,
+      380,
+      364.40000000596046,
+      383.09999999403954
+     ]
+    },
+    "highlightMs": {
+     "median": 745.7999999821186,
+     "min": 663.3000000119209,
+     "max": 852.5,
+     "values": [
+      852.5,
+      779.9000000059605,
+      745.7999999821186,
+      688,
+      663.3000000119209
+     ]
+    },
+    "zoomMs": {
+     "median": 334.69999998807907,
+     "min": 309.2000000178814,
+     "max": 405,
+     "values": [
+      393.80000001192093,
+      405,
+      331.39999997615814,
+      334.69999998807907,
+      309.2000000178814
+     ]
+    },
+    "heapAfterMB": {
+     "median": 60.61282253265381,
+     "min": 60.61234188079834,
+     "max": 60.61366558074951,
+     "values": [
+      60.613444328308105,
+      60.61276149749756,
+      60.61234188079834,
+      60.61366558074951,
+      60.61282253265381
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 32.09251117706299,
+     "min": 32.09203052520752,
+     "max": 32.09338855743408,
+     "values": [
+      32.09306812286377,
+      32.09243106842041,
+      32.09203052520752,
+      32.09338855743408,
+      32.09251117706299
+     ]
+    },
+    "info": {
+     "genMs": 1525.799999922514,
+     "decimateMs": 86.6000000834465,
+     "pointsPerChannel": 3200,
+     "channels": 60,
+     "totalPoints": 192000
+    },
+    "genMs": {
+     "median": 1519.299999922514,
+     "min": 1286.4000000059605,
+     "max": 1745.1999999284744,
+     "values": [
+      1525.799999922514,
+      1519.299999922514,
+      1745.1999999284744,
+      1350.6999999582767,
+      1286.4000000059605
+     ]
+    },
+    "decimateMs": {
+     "median": 86.1000000834465,
+     "min": 74.80000001192093,
+     "max": 96.80000007152557,
+     "values": [
+      86.6000000834465,
+      86.1000000834465,
+      96.80000007152557,
+      77.90000003576279,
+      74.80000001192093
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 1424.699999988079,
+     "min": 1355.9000000059605,
+     "max": 1441,
+     "values": [
+      1424.699999988079,
+      1416.3999999761581,
+      1441,
+      1425.0999999940395,
+      1355.9000000059605
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 16.799999982118607,
+     "min": 13.5,
+     "max": 18,
+     "values": [
+      16.799999982118607,
+      18,
+      17.099999994039536,
+      13.699999988079071,
+      13.5
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 0.699999988079071,
+     "min": 0.5999999940395355,
+     "max": 0.7999999821186066,
+     "values": [
+      0.7000000178813934,
+      0.7999999821186066,
+      0.699999988079071,
+      0.5999999940395355,
+      0.5999999940395355
+     ]
+    },
+    "brushPaintMs": {
+     "median": 1407.199999988079,
+     "min": 1341.800000011921,
+     "max": 1423.2000000178814,
+     "values": [
+      1407.199999988079,
+      1397.5999999940395,
+      1423.2000000178814,
+      1410.800000011921,
+      1341.800000011921
+     ]
+    },
+    "selection": {
+     "source": "range, indices computed here",
+     "nSelected": [
+      640,
+      640,
+      640,
+      640,
+      640
+     ],
+     "nDelivered": [
+      640,
+      640,
+      640,
+      640,
+      640
+     ],
+     "nReference": [
+      640,
+      640,
+      640,
+      640,
+      640
+     ],
+     "nMissing": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nExtra": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nativeCount": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "allAgree": true
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  },
+  {
+   "lib": "plotly2",
+   "case": "scatter-1",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 125.09999999403954,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 427.69999998807907,
+      "libReturnMs": 357.40000000596046
+     },
+     "brush": {
+      "latencyMs": 192.90000000596046,
+      "callbackMs": 165,
+      "indicesMs": 0.10000002384185791,
+      "paintMs": 27.799999982118607,
+      "source": "library indices",
+      "nDelivered": 53828,
+      "nSelected": 53828,
+      "nReference": 53817,
+      "nMissing": 0,
+      "nExtra": 11,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        5.54054054054054,
+        7.4324324324324325
+       ],
+       "y": [
+        5.592105263157895,
+        7.5
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 303.40000000596046,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 118.59999999403954
+     },
+     "heap": {
+      "heapBefore": 31113578,
+      "heapAfter": 104512140,
+      "heapDelta": 73398562
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 126.59999999403954,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 424.40000000596046,
+      "libReturnMs": 355.5
+     },
+     "brush": {
+      "latencyMs": 172.89999997615814,
+      "callbackMs": 148.19999998807907,
+      "indicesMs": 0,
+      "paintMs": 24.69999998807907,
+      "source": "library indices",
+      "nDelivered": 53828,
+      "nSelected": 53828,
+      "nReference": 53817,
+      "nMissing": 0,
+      "nExtra": 11,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        5.54054054054054,
+        7.4324324324324325
+       ],
+       "y": [
+        5.592105263157895,
+        7.5
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 287.19999998807907,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 123.5
+     },
+     "heap": {
+      "heapBefore": 31113622,
+      "heapAfter": 104489956,
+      "heapDelta": 73376334
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 127.59999999403954,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 425.89999997615814,
+      "libReturnMs": 364.19999998807907
+     },
+     "brush": {
+      "latencyMs": 64.90000000596046,
+      "callbackMs": 32.900000005960464,
+      "indicesMs": 0,
+      "paintMs": 32,
+      "source": "library indices",
+      "nDelivered": 53828,
+      "nSelected": 53828,
+      "nReference": 53817,
+      "nMissing": 0,
+      "nExtra": 11,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        5.54054054054054,
+        7.4324324324324325
+       ],
+       "y": [
+        5.592105263157895,
+        7.5
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 326,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 122.09999999403954
+     },
+     "heap": {
+      "heapBefore": 31113202,
+      "heapAfter": 104492324,
+      "heapDelta": 73379122
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 116.40000000596046,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 410.69999998807907,
+      "libReturnMs": 345.39999997615814
+     },
+     "brush": {
+      "latencyMs": 178.2000000178814,
+      "callbackMs": 153.10000002384186,
+      "indicesMs": 0,
+      "paintMs": 25.099999994039536,
+      "source": "library indices",
+      "nDelivered": 53828,
+      "nSelected": 53828,
+      "nReference": 53817,
+      "nMissing": 0,
+      "nExtra": 11,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        5.54054054054054,
+        7.4324324324324325
+       ],
+       "y": [
+        5.592105263157895,
+        7.5
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 296.2000000178814,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 122.69999998807907
+     },
+     "heap": {
+      "heapBefore": 31113234,
+      "heapAfter": 104509484,
+      "heapDelta": 73396250
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 121.5,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 419.90000000596046,
+      "libReturnMs": 360.19999998807907
+     },
+     "brush": {
+      "latencyMs": 175.80000001192093,
+      "callbackMs": 147.90000000596046,
+      "indicesMs": 0,
+      "paintMs": 27.900000005960464,
+      "source": "library indices",
+      "nDelivered": 53828,
+      "nSelected": 53828,
+      "nReference": 53817,
+      "nMissing": 0,
+      "nExtra": 11,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        5.54054054054054,
+        7.4324324324324325
+       ],
+       "y": [
+        5.592105263157895,
+        7.5
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 297.90000000596046,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 123.2000000178814
+     },
+     "heap": {
+      "heapBefore": 31113202,
+      "heapAfter": 104483084,
+      "heapDelta": 73369882
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 147.19999998807907,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 429,
+      "libReturnMs": 361.90000000596046
+     },
+     "brush": {
+      "latencyMs": 182.2999999821186,
+      "callbackMs": 155.69999998807907,
+      "indicesMs": 0,
+      "paintMs": 26.599999994039536,
+      "source": "library indices",
+      "nDelivered": 53828,
+      "nSelected": 53828,
+      "nReference": 53817,
+      "nMissing": 0,
+      "nExtra": 11,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        5.54054054054054,
+        7.4324324324324325
+       ],
+       "y": [
+        5.592105263157895,
+        7.5
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 297.90000000596046,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 120.40000000596046
+     },
+     "heap": {
+      "heapBefore": 31113574,
+      "heapAfter": 104483576,
+      "heapDelta": 73370002
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 424.40000000596046,
+     "min": 410.69999998807907,
+     "max": 429,
+     "values": [
+      424.40000000596046,
+      425.89999997615814,
+      410.69999998807907,
+      419.90000000596046,
+      429
+     ]
+    },
+    "libReturnMs": {
+     "median": 360.19999998807907,
+     "min": 345.39999997615814,
+     "max": 364.19999998807907,
+     "values": [
+      355.5,
+      364.19999998807907,
+      345.39999997615814,
+      360.19999998807907,
+      361.90000000596046
+     ]
+    },
+    "highlightMs": {
+     "median": 297.90000000596046,
+     "min": 287.19999998807907,
+     "max": 326,
+     "values": [
+      287.19999998807907,
+      326,
+      296.2000000178814,
+      297.90000000596046,
+      297.90000000596046
+     ]
+    },
+    "zoomMs": {
+     "median": 122.69999998807907,
+     "min": 120.40000000596046,
+     "max": 123.5,
+     "values": [
+      123.5,
+      122.09999999403954,
+      122.69999998807907,
+      123.2000000178814,
+      120.40000000596046
+     ]
+    },
+    "heapAfterMB": {
+     "median": 99.64938735961914,
+     "min": 99.6428337097168,
+     "max": 99.66801071166992,
+     "values": [
+      99.64938735961914,
+      99.65164566040039,
+      99.66801071166992,
+      99.6428337097168,
+      99.64330291748047
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 69.97712516784668,
+     "min": 69.97097206115723,
+     "max": 69.99611854553223,
+     "values": [
+      69.97712516784668,
+      69.97978401184082,
+      69.99611854553223,
+      69.97097206115723,
+      69.9710865020752
+     ]
+    },
+    "info": {
+     "genMs": 126.59999999403954,
+     "decimateMs": 0,
+     "pointsPerChannel": 252665,
+     "channels": 1,
+     "totalPoints": 252665
+    },
+    "genMs": {
+     "median": 126.59999999403954,
+     "min": 116.40000000596046,
+     "max": 147.19999998807907,
+     "values": [
+      126.59999999403954,
+      127.59999999403954,
+      116.40000000596046,
+      121.5,
+      147.19999998807907
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 175.80000001192093,
+     "min": 64.90000000596046,
+     "max": 182.2999999821186,
+     "values": [
+      172.89999997615814,
+      64.90000000596046,
+      178.2000000178814,
+      175.80000001192093,
+      182.2999999821186
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 148.19999998807907,
+     "min": 32.900000005960464,
+     "max": 155.69999998807907,
+     "values": [
+      148.19999998807907,
+      32.900000005960464,
+      153.10000002384186,
+      147.90000000596046,
+      155.69999998807907
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 0,
+     "min": 0,
+     "max": 0,
+     "values": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    },
+    "brushPaintMs": {
+     "median": 26.599999994039536,
+     "min": 24.69999998807907,
+     "max": 32,
+     "values": [
+      24.69999998807907,
+      32,
+      25.099999994039536,
+      27.900000005960464,
+      26.599999994039536
+     ]
+    },
+    "selection": {
+     "source": "library indices",
+     "nSelected": [
+      53828,
+      53828,
+      53828,
+      53828,
+      53828
+     ],
+     "nDelivered": [
+      53828,
+      53828,
+      53828,
+      53828,
+      53828
+     ],
+     "nReference": [
+      53817,
+      53817,
+      53817,
+      53817,
+      53817
+     ],
+     "nMissing": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nExtra": [
+      11,
+      11,
+      11,
+      11,
+      11
+     ],
+     "nativeCount": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "allAgree": false
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  },
+  {
+   "lib": "echarts",
+   "case": "timeline-1",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 88.19999998807907,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 121.69999998807907,
+      "libReturnMs": 117.2999999821186
+     },
+     "brush": {
+      "latencyMs": 242.5,
+      "callbackMs": 2.2999999821186066,
+      "indicesMs": 1.9000000059604645,
+      "paintMs": 238.30000001192093,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 167.19999998807907,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 86.39999997615814
+     },
+     "heap": {
+      "heapBefore": 8315965,
+      "heapAfter": 38572161,
+      "heapDelta": 30256196
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 88.40000000596046,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 122.7000000178814,
+      "libReturnMs": 116.90000000596046
+     },
+     "brush": {
+      "latencyMs": 226.40000000596046,
+      "callbackMs": 4.9000000059604645,
+      "indicesMs": 2.300000011920929,
+      "paintMs": 219.19999998807907,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 139.80000001192093,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 68.60000002384186
+     },
+     "heap": {
+      "heapBefore": 8315529,
+      "heapAfter": 38571145,
+      "heapDelta": 30255616
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 94.40000000596046,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 124.5,
+      "libReturnMs": 118.40000000596046
+     },
+     "brush": {
+      "latencyMs": 276,
+      "callbackMs": 6.0999999940395355,
+      "indicesMs": 3.5999999940395355,
+      "paintMs": 266.30000001192093,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 215.30000001192093,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 69.39999997615814
+     },
+     "heap": {
+      "heapBefore": 8316001,
+      "heapAfter": 38576737,
+      "heapDelta": 30260736
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 77.5,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 130.30000001192093,
+      "libReturnMs": 126.10000002384186
+     },
+     "brush": {
+      "latencyMs": 244.7000000178814,
+      "callbackMs": 2.800000011920929,
+      "indicesMs": 2.699999988079071,
+      "paintMs": 239.2000000178814,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 167.69999998807907,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 92
+     },
+     "heap": {
+      "heapBefore": 8315829,
+      "heapAfter": 38572185,
+      "heapDelta": 30256356
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 83.7999999821186,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 122.90000000596046,
+      "libReturnMs": 117.90000000596046
+     },
+     "brush": {
+      "latencyMs": 225,
+      "callbackMs": 2.399999976158142,
+      "indicesMs": 1.800000011920929,
+      "paintMs": 220.80000001192093,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 161.7000000178814,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 86.2999999821186
+     },
+     "heap": {
+      "heapBefore": 8315921,
+      "heapAfter": 38572261,
+      "heapDelta": 30256340
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 87.19999998807907,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 120.2999999821186,
+      "libReturnMs": 116.39999997615814
+     },
+     "brush": {
+      "latencyMs": 259.09999999403954,
+      "callbackMs": 5,
+      "indicesMs": 4.300000011920929,
+      "paintMs": 249.7999999821186,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 178,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 86.09999999403954
+     },
+     "heap": {
+      "heapBefore": 8315813,
+      "heapAfter": 38577621,
+      "heapDelta": 30261808
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 122.90000000596046,
+     "min": 120.2999999821186,
+     "max": 130.30000001192093,
+     "values": [
+      122.7000000178814,
+      124.5,
+      130.30000001192093,
+      122.90000000596046,
+      120.2999999821186
+     ]
+    },
+    "libReturnMs": {
+     "median": 117.90000000596046,
+     "min": 116.39999997615814,
+     "max": 126.10000002384186,
+     "values": [
+      116.90000000596046,
+      118.40000000596046,
+      126.10000002384186,
+      117.90000000596046,
+      116.39999997615814
+     ]
+    },
+    "highlightMs": {
+     "median": 167.69999998807907,
+     "min": 139.80000001192093,
+     "max": 215.30000001192093,
+     "values": [
+      139.80000001192093,
+      215.30000001192093,
+      167.69999998807907,
+      161.7000000178814,
+      178
+     ]
+    },
+    "zoomMs": {
+     "median": 86.09999999403954,
+     "min": 68.60000002384186,
+     "max": 92,
+     "values": [
+      68.60000002384186,
+      69.39999997615814,
+      92,
+      86.2999999821186,
+      86.09999999403954
+     ]
+    },
+    "heapAfterMB": {
+     "median": 36.78537464141846,
+     "min": 36.78431034088135,
+     "max": 36.790486335754395,
+     "values": [
+      36.78431034088135,
+      36.78964328765869,
+      36.78530216217041,
+      36.78537464141846,
+      36.790486335754395
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 28.85470962524414,
+     "min": 28.85400390625,
+     "max": 28.859909057617188,
+     "values": [
+      28.85400390625,
+      28.85888671875,
+      28.85470962524414,
+      28.854694366455078,
+      28.859909057617188
+     ]
+    },
+    "info": {
+     "genMs": 88.40000000596046,
+     "decimateMs": 0,
+     "pointsPerChannel": 262800,
+     "channels": 1,
+     "totalPoints": 262800
+    },
+    "genMs": {
+     "median": 87.19999998807907,
+     "min": 77.5,
+     "max": 94.40000000596046,
+     "values": [
+      88.40000000596046,
+      94.40000000596046,
+      77.5,
+      83.7999999821186,
+      87.19999998807907
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 244.7000000178814,
+     "min": 225,
+     "max": 276,
+     "values": [
+      226.40000000596046,
+      276,
+      244.7000000178814,
+      225,
+      259.09999999403954
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 4.9000000059604645,
+     "min": 2.399999976158142,
+     "max": 6.0999999940395355,
+     "values": [
+      4.9000000059604645,
+      6.0999999940395355,
+      2.800000011920929,
+      2.399999976158142,
+      5
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 2.699999988079071,
+     "min": 1.800000011920929,
+     "max": 4.300000011920929,
+     "values": [
+      2.300000011920929,
+      3.5999999940395355,
+      2.699999988079071,
+      1.800000011920929,
+      4.300000011920929
+     ]
+    },
+    "brushPaintMs": {
+     "median": 239.2000000178814,
+     "min": 219.19999998807907,
+     "max": 266.30000001192093,
+     "values": [
+      219.19999998807907,
+      266.30000001192093,
+      239.2000000178814,
+      220.80000001192093,
+      249.7999999821186
+     ]
+    },
+    "selection": {
+     "source": "range, indices computed here",
+     "nSelected": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nDelivered": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nReference": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nMissing": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nExtra": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nativeCount": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "allAgree": true
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  },
+  {
+   "lib": "echarts",
+   "case": "timeline-6",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 200.2999999821186,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 228.80000001192093,
+      "libReturnMs": 222.59999999403954
+     },
+     "brush": {
+      "latencyMs": 1006.2000000178814,
+      "callbackMs": 2.9000000059604645,
+      "indicesMs": 4.200000017881393,
+      "paintMs": 999.0999999940395,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 900.1999999880791,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 317.19999998807907
+     },
+     "heap": {
+      "heapBefore": 13597757,
+      "heapAfter": 150461892,
+      "heapDelta": 136864135
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 224.59999999403954,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 262.5,
+      "libReturnMs": 255.80000001192093
+     },
+     "brush": {
+      "latencyMs": 985,
+      "callbackMs": 2.9000000059604645,
+      "indicesMs": 2.2999999821186066,
+      "paintMs": 979.8000000119209,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 780.9000000059605,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 289.80000001192093
+     },
+     "heap": {
+      "heapBefore": 13597769,
+      "heapAfter": 150473072,
+      "heapDelta": 136875303
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 235.90000000596046,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 256.09999999403954,
+      "libReturnMs": 247.7999999821186
+     },
+     "brush": {
+      "latencyMs": 1041.300000011921,
+      "callbackMs": 3.199999988079071,
+      "indicesMs": 1.9000000059604645,
+      "paintMs": 1036.2000000178814,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 742.2999999821186,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 298
+     },
+     "heap": {
+      "heapBefore": 13597713,
+      "heapAfter": 150463036,
+      "heapDelta": 136865323
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 241,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 257.09999999403954,
+      "libReturnMs": 249.30000001192093
+     },
+     "brush": {
+      "latencyMs": 973.2999999821186,
+      "callbackMs": 9.5,
+      "indicesMs": 4.799999982118607,
+      "paintMs": 959,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 767.1999999880791,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 323.59999999403954
+     },
+     "heap": {
+      "heapBefore": 13597701,
+      "heapAfter": 150463704,
+      "heapDelta": 136866003
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 244,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 266.69999998807907,
+      "libReturnMs": 259
+     },
+     "brush": {
+      "latencyMs": 1026.4000000059605,
+      "callbackMs": 3.5,
+      "indicesMs": 2.5,
+      "paintMs": 1020.4000000059605,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 804.3000000119209,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 335.90000000596046
+     },
+     "heap": {
+      "heapBefore": 13597917,
+      "heapAfter": 150467448,
+      "heapDelta": 136869531
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 271.5,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 272,
+      "libReturnMs": 264
+     },
+     "brush": {
+      "latencyMs": 1014.0999999940395,
+      "callbackMs": 2.699999988079071,
+      "indicesMs": 2.100000023841858,
+      "paintMs": 1009.2999999821186,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 804.5999999940395,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 343.2999999821186
+     },
+     "heap": {
+      "heapBefore": 13597601,
+      "heapAfter": 150458668,
+      "heapDelta": 136861067
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 262.5,
+     "min": 256.09999999403954,
+     "max": 272,
+     "values": [
+      262.5,
+      256.09999999403954,
+      257.09999999403954,
+      266.69999998807907,
+      272
+     ]
+    },
+    "libReturnMs": {
+     "median": 255.80000001192093,
+     "min": 247.7999999821186,
+     "max": 264,
+     "values": [
+      255.80000001192093,
+      247.7999999821186,
+      249.30000001192093,
+      259,
+      264
+     ]
+    },
+    "highlightMs": {
+     "median": 780.9000000059605,
+     "min": 742.2999999821186,
+     "max": 804.5999999940395,
+     "values": [
+      780.9000000059605,
+      742.2999999821186,
+      767.1999999880791,
+      804.3000000119209,
+      804.5999999940395
+     ]
+    },
+    "zoomMs": {
+     "median": 323.59999999403954,
+     "min": 289.80000001192093,
+     "max": 343.2999999821186,
+     "values": [
+      289.80000001192093,
+      298,
+      323.59999999403954,
+      335.90000000596046,
+      343.2999999821186
+     ]
+    },
+    "heapAfterMB": {
+     "median": 143.49337005615234,
+     "min": 143.48856735229492,
+     "max": 143.50230407714844,
+     "values": [
+      143.50230407714844,
+      143.49273300170898,
+      143.49337005615234,
+      143.49694061279297,
+      143.48856735229492
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 130.52559185028076,
+     "min": 130.52088451385498,
+     "max": 130.53446102142334,
+     "values": [
+      130.53446102142334,
+      130.5249433517456,
+      130.52559185028076,
+      130.52895641326904,
+      130.52088451385498
+     ]
+    },
+    "info": {
+     "genMs": 224.59999999403954,
+     "decimateMs": 0,
+     "pointsPerChannel": 262800,
+     "channels": 6,
+     "totalPoints": 1576800
+    },
+    "genMs": {
+     "median": 241,
+     "min": 224.59999999403954,
+     "max": 271.5,
+     "values": [
+      224.59999999403954,
+      235.90000000596046,
+      241,
+      244,
+      271.5
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 1014.0999999940395,
+     "min": 973.2999999821186,
+     "max": 1041.300000011921,
+     "values": [
+      985,
+      1041.300000011921,
+      973.2999999821186,
+      1026.4000000059605,
+      1014.0999999940395
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 3.199999988079071,
+     "min": 2.699999988079071,
+     "max": 9.5,
+     "values": [
+      2.9000000059604645,
+      3.199999988079071,
+      9.5,
+      3.5,
+      2.699999988079071
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 2.2999999821186066,
+     "min": 1.9000000059604645,
+     "max": 4.799999982118607,
+     "values": [
+      2.2999999821186066,
+      1.9000000059604645,
+      4.799999982118607,
+      2.5,
+      2.100000023841858
+     ]
+    },
+    "brushPaintMs": {
+     "median": 1009.2999999821186,
+     "min": 959,
+     "max": 1036.2000000178814,
+     "values": [
+      979.8000000119209,
+      1036.2000000178814,
+      959,
+      1020.4000000059605,
+      1009.2999999821186
+     ]
+    },
+    "selection": {
+     "source": "range, indices computed here",
+     "nSelected": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nDelivered": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nReference": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nMissing": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nExtra": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nativeCount": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "allAgree": true
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  },
+  {
+   "lib": "echarts",
+   "case": "timeline-60-decimated",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1397.7999999821186,
+      "decimateMs": 77.90000003576279,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 307.90000000596046,
+      "libReturnMs": 265.59999999403954
+     },
+     "brush": {
+      "latencyMs": 1034.4000000059605,
+      "callbackMs": 9.300000011920929,
+      "indicesMs": 0.29999998211860657,
+      "paintMs": 1024.800000011921,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 883.5,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 498.09999999403954
+     },
+     "heap": {
+      "heapBefore": 8300531,
+      "heapAfter": 88845644,
+      "heapDelta": 80545113
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1630.099999845028,
+      "decimateMs": 84.30000013113022,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 243.5,
+      "libReturnMs": 205
+     },
+     "brush": {
+      "latencyMs": 981.7000000178814,
+      "callbackMs": 5.200000017881393,
+      "indicesMs": 0.3999999761581421,
+      "paintMs": 976.1000000238419,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 902.0999999940395,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 486.80000001192093
+     },
+     "heap": {
+      "heapBefore": 8300403,
+      "heapAfter": 88840219,
+      "heapDelta": 80539816
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1521.4000000953674,
+      "decimateMs": 82.79999992251396,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 228.90000000596046,
+      "libReturnMs": 192.90000000596046
+     },
+     "brush": {
+      "latencyMs": 1035.7999999821186,
+      "callbackMs": 5.399999976158142,
+      "indicesMs": 0.30000001192092896,
+      "paintMs": 1030.0999999940395,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 844.2000000178814,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 430.89999997615814
+     },
+     "heap": {
+      "heapBefore": 8300639,
+      "heapAfter": 88836643,
+      "heapDelta": 80536004
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1380.5999999642372,
+      "decimateMs": 77.90000003576279,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 223.7999999821186,
+      "libReturnMs": 187.89999997615814
+     },
+     "brush": {
+      "latencyMs": 910.5999999940395,
+      "callbackMs": 7.9000000059604645,
+      "indicesMs": 0.5,
+      "paintMs": 902.1999999880791,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 858.2999999821186,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 446.59999999403954
+     },
+     "heap": {
+      "heapBefore": 8300483,
+      "heapAfter": 88846027,
+      "heapDelta": 80545544
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1393.0000000596046,
+      "decimateMs": 76.79999992251396,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 221.40000000596046,
+      "libReturnMs": 185.5
+     },
+     "brush": {
+      "latencyMs": 923.1000000238419,
+      "callbackMs": 6.5,
+      "indicesMs": 0.30000001192092896,
+      "paintMs": 916.3000000119209,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 750.9000000059605,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 421.7999999821186
+     },
+     "heap": {
+      "heapBefore": 8300411,
+      "heapAfter": 88849275,
+      "heapDelta": 80548864
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1305.699999988079,
+      "decimateMs": 78.80000001192093,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 284.2999999821186,
+      "libReturnMs": 242.5
+     },
+     "brush": {
+      "latencyMs": 858.8000000119209,
+      "callbackMs": 4.9000000059604645,
+      "indicesMs": 0.29999998211860657,
+      "paintMs": 853.6000000238419,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 739.5,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 451.5
+     },
+     "heap": {
+      "heapBefore": 8300627,
+      "heapAfter": 88852731,
+      "heapDelta": 80552104
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 228.90000000596046,
+     "min": 221.40000000596046,
+     "max": 284.2999999821186,
+     "values": [
+      243.5,
+      228.90000000596046,
+      223.7999999821186,
+      221.40000000596046,
+      284.2999999821186
+     ]
+    },
+    "libReturnMs": {
+     "median": 192.90000000596046,
+     "min": 185.5,
+     "max": 242.5,
+     "values": [
+      205,
+      192.90000000596046,
+      187.89999997615814,
+      185.5,
+      242.5
+     ]
+    },
+    "highlightMs": {
+     "median": 844.2000000178814,
+     "min": 739.5,
+     "max": 902.0999999940395,
+     "values": [
+      902.0999999940395,
+      844.2000000178814,
+      858.2999999821186,
+      750.9000000059605,
+      739.5
+     ]
+    },
+    "zoomMs": {
+     "median": 446.59999999403954,
+     "min": 421.7999999821186,
+     "max": 486.80000001192093,
+     "values": [
+      486.80000001192093,
+      430.89999997615814,
+      446.59999999403954,
+      421.7999999821186,
+      451.5
+     ]
+    },
+    "heapAfterMB": {
+     "median": 84.73017406463623,
+     "min": 84.72122478485107,
+     "max": 84.73656749725342,
+     "values": [
+      84.72463512420654,
+      84.72122478485107,
+      84.73017406463623,
+      84.73327159881592,
+      84.73656749725342
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 76.81421661376953,
+     "min": 76.80511856079102,
+     "max": 76.82047271728516,
+     "values": [
+      76.80875396728516,
+      76.80511856079102,
+      76.81421661376953,
+      76.8173828125,
+      76.82047271728516
+     ]
+    },
+    "info": {
+     "genMs": 1630.099999845028,
+     "decimateMs": 84.30000013113022,
+     "pointsPerChannel": 3200,
+     "channels": 60,
+     "totalPoints": 192000
+    },
+    "genMs": {
+     "median": 1393.0000000596046,
+     "min": 1305.699999988079,
+     "max": 1630.099999845028,
+     "values": [
+      1630.099999845028,
+      1521.4000000953674,
+      1380.5999999642372,
+      1393.0000000596046,
+      1305.699999988079
+     ]
+    },
+    "decimateMs": {
+     "median": 78.80000001192093,
+     "min": 76.79999992251396,
+     "max": 84.30000013113022,
+     "values": [
+      84.30000013113022,
+      82.79999992251396,
+      77.90000003576279,
+      76.79999992251396,
+      78.80000001192093
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 923.1000000238419,
+     "min": 858.8000000119209,
+     "max": 1035.7999999821186,
+     "values": [
+      981.7000000178814,
+      1035.7999999821186,
+      910.5999999940395,
+      923.1000000238419,
+      858.8000000119209
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 5.399999976158142,
+     "min": 4.9000000059604645,
+     "max": 7.9000000059604645,
+     "values": [
+      5.200000017881393,
+      5.399999976158142,
+      7.9000000059604645,
+      6.5,
+      4.9000000059604645
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 0.30000001192092896,
+     "min": 0.29999998211860657,
+     "max": 0.5,
+     "values": [
+      0.3999999761581421,
+      0.30000001192092896,
+      0.5,
+      0.30000001192092896,
+      0.29999998211860657
+     ]
+    },
+    "brushPaintMs": {
+     "median": 916.3000000119209,
+     "min": 853.6000000238419,
+     "max": 1030.0999999940395,
+     "values": [
+      976.1000000238419,
+      1030.0999999940395,
+      902.1999999880791,
+      916.3000000119209,
+      853.6000000238419
+     ]
+    },
+    "selection": {
+     "source": "range, indices computed here",
+     "nSelected": [
+      640,
+      640,
+      640,
+      640,
+      640
+     ],
+     "nDelivered": [
+      640,
+      640,
+      640,
+      640,
+      640
+     ],
+     "nReference": [
+      640,
+      640,
+      640,
+      640,
+      640
+     ],
+     "nMissing": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nExtra": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nativeCount": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "allAgree": true
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  },
+  {
+   "lib": "echarts",
+   "case": "scatter-1",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 155.89999997615814,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 796.3000000119209,
+      "libReturnMs": 785.9000000059605
+     },
+     "brush": {
+      "latencyMs": 891.8000000119209,
+      "callbackMs": 2.199999988079071,
+      "indicesMs": 4,
+      "paintMs": 885.6000000238419,
+      "source": "range, indices computed here",
+      "nDelivered": 53839,
+      "nSelected": 53839,
+      "nReference": 53839,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        5.540818400415984,
+        7.466590649341051
+       ],
+       "y": [
+        5.592105263157897,
+        7.467105263157897
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 708.7999999821186,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 70.09999999403954
+     },
+     "heap": {
+      "heapBefore": 9295476,
+      "heapAfter": 34290190,
+      "heapDelta": 24994714
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 122.30000001192093,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 703.1000000238419,
+      "libReturnMs": 694.2000000178814
+     },
+     "brush": {
+      "latencyMs": 851,
+      "callbackMs": 2,
+      "indicesMs": 4,
+      "paintMs": 845,
+      "source": "range, indices computed here",
+      "nDelivered": 53839,
+      "nSelected": 53839,
+      "nReference": 53839,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        5.540818400415984,
+        7.466590649341051
+       ],
+       "y": [
+        5.592105263157897,
+        7.467105263157897
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 761.0999999940395,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 85.2000000178814
+     },
+     "heap": {
+      "heapBefore": 9296044,
+      "heapAfter": 34304158,
+      "heapDelta": 25008114
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 133.5,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 703.4000000059605,
+      "libReturnMs": 691.9000000059605
+     },
+     "brush": {
+      "latencyMs": 1028.0999999940395,
+      "callbackMs": 3.300000011920929,
+      "indicesMs": 5.0999999940395355,
+      "paintMs": 1019.6999999880791,
+      "source": "range, indices computed here",
+      "nDelivered": 53839,
+      "nSelected": 53839,
+      "nReference": 53839,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        5.540818400415984,
+        7.466590649341051
+       ],
+       "y": [
+        5.592105263157897,
+        7.467105263157897
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 885.6000000238419,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 72
+     },
+     "heap": {
+      "heapBefore": 9296036,
+      "heapAfter": 34300054,
+      "heapDelta": 25004018
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 98.5,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 605.8000000119209,
+      "libReturnMs": 600
+     },
+     "brush": {
+      "latencyMs": 922.4000000059605,
+      "callbackMs": 2.4000000059604645,
+      "indicesMs": 3,
+      "paintMs": 917,
+      "source": "range, indices computed here",
+      "nDelivered": 53839,
+      "nSelected": 53839,
+      "nReference": 53839,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        5.540818400415984,
+        7.466590649341051
+       ],
+       "y": [
+        5.592105263157897,
+        7.467105263157897
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 799.3000000119209,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 73.30000001192093
+     },
+     "heap": {
+      "heapBefore": 9295936,
+      "heapAfter": 34298734,
+      "heapDelta": 25002798
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 112.40000000596046,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 653,
+      "libReturnMs": 643.4000000059605
+     },
+     "brush": {
+      "latencyMs": 801.0999999940395,
+      "callbackMs": 3.5999999940395355,
+      "indicesMs": 4.0999999940395355,
+      "paintMs": 793.4000000059605,
+      "source": "range, indices computed here",
+      "nDelivered": 53839,
+      "nSelected": 53839,
+      "nReference": 53839,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        5.540818400415984,
+        7.466590649341051
+       ],
+       "y": [
+        5.592105263157897,
+        7.467105263157897
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 765.6999999880791,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 76.09999999403954
+     },
+     "heap": {
+      "heapBefore": 9296008,
+      "heapAfter": 34310114,
+      "heapDelta": 25014106
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 125.09999999403954,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 662.7999999821186,
+      "libReturnMs": 653
+     },
+     "brush": {
+      "latencyMs": 939.7999999821186,
+      "callbackMs": 3.7999999821186066,
+      "indicesMs": 4.600000023841858,
+      "paintMs": 931.3999999761581,
+      "source": "range, indices computed here",
+      "nDelivered": 53839,
+      "nSelected": 53839,
+      "nReference": 53839,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": 0,
+      "bounds": {
+       "x": [
+        5.540818400415984,
+        7.466590649341051
+       ],
+       "y": [
+        5.592105263157897,
+        7.467105263157897
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 712.5,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 74.59999999403954
+     },
+     "heap": {
+      "heapBefore": 9295920,
+      "heapAfter": 34298638,
+      "heapDelta": 25002718
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 662.7999999821186,
+     "min": 605.8000000119209,
+     "max": 703.4000000059605,
+     "values": [
+      703.1000000238419,
+      703.4000000059605,
+      605.8000000119209,
+      653,
+      662.7999999821186
+     ]
+    },
+    "libReturnMs": {
+     "median": 653,
+     "min": 600,
+     "max": 694.2000000178814,
+     "values": [
+      694.2000000178814,
+      691.9000000059605,
+      600,
+      643.4000000059605,
+      653
+     ]
+    },
+    "highlightMs": {
+     "median": 765.6999999880791,
+     "min": 712.5,
+     "max": 885.6000000238419,
+     "values": [
+      761.0999999940395,
+      885.6000000238419,
+      799.3000000119209,
+      765.6999999880791,
+      712.5
+     ]
+    },
+    "zoomMs": {
+     "median": 74.59999999403954,
+     "min": 72,
+     "max": 85.2000000178814,
+     "values": [
+      85.2000000178814,
+      72,
+      73.30000001192093,
+      76.09999999403954,
+      74.59999999403954
+     ]
+    },
+    "heapAfterMB": {
+     "median": 32.71108055114746,
+     "min": 32.70973014831543,
+     "max": 32.72067451477051,
+     "values": [
+      32.71499443054199,
+      32.71108055114746,
+      32.709821701049805,
+      32.72067451477051,
+      32.70973014831543
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 23.84568977355957,
+     "min": 23.844449996948242,
+     "max": 23.855310440063477,
+     "values": [
+      23.84959602355957,
+      23.84568977355957,
+      23.844526290893555,
+      23.855310440063477,
+      23.844449996948242
+     ]
+    },
+    "info": {
+     "genMs": 122.30000001192093,
+     "decimateMs": 0,
+     "pointsPerChannel": 252665,
+     "channels": 1,
+     "totalPoints": 252665
+    },
+    "genMs": {
+     "median": 122.30000001192093,
+     "min": 98.5,
+     "max": 133.5,
+     "values": [
+      122.30000001192093,
+      133.5,
+      98.5,
+      112.40000000596046,
+      125.09999999403954
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 922.4000000059605,
+     "min": 801.0999999940395,
+     "max": 1028.0999999940395,
+     "values": [
+      851,
+      1028.0999999940395,
+      922.4000000059605,
+      801.0999999940395,
+      939.7999999821186
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 3.300000011920929,
+     "min": 2,
+     "max": 3.7999999821186066,
+     "values": [
+      2,
+      3.300000011920929,
+      2.4000000059604645,
+      3.5999999940395355,
+      3.7999999821186066
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 4.0999999940395355,
+     "min": 3,
+     "max": 5.0999999940395355,
+     "values": [
+      4,
+      5.0999999940395355,
+      3,
+      4.0999999940395355,
+      4.600000023841858
+     ]
+    },
+    "brushPaintMs": {
+     "median": 917,
+     "min": 793.4000000059605,
+     "max": 1019.6999999880791,
+     "values": [
+      845,
+      1019.6999999880791,
+      917,
+      793.4000000059605,
+      931.3999999761581
+     ]
+    },
+    "selection": {
+     "source": "range, indices computed here",
+     "nSelected": [
+      53839,
+      53839,
+      53839,
+      53839,
+      53839
+     ],
+     "nDelivered": [
+      53839,
+      53839,
+      53839,
+      53839,
+      53839
+     ],
+     "nReference": [
+      53839,
+      53839,
+      53839,
+      53839,
+      53839
+     ],
+     "nMissing": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nExtra": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nativeCount": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "allAgree": true
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  },
+  {
+   "lib": "uplot",
+   "case": "timeline-1",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 92.09999999403954,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 68.09999999403954,
+      "libReturnMs": 65.90000000596046
+     },
+     "brush": {
+      "latencyMs": 17.80000001192093,
+      "callbackMs": 3.5999999940395355,
+      "indicesMs": 2.0999999940395355,
+      "paintMs": 12.100000023841858,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 11,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 37.30000001192093
+     },
+     "heap": {
+      "heapBefore": 6788562,
+      "heapAfter": 11790537,
+      "heapDelta": 5001975
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 84.5,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 62.400000005960464,
+      "libReturnMs": 60.400000005960464
+     },
+     "brush": {
+      "latencyMs": 18.5,
+      "callbackMs": 1.2000000178813934,
+      "indicesMs": 3,
+      "paintMs": 14.299999982118607,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 9.800000011920929,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 36.900000005960464
+     },
+     "heap": {
+      "heapBefore": 6788658,
+      "heapAfter": 11791349,
+      "heapDelta": 5002691
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 80.39999997615814,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 61.20000001788139,
+      "libReturnMs": 59.099999994039536
+     },
+     "brush": {
+      "latencyMs": 25.5,
+      "callbackMs": 1.2000000178813934,
+      "indicesMs": 4.699999988079071,
+      "paintMs": 19.599999994039536,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 9,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 34.099999994039536
+     },
+     "heap": {
+      "heapBefore": 6788658,
+      "heapAfter": 11791453,
+      "heapDelta": 5002795
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 76.2999999821186,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 60.30000001192093,
+      "libReturnMs": 56.599999994039536
+     },
+     "brush": {
+      "latencyMs": 16.299999982118607,
+      "callbackMs": 0.699999988079071,
+      "indicesMs": 1.9000000059604645,
+      "paintMs": 13.699999988079071,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 8.399999976158142,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 43.20000001788139
+     },
+     "heap": {
+      "heapBefore": 6788682,
+      "heapAfter": 11791541,
+      "heapDelta": 5002859
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 123.39999997615814,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 77.19999998807907,
+      "libReturnMs": 74.39999997615814
+     },
+     "brush": {
+      "latencyMs": 32.5,
+      "callbackMs": 2.699999988079071,
+      "indicesMs": 3.5999999940395355,
+      "paintMs": 26.200000017881393,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 12.599999994039536,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 41.19999998807907
+     },
+     "heap": {
+      "heapBefore": 6788682,
+      "heapAfter": 11787705,
+      "heapDelta": 4999023
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 87.69999998807907,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 1,
+      "totalPoints": 262800
+     },
+     "render": {
+      "firstRenderMs": 66,
+      "libReturnMs": 63.900000005960464
+     },
+     "brush": {
+      "latencyMs": 19.69999998807907,
+      "callbackMs": 1.199999988079071,
+      "indicesMs": 3.300000011920929,
+      "paintMs": 15.199999988079071,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 10.299999982118607,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 36.599999994039536
+     },
+     "heap": {
+      "heapBefore": 6788658,
+      "heapAfter": 11791413,
+      "heapDelta": 5002755
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 62.400000005960464,
+     "min": 60.30000001192093,
+     "max": 77.19999998807907,
+     "values": [
+      62.400000005960464,
+      61.20000001788139,
+      60.30000001192093,
+      77.19999998807907,
+      66
+     ]
+    },
+    "libReturnMs": {
+     "median": 60.400000005960464,
+     "min": 56.599999994039536,
+     "max": 74.39999997615814,
+     "values": [
+      60.400000005960464,
+      59.099999994039536,
+      56.599999994039536,
+      74.39999997615814,
+      63.900000005960464
+     ]
+    },
+    "highlightMs": {
+     "median": 9.800000011920929,
+     "min": 8.399999976158142,
+     "max": 12.599999994039536,
+     "values": [
+      9.800000011920929,
+      9,
+      8.399999976158142,
+      12.599999994039536,
+      10.299999982118607
+     ]
+    },
+    "zoomMs": {
+     "median": 36.900000005960464,
+     "min": 34.099999994039536,
+     "max": 43.20000001788139,
+     "values": [
+      36.900000005960464,
+      34.099999994039536,
+      43.20000001788139,
+      41.19999998807907,
+      36.599999994039536
+     ]
+    },
+    "heapAfterMB": {
+     "median": 11.24516773223877,
+     "min": 11.241631507873535,
+     "max": 11.24528980255127,
+     "values": [
+      11.24510669708252,
+      11.245205879211426,
+      11.24528980255127,
+      11.241631507873535,
+      11.24516773223877
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 4.770998954772949,
+     "min": 4.767439842224121,
+     "max": 4.7710981369018555,
+     "values": [
+      4.770937919616699,
+      4.7710371017456055,
+      4.7710981369018555,
+      4.767439842224121,
+      4.770998954772949
+     ]
+    },
+    "info": {
+     "genMs": 84.5,
+     "decimateMs": 0,
+     "pointsPerChannel": 262800,
+     "channels": 1,
+     "totalPoints": 262800
+    },
+    "genMs": {
+     "median": 84.5,
+     "min": 76.2999999821186,
+     "max": 123.39999997615814,
+     "values": [
+      84.5,
+      80.39999997615814,
+      76.2999999821186,
+      123.39999997615814,
+      87.69999998807907
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 19.69999998807907,
+     "min": 16.299999982118607,
+     "max": 32.5,
+     "values": [
+      18.5,
+      25.5,
+      16.299999982118607,
+      32.5,
+      19.69999998807907
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 1.2000000178813934,
+     "min": 0.699999988079071,
+     "max": 2.699999988079071,
+     "values": [
+      1.2000000178813934,
+      1.2000000178813934,
+      0.699999988079071,
+      2.699999988079071,
+      1.199999988079071
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 3.300000011920929,
+     "min": 1.9000000059604645,
+     "max": 4.699999988079071,
+     "values": [
+      3,
+      4.699999988079071,
+      1.9000000059604645,
+      3.5999999940395355,
+      3.300000011920929
+     ]
+    },
+    "brushPaintMs": {
+     "median": 15.199999988079071,
+     "min": 13.699999988079071,
+     "max": 26.200000017881393,
+     "values": [
+      14.299999982118607,
+      19.599999994039536,
+      13.699999988079071,
+      26.200000017881393,
+      15.199999988079071
+     ]
+    },
+    "selection": {
+     "source": "range, indices computed here",
+     "nSelected": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nDelivered": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nReference": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nMissing": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nExtra": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nativeCount": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "allAgree": true
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  },
+  {
+   "lib": "uplot",
+   "case": "timeline-6",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 224.69999998807907,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 240,
+      "libReturnMs": 236.40000000596046
+     },
+     "brush": {
+      "latencyMs": 717.8999999761581,
+      "callbackMs": 0.699999988079071,
+      "indicesMs": 1.9000000059604645,
+      "paintMs": 715.2999999821186,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 36.29999998211861,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 530.4000000059605
+     },
+     "heap": {
+      "heapBefore": 12070090,
+      "heapAfter": 38523779,
+      "heapDelta": 26453689
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 261.90000000596046,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 215.5,
+      "libReturnMs": 211.7000000178814
+     },
+     "brush": {
+      "latencyMs": 55.70000001788139,
+      "callbackMs": 1,
+      "indicesMs": 2.100000023841858,
+      "paintMs": 52.599999994039536,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 511.59999999403954,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 551.4000000059605
+     },
+     "heap": {
+      "heapBefore": 12070354,
+      "heapAfter": 38523139,
+      "heapDelta": 26452785
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 260.59999999403954,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 227.30000001192093,
+      "libReturnMs": 224.69999998807907
+     },
+     "brush": {
+      "latencyMs": 76.09999999403954,
+      "callbackMs": 1.199999988079071,
+      "indicesMs": 3.2000000178813934,
+      "paintMs": 71.69999998807907,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 498.59999999403954,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 502.5
+     },
+     "heap": {
+      "heapBefore": 12070406,
+      "heapAfter": 38521843,
+      "heapDelta": 26451437
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 270.09999999403954,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 229.69999998807907,
+      "libReturnMs": 225.80000001192093
+     },
+     "brush": {
+      "latencyMs": 55.60000002384186,
+      "callbackMs": 0.7000000178813934,
+      "indicesMs": 1.5999999940395355,
+      "paintMs": 53.30000001192093,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 551.4000000059605,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 553.5
+     },
+     "heap": {
+      "heapBefore": 12070486,
+      "heapAfter": 38522067,
+      "heapDelta": 26451581
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 268.5,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 273.30000001192093,
+      "libReturnMs": 269.5
+     },
+     "brush": {
+      "latencyMs": 62.80000001192093,
+      "callbackMs": 1.0999999940395355,
+      "indicesMs": 2.600000023841858,
+      "paintMs": 59.099999994039536,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 508.7999999821186,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 641
+     },
+     "heap": {
+      "heapBefore": 12070486,
+      "heapAfter": 38521599,
+      "heapDelta": 26451113
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 261.30000001192093,
+      "decimateMs": 0,
+      "pointsPerChannel": 262800,
+      "channels": 6,
+      "totalPoints": 1576800
+     },
+     "render": {
+      "firstRenderMs": 231.59999999403954,
+      "libReturnMs": 229
+     },
+     "brush": {
+      "latencyMs": 60.89999997615814,
+      "callbackMs": 1.0999999940395355,
+      "indicesMs": 3.4000000059604645,
+      "paintMs": 56.39999997615814,
+      "source": "range, indices computed here",
+      "nDelivered": 51822,
+      "nSelected": 51822,
+      "nReference": 51822,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 526.4000000059605,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 554.4000000059605
+     },
+     "heap": {
+      "heapBefore": 12070390,
+      "heapAfter": 38522063,
+      "heapDelta": 26451673
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 229.69999998807907,
+     "min": 215.5,
+     "max": 273.30000001192093,
+     "values": [
+      215.5,
+      227.30000001192093,
+      229.69999998807907,
+      273.30000001192093,
+      231.59999999403954
+     ]
+    },
+    "libReturnMs": {
+     "median": 225.80000001192093,
+     "min": 211.7000000178814,
+     "max": 269.5,
+     "values": [
+      211.7000000178814,
+      224.69999998807907,
+      225.80000001192093,
+      269.5,
+      229
+     ]
+    },
+    "highlightMs": {
+     "median": 511.59999999403954,
+     "min": 498.59999999403954,
+     "max": 551.4000000059605,
+     "values": [
+      511.59999999403954,
+      498.59999999403954,
+      551.4000000059605,
+      508.7999999821186,
+      526.4000000059605
+     ]
+    },
+    "zoomMs": {
+     "median": 553.5,
+     "min": 502.5,
+     "max": 641,
+     "values": [
+      551.4000000059605,
+      502.5,
+      553.5,
+      641,
+      554.4000000059605
+     ]
+    },
+    "heapAfterMB": {
+     "median": 36.737502098083496,
+     "min": 36.737059593200684,
+     "max": 36.73852825164795,
+     "values": [
+      36.73852825164795,
+      36.73729228973389,
+      36.73750591278076,
+      36.737059593200684,
+      36.737502098083496
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 25.22619342803955,
+     "min": 25.225747108459473,
+     "max": 25.227341651916504,
+     "values": [
+      25.227341651916504,
+      25.22605609893799,
+      25.22619342803955,
+      25.225747108459473,
+      25.22628116607666
+     ]
+    },
+    "info": {
+     "genMs": 261.90000000596046,
+     "decimateMs": 0,
+     "pointsPerChannel": 262800,
+     "channels": 6,
+     "totalPoints": 1576800
+    },
+    "genMs": {
+     "median": 261.90000000596046,
+     "min": 260.59999999403954,
+     "max": 270.09999999403954,
+     "values": [
+      261.90000000596046,
+      260.59999999403954,
+      270.09999999403954,
+      268.5,
+      261.30000001192093
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 60.89999997615814,
+     "min": 55.60000002384186,
+     "max": 76.09999999403954,
+     "values": [
+      55.70000001788139,
+      76.09999999403954,
+      55.60000002384186,
+      62.80000001192093,
+      60.89999997615814
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 1.0999999940395355,
+     "min": 0.7000000178813934,
+     "max": 1.199999988079071,
+     "values": [
+      1,
+      1.199999988079071,
+      0.7000000178813934,
+      1.0999999940395355,
+      1.0999999940395355
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 2.600000023841858,
+     "min": 1.5999999940395355,
+     "max": 3.4000000059604645,
+     "values": [
+      2.100000023841858,
+      3.2000000178813934,
+      1.5999999940395355,
+      2.600000023841858,
+      3.4000000059604645
+     ]
+    },
+    "brushPaintMs": {
+     "median": 56.39999997615814,
+     "min": 52.599999994039536,
+     "max": 71.69999998807907,
+     "values": [
+      52.599999994039536,
+      71.69999998807907,
+      53.30000001192093,
+      59.099999994039536,
+      56.39999997615814
+     ]
+    },
+    "selection": {
+     "source": "range, indices computed here",
+     "nSelected": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nDelivered": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nReference": [
+      51822,
+      51822,
+      51822,
+      51822,
+      51822
+     ],
+     "nMissing": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nExtra": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nativeCount": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "allAgree": true
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  },
+  {
+   "lib": "uplot",
+   "case": "timeline-60-decimated",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1493.400000065565,
+      "decimateMs": 83.09999993443489,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 68.19999998807907,
+      "libReturnMs": 65.09999999403954
+     },
+     "brush": {
+      "latencyMs": 16.19999998807907,
+      "callbackMs": 0.699999988079071,
+      "indicesMs": 0.20000001788139343,
+      "paintMs": 15.299999982118607,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 14.100000023841858,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 72.5
+     },
+     "heap": {
+      "heapBefore": 6777900,
+      "heapAfter": 10531418,
+      "heapDelta": 3753518
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1474.2000000178814,
+      "decimateMs": 80.2999999821186,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 66.19999998807907,
+      "libReturnMs": 63.29999998211861
+     },
+     "brush": {
+      "latencyMs": 14.599999994039536,
+      "callbackMs": 0.8999999761581421,
+      "indicesMs": 0.30000001192092896,
+      "paintMs": 13.400000005960464,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 14.899999976158142,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 64.80000001192093
+     },
+     "heap": {
+      "heapBefore": 6777820,
+      "heapAfter": 10527842,
+      "heapDelta": 3750022
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1459.2999999821186,
+      "decimateMs": 83.60000002384186,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 68.5,
+      "libReturnMs": 65.19999998807907
+     },
+     "brush": {
+      "latencyMs": 15.399999976158142,
+      "callbackMs": 0.699999988079071,
+      "indicesMs": 0.19999998807907104,
+      "paintMs": 14.5,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 14.599999994039536,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 70
+     },
+     "heap": {
+      "heapBefore": 6777876,
+      "heapAfter": 10531282,
+      "heapDelta": 3753406
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1462.7999998927116,
+      "decimateMs": 75.10000011324883,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 64.69999998807907,
+      "libReturnMs": 60.30000001192093
+     },
+     "brush": {
+      "latencyMs": 15.599999994039536,
+      "callbackMs": 0.7000000178813934,
+      "indicesMs": 0.09999999403953552,
+      "paintMs": 14.799999982118607,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 14.099999994039536,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 73.69999998807907
+     },
+     "heap": {
+      "heapBefore": 6777900,
+      "heapAfter": 10527954,
+      "heapDelta": 3750054
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1430.8999999761581,
+      "decimateMs": 78.50000002980232,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 70.2999999821186,
+      "libReturnMs": 67.19999998807907
+     },
+     "brush": {
+      "latencyMs": 15,
+      "callbackMs": 0.9000000059604645,
+      "indicesMs": 0.29999998211860657,
+      "paintMs": 13.800000011920929,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 15,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 68.09999999403954
+     },
+     "heap": {
+      "heapBefore": 6777900,
+      "heapAfter": 10531026,
+      "heapDelta": 3753126
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 1366.8000000417233,
+      "decimateMs": 79.79999995231628,
+      "pointsPerChannel": 3200,
+      "channels": 60,
+      "totalPoints": 192000
+     },
+     "render": {
+      "firstRenderMs": 66.59999999403954,
+      "libReturnMs": 63.900000005960464
+     },
+     "brush": {
+      "latencyMs": 15.299999982118607,
+      "callbackMs": 0.7999999821186066,
+      "indicesMs": 0.30000001192092896,
+      "paintMs": 14.199999988079071,
+      "source": "range, indices computed here",
+      "nDelivered": 640,
+      "nSelected": 640,
+      "nReference": 640,
+      "nMissing": 0,
+      "nExtra": 0,
+      "agree": true,
+      "nativeCount": null,
+      "bounds": {
+       "x": [
+        730,
+        1095
+       ]
+      },
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 14.599999994039536,
+      "n": 609
+     },
+     "zoom": {
+      "zoomMs": 65.30000001192093
+     },
+     "heap": {
+      "heapBefore": 6777868,
+      "heapAfter": 10531602,
+      "heapDelta": 3753734
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 66.59999999403954,
+     "min": 64.69999998807907,
+     "max": 70.2999999821186,
+     "values": [
+      66.19999998807907,
+      68.5,
+      64.69999998807907,
+      70.2999999821186,
+      66.59999999403954
+     ]
+    },
+    "libReturnMs": {
+     "median": 63.900000005960464,
+     "min": 60.30000001192093,
+     "max": 67.19999998807907,
+     "values": [
+      63.29999998211861,
+      65.19999998807907,
+      60.30000001192093,
+      67.19999998807907,
+      63.900000005960464
+     ]
+    },
+    "highlightMs": {
+     "median": 14.599999994039536,
+     "min": 14.099999994039536,
+     "max": 15,
+     "values": [
+      14.899999976158142,
+      14.599999994039536,
+      14.099999994039536,
+      15,
+      14.599999994039536
+     ]
+    },
+    "zoomMs": {
+     "median": 68.09999999403954,
+     "min": 64.80000001192093,
+     "max": 73.69999998807907,
+     "values": [
+      64.80000001192093,
+      70,
+      73.69999998807907,
+      68.09999999403954,
+      65.30000001192093
+     ]
+    },
+    "heapAfterMB": {
+     "median": 10.043169021606445,
+     "min": 10.040132522583008,
+     "max": 10.043718338012695,
+     "values": [
+      10.040132522583008,
+      10.043413162231445,
+      10.040239334106445,
+      10.043169021606445,
+      10.043718338012695
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 3.5792598724365234,
+     "min": 3.5762996673583984,
+     "max": 3.5798397064208984,
+     "values": [
+      3.5762996673583984,
+      3.579526901245117,
+      3.5763301849365234,
+      3.5792598724365234,
+      3.5798397064208984
+     ]
+    },
+    "info": {
+     "genMs": 1474.2000000178814,
+     "decimateMs": 80.2999999821186,
+     "pointsPerChannel": 3200,
+     "channels": 60,
+     "totalPoints": 192000
+    },
+    "genMs": {
+     "median": 1459.2999999821186,
+     "min": 1366.8000000417233,
+     "max": 1474.2000000178814,
+     "values": [
+      1474.2000000178814,
+      1459.2999999821186,
+      1462.7999998927116,
+      1430.8999999761581,
+      1366.8000000417233
+     ]
+    },
+    "decimateMs": {
+     "median": 79.79999995231628,
+     "min": 75.10000011324883,
+     "max": 83.60000002384186,
+     "values": [
+      80.2999999821186,
+      83.60000002384186,
+      75.10000011324883,
+      78.50000002980232,
+      79.79999995231628
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 15.299999982118607,
+     "min": 14.599999994039536,
+     "max": 15.599999994039536,
+     "values": [
+      14.599999994039536,
+      15.399999976158142,
+      15.599999994039536,
+      15,
+      15.299999982118607
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 0.7999999821186066,
+     "min": 0.699999988079071,
+     "max": 0.9000000059604645,
+     "values": [
+      0.8999999761581421,
+      0.699999988079071,
+      0.7000000178813934,
+      0.9000000059604645,
+      0.7999999821186066
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 0.29999998211860657,
+     "min": 0.09999999403953552,
+     "max": 0.30000001192092896,
+     "values": [
+      0.30000001192092896,
+      0.19999998807907104,
+      0.09999999403953552,
+      0.29999998211860657,
+      0.30000001192092896
+     ]
+    },
+    "brushPaintMs": {
+     "median": 14.199999988079071,
+     "min": 13.400000005960464,
+     "max": 14.799999982118607,
+     "values": [
+      13.400000005960464,
+      14.5,
+      14.799999982118607,
+      13.800000011920929,
+      14.199999988079071
+     ]
+    },
+    "selection": {
+     "source": "range, indices computed here",
+     "nSelected": [
+      640,
+      640,
+      640,
+      640,
+      640
+     ],
+     "nDelivered": [
+      640,
+      640,
+      640,
+      640,
+      640
+     ],
+     "nReference": [
+      640,
+      640,
+      640,
+      640,
+      640
+     ],
+     "nMissing": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nExtra": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nativeCount": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "allAgree": true
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  },
+  {
+   "lib": "uplot",
+   "case": "scatter-1",
+   "runs": [
+    {
+     "ok": true,
+     "info": {
+      "genMs": 134,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 354.7000000178814,
+      "libReturnMs": 353.09999999403954
+     },
+     "brush": {
+      "latencyMs": 49.900000005960464,
+      "callbackMs": 32.80000001192093,
+      "indicesMs": 0.09999999403953552,
+      "paintMs": 17,
+      "source": "library indices",
+      "nDelivered": 50301,
+      "nSelected": 50301,
+      "nReference": 50302,
+      "nMissing": 1,
+      "nExtra": 0,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": null,
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 9,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 22
+     },
+     "heap": {
+      "heapBefore": 20413280,
+      "heapAfter": 43168030,
+      "heapDelta": 22754750
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 124.40000000596046,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 256.60000002384186,
+      "libReturnMs": 253.7000000178814
+     },
+     "brush": {
+      "latencyMs": 49.80000001192093,
+      "callbackMs": 33,
+      "indicesMs": 0,
+      "paintMs": 16.80000001192093,
+      "source": "library indices",
+      "nDelivered": 50301,
+      "nSelected": 50301,
+      "nReference": 50302,
+      "nMissing": 1,
+      "nExtra": 0,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": null,
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 9,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 29.799999982118607
+     },
+     "heap": {
+      "heapBefore": 20413340,
+      "heapAfter": 43168034,
+      "heapDelta": 22754694
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 136.89999997615814,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 254,
+      "libReturnMs": 252.90000000596046
+     },
+     "brush": {
+      "latencyMs": 50.19999998807907,
+      "callbackMs": 33.29999998211861,
+      "indicesMs": 0,
+      "paintMs": 16.900000005960464,
+      "source": "library indices",
+      "nDelivered": 50301,
+      "nSelected": 50301,
+      "nReference": 50302,
+      "nMissing": 1,
+      "nExtra": 0,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": null,
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 11.299999982118607,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 32.69999998807907
+     },
+     "heap": {
+      "heapBefore": 20413412,
+      "heapAfter": 43168150,
+      "heapDelta": 22754738
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 120.40000000596046,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 255.7999999821186,
+      "libReturnMs": 254.69999998807907
+     },
+     "brush": {
+      "latencyMs": 49.5,
+      "callbackMs": 32.80000001192093,
+      "indicesMs": 0.09999999403953552,
+      "paintMs": 16.599999994039536,
+      "source": "library indices",
+      "nDelivered": 50301,
+      "nSelected": 50301,
+      "nReference": 50302,
+      "nMissing": 1,
+      "nExtra": 0,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": null,
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 9.799999982118607,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 27.599999994039536
+     },
+     "heap": {
+      "heapBefore": 20413304,
+      "heapAfter": 43168078,
+      "heapDelta": 22754774
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 126.7999999821186,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 258.09999999403954,
+      "libReturnMs": 253.2999999821186
+     },
+     "brush": {
+      "latencyMs": 51.400000005960464,
+      "callbackMs": 33.80000001192093,
+      "indicesMs": 0,
+      "paintMs": 17.599999994039536,
+      "source": "library indices",
+      "nDelivered": 50301,
+      "nSelected": 50301,
+      "nReference": 50302,
+      "nMissing": 1,
+      "nExtra": 0,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": null,
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 12,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 32.10000002384186
+     },
+     "heap": {
+      "heapBefore": 20413316,
+      "heapAfter": 43168074,
+      "heapDelta": 22754758
+     },
+     "pageErrors": []
+    },
+    {
+     "ok": true,
+     "info": {
+      "genMs": 121.5,
+      "decimateMs": 0,
+      "pointsPerChannel": 252665,
+      "channels": 1,
+      "totalPoints": 252665
+     },
+     "render": {
+      "firstRenderMs": 244.10000002384186,
+      "libReturnMs": 243.30000001192093
+     },
+     "brush": {
+      "latencyMs": 50,
+      "callbackMs": 33,
+      "indicesMs": 0,
+      "paintMs": 17,
+      "source": "library indices",
+      "nDelivered": 50301,
+      "nSelected": 50301,
+      "nReference": 50302,
+      "nMissing": 1,
+      "nExtra": 0,
+      "agree": false,
+      "nativeCount": null,
+      "bounds": null,
+      "callbacks": 1
+     },
+     "highlight": {
+      "highlightMs": 11.900000005960464,
+      "n": 50000
+     },
+     "zoom": {
+      "zoomMs": 22.900000005960464
+     },
+     "heap": {
+      "heapBefore": 20413364,
+      "heapAfter": 43168034,
+      "heapDelta": 22754670
+     },
+     "pageErrors": []
+    }
+   ],
+   "summary": {
+    "firstRenderMs": {
+     "median": 255.7999999821186,
+     "min": 244.10000002384186,
+     "max": 258.09999999403954,
+     "values": [
+      256.60000002384186,
+      254,
+      255.7999999821186,
+      258.09999999403954,
+      244.10000002384186
+     ]
+    },
+    "libReturnMs": {
+     "median": 253.2999999821186,
+     "min": 243.30000001192093,
+     "max": 254.69999998807907,
+     "values": [
+      253.7000000178814,
+      252.90000000596046,
+      254.69999998807907,
+      253.2999999821186,
+      243.30000001192093
+     ]
+    },
+    "highlightMs": {
+     "median": 11.299999982118607,
+     "min": 9,
+     "max": 12,
+     "values": [
+      9,
+      11.299999982118607,
+      9.799999982118607,
+      12,
+      11.900000005960464
+     ]
+    },
+    "zoomMs": {
+     "median": 29.799999982118607,
+     "min": 22.900000005960464,
+     "max": 32.69999998807907,
+     "values": [
+      29.799999982118607,
+      32.69999998807907,
+      27.599999994039536,
+      32.10000002384186,
+      22.900000005960464
+     ]
+    },
+    "heapAfterMB": {
+     "median": 41.168283462524414,
+     "min": 41.16824531555176,
+     "max": 41.16835594177246,
+     "values": [
+      41.16824531555176,
+      41.16835594177246,
+      41.16828727722168,
+      41.168283462524414,
+      41.16824531555176
+     ]
+    },
+    "heapDeltaMB": {
+     "median": 21.70060920715332,
+     "min": 21.700544357299805,
+     "max": 21.70064353942871,
+     "values": [
+      21.7005672454834,
+      21.70060920715332,
+      21.70064353942871,
+      21.70062828063965,
+      21.700544357299805
+     ]
+    },
+    "info": {
+     "genMs": 124.40000000596046,
+     "decimateMs": 0,
+     "pointsPerChannel": 252665,
+     "channels": 1,
+     "totalPoints": 252665
+    },
+    "genMs": {
+     "median": 124.40000000596046,
+     "min": 120.40000000596046,
+     "max": 136.89999997615814,
+     "values": [
+      124.40000000596046,
+      136.89999997615814,
+      120.40000000596046,
+      126.7999999821186,
+      121.5
+     ]
+    },
+    "brushLatencyMs": {
+     "median": 50,
+     "min": 49.5,
+     "max": 51.400000005960464,
+     "values": [
+      49.80000001192093,
+      50.19999998807907,
+      49.5,
+      51.400000005960464,
+      50
+     ]
+    },
+    "brushCallbackMs": {
+     "median": 33,
+     "min": 32.80000001192093,
+     "max": 33.80000001192093,
+     "values": [
+      33,
+      33.29999998211861,
+      32.80000001192093,
+      33.80000001192093,
+      33
+     ]
+    },
+    "brushIndicesMs": {
+     "median": 0,
+     "min": 0,
+     "max": 0.09999999403953552,
+     "values": [
+      0,
+      0,
+      0.09999999403953552,
+      0,
+      0
+     ]
+    },
+    "brushPaintMs": {
+     "median": 16.900000005960464,
+     "min": 16.599999994039536,
+     "max": 17.599999994039536,
+     "values": [
+      16.80000001192093,
+      16.900000005960464,
+      16.599999994039536,
+      17.599999994039536,
+      17
+     ]
+    },
+    "selection": {
+     "source": "library indices",
+     "nSelected": [
+      50301,
+      50301,
+      50301,
+      50301,
+      50301
+     ],
+     "nDelivered": [
+      50301,
+      50301,
+      50301,
+      50301,
+      50301
+     ],
+     "nReference": [
+      50302,
+      50302,
+      50302,
+      50302,
+      50302
+     ],
+     "nMissing": [
+      1,
+      1,
+      1,
+      1,
+      1
+     ],
+     "nExtra": [
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "nativeCount": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "allAgree": false
+    },
+    "brushRunsDelivered": "5/5",
+    "failures": [],
+    "brushTimeouts": 0
+   }
+  }
+ ]
+}

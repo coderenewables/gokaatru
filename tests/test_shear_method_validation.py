@@ -234,5 +234,22 @@ class TestVerticalUncertaintyOrdering:
         u_assumed = assumed["components"]["vertical_extrapolation"]
         u_analyst = analyst["components"]["vertical_extrapolation"]
         assert u_fitted <= u_assumed <= u_analyst
-        assert analyst["inputs"]["k_shear"] == 0.05
+        assert analyst["inputs"]["k_shear"] == 0.07
         assert analyst["inputs"]["k_shear_basis"] == "analyst_supplied"
+
+    def test_analyst_supplied_never_scores_better_than_the_log_law(self) -> None:
+        """A typed-in exponent takes at least the largest assumed constant (0.05 → 0.07, 2026-11-17)."""
+        shared = dict(
+            measurement_uncertainty_pct=2.0,
+            measurement_height_m=80.0,
+            hub_height_m=120.0,
+            mcp_r_squared=0.85,
+            concurrent_hours=8760.0,
+        )
+        log_law = _calculate_uncertainty(_make_state(), shear_method="log_law", **shared)
+        analyst = _calculate_uncertainty(_make_state(), shear_method="analyst_supplied", **shared)
+        assert (
+            analyst["components"]["vertical_extrapolation"]
+            >= log_law["components"]["vertical_extrapolation"]
+        )
+        assert analyst["components"]["vertical_extrapolation"] == 2.84

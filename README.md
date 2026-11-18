@@ -94,11 +94,15 @@ pip install -e ".[ml,dev]"
 python -m server.main                # MCP server (stdio transport)
 ```
 
-For a network-reachable SSE server:
+For an SSE server on this machine only:
 
 ```bash
-python -m server.main --transport sse --host 0.0.0.0 --port 8080
+python -m server.main --transport sse --host 127.0.0.1 --port 8080
 ```
+
+The SSE transport has no authentication, and every tool can read and change session data.
+`--host 0.0.0.0` exposes all of them to anyone on the network; do not use it outside an
+isolated network.
 
 The FastAPI web API (consumed by the frontend) runs separately:
 
@@ -316,6 +320,7 @@ invites use:
 | Clipping year completeness | **0.9** (`min_year_completeness`) | Leap-aware, measured against the series' own cadence. |
 | SpeedSort binning | **12 sectors × 30°**, min **200** records/sector | Sparse sectors fall back to the all-sector fit; `independent_sectors` and the per-sector `sector_models` report where the fit is thin. |
 | Mast-shadow speed gate | **4.0 m/s**, min **50** records/sector | Detection is two-sided: a low ratio means `sensor_b` is shadowed, a high ratio means `sensor_a` is. Sparse sectors are reported but not flagged. |
+| MCP readiness thresholds | **4,380 concurrent hours** (`MIN_CONCURRENT_HOURS`, the correction's own floor), **R² ≥ 0.5** (`READINESS_MIN_R_SQUARED`) | `compute_mcp_readiness` used a 720-hour floor, so it could report `ready` for a series long-term correction then refused. It now imports the correction's floor. The R² threshold is a diagnostic cue only: the sweep's R² admissibility gate was removed as biased against non-least-squares methods. |
 | `range_check` bounds | **Derived from sensor type** | wind_speed 0–50 m/s, wind_direction 0–360°, temperature −60–60 °C, pressure 80 000–110 000 Pa, humidity 0–100%. An unknown type falls back to that sensor's own data range, which makes the rule a **no-op** — an intentional fail-safe, reported as `bounds_source: "sensor_data_range"`. Explicit `min`/`max` always win. |
 | LTC measured column | **The hub-height series**, refused if absent | Was "the highest-height speed sensor in `sensor_mapping`" — and a hub column is never in that mapping (extrapolation appends it to `timeseries_df`), so the resolver could not return one at any site. The sweep therefore computed the hub series and discarded it, fitting every LTC on the top sensor. Measured on a 167 m lidar campaign with sensors at 140/160/180/200 m: the LTC ran on `Spd_200m`, whose measured level is **+0.185 m/s (+2.05%)** above the 167 m hub level (9.2166 vs 9.0316 m/s), and that level propagated into `long_term_mean_speed_mps`, the indicative AEP and the capacity factor. It also made axes A1, A2 and B unable to move any published metric, because everything downstream of the shear and extrapolation stages was bypassed — the Interrogate page attributed 100% of the spread to the LTC axis, the only axis still able to vary. |
 | SpeedSort directional binning in a sweep | **On** (12 sectors × 30°) | The sweep called every non-XGBoost algorithm as `runner(state, short, long)`, so SpeedSort's `long_dir_col` defaulted to empty and it ran direction-agnostically in every sweep ever executed, losing the per-sector transfer functions that are the reason to choose it — while XGBoost kept its directional feature, so axis D compared them on unequal terms. All three dispatch sites now share `DIRECTIONAL_LTC_ALGORITHMS`. |
@@ -336,7 +341,8 @@ invites use:
 | Project life | **20 years** (`project_life_years`) | `u_future = iav / sqrt(life)`. A 15-year life gives 1.55% where 20 years gives 1.34% for the same 6% IAV. |
 | Vertical shear constant, assumed power law | **0.03** (`K_SHEAR_ASSUMED_POWER_LAW`) | Interim (decision D2, 2026-11-14, pending owner sign-off). Used for `simple_power_law` and for a fitted profile with no measured dispersion. A fitted profile takes `min(measured shear scatter, 0.03)`, so measuring can lower `u_vert` but never raise it above the assumed value. Reported as `inputs.k_shear` and `inputs.k_shear_basis`. |
 | Vertical shear constant, log law | **0.07** (`K_SHEAR_LOG_LAW`) | Raised from 0.05 on 2026-11-16 (owner decision D2). Held-out height error for the log law measured 0.065 pooled and 0.070 in the worst year at Launakalana, 0.038 and 0.069 at Boxkite, so 0.05 understated a single-year campaign at both sites. Same heights (80 m measurement, 120 m hub): 2.03% → 2.84%. Used when `shear_method` is `log_law`, which `derive_uncertainty_inputs` selects for any roughness-derived profile with no power-law shear table. |
-| Vertical shear constant, analyst-supplied exponent | **0.05** (`K_SHEAR_ANALYST_SUPPLIED`) | Interim (D2). Used for `shear_method: "analyst_supplied"`, which an analyst-typed exponent takes. It has no measured dispersion, so it takes the larger constant of the two assumed branches. Same heights (80 m measurement, 120 m hub), formula values: fitted 1.22%, assumed 1.22%, analyst-supplied 2.03%. The evidence-based vertical term that replaces these constants is not built. |
+| Vertical shear constant, analyst-supplied exponent | **0.07** (`K_SHEAR_ANALYST_SUPPLIED`) | Raised from 0.05 on 2026-11-17 (owner decision) to match the log-law constant. Used for `shear_method: "analyst_supplied"`, which an analyst-typed exponent takes. It has no measured dispersion, so it takes the largest of the assumed constants and never scores better than the log law. Same heights (80 m measurement, 120 m hub), formula values: fitted 1.22%, assumed 1.22%, log law 2.84%, analyst-supplied 2.84% (was 2.03%). The evidence-based vertical term that replaces these constants is not built. |
+| Sweep uncertainty substitution | **Sample std of level means, ≥ 3 levels** (`MIN_LEVELS_FOR_EMPIRICAL`, `server/core/sweep_analysis.py`) | Owner decision 2026-11-17 (F9). An axis's empirical term is the sample standard deviation of the long-term mean speed across its level means, as a percentage of the sweep's mean speed; a component measured by several axes combines them in quadrature. Per scenario, `max(parametric, empirical)` replaces the MCP and vertical terms and the reference-source spread is added. An axis with fewer than 3 levels gives nothing, so with two reanalyses the reference-source term never fires. Until 2026-11-18 this was computed only in the browser, from the swing of `total_uncertainty_pct`; on the two stored sweeps the LTC term moved 0.30% → 0.55% and 0.24% → 1.76%, and 4 of 40 scenario totals rose (minimum 3.134% → 3.146%). |
 | Uncertainty combination | **Pure quadrature** (`component_correlation = 0`) | Measurement, vertical extrapolation and MCP all derive from the same measured series, so independence is optimistic. Every response reports the total at rho = 0.5 alongside — about 30% higher — so the size of the assumption is visible. |
 | Clipping window floor | **10 years** (`min_window_years`) | Every candidate window ends at the final year and so contains the 5-year reference period; the shortest candidate *is* that period, with deviation exactly zero and its climate term pinned at the minimum. Without a floor a 10-year record selected 6 years. The unconstrained optimum is still reported. |
 | Date order | **Determined from the data** (`runconfig.dayfirst`) | Whichever of DD/MM and MM/DD parses more rows wins, because any day above 12 settles it. Where every day is 12 or below neither reading parses more, ingest **refuses** rather than guessing, and `dayfirst` resolves it. ISO-8601 avoids the question. |
@@ -361,6 +367,8 @@ invites use:
 | `n_above_training_max`, `fraction_above_training_max` | `run_ltc_xgboost` | Long-term records above the campaign maximum. Trees are piecewise-constant and cannot extrapolate, so these collapse onto the model's highest leaf. **Do not use XGBoost alone for extreme-wind estimation** — it biases GEV/Gumbel annual maxima low. |
 | `years_used`, `years_excluded`, `excluded_reason` | `run_clipping_analysis` | Which calendar years passed the completeness gate. |
 | `calm_fraction`, `fit_excludes_calms`, `fit_method` | `compute_weibull_params` | `mean_speed` is always the **full-series** mean including calms, consistent with MoMM and the monthly means. |
+| `ready`, `not_ready_reasons`, `min_concurrent_hours`, `min_r_squared` | `compute_mcp_readiness` | The thresholds used and one reason string per failed condition (measured value and threshold); empty when ready. |
+| `range_failures`, `range_min`, `range_max`, `range_bounds_source` | `compute_qc_diagnostics` (per sensor) | Failures are counted against the bounds `range_check` would apply to that sensor (`_resolve_range_bounds`, no explicit min/max), where it was a fixed 0-50 for every speed sensor. `range_bounds_source: "sensor_data_range"` means the type is unknown, the bounds are the data's own range and the count is necessarily 0. |
 | `bounds_source`, `min_applied`, `max_applied` | `apply_cleaning_rule` (`range_check`) | The bounds actually applied, recorded in the cleaning log so it cannot imply a check that did not happen. |
 | `weights`, `weight_basis` | `run_ensemble` | Inverse-RMSE component weights, using each algorithm's **out-of-sample** RMSE where it reports one (currently XGBoost only) and its overlap RMSE otherwise. `weight_basis` labels which each component used and `weight_basis_is_mixed` flags the mixture, because in-sample error is systematically lower and tilts the blend for reasons unrelated to skill. |
 | `component_spread` | `run_ensemble` | Per-timestamp disagreement between the bias-corrected components. Level disagreement is already removed by the bias correction, so this is **shape** disagreement — an empirical estimate of LTC model uncertainty, which the uncertainty model does not otherwise carry. Reported, not folded into the total. |
@@ -383,11 +391,12 @@ invites use:
 | `iec_ti_at_15ms`, `iec_ti_bin_mps`, `iec_ti_bin_records` | `compute_turbulence_analysis` | Representative turbulence in the 1 m/s bin containing 15 m/s, which selects the IEC turbulence class (Iref 0.16 / 0.14 / 0.12 for A / B / C). The bin actually used and its record count travel with it, because a low-wind campaign may never reach 15 m/s — in which case the response says so and the class cannot be selected from it. |
 | `gev.available`, `plausible`, `below_largest_observed` | `compute_extreme_winds` | Whether the GEV fit was performed at all, whether each fit's return levels are usable (divergent, or collapsed so that V100 is no higher than V50), and whether V50 sits below the largest observed annual maximum. The last is a cue, not a failure: the largest of twenty maxima is roughly a twenty-year event. |
 | `years_excluded`, `min_year_coverage` | `compute_extreme_winds` | Calendar years covering too little of the calendar to hold an annual maximum, with their day coverage, months and the partial maximum they would have contributed. |
-| `density_normalisation` | `calculate_uncertainty`, `compute_energy_sensitivity` | Whether speeds were normalised to the power curve's reference density per IEC 61400-12-1 before the sensitivity factor was measured. Requires a recorded site density; without one it reports `applied: false` rather than assuming standard conditions. |
+| `density_normalisation` | `calculate_uncertainty`, `compute_energy_sensitivity` | Whether speeds were normalised to the power curve's reference density before the sensitivity factor was measured, as `U*(rho/rho0)^(1/3)`: the IEC 61400-12-1 treatment for a pitch-regulated turbine (`turbine_regulation: "pitch"`, `method: "iec_61400_12_1_wind_speed_normalisation"`; the method was labelled `iec_61400_12_1_stall` before 2026-11-17, with the same arithmetic). Requires a recorded site density; without one it reports `applied: false` rather than assuming standard conditions. |
 | `upstream_processing` | `brighthub_import_location` | BrightHub cleaning, calibration and offsets applied **before** GoKaatru saw the data. Recorded as a non-undoable entry at the head of the cleaning log: coverage and recovery figures describe the data as received, not the raw campaign. |
-| `engine_version` | sweep `manifest.json`, `get_sweep_summary`, `fixed_prefix_hash` | The engine release that produced the numbers (`ENGINE_VERSION`, currently `"2026.11.1"`), also hashed into the fixed-prefix hash, so every config hash moves with it. Sweeps stored before the stamp read as `null`. The 2026.11 changes (sub-gate records extrapolated, SpeedSort rank-sorted fit, interim vertical-uncertainty rule) moved the numbers, so a `null` or older version is not comparable with a current sweep. Re-run rather than compare. |
+| `engine_version` | sweep `manifest.json`, `get_sweep_summary`, `fixed_prefix_hash` | The engine release that produced the numbers (`ENGINE_VERSION`, currently `"2026.11.2"`), also hashed into the fixed-prefix hash, so every config hash moves with it. Sweeps stored before the stamp read as `null`. The 2026.11 changes (sub-gate records extrapolated, SpeedSort rank-sorted fit, interim vertical-uncertainty rule) moved the numbers, so a `null` or older version is not comparable with a current sweep. Re-run rather than compare. |
 | `duplicates_skipped` | sweep `manifest.json` (`counts.duplicates_skipped`) | Leaves that resolved to the same computation as an earlier leaf and were **not run**. The computation is identified by the resolved sensor columns for the shear-fit and extrapolation-reference policies, plus shear model, reference source, LTC algorithm, hub height and any analyst exponent, so two policy names that pick the same sensors on this mast run once. Each entry names the two policies and `same_as`, the `config_hash` of the row that was run. A skipped duplicate has no row of its own. `planned` = `completed` + `failed` + `duplicates_skipped` on a sweep that was not stopped early. Only completed runs are matched against: if the first of two identical leaves fails, the second runs. Stored sweeps from before 2026-11-14 hashed the policy names and are not comparable on `config_hash`. |
 | `duplicate_levels` | `get_sweep_summary` (`axes.<axis>.duplicate_levels`), `analyze_sweep_spread` / `POST .../spread` (`contributions[].duplicate_levels`) | For the two policy axes, each level whose leaves were skipped as duplicates, the level whose rows it shares (`same_as`) and how many scenarios that covers. Such a level has no rows, so it is absent from `levels_admissible` and the decomposition's `levels`; without this field an axis varied between two policies that picked the same sensors reads as "not varied". `levels_designed` includes it. Only duplicates of rows in view count: a filtered or inadmissible `same_as` row drops its duplicates too. The Interrogate page shows it as "same sensors: <level> = <level>", and the Run monitor's Outcome panel shows `counts.duplicates_skipped`. |
+| `uncertainty_substitution` | `analyze_sweep_spread` / `POST .../spread` | Per component: the parametric mean, the sweep's empirical term, the value applied and its `basis` (`empirical`, `parametric`, `added`, `not_resolved`), and which axes were used, under-resolved (two levels) or not varied. Per sweep: the distribution of scenario totals with and without the substitution, how many it raised, and how many lacked a parametric component and were left out. Computed over the caller's row selection. The scenario rows' own `total_uncertainty_pct` is unchanged. |
 | `is_interpolation` (`inputs`, `provenance.is_interpolation`) | `derive_uncertainty_inputs` | Whether hub height sits inside the profile the scenario extrapolated from: its own reference heights (axis A2) when given, otherwise every mapped height. A scenario restricted to sensors below hub is extrapolating even when another sensor sits above hub, so it takes the extrapolated vertical term rather than the 1% interpolated one. |
 | `extrapolate_reanalysis`, `reanalysis_status` | `extrapolate_to_hub_height` (sweep stage detail) | Sweep leaves pass `extrapolate_reanalysis=False`: the eight reanalysis node frames are not carried to hub height and the stage reports `reanalysis_status: "not_run"`. The reanalysis response reads `{"status": "skipped", "reason": "not_requested", "wrote_hub_column": false}`. The sweep's LTC reads the native `Spd_100m` / `Spd_50m` columns, so no reported number changes (68 rows identical before and after, 2026-11-14). The MCP tool and HTTP route still default to extrapolating. |
 | `in_progress` | sweep `manifest.json` (`list_sweeps`) | `true` on a checkpoint written while a sweep runs, or left by one that died part-way; absent on a finished sweep. The rows and runconfigs present are the shear-prefix groups completed so far. `finished_at` is the checkpoint time. `get_sweep_summary` and `analyze_sweep_spread` do not flag it yet. |
@@ -424,15 +433,16 @@ exceedances; using them directly on AEP understates the energy band by a factor 
 
 **S is not a constant.** It falls as a site sits higher on the power curve, because more
 hours at rated power means extra wind speed buys no extra energy. Measured against the
-generic curve GoKaatru ships:
+generic curve GoKaatru ships, on one synthetic 20-year hourly long-term series rescaled to
+each mean (`tests/test_readme_energy_table.py` recomputes every row):
 
 | site mean speed | gross CF | S |
 |---|---|---|
-| 5.5 m/s | 27% | **2.12** |
+| 5.5 m/s | 27% | **2.10** |
 | 6.5 m/s | 37% | 1.70 |
 | 7.5 m/s | 46% | 1.37 |
 | 8.5 m/s | 54% | 1.10 |
-| 10.5 m/s | 65% | **0.64** |
+| 10.5 m/s | 65% | **0.63** |
 
 The gap between the two bases is therefore **widest at marginal sites** — exactly where
 the P90 decides whether a project is financeable. A fixed multiplier would be wrong in
@@ -440,7 +450,7 @@ both directions.
 
 **Two caveats that matter.**
 
-The power curve is **generic** — a 4.2 MW, 150 m rotor machine at 238 W/m², roughly IEC
+The power curve is **generic** — a 3.0 MW, 130 m rotor machine at 226 W/m², roughly IEC
 class IIA — chosen to give the right shape and order, not to represent a specific turbine.
 S is turbine-specific, so recompute it with the project machine before publishing.
 
@@ -450,10 +460,11 @@ availability, electrical-loss and flow-modelling terms — none of which GoKaatr
 
 ### Known limitations
 
-- **No energy yield is computed.** GoKaatru characterises the wind *resource* and stops
-  short of the *yield*: there is no project AEP, no capacity factor and no loss model.
-  The energy sensitivity factor above exists to make the speed-to-energy conversion
-  explicit, not to substitute for an energy assessment.
+- **No project energy yield is computed.** An indicative gross AEP and capacity factor
+  (`indicative_aep_mwh`, `indicative_capacity_factor`) are computed off the generic curve
+  and labelled indicative. There is no project power curve, no loss model, no wakes, no
+  net energy and no energy-basis P50/P90. By the owner's decision of 2026-11-16 these will
+  not be built: the product's output is long-term-corrected wind data.
 - **Confidence intervals are approximate.** `ols_confidence_intervals` applies an
   AR(1) effective-sample-size correction estimated from the residuals' own lag-1
   autocorrelation, which on hourly wind widens the interval by roughly 3.5×
@@ -571,9 +582,11 @@ offered. Tool results are wrapped in `<untrusted-tool-output>` tags and the
 system prompt instructs the model not to follow instructions found inside them —
 that mitigates prompt injection; the allowlist is the actual control.
 
-The Copilot UI sends `allow_mutating_tools: true` by default so the assistant can
-drive the workflow, and exposes a checkbox in its BYOK settings to make the
-assistant read-only. The API default is read-only.
+The Copilot UI sends `allow_mutating_tools: false` by default, and its BYOK
+settings carry an opt-in checkbox ("Allow the assistant to change session data").
+When on, the assistant can change session data without asking for each change;
+per-action approval is not built yet, so it is off until the user opts in. The API
+default is read-only as well.
 
 ## Validation
 
@@ -588,11 +601,18 @@ python -m pytest tests/test_sensor_selection.py tests/test_uploaded_dataset.py -
 python -c "import asyncio, json; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())), 'tools')"
 ```
 
+Tests that read the real reference campaigns (Boxkite, Horns Rev, Launakalana) need files
+under the gitignored `data/uploads/` (set `GOKAATRU_TEST_UPLOADS_DIR` to read them from
+elsewhere). Without them those tests skip with a message naming the missing file; they do
+not error.
+
 Frontend (Vitest coverage across types, store, import, stages, Canvas, copilot, compare, and WindKit):
 
 ```bash
 cd frontend && npm run test
 cd frontend && npm run build    # tsc --noEmit && vite build
+cd frontend && npx playwright install chromium   # once
+cd frontend && npm run test:e2e # Playwright smoke test; starts its own backend (:8011) and Vite (:5183)
 ```
 
 Smoke checks:

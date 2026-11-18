@@ -321,6 +321,9 @@ export interface QcDiagnosticsSummary {
   sensors: Array<{
     sensor: string;
     range_failures: number;
+    range_min?: number;
+    range_max?: number;
+    range_bounds_source?: string;
     flatline_records: number;
     removed_after_cleaning: number;
   }>;
@@ -339,6 +342,9 @@ export interface McpReadinessSummary {
   record_count: number;
   long_term_adjustment_factor: number;
   ready: boolean;
+  not_ready_reasons?: string[];
+  min_concurrent_hours?: number;
+  min_r_squared?: number;
 }
 
 export interface OverviewSummary {

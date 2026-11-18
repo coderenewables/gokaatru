@@ -41,6 +41,29 @@ def dry_air_density(pressure_pa: float, temperature_k: float) -> float:
     return pressure_pa / (287.05 * temperature_k)
 
 
+def equal_kinetic_power_speed(speed: np.ndarray, air_density: np.ndarray) -> np.ndarray:
+    """Return the speed that carries the same kinetic power at the reference density.
+
+    Solves ``0.5 * rho_0 * U_n^3 = 0.5 * rho * U^3`` for ``U_n`` from the flux itself, so a
+    wrong exponent or an inverted density ratio in the tool under test shows up as a mismatch.
+    """
+    flux = 0.5 * np.asarray(air_density, dtype=float) * np.asarray(speed, dtype=float) ** 3
+    return np.power(flux / (0.5 * ISA_DRY_DENSITY), 1.0 / 3.0)
+
+
+def level_mean_spread_pct(levels: list[str], values: list[float]) -> float:
+    """Sample standard deviation of the per-level means, as a percentage of the grand mean.
+
+    The grand mean is over every value, not over the level means, so a level with more
+    scenarios weighs more in the denominator and the same in the numerator.
+    """
+    groups: dict[str, list[float]] = {}
+    for level, value in zip(levels, values):
+        groups.setdefault(level, []).append(float(value))
+    means = np.array([np.mean(group) for group in groups.values()])
+    return float(np.std(means, ddof=1) / np.mean(np.asarray(values, dtype=float)) * 100.0)
+
+
 def magnus_saturation_vapour_pressure_pa(temperature_c: float) -> float:
     """Return saturation vapour pressure over water (Magnus/Tetens, hPa form scaled to Pa).
 

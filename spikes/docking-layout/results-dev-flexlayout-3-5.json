@@ -1,0 +1,150 @@
+{
+  "phase": "dev",
+  "date": "2026-11-18T18:51:11.940Z",
+  "results": {
+    "flexlayout": {
+      "3": {
+        "jsonBytes": 889,
+        "jsonBytesUtf8": 889,
+        "groupsBefore": [
+          [
+            "inspector",
+            "tree"
+          ],
+          [
+            "chart"
+          ],
+          [
+            "rose"
+          ]
+        ],
+        "groupsAfterReload": [
+          [
+            "inspector",
+            "tree"
+          ],
+          [
+            "chart"
+          ],
+          [
+            "rose"
+          ]
+        ],
+        "sameGroups": true,
+        "sameGroupsExactOrder": true,
+        "jsonIdenticalAfterRestore": true,
+        "jsonDiffAfterRestore": null,
+        "chartDrawnAfterReload": true,
+        "liveChartsAfterReload": 1,
+        "chartHostRectBefore": {
+          "chart-host": [
+            0,
+            434,
+            636,
+            366
+          ]
+        },
+        "chartHostRectAfter": {
+          "chart-host": [
+            0,
+            434,
+            636,
+            366
+          ]
+        },
+        "jsonPreview": "{\"global\":{\"tabEnablePopout\":true,\"tabEnableFloat\":true},\"borders\":[],\"layout\":{\"type\":\"row\",\"id\":\"#9f97b2e4-745b-476f-9a67-9c81d093612f\",\"children\":[{\"type\":\"row\",\"id\":\"#fe27b64d-106f-4429-b632-7fe1c4cd05ef\",\"weight\":40,\"children\":[{\"type\":\"tabset\",\"id\":\"#f651f82d-deea-4552-b2d1-1a133050f539\",\"weight\":50,\"selected\":1,\"children\":[{\"type\":\"tab\",\"id\":\"inspector\",\"name\":\"Inspector\",\"component\":\"ph\"},"
+      },
+      "5": {
+        "floating": {
+          "error": null,
+          "floatElement": "flexlayout__float_window",
+          "groups": [
+            [
+              "tree"
+            ],
+            [
+              "inspector"
+            ],
+            [
+              "rose"
+            ],
+            [
+              "chart"
+            ]
+          ],
+          "mountDelta": 0,
+          "unmountDelta": 0,
+          "chartDrawn": true,
+          "hostRect": [
+            753,
+            704
+          ],
+          "uplotSize": [
+            753,
+            704
+          ],
+          "consoleErrors": [
+            {
+              "type": "warning",
+              "text": "Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently"
+            }
+          ]
+        },
+        "popout": {
+          "error": null,
+          "popupOpened": true,
+          "popupUrl": "http://127.0.0.1:5198/popout.html?id=42ce64b5-6bd8-4046-b9f0-455bc3fdcf65",
+          "windowsOpenedIncludingClosed": 1,
+          "popup": {
+            "chartHostInPopup": true,
+            "canvasInkPixels": 191623,
+            "hostSize": [
+              782,
+              822
+            ],
+            "popupInner": [
+              782,
+              852
+            ]
+          },
+          "afterPopupResize": {
+            "uplot": [
+              500,
+              370
+            ],
+            "hostAndInner": [
+              500,
+              370,
+              500,
+              400
+            ]
+          },
+          "mainWindow": {
+            "mountDelta": 0,
+            "unmountDelta": 0,
+            "live": 1,
+            "groups": [
+              [
+                "tree"
+              ],
+              [
+                "inspector"
+              ],
+              [
+                "rose"
+              ],
+              [
+                "chart"
+              ]
+            ]
+          },
+          "consoleErrors": []
+        }
+      }
+    }
+  },
+  "env": {
+    "version": "159.0.8154.6",
+    "gpu": "ANGLE (Intel, Intel(R) UHD Graphics (0x00009B41) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  }
+}

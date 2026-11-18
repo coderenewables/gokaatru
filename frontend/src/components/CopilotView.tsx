@@ -6,7 +6,18 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
-import { defaultModelForProvider, type CopilotToolEvent } from "../lib/copilotAgent";
+import {
+  SUPPORTED_COPILOT_PROVIDERS,
+  defaultModelForProvider,
+  type CopilotToolEvent,
+} from "../lib/copilotAgent";
+
+const PROVIDER_LABELS: Record<(typeof SUPPORTED_COPILOT_PROVIDERS)[number], string> = {
+  openai: "OpenAI",
+  openrouter: "OpenRouter",
+  groq: "Groq",
+  together: "Together",
+};
 
 export function CopilotView() {
   const chatMessages = useWorkspaceStore((state) => state.chatMessages);
@@ -16,7 +27,7 @@ export function CopilotView() {
   const summary = useWorkspaceStore((state) => state.summary);
 
   const [draft, setDraft] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(!chatSettings.apiKey);
+  const [settingsOpen, setSettingsOpen] = useState(!chatSettings.apiKey || !!chatSettings.replacedProvider);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -98,12 +109,17 @@ function SettingsDrawer({
   const [provider, setProvider] = useState(settings.provider);
   const [model, setModel] = useState(settings.model);
   const [apiKey, setApiKey] = useState(settings.apiKey);
-  const [allowMutatingTools, setAllowMutatingTools] = useState(settings.allowMutatingTools !== false);
+  const [allowMutatingTools, setAllowMutatingTools] = useState(settings.allowMutatingTools === true);
 
   return (
     <div className="settings-drawer">
       <h4>BYOK settings</h4>
       <p className="muted">Keys are stored only in this browser's localStorage.</p>
+      {settings.replacedProvider ? (
+        <p className="muted">
+          The saved provider "{settings.replacedProvider}" is not supported yet and was replaced with OpenAI.
+        </p>
+      ) : null}
       <div className="form-grid">
         <label className="form-field">
           <span>Provider</span>
@@ -114,11 +130,11 @@ function SettingsDrawer({
               setModel(defaultModelForProvider(e.target.value));
             }}
           >
-            <option value="openai">OpenAI</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="groq">Groq</option>
-            <option value="together">Together</option>
+            {SUPPORTED_COPILOT_PROVIDERS.map((p) => (
+              <option key={p} value={p}>
+                {PROVIDER_LABELS[p]}
+              </option>
+            ))}
           </select>
         </label>
         <label className="form-field">
@@ -135,15 +151,14 @@ function SettingsDrawer({
           />
         </label>
         <label className="form-field">
-          <span>Allow the assistant to modify this session</span>
+          <span>Allow the assistant to change session data</span>
           <input
             type="checkbox"
             checked={allowMutatingTools}
             onChange={(e) => setAllowMutatingTools(e.target.checked)}
           />
           <small className="muted">
-            Off: the assistant can only read data and generate plots. On: it may also import files,
-            apply cleaning rules, change config, fetch reanalysis data, and run long-term correction.
+            Off by default. When on, the assistant can change session data without asking for each change.
           </small>
         </label>
       </div>

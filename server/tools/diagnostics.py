@@ -7,6 +7,8 @@ import pandas as pd
 from server.core.validators import to_utc_index
 from server.main import mcp
 from server.state.session import SessionState, session
+from server.tools.cleaning import _resolve_range_bounds
+from server.tools.ltc import MIN_CONCURRENT_HOURS
 
 COMPASS_16 = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
 
@@ -20,6 +22,10 @@ MAST_EFFECT_MIN_SECTOR_RECORDS = 50
 
 # Fractional departure from the baseline ratio that counts as a shadow.
 MAST_EFFECT_RATIO_TOLERANCE = 0.05
+
+# A cue only: the sweep's R-squared admissibility gate was removed because it is
+# biased against non-least-squares MCP methods, so this never gates a correction.
+READINESS_MIN_R_SQUARED = 0.5
 
 
 def _require_frame(state: SessionState) -> pd.DataFrame:
@@ -228,11 +234,15 @@ def _compute_qc_diagnostics(state: SessionState) -> dict:
     rows = []
     for sensor in _speed_candidates(state):
         values = raw[sensor].astype(float)
+        range_min, range_max, bounds_source, _ = _resolve_range_bounds(state, raw, sensor, {})
         removed = int((raw[sensor].notna() & frame[sensor].isna()).sum()) if sensor in frame.columns else 0
         rows.append(
             {
                 "sensor": sensor,
-                "range_failures": int(((values < 0) | (values > 50)).fillna(False).sum()),
+                "range_failures": int(((values < range_min) | (values > range_max)).sum()),
+                "range_min": range_min,
+                "range_max": range_max,
+                "range_bounds_source": bounds_source,
                 "flatline_records": _flatline_count(values),
                 "removed_after_cleaning": removed,
             }
@@ -267,13 +277,23 @@ def _compute_mcp_readiness(state: SessionState, speed_sensor: str, reference_sen
         if concurrent[speed_sensor].mean() > 0
         else float("nan")
     )
+    reasons: list[str] = []
+    if len(concurrent) < MIN_CONCURRENT_HOURS:
+        reasons.append(
+            f"concurrent hours {len(concurrent)} below the correction's floor of {MIN_CONCURRENT_HOURS}"
+        )
+    if not metrics["r_squared"] >= READINESS_MIN_R_SQUARED:
+        reasons.append(f"R-squared {metrics['r_squared']:.3f} below {READINESS_MIN_R_SQUARED}")
     return {
         "speed_sensor": speed_sensor,
         "reference_sensor": reference,
         "concurrent_hours": int(len(concurrent)),
         **metrics,
         "long_term_adjustment_factor": adjustment,
-        "ready": bool(metrics["r_squared"] >= 0.5 and len(concurrent) >= 720),
+        "ready": not reasons,
+        "not_ready_reasons": reasons,
+        "min_concurrent_hours": MIN_CONCURRENT_HOURS,
+        "min_r_squared": READINESS_MIN_R_SQUARED,
     }
 
 

@@ -4,63 +4,67 @@
 // whose derivation is invisible is a number a reviewer cannot check. Three depths, as the
 // design requires: the badge at the number, the reasoning behind a disclosure, and a
 // warning when an axis was too thinly covered for its empirical estimate to mean anything.
+//
+// The numbers are the server's (`uncertainty_substitution` on the spread response). This
+// file computed them itself until 2026-11-18, from the swing of the uncertainty figure
+// rather than of the wind speed, and the server's totals never carried them (F9).
 import { useState } from "react";
 import clsx from "clsx";
 
-import type { AxisContribution } from "../../types/sweep";
-import { AXIS_LABELS, type AxisColumn } from "../../types/sweep";
+import { AXIS_LABELS, type SubstitutedComponent } from "../../types/sweep";
 
-/** Below this many levels an axis spread is under-resolved and cannot displace anything. */
-export const MIN_LEVELS_FOR_EMPIRICAL = 3;
+export const COMPONENT_LABELS: Record<SubstitutedComponent["component"], string> = {
+  mcp: "MCP model",
+  vertical_extrapolation: "Vertical extrapolation",
+  long_term_reference: "Long-term reference",
+};
 
-export interface SubstitutionRow {
-  component: string;
-  /** Which axes measure this component empirically. */
-  axes: AxisColumn[];
-  parametric: number | null;
-  empirical: number | null;
-  /** Whether the empirical estimate rests on enough axis coverage to be trusted. */
-  underResolved: boolean;
-  /** True when this term has no parametric counterpart and is a genuine addition. */
-  additive?: boolean;
+function pct(value: number | null): string {
+  return value == null ? "—" : `${value.toFixed(2)}%`;
 }
 
-export function SubstitutionBadge({ row }: { row: SubstitutionRow }) {
-  const empiricalWins =
-    row.empirical != null && (row.parametric == null || row.empirical > row.parametric);
-  const applied = row.additive
-    ? row.empirical
-    : Math.max(row.parametric ?? 0, row.empirical ?? 0);
+export function SubstitutionBadge({
+  entry,
+  minLevels,
+}: {
+  entry: SubstitutedComponent;
+  minLevels: number;
+}) {
+  const badge =
+    entry.basis === "added"
+      ? "added"
+      : entry.basis === "empirical"
+        ? "empirical"
+        : entry.basis === "not_resolved"
+          ? "not resolved"
+          : "parametric";
   return (
     <div className="substitution-row">
-      <span className="substitution-name">{row.component}</span>
-      <strong className="substitution-value">
-        {applied == null ? "—" : `${applied.toFixed(2)}%`}
-      </strong>
+      <span className="substitution-name">{COMPONENT_LABELS[entry.component]}</span>
+      <strong className="substitution-value">{pct(entry.applied_pct)}</strong>
       <span
         className={clsx("substitution-badge", {
-          empirical: empiricalWins && !row.additive,
-          additive: row.additive,
+          empirical: entry.basis === "empirical",
+          additive: entry.basis === "added",
         })}
       >
-        {row.additive ? "added" : empiricalWins ? "empirical" : "parametric"}
+        {badge}
       </span>
       <small className="substitution-detail">
-        parametric {row.parametric == null ? "—" : `${row.parametric.toFixed(2)}%`} · sweep
-        spread {row.empirical == null ? "—" : `${row.empirical.toFixed(2)}%`}
+        parametric {pct(entry.parametric_mean_pct)} · sweep spread {pct(entry.empirical_pct)}
       </small>
-      {row.underResolved ? (
+      {entry.axes_under_resolved.length > 0 ? (
         <small className="substitution-warning">
-          {row.axes.map((axis) => AXIS_LABELS[axis]).join(" and ")} covered fewer than{" "}
-          {MIN_LEVELS_FOR_EMPIRICAL} levels — the empirical spread is under-resolved and the
-          parametric term was kept.
+          {entry.axes_under_resolved.map((axis) => AXIS_LABELS[axis]).join(" and ")} covered
+          fewer than {minLevels} levels, so{" "}
+          {entry.axes_under_resolved.length === 1 ? "its" : "their"} spread was not used.
         </small>
       ) : null}
     </div>
   );
 }
 
-export function SubstitutionExplainer() {
+export function SubstitutionExplainer({ minLevels }: { minLevels: number }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <section className="substitution-explainer">
@@ -75,11 +79,19 @@ export function SubstitutionExplainer() {
       {expanded ? (
         <div className="substitution-explanation">
           <p>
+            An axis&apos;s sweep spread is the sample standard deviation of the long-term mean
+            speed across that axis&apos;s level means, as a percentage of the sweep&apos;s mean
+            speed. A component measured by several axes combines their spreads in quadrature.
+            An axis needs at least {minLevels} levels: across one or two levels the figure is a
+            range, not a dispersion estimate.
+          </p>
+          <p>
             The parametric term and the sweep spread measure <strong>the same quantity</strong>,
             so adding them would double-count. In root-sum-square terms,{" "}
             <code>max(p, e)</code> is identical to <em>adding only the shortfall the
             parametric term does not already cover</em>:{" "}
-            <code>√(p² + max(0, e² − p²)) ≡ max(p, e)</code>.
+            <code>√(p² + max(0, e² − p²)) ≡ max(p, e)</code>. It is applied per scenario,
+            against that scenario&apos;s own parametric term.
           </p>
           <p>
             The rule is one-sided on purpose. An empirical spread can be too small because
@@ -96,64 +108,14 @@ export function SubstitutionExplainer() {
           </p>
           <p className="substitution-caveat">
             One term is genuinely additive rather than substituted: disagreement between
-            two independent reanalyses has no parametric counterpart in the model. Note
-            that variance ratio is invariant to an affine rescaling of the reference, so a
-            small reference spread measured with that estimator alone is not evidence the
-            sources agree.
+            independent long-term references has no parametric counterpart in the model.
+            With two reanalyses it cannot be estimated under the {minLevels}-level rule, so it
+            stays out of the total until a third reference is in the sweep. Note that variance
+            ratio is invariant to an affine rescaling of the reference, so a small reference
+            spread measured with that estimator alone is not evidence the sources agree.
           </p>
         </div>
       ) : null}
     </section>
   );
-}
-
-/** Map axis contributions onto the uncertainty components they measure empirically. */
-export function buildSubstitutionRows(
-  contributions: AxisContribution[],
-  components: Record<string, number | null>,
-): SubstitutionRow[] {
-  const byAxis = new Map(contributions.map((entry) => [entry.axis, entry]));
-  // Axis swing is expressed in metric units; on a percentage metric it is already a
-  // percentage, which is why the substitution is only shown for the uncertainty metrics.
-  const swingPct = (axes: AxisColumn[]): { value: number | null; levels: number } => {
-    const entries = axes.map((axis) => byAxis.get(axis)).filter(Boolean) as AxisContribution[];
-    if (entries.length === 0) return { value: null, levels: 0 };
-    const combined = Math.sqrt(
-      entries.reduce((total, entry) => total + entry.swing ** 2, 0),
-    );
-    return { value: combined, levels: Math.max(...entries.map((entry) => entry.levels)) };
-  };
-
-  const definitions: Array<{
-    component: string;
-    axes: AxisColumn[];
-    parametricKey: string | null;
-    additive?: boolean;
-  }> = [
-    { component: "MCP model", axes: ["ltc_algorithm"], parametricKey: "u_mcp_pct" },
-    {
-      component: "Vertical extrapolation",
-      axes: ["shear_fit_policy", "reference_policy", "shear_model"],
-      parametricKey: "u_vertical_pct",
-    },
-    {
-      component: "Long-term reference",
-      axes: ["reference_source"],
-      parametricKey: null,
-      additive: true,
-    },
-  ];
-
-  return definitions.map((definition) => {
-    const { value, levels } = swingPct(definition.axes);
-    const underResolved = levels > 0 && levels < MIN_LEVELS_FOR_EMPIRICAL;
-    return {
-      component: definition.component,
-      axes: definition.axes,
-      parametric: definition.parametricKey ? (components[definition.parametricKey] ?? null) : null,
-      empirical: underResolved ? null : value,
-      underResolved,
-      additive: definition.additive,
-    };
-  });
 }

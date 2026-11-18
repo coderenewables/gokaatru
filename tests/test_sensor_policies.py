@@ -14,8 +14,6 @@ single height, a mast where nothing clears the availability floor.
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -39,6 +37,7 @@ from server.core.sensor_selection import (
     resolve_policy,
 )
 from server.state.session import SessionState
+from tests.conftest import require_campaign_file
 
 INDEX = pd.date_range("2021-01-01", periods=2000, freq="10min", tz="UTC")
 
@@ -369,9 +368,8 @@ def horns_rev_session():
     from server.state.session import session as _session
     from server.tools.data_io import _parse_datamodel, _parse_timeseries
 
-    uploads = Path(__file__).resolve().parents[1] / "data" / "uploads"
-    _parse_timeseries(_session, str(uploads / "HornsRev-MAST_timeseries_data.csv"))
-    _parse_datamodel(_session, str(uploads / "HornsRev-MAST_data_model.json"))
+    _parse_timeseries(_session, str(require_campaign_file("HornsRev-MAST_timeseries_data.csv")))
+    _parse_datamodel(_session, str(require_campaign_file("HornsRev-MAST_data_model.json")))
     return _session
 
 

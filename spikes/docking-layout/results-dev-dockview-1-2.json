@@ -1,0 +1,193 @@
+{
+  "phase": "dev",
+  "date": "2026-11-18T18:49:16.666Z",
+  "results": {
+    "dockview": {
+      "1": {
+        "phase": "dev",
+        "mountsAfterLoad": 2,
+        "unmountsAfterLoad": 1,
+        "liveCharts": 1,
+        "chartCanvasesInDom": 1,
+        "console": {
+          "counts": {
+            "info": 1
+          },
+          "errorsAndWarnings": []
+        }
+      },
+      "2": {
+        "before": {
+          "mounts": 2,
+          "unmounts": 1,
+          "live": 1,
+          "instance": "2",
+          "points": 262800,
+          "checksum": 1690.51,
+          "canvasInkPixels": 153270,
+          "canvasPx": [
+            640,
+            765
+          ],
+          "hostRect": [
+            640,
+            765
+          ],
+          "uplotSize": [
+            640,
+            765
+          ],
+          "hostConnected": true,
+          "groups": [
+            [
+              "chart",
+              "tree"
+            ],
+            [
+              "inspector"
+            ],
+            [
+              "rose"
+            ]
+          ]
+        },
+        "moveToGroup": {
+          "worked": true,
+          "groups": [
+            [
+              "tree"
+            ],
+            [
+              "inspector",
+              "chart"
+            ],
+            [
+              "rose"
+            ]
+          ],
+          "mountDelta": 0,
+          "unmountDelta": 0,
+          "sameInstance": true,
+          "sameData": true,
+          "drawn": true,
+          "after": {
+            "mounts": 2,
+            "unmounts": 1,
+            "live": 1,
+            "instance": "2",
+            "points": 262800,
+            "checksum": 1690.51,
+            "canvasInkPixels": 67828,
+            "canvasPx": [
+              640,
+              365
+            ],
+            "hostRect": [
+              640,
+              365
+            ],
+            "uplotSize": [
+              640,
+              365
+            ],
+            "hostConnected": true,
+            "groups": [
+              [
+                "tree"
+              ],
+              [
+                "inspector",
+                "chart"
+              ],
+              [
+                "rose"
+              ]
+            ]
+          }
+        },
+        "dragToSplit": {
+          "worked": true,
+          "groups": [
+            [
+              "tree"
+            ],
+            [
+              "inspector"
+            ],
+            [
+              "rose"
+            ],
+            [
+              "chart"
+            ]
+          ],
+          "groupCountBefore": 3,
+          "groupCountAfter": 4,
+          "mountDelta": 0,
+          "unmountDelta": 0,
+          "sameInstance": true,
+          "sameData": true,
+          "drawn": true,
+          "after": {
+            "mounts": 2,
+            "unmounts": 1,
+            "live": 1,
+            "instance": "2",
+            "points": 262800,
+            "checksum": 1690.51,
+            "canvasInkPixels": 35311,
+            "canvasPx": [
+              320,
+              365
+            ],
+            "hostRect": [
+              320,
+              365
+            ],
+            "uplotSize": [
+              320,
+              365
+            ],
+            "hostConnected": true,
+            "groups": [
+              [
+                "tree"
+              ],
+              [
+                "inspector"
+              ],
+              [
+                "rose"
+              ],
+              [
+                "chart"
+              ]
+            ]
+          }
+        },
+        "totalMountDeltaAcrossBothMoves": 0,
+        "totalUnmountDeltaAcrossBothMoves": 0,
+        "placeholderInputWorksAfterMoves": true,
+        "_json": "{\"grid\":{\"root\":{\"type\":\"branch\",\"data\":[{\"type\":\"leaf\",\"data\":{\"views\":[\"tree\"],\"activeView\":\"tree\",\"id\":\"1\"},\"size\":640},{\"type\":\"branch\",\"data\":[{\"type\":\"leaf\",\"data\":{\"views\":[\"inspector\"],\"activeView\":\"inspector\",\"id\":\"2\"},\"size\":400},{\"type\":\"branch\",\"data\":[{\"type\":\"leaf\",\"data\":{\"views\":[\"chart\"],\"activeView\":\"chart\",\"id\":\"4\"},\"size\":320},{\"type\":\"leaf\",\"data\":{\"views\":[\"rose\"],\"activeView\":\"rose\",\"id\":\"3\"},\"size\":320}],\"size\":400}],\"size\":640}],\"size\":800},\"width\":1280,\"height\":800,\"orientation\":\"HORIZONTAL\"},\"panels\":{\"tree\":{\"id\":\"tree\",\"contentComponent\":\"ph\",\"params\":{\"name\":\"tree\"},\"title\":\"Data tree\"},\"inspector\":{\"id\":\"inspector\",\"contentComponent\":\"ph\",\"params\":{\"name\":\"inspector\"},\"title\":\"Inspector\"},\"rose\":{\"id\":\"rose\",\"contentComponent\":\"ph\",\"params\":{\"name\":\"rose\"},\"title\":\"Wind rose\"},\"chart\":{\"id\":\"chart\",\"contentComponent\":\"chart\",\"title\":\"Timeline\"}},\"activeGroup\":\"2\"}",
+        "_groups": [
+          [
+            "tree"
+          ],
+          [
+            "inspector"
+          ],
+          [
+            "rose"
+          ],
+          [
+            "chart"
+          ]
+        ]
+      }
+    }
+  },
+  "env": {
+    "version": "159.0.8154.6",
+    "gpu": "ANGLE (Intel, Intel(R) UHD Graphics (0x00009B41) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  }
+}

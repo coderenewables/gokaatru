@@ -30,7 +30,9 @@ K_SHEAR_ASSUMED_POWER_LAW = 0.03
 # measured 0.065 pooled and 0.070 in the worst year at Launakalana, 0.038 and 0.069 at
 # Boxkite, so 0.05 understated a single-year campaign at both sites.
 K_SHEAR_LOG_LAW = 0.07
-K_SHEAR_ANALYST_SUPPLIED = 0.05
+# Raised from 0.05 on 2026-11-17 (owner decision) to match the log-law constant: a typed-in
+# exponent has no measured dispersion, so it must not score better than any assumed profile.
+K_SHEAR_ANALYST_SUPPLIED = 0.07
 # Must match CalculateUncertaintyRequest.shear_method in server/api/schemas.py; the MCP tool
 # has no Pydantic layer, so without this an unknown name would silently take the 0.03 branch.
 VALID_SHEAR_METHODS = (
@@ -108,19 +110,20 @@ def _density_normalised(
             "reference_density_kgm3": REFERENCE_AIR_DENSITY,
         }
     normalised = normalise_speed_to_reference_density(
-        speed, np.full(speed.shape, float(density)), regulation="stall"
+        speed, np.full(speed.shape, float(density)), regulation="pitch"
     )
     return normalised, {
         "applied": True,
-        "method": "iec_61400_12_1_stall",
+        "method": "iec_61400_12_1_wind_speed_normalisation",
+        "turbine_regulation": "pitch",
         "site_density_kgm3": round(float(density), 4),
         "reference_density_kgm3": REFERENCE_AIR_DENSITY,
         "speed_factor": round(float((density / REFERENCE_AIR_DENSITY) ** (1.0 / 3.0)), 6),
         "note": (
             "Speeds were normalised to the curve's reference density as U*(rho/rho0)^(1/3), "
-            "which is the IEC treatment for a stall-regulated machine. A pitch-regulated "
-            "machine is handled by correcting the power curve instead, which needs the "
-            "project turbine."
+            "which is the IEC 61400-12-1 treatment for a turbine with active power control "
+            "(pitch-regulated), as the generic curves are. A stall-regulated machine has its "
+            "power output normalised instead, which this tool does not do."
         ),
     }
 

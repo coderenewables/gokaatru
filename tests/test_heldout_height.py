@@ -13,14 +13,13 @@ comparison confounds extrapolation error with installation history.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from server.state.session import session
 from server.tools.data_io import _parse_datamodel, _parse_timeseries
 from server.tools.extrapolation import _extrapolate_to_hub_height
 from server.tools.shear import _build_shear_table, _calculate_shear_timeseries
+from tests.conftest import require_campaign_file
 
-UPLOADS_DIR = Path(__file__).resolve().parents[1] / "data" / "uploads"
 MAX_ABS_BIAS = 0.01
 MIN_COVERAGE = 0.99
 # Speed above which a record counts as valid for the nearest fit sensor; matches the
@@ -50,8 +49,10 @@ def _held_out_bias(state, fit_columns: dict[str, str], target: str, hub: float, 
 
 
 def _load_launakalana():
-    _parse_timeseries(session, str(UPLOADS_DIR / "WB-ESMAP_Launakalana_timeseries_data.csv"))
-    _parse_datamodel(session, str(UPLOADS_DIR / "WB-ESMAP_Launakalana_data_model.json"))
+    timeseries = require_campaign_file("WB-ESMAP_Launakalana_timeseries_data.csv")
+    datamodel = require_campaign_file("WB-ESMAP_Launakalana_data_model.json")
+    _parse_timeseries(session, str(timeseries))
+    _parse_datamodel(session, str(datamodel))
     return session
 
 

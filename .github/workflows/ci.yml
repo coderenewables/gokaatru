@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      # WindKit prompts for these interactively on first import; a runner has no terminal.
+      WINDKIT_NAME: CI
+      WINDKIT_EMAIL: ci@example.invalid
+      WINDKIT_INSTITUTION: CI
+      # Adding or removing an MCP tool is a deliberate change: update this with it.
+      EXPECTED_MCP_TOOLS: "232"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[ml,dev]"
+      - name: Ruff
+        run: python -m ruff check server/ tests/
+      # The real campaign files are gitignored, so the tests that read them skip here
+      # (tests/conftest.py, require_campaign_file). Only synthetic-data tests run in CI.
+      - name: Pytest
+        run: python -m pytest tests/ -q -p no:cacheprovider
+      - name: MCP tool count
+        shell: bash
+        run: |
+          count=$(python -c "import asyncio; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())))")
+          echo "MCP tools registered: $count"
+          test "$count" = "$EXPECTED_MCP_TOOLS"
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit -p .
+      - name: Vitest
+        run: npm run test
+      - name: Build
+        run: npm run build
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    env:
+      # WindKit prompts for these interactively on first import; a runner has no terminal.
+      WINDKIT_NAME: CI
+      WINDKIT_EMAIL: ci@example.invalid
+      WINDKIT_INSTITUTION: CI
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install backend
+        run: python -m pip install -e ".[ml,dev]"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend
+        working-directory: frontend
+        run: npm ci
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Playwright
+        working-directory: frontend
+        run: npm run test:e2e
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7

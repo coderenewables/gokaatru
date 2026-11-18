@@ -20,3 +20,17 @@ CODE_REVIEW_LOG.md
 WORKFLOW_FRONTEND_SPEC.md
 SENSOR_OVERVIEW_REWRITE_PLAN.md
 docs/
+frontend/test-results/
+frontend/playwright-report/
+
+# Chart library spike
+spikes/chart-libraries/node_modules/
+spikes/chart-libraries/dist/
+spikes/chart-libraries/test-results/
+spikes/chart-libraries/*.log
+
+# Docking layout spike
+spikes/docking-layout/node_modules/
+spikes/docking-layout/dist/
+spikes/docking-layout/test-results/
+spikes/docking-layout/*.log

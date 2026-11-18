@@ -1,0 +1,75 @@
+{
+  "phase": "prod",
+  "date": "2026-11-18T18:53:25.824Z",
+  "results": {
+    "dockview": {
+      "4": {
+        "reps": [
+          {
+            "widthBefore": 640,
+            "widthAfter": 940,
+            "grew": 300,
+            "chartFollows": true,
+            "frames": 88,
+            "medianFrameMs": 17.5,
+            "worstFrameMs": 18.6,
+            "framesOver33ms": 0,
+            "resizeEvents": 30
+          },
+          {
+            "widthBefore": 640,
+            "widthAfter": 940,
+            "grew": 300,
+            "chartFollows": true,
+            "frames": 87,
+            "medianFrameMs": 17.7,
+            "worstFrameMs": 19,
+            "framesOver33ms": 0,
+            "resizeEvents": 30
+          },
+          {
+            "widthBefore": 640,
+            "widthAfter": 940,
+            "grew": 300,
+            "chartFollows": true,
+            "frames": 85,
+            "medianFrameMs": 17.8,
+            "worstFrameMs": 18.6,
+            "framesOver33ms": 0,
+            "resizeEvents": 30
+          },
+          {
+            "widthBefore": 640,
+            "widthAfter": 940,
+            "grew": 300,
+            "chartFollows": true,
+            "frames": 89,
+            "medianFrameMs": 17.7,
+            "worstFrameMs": 18.9,
+            "framesOver33ms": 0,
+            "resizeEvents": 30
+          },
+          {
+            "widthBefore": 640,
+            "widthAfter": 940,
+            "grew": 300,
+            "chartFollows": true,
+            "frames": 89,
+            "medianFrameMs": 17.5,
+            "worstFrameMs": 18.5,
+            "framesOver33ms": 0,
+            "resizeEvents": 30
+          }
+        ],
+        "medianOfMedianFrameMs": 17.7,
+        "worstFrameMsAcrossReps": 19,
+        "medianOfWorstFrameMs": 18.6,
+        "allChartsEndAtPanelSize": true
+      }
+    }
+  },
+  "env": {
+    "version": "159.0.8154.6",
+    "gpu": "ANGLE (Intel, Intel(R) UHD Graphics (0x00009B41) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  }
+}

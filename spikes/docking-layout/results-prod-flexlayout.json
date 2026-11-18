@@ -1,0 +1,230 @@
+{
+  "phase": "prod",
+  "date": "2026-11-18T18:52:36.549Z",
+  "results": {
+    "flexlayout": {
+      "1": {
+        "phase": "prod",
+        "mountsAfterLoad": 1,
+        "unmountsAfterLoad": 0,
+        "liveCharts": 1,
+        "chartCanvasesInDom": 1,
+        "console": {
+          "counts": {},
+          "errorsAndWarnings": []
+        }
+      },
+      "6": {
+        "roles": {
+          "tablist": 3,
+          "tab": 4,
+          "tabSelectedTrue": 3,
+          "tabSelectedFalse": 1,
+          "tabpanel": 3,
+          "ariaControls": 4,
+          "buttonsInTabs": 0,
+          "separators": 2
+        },
+        "keyboard": {
+          "tabKeyPressesToReachFirstTab": 1,
+          "firstTabFocused": {
+            "role": "tab",
+            "aria": "Timeline",
+            "tag": "DIV",
+            "text": "Timeline"
+          },
+          "trail": [
+            {
+              "role": "tab",
+              "aria": "Timeline",
+              "tag": "DIV",
+              "text": "Timeline"
+            }
+          ],
+          "selectedAtStart": [
+            "Timeline",
+            "Inspector",
+            "Wind rose"
+          ],
+          "keys": [
+            {
+              "key": "ArrowRight",
+              "focusBefore": "Timeline",
+              "focusAfter": "Data tree",
+              "focusMoved": true,
+              "selectedBefore": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectedAfter": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectionChanged": false
+            },
+            {
+              "key": "Enter",
+              "focusBefore": "Data tree",
+              "focusAfter": "Data tree",
+              "focusMoved": false,
+              "selectedBefore": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectedAfter": [
+                "Data tree",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectionChanged": true
+            },
+            {
+              "key": "ArrowLeft",
+              "focusBefore": "Data tree",
+              "focusAfter": "Timeline",
+              "focusMoved": true,
+              "selectedBefore": [
+                "Data tree",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectedAfter": [
+                "Data tree",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectionChanged": false
+            },
+            {
+              "key": " ",
+              "focusBefore": "Timeline",
+              "focusAfter": "Timeline",
+              "focusMoved": false,
+              "selectedBefore": [
+                "Data tree",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectedAfter": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectionChanged": true
+            },
+            {
+              "key": "Tab",
+              "focusBefore": "Timeline",
+              "focusAfter": "Maximize tabset",
+              "focusMoved": true,
+              "selectedBefore": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectedAfter": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectionChanged": false
+            },
+            {
+              "key": "Enter",
+              "focusBefore": "Maximize tabset",
+              "focusAfter": null,
+              "focusMoved": true,
+              "selectedBefore": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectedAfter": [
+                "Inspector",
+                "Wind rose",
+                "Timeline"
+              ],
+              "selectionChanged": true
+            },
+            {
+              "key": "ArrowRight",
+              "focusBefore": null,
+              "focusAfter": null,
+              "focusMoved": false,
+              "selectedBefore": [
+                "Inspector",
+                "Wind rose",
+                "Timeline"
+              ],
+              "selectedAfter": [
+                "Inspector",
+                "Wind rose",
+                "Timeline"
+              ],
+              "selectionChanged": false
+            },
+            {
+              "key": "Home",
+              "focusBefore": null,
+              "focusAfter": null,
+              "focusMoved": false,
+              "selectedBefore": [
+                "Inspector",
+                "Wind rose",
+                "Timeline"
+              ],
+              "selectedAfter": [
+                "Inspector",
+                "Wind rose",
+                "Timeline"
+              ],
+              "selectionChanged": false
+            },
+            {
+              "key": "End",
+              "focusBefore": null,
+              "focusAfter": null,
+              "focusMoved": false,
+              "selectedBefore": [
+                "Inspector",
+                "Wind rose",
+                "Timeline"
+              ],
+              "selectedAfter": [
+                "Inspector",
+                "Wind rose",
+                "Timeline"
+              ],
+              "selectionChanged": false
+            }
+          ],
+          "switchByFocusAndEnter": true,
+          "switchByFocusAndSpace": true,
+          "panelControlsReachableByTab": true
+        },
+        "axe": {
+          "phase": "prod",
+          "violationsByRule": [
+            {
+              "id": "region",
+              "impact": "moderate",
+              "nodes": 3
+            }
+          ],
+          "violationRuleCount": 1,
+          "violationNodeCount": 3,
+          "passes": 32,
+          "incomplete": []
+        }
+      }
+    }
+  },
+  "env": {
+    "version": "159.0.8154.6",
+    "gpu": "ANGLE (Intel, Intel(R) UHD Graphics (0x00009B41) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  "note": "item 4 removed: re-run with the final splitter handling, see results-prod-flexlayout4.json"
+}

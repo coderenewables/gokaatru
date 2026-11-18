@@ -1,0 +1,27 @@
+{
+  "name": "gokaatru-docking-layout-spike",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "bench": "node run.mjs"
+  },
+  "dependencies": {
+    "dockview-core": "8.9.1",
+    "dockview-react": "8.9.1",
+    "flexlayout-react": "0.11.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "uplot": "1.6.32"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.65.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "4.7.0",
+    "typescript": "5.9.3",
+    "vite": "6.4.3"
+  }
+}

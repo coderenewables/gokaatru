@@ -21,9 +21,6 @@ from server.tools.data_io import (
     _parse_timeseries,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-UPLOADS_DIR = REPO_ROOT / "data" "uploads"
-
 
 def _make_datamodel(offset_hrs: int | float = 0, *, iana: str | None = None) -> dict:
     """Build a minimal IEA Task 43 datamodel stub for testing."""

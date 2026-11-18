@@ -28,3 +28,9 @@ spikes/chart-libraries/node_modules/
 spikes/chart-libraries/dist/
 spikes/chart-libraries/test-results/
 spikes/chart-libraries/*.log
+
+# Docking layout spike
+spikes/docking-layout/node_modules/
+spikes/docking-layout/dist/
+spikes/docking-layout/test-results/
+spikes/docking-layout/*.log

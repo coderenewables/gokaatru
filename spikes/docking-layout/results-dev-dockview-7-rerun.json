@@ -1,0 +1,44 @@
+{
+  "phase": "dev",
+  "date": "2026-11-18T18:52:01.026Z",
+  "results": {
+    "dockview": {
+      "7": {
+        "baseline": {
+          "probe": "rgb(0, 12, 24)",
+          "probe2": "rgb(0, 12, 24)",
+          "tabsHeight": 35
+        },
+        "tokenSetA": {
+          "probe": "rgb(255, 0, 0)",
+          "probe2": "rgb(0, 0, 255)",
+          "tabsHeight": 50
+        },
+        "tokenSetB": {
+          "probe": "rgb(0, 128, 0)",
+          "probe2": "rgb(255, 255, 0)",
+          "tabsHeight": 30
+        },
+        "varsSet": {
+          "--dv-activegroup-visiblepanel-tab-background-color": [
+            "rgb(255, 0, 0)",
+            "rgb(0, 128, 0)"
+          ],
+          "--dv-group-view-background-color": [
+            "rgb(0, 0, 255)",
+            "rgb(255, 255, 0)"
+          ],
+          "--dv-tabs-and-actions-container-height": [
+            "50px",
+            "30px"
+          ]
+        },
+        "scope": "variables are defined on the theme class element (.dockview-theme-*); the class appears on two nested elements (shell and inner), and the inner one re-declares the variables, so the override must be set on every element carrying the class (setting it only on the outer one had no effect, measured)"
+      }
+    }
+  },
+  "env": {
+    "version": "159.0.8154.6",
+    "gpu": "ANGLE (Intel, Intel(R) UHD Graphics (0x00009B41) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  }
+}

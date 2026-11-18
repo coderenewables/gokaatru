@@ -1,0 +1,29 @@
+{
+  "phase": "prod",
+  "date": "2026-11-18T18:54:45.232Z",
+  "results": {
+    "dockview": {
+      "10": {
+        "phase": "prod",
+        "mountsBefore": 1,
+        "afterHide": {
+          "mountDelta": 0,
+          "unmountDelta": 0,
+          "chartCanvasesInDom": 0
+        },
+        "afterShow": {
+          "mountDelta": 0,
+          "unmountDelta": 0,
+          "sameInstance": true,
+          "drawn": true,
+          "sameData": true,
+          "uplotMatchesHost": true
+        }
+      }
+    }
+  },
+  "env": {
+    "version": "159.0.8154.6",
+    "gpu": "ANGLE (Intel, Intel(R) UHD Graphics (0x00009B41) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  }
+}

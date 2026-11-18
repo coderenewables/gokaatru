@@ -1,0 +1,193 @@
+{
+  "phase": "dev",
+  "date": "2026-11-18T18:49:30.954Z",
+  "results": {
+    "flexlayout": {
+      "1": {
+        "phase": "dev",
+        "mountsAfterLoad": 2,
+        "unmountsAfterLoad": 1,
+        "liveCharts": 1,
+        "chartCanvasesInDom": 1,
+        "console": {
+          "counts": {
+            "info": 1
+          },
+          "errorsAndWarnings": []
+        }
+      },
+      "2": {
+        "before": {
+          "mounts": 2,
+          "unmounts": 1,
+          "live": 1,
+          "instance": "2",
+          "points": 262800,
+          "checksum": 1690.51,
+          "canvasInkPixels": 176250,
+          "canvasPx": [
+            763,
+            770
+          ],
+          "hostRect": [
+            763,
+            770
+          ],
+          "uplotSize": [
+            763,
+            770
+          ],
+          "hostConnected": true,
+          "groups": [
+            [
+              "chart",
+              "tree"
+            ],
+            [
+              "inspector"
+            ],
+            [
+              "rose"
+            ]
+          ]
+        },
+        "moveToGroup": {
+          "worked": true,
+          "groups": [
+            [
+              "tree"
+            ],
+            [
+              "inspector",
+              "chart"
+            ],
+            [
+              "rose"
+            ]
+          ],
+          "mountDelta": 0,
+          "unmountDelta": 0,
+          "sameInstance": true,
+          "sameData": true,
+          "drawn": true,
+          "after": {
+            "mounts": 2,
+            "unmounts": 1,
+            "live": 1,
+            "instance": "2",
+            "points": 262800,
+            "checksum": 1690.51,
+            "canvasInkPixels": 55250,
+            "canvasPx": [
+              509,
+              366
+            ],
+            "hostRect": [
+              509,
+              366
+            ],
+            "uplotSize": [
+              509,
+              366
+            ],
+            "hostConnected": true,
+            "groups": [
+              [
+                "tree"
+              ],
+              [
+                "inspector",
+                "chart"
+              ],
+              [
+                "rose"
+              ]
+            ]
+          }
+        },
+        "dragToSplit": {
+          "worked": true,
+          "groups": [
+            [
+              "tree"
+            ],
+            [
+              "inspector"
+            ],
+            [
+              "chart"
+            ],
+            [
+              "rose"
+            ]
+          ],
+          "groupCountBefore": 3,
+          "groupCountAfter": 4,
+          "mountDelta": 0,
+          "unmountDelta": 0,
+          "sameInstance": true,
+          "sameData": true,
+          "drawn": true,
+          "after": {
+            "mounts": 2,
+            "unmounts": 1,
+            "live": 1,
+            "instance": "2",
+            "points": 262800,
+            "checksum": 1690.51,
+            "canvasInkPixels": 26383,
+            "canvasPx": [
+              250,
+              366
+            ],
+            "hostRect": [
+              250,
+              366
+            ],
+            "uplotSize": [
+              250,
+              366
+            ],
+            "hostConnected": true,
+            "groups": [
+              [
+                "tree"
+              ],
+              [
+                "inspector"
+              ],
+              [
+                "chart"
+              ],
+              [
+                "rose"
+              ]
+            ]
+          }
+        },
+        "totalMountDeltaAcrossBothMoves": 0,
+        "totalUnmountDeltaAcrossBothMoves": 0,
+        "placeholderInputWorksAfterMoves": true,
+        "_json": "{\"global\":{\"tabEnablePopout\":true,\"tabEnableFloat\":true},\"borders\":[],\"layout\":{\"type\":\"row\",\"id\":\"#3c160b6b-29dc-4e3c-8a65-1c2d7980d9aa\",\"children\":[{\"type\":\"tabset\",\"id\":\"#625ae9cb-20e9-4a36-ae07-f86b06218f98\",\"weight\":60,\"children\":[{\"type\":\"tab\",\"id\":\"tree\",\"name\":\"Data tree\",\"component\":\"ph\"}]},{\"type\":\"row\",\"id\":\"#bf3c3ada-13f7-4837-898c-71965c7e25eb\",\"weight\":40,\"children\":[{\"type\":\"tabset\",\"id\":\"#fe86b982-51d5-4d08-a2d6-57855b287672\",\"weight\":50,\"children\":[{\"type\":\"tab\",\"id\":\"inspector\",\"name\":\"Inspector\",\"component\":\"ph\"}]},{\"type\":\"row\",\"id\":\"#c568bcb6-cd70-4ec8-a216-ad0b9aaf8908\",\"weight\":50,\"children\":[{\"type\":\"tabset\",\"id\":\"#92a91aee-f296-463c-922c-6c2e598bd615\",\"weight\":50,\"children\":[{\"type\":\"tab\",\"id\":\"chart\",\"name\":\"Timeline\",\"component\":\"chart\"}],\"active\":true},{\"type\":\"tabset\",\"id\":\"#fa33934d-556d-4172-b10f-322a68579268\",\"weight\":50,\"children\":[{\"type\":\"tab\",\"id\":\"rose\",\"name\":\"Wind rose\",\"component\":\"ph\"}]}]}]}]},\"subLayouts\":{}}",
+        "_groups": [
+          [
+            "tree"
+          ],
+          [
+            "inspector"
+          ],
+          [
+            "chart"
+          ],
+          [
+            "rose"
+          ]
+        ]
+      }
+    }
+  },
+  "env": {
+    "version": "159.0.8154.6",
+    "gpu": "ANGLE (Intel, Intel(R) UHD Graphics (0x00009B41) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  }
+}

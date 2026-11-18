@@ -1,0 +1,255 @@
+{
+  "phase": "dev",
+  "date": "2026-11-18T18:51:31.530Z",
+  "results": {
+    "dockview": {
+      "6": {
+        "roles": {
+          "tablist": 3,
+          "tab": 4,
+          "tabSelectedTrue": 3,
+          "tabSelectedFalse": 1,
+          "tabpanel": 3,
+          "ariaControls": 4,
+          "buttonsInTabs": 4,
+          "separators": 0
+        },
+        "keyboard": {
+          "tabKeyPressesToReachFirstTab": 1,
+          "firstTabFocused": {
+            "role": "tab",
+            "aria": "Timeline",
+            "tag": "DIV",
+            "text": "Timeline"
+          },
+          "trail": [
+            {
+              "role": "tab",
+              "aria": "Timeline",
+              "tag": "DIV",
+              "text": "Timeline"
+            }
+          ],
+          "selectedAtStart": [
+            "Timeline",
+            "Inspector",
+            "Wind rose"
+          ],
+          "keys": [
+            {
+              "key": "ArrowRight",
+              "focusBefore": "Timeline",
+              "focusAfter": "Data tree",
+              "focusMoved": true,
+              "selectedBefore": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectedAfter": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectionChanged": false
+            },
+            {
+              "key": "Enter",
+              "focusBefore": "Data tree",
+              "focusAfter": "Data tree",
+              "focusMoved": false,
+              "selectedBefore": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectedAfter": [
+                "Data tree",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectionChanged": true
+            },
+            {
+              "key": "ArrowLeft",
+              "focusBefore": "Data tree",
+              "focusAfter": "Timeline",
+              "focusMoved": true,
+              "selectedBefore": [
+                "Data tree",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectedAfter": [
+                "Data tree",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectionChanged": false
+            },
+            {
+              "key": " ",
+              "focusBefore": "Timeline",
+              "focusAfter": "Timeline",
+              "focusMoved": false,
+              "selectedBefore": [
+                "Data tree",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectedAfter": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectionChanged": true
+            },
+            {
+              "key": "Tab",
+              "focusBefore": "Timeline",
+              "focusAfter": "Inspector",
+              "focusMoved": true,
+              "selectedBefore": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectedAfter": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectionChanged": false
+            },
+            {
+              "key": "Enter",
+              "focusBefore": "Inspector",
+              "focusAfter": "Inspector",
+              "focusMoved": false,
+              "selectedBefore": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectedAfter": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectionChanged": false
+            },
+            {
+              "key": "ArrowRight",
+              "focusBefore": "Inspector",
+              "focusAfter": "Inspector",
+              "focusMoved": false,
+              "selectedBefore": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectedAfter": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectionChanged": false
+            },
+            {
+              "key": "Home",
+              "focusBefore": "Inspector",
+              "focusAfter": "Inspector",
+              "focusMoved": false,
+              "selectedBefore": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectedAfter": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectionChanged": false
+            },
+            {
+              "key": "End",
+              "focusBefore": "Inspector",
+              "focusAfter": "Inspector",
+              "focusMoved": false,
+              "selectedBefore": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectedAfter": [
+                "Timeline",
+                "Inspector",
+                "Wind rose"
+              ],
+              "selectionChanged": false
+            }
+          ],
+          "switchByFocusAndEnter": true,
+          "switchByFocusAndSpace": true,
+          "panelControlsReachableByTab": true
+        },
+        "axe": {
+          "phase": "dev",
+          "violationsByRule": [
+            {
+              "id": "nested-interactive",
+              "impact": "serious",
+              "nodes": 4
+            }
+          ],
+          "violationRuleCount": 1,
+          "violationNodeCount": 4,
+          "passes": 33,
+          "incomplete": [
+            {
+              "id": "color-contrast",
+              "nodes": 13
+            }
+          ]
+        }
+      },
+      "7": {
+        "baseline": {
+          "probe": "rgb(0, 12, 24)",
+          "probe2": "rgb(0, 12, 24)",
+          "tabsHeight": 35
+        },
+        "tokenSetA": {
+          "probe": "rgb(0, 12, 24)",
+          "probe2": "rgb(0, 12, 24)",
+          "tabsHeight": 35
+        },
+        "tokenSetB": {
+          "probe": "rgb(0, 12, 24)",
+          "probe2": "rgb(0, 12, 24)",
+          "tabsHeight": 35
+        },
+        "varsSet": {
+          "--dv-activegroup-visiblepanel-tab-background-color": [
+            "rgb(255, 0, 0)",
+            "rgb(0, 128, 0)"
+          ],
+          "--dv-group-view-background-color": [
+            "rgb(0, 0, 255)",
+            "rgb(255, 255, 0)"
+          ],
+          "--dv-tabs-and-actions-container-height": [
+            "50px",
+            "30px"
+          ]
+        },
+        "scope": "variables are defined on the theme class element (.dockview-theme-*); override set inline on that element"
+      }
+    }
+  },
+  "env": {
+    "version": "159.0.8154.6",
+    "gpu": "ANGLE (Intel, Intel(R) UHD Graphics (0x00009B41) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  }
+}

@@ -172,22 +172,41 @@ python -c "import asyncio; from server.main import mcp; print(len(asyncio.run(mc
 
 cd frontend && npm run test          # vitest
 cd frontend && npm run build         # tsc --noEmit && vite build
+cd frontend && npm run test:e2e      # Playwright; starts its own backend :8011 and Vite :5183
 ```
 
-Current baseline (backend, ruff and tool count verified 2026-11-16; frontend last run
-2026-11-15 after the D3 follow-up, with no frontend change since):
-1089 backend tests passing / 2 skipped, 258 frontend tests passing, frontend typecheck clean,
-232 MCP tools registered, and `ruff check server/ tests/` clean. These numbers move as the project
+CI (`.github/workflows/ci.yml`) runs the same on every push: backend on Ubuntu and Windows,
+frontend, and the Playwright smoke test. The real campaigns are gitignored, so CI runs only
+the synthetic-data tests; `GOKAATRU_TEST_UPLOADS_DIR` points the suite at another campaign
+folder, and a missing campaign file skips its test by name (`require_campaign_file` in
+`tests/conftest.py`), never errors.
+
+Current baseline (verified 2026-11-18, branch `phase0-stabilise` at P0-6):
+1125 backend tests passing / 2 skipped, 266 frontend tests passing, 1 Playwright smoke test
+passing, frontend typecheck clean, 232 MCP tools registered, and `ruff check server/ tests/`
+clean. Without the campaign files: 1055 passed / 61 skipped at P0-8 (59 campaign skips). These numbers move as the project
 grows — `validate-gokaatru` always re-derives the live count rather than trusting any written
 baseline, this one included. Backend count assumes the gitignored `data/uploads/` fixtures are
-present (see the `tests/` layout note above); without them, expect setup errors on the tests
-that use them, not a lower clean pass count.
+present (see the `tests/` layout note above); without them the tests that need them skip.
 
 **Ruff was not clean before 2026-08-25** — 185 findings (97 E501, 36 I001, 31 F401, 17 W292,
 3 F841, 1 F811) had accumulated because `ruff>=0.1` is unpinned and the check was not being
 run to zero. They are all fixed now; keep it at zero rather than letting a second wall build.
 
-## Current state (last verified 2026-11-17)
+## Current state (last verified 2026-11-18)
+
+**2026-11-17 to 2026-11-18: workbench Phase 0 on branch `phase0-stabilise` (not pushed).** One task per commit; the task list and status are in `Claude outputs/WORKBENCH_PLAN.md` §8a.
+
+- **P0-1 `e04446e`:** `K_SHEAR_ANALYST_SUPPLIED` 0.07 (entry below). `startup.ps1 -IncludeMcp` bound the unauthenticated SSE transport to `0.0.0.0`; it now binds to `127.0.0.1`. The "follows IEC 61400-12-1 / 61400-12-2" claim is replaced by a statement that no conformance claim is made.
+- **P0-2 `ee24eac` (F1):** `normalise_speed_to_reference_density` carried the stall and pitch labels the wrong way round. IEC 61400-12-1 normalises wind speed for a pitch-regulated turbine and power for a stall-regulated one. The arithmetic applied was already the pitch one, so no number moved; `regulation` now defaults to `"pitch"`, `"stall"` is refused, and `density_normalisation.method` is `iec_61400_12_1_wind_speed_normalisation` (was `iec_61400_12_1_stall`). Basis: a public ECN/TNO report; the clause text has not been read.
+- **P0-3 `f28347f` (F7):** `compute_mcp_readiness` said ready at 720 concurrent hours while the correction refuses below 4,380 (`MIN_CONCURRENT_HOURS`). It now uses that floor and reports `not_ready_reasons`. Pinned value moved: `tests/test_sensor_overview.py` readiness at 1,000 hours, ready True → False.
+- **P0-4 `fe6d03d` (F8):** `compute_qc_diagnostics` counted range failures against a fixed 0-50 m/s; it now uses the `range_check` rule's own bounds (`_resolve_range_bounds`) and reports them.
+- **P0-5 `ec5a0d5` (F3, F4):** the Copilot listed Anthropic, which the backend refuses; it now offers only `SUPPORTED_COPILOT_PROVIDERS` (pinned against `_PROVIDER_URLS` on both sides). Data-changing tools were on by default; they are now off unless the user opts in, because per-action approval does not exist yet.
+- **P0-6 `100928f` (F9):** the sweep's uncertainty substitution (design doc §8.1) existed only in the browser and measured the swing of `total_uncertainty_pct`. It is now `uncertainty_substitution` in `server/core/sweep_analysis.py`, on `analyze_sweep_spread` and `POST .../spread`: per axis, the sample standard deviation of the long-term mean speed across level means as a % of the sweep mean (owner decision 2026-11-18), at least 3 levels (`MIN_LEVELS_FOR_EMPIRICAL`), max(parametric, empirical) per scenario for the MCP and vertical terms, the reference-source spread added. Stored rows are unchanged. With two reanalyses the reference-source term cannot fire. Measured on the two stored sweeps: LTC term 0.30% → 0.55% and 0.24% → 1.76%.
+- **P0-7 `6748e02` (F5):** README described a 4.2 MW curve and said no AEP or capacity factor is computed. It now describes the default `generic-3.0MW-130m-IIA` (3.0 MW, 130 m, 226 W/m²) and the sensitivity table is re-measured on it, pinned by `tests/test_readme_energy_table.py` against the oracle.
+- **P0-8 `d35ead6`, P0-9 `782545d`, P0-10 `ec2824a`:** campaign-dependent tests skip when files are absent; CI workflow; Playwright harness and smoke test. The CI workflow has not yet run on GitHub. The smoke test allow-lists one known error: `GET /sessions/{id}/sensors` returns 400 on a new, empty session.
+- **P0-11 `7cc16dd`:** chart-library spike, `spikes/chart-libraries/FINDINGS.md`. At one channel of 262,800 points, uPlot renders in 62 ms and brushes in 19.7 ms (Plotly 455 / 478, ECharts 123 / 245); regl-scatterplot renders 252,665 points in 256 ms and brushes in 50 ms (Plotly 407 / 182, ECharts 663 / 922). Plotly spends over 100 ms before its own selection callback. Recommendation: uPlot for time series, regl-scatterplot for scatters, server-side decimation with refetch on zoom, selections resolved on the server from the drawn bounds, Plotly only for the existing static figures.
+- **Next:** P0-12 docking-layout spike, P0-13 decision records. Open owner decisions: the six in `docs/design/long-term-direction-temperature.md` §9.
 
 **2026-11-17: owner decisions for the workbench build, and the analyst-supplied constant raised.**
 

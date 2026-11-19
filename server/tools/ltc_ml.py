@@ -22,6 +22,7 @@ from server.tools.ltc import (
     _concurrent_frame,
     _regression_metrics,
     _resampling_disclosure,
+    _variance_attenuation,
 )
 
 # Fraction of long-term records above the campaign maximum that triggers an
@@ -377,6 +378,11 @@ def _run_ltc_xgboost(
     )
     metrics.update(clip_stats)
     metrics.update(_resampling_disclosure(state))
+    # Every other correction reports how much reference variance it kept (F-38); XGBoost
+    # builds its own response and had left it out.
+    metrics.update(
+        _variance_attenuation(long_df[[long_col]].rename(columns={long_col: REFERENCE_COLUMN}), corrected)
+    )
     metrics.update(
         _truncation_disclosure(
             X_train["ref_ws"].to_numpy(dtype=float),
@@ -400,7 +406,21 @@ def _run_ltc_xgboost(
     return {"status": "ok", "algorithm": "xgboost", "metrics": metrics, "result_file": result_file}
 
 
-@operation(effect="change", stage="ltc_ml")
+@operation(
+    effect="change", stage="ltc_ml",
+    disclosure=(
+        "measured_resampled_to_hourly",
+        "resampling_note",
+        "negative_predictions_clipped",
+        "variance_ratio_to_reference",
+        "reference_temporal_semantics",
+        "n_above_training_max",
+        "fraction_above_training_max",
+        "out_of_sample_basis",
+        "cv_fold_reports",
+        "cv_rmse_spread",
+    ),
+)
 def run_ltc_xgboost(short_col: str, long_col: str, short_dir_col: str = "", long_dir_col: str = "") -> dict:
     """Run XGBoost MCP with temporal, directional, and meteorological features and early stopping.
 

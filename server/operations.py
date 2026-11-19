@@ -38,6 +38,16 @@ EFFECTS: tuple[str, ...] = ("read", "change")
 #: surfaces wrapped, such as a test or a script, is "direct".
 ACTOR: ContextVar[str] = ContextVar("gokaatru_actor", default="direct")
 REDACTED = "[redacted]"
+#: Undo and redo walk the history; every other successful change starts a new branch of it,
+#: so what was undone can no longer be redone.
+HISTORY_OPERATIONS = frozenset({"undo_last_change", "redo_last_change"})
+
+
+def note_undo(note: dict[str, object]) -> None:
+    """Attach what undoing this call needs to its operation-log entry."""
+    call = current_operation.get()
+    if call is not None:
+        call["undo"] = note
 
 
 @contextmanager
@@ -226,23 +236,25 @@ def _record(
     before: int,
     status: str,
     error: str | None,
+    undo: dict[str, object] | None = None,
 ) -> None:
     state = get_active_session()
-    state.operation_log.append(
-        {
-            "seq": len(state.operation_log) + 1,
-            "at": datetime.now(timezone.utc).isoformat(),
-            "actor": ACTOR.get(),
-            "operation": name,
-            "effect": effect,
-            "parameters": parameters,
-            "code_version": code_version,
-            "data_version_before": before,
-            "data_version_after": state.data_version,
-            "status": status,
-            "error": error,
-        }
-    )
+    entry: dict[str, object] = {
+        "seq": len(state.operation_log) + 1,
+        "at": datetime.now(timezone.utc).isoformat(),
+        "actor": ACTOR.get(),
+        "operation": name,
+        "effect": effect,
+        "parameters": parameters,
+        "code_version": code_version,
+        "data_version_before": before,
+        "data_version_after": state.data_version,
+        "status": status,
+        "error": error,
+    }
+    if undo is not None:
+        entry["undo"] = _json_safe(undo)
+    state.operation_log.append(entry)
 
 
 def _save_project() -> None:
@@ -307,8 +319,10 @@ def _logged(fn: F, name: str, effect: Effect, code_version: str, secrets: tuple[
             raise
         finally:
             current_operation.reset(token)
-        _record(name, effect, code_version, parameters, before, "ok", None)
+        _record(name, effect, code_version, parameters, before, "ok", None, call.get("undo"))
         if effect == "change":
+            if name not in HISTORY_OPERATIONS:
+                state.undo_stack.clear()
             _save_project()
         return result
 

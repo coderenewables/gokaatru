@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from server.core.validators import SENSOR_FIELDS, detect_timestep_minutes
-from server.operations import ACTOR, operation
+from server.operations import ACTOR, note_undo, operation
 from server.state.session import SessionProxy, SessionState, empty_cleaning_flags, get_active_session, session
 
 # Physical bounds per sensor type for range_check (D16), in the units the
@@ -1016,7 +1016,11 @@ def list_cleaning_rules() -> dict:
 )
 def apply_cleaning_rule(rule_type: str, sensor: str, params: str, start_date: str = "", end_date: str = "") -> dict:
     """Apply one named cleaning rule to the active timeseries and log the operation for undo."""
-    return _apply_cleaning_rule(session, rule_type, sensor, params, start_date, end_date)
+    result = _apply_cleaning_rule(session, rule_type, sensor, params, start_date, end_date)
+    note_undo(
+        {"kind": "cleaning", "cleaning_sequence": len(session.cleaning_log), "rule_type": rule_type, "sensor": sensor}
+    )
+    return result
 
 
 @operation(effect="read", stage="cleaning")

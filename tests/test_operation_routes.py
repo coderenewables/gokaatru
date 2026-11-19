@@ -31,6 +31,10 @@ from server.tools.era5 import _store_coordinate
 READ_OPERATIONS = sorted(
     declared.name for declared in REGISTRY if declared.effect == "read" and not declared.network
 )
+# Reads whose answer depends on the surface by design, so they cannot match across them.
+SURFACE_DEPENDENT = {
+    "get_operation_log": "it reports the calls made so far, and each surface logs its own, with its own actor",
+}
 
 # Values for required parameters, by parameter name. Anything not here keeps its default.
 ARGUMENT_VALUES: dict[str, object] = {
@@ -155,6 +159,8 @@ def _mcp_result(name: str, state: SessionState, arguments: dict[str, object]) ->
 
 @pytest.mark.parametrize("name", READ_OPERATIONS)
 def test_a_read_operation_returns_the_same_over_http_as_over_mcp(client, name: str) -> None:
+    if name in SURFACE_DEPENDENT:
+        pytest.skip(SURFACE_DEPENDENT[name])
     test_client, manager = client
     arguments = _arguments(name)
     _, mcp_state = _new_session(test_client, manager)

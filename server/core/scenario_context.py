@@ -90,6 +90,7 @@ RESET_FIELDS: tuple[str, ...] = (
     "executed_nodes",
     "workflow_execution",
     "operation_log",
+    "undo_stack",
 )
 
 #: Handled explicitly rather than by category.

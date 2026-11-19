@@ -10,9 +10,9 @@ import math
 from pathlib import Path
 
 from server.core.runconfig import strip_mirrors
-from server.operations import operation
+from server.operations import note_undo, operation
 from server.schemas.common import Coordinate
-from server.state.session import SessionState, session
+from server.state.session import SessionState, get_active_session, session
 
 
 def _speed_sensor_columns(state: SessionState) -> list[str]:
@@ -209,10 +209,32 @@ def get_run_config() -> dict:
     return _get_run_config(session)
 
 
+#: The session fields ``_sync_state_from_runconfig`` rewrites; undo restores them with the
+#: configuration.
+SYNCED_FIELDS: tuple[str, ...] = ("project_name", "coordinate", "measurement_type", "hub_height_m")
+
+
+def config_snapshot(state: SessionState) -> dict[str, object]:
+    """The run configuration and the fields synced from it, as undo needs them."""
+    coordinate = state.coordinate
+    return {
+        "runconfig": copy.deepcopy(state.runconfig),
+        "fields": {
+            "project_name": state.project_name,
+            "coordinate": None if coordinate is None else coordinate.model_dump(),
+            "measurement_type": state.measurement_type,
+            "hub_height_m": state.hub_height_m,
+        },
+    }
+
+
 @operation(effect="change", stage="config")
 def update_run_config(key: str, value: str) -> dict:
     """Update a dotted runconfig key using JSON parsing rules from the Phase 1 config manager spec."""
-    return _update_run_config(session, key, value)
+    before = config_snapshot(get_active_session())
+    result = _update_run_config(session, key, value)
+    note_undo({"kind": "config", "before": before, "after": config_snapshot(get_active_session())})
+    return result
 
 
 @operation(effect="change", stage="config")

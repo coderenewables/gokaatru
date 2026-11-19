@@ -4,7 +4,7 @@
 
 GoKaatru ships as two parts that work together:
 
-- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **90 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
+- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **93 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
 - **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison.
 
 State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The frontend's convenience fields are **derived mirrors** of canonical backend keys, not independent state — the mapping is defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
@@ -204,6 +204,10 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 
 ### Configuration
 - `get_run_config`, `update_run_config`, `save_run_config`, `load_run_config`, `get_analysis_summary`
+
+### History
+- `undo_last_change`, `redo_last_change` — undo the last cleaning rule or configuration change still in the history, or redo what was undone. Undo refuses when a later change has moved what it would restore; any other change clears what can be redone.
+- `get_operation_log` — the most recent operation calls (actor, operation, parameters with credentials redacted, data versions) and the undo state.
 
 ### Scenario sweep (Analysis Engine)
 - `get_fixed_prefix_hash`, `list_sweeps`, `get_sweep_summary`, `analyze_sweep_spread`
@@ -546,10 +550,10 @@ with `assistant=False` is not exposed at all.
 
 | Tier | Count | Exposed when |
 |---|---|---|
-| Read-only — query, compute, plot | 50 | always |
-| Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty, the atmospheric diagnostic (it records the density the energy sensitivity uses) | 28 | only with `allow_mutating_tools: true` |
+| Read-only — query, compute, plot, the operation log | 51 | always |
+| Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty, the atmospheric diagnostic (it records the density the energy sensitivity uses), undo and redo | 30 | only with `allow_mutating_tools: true` |
 
-The remaining 12 of the 90 registered tools are declared `assistant=False` and
+The remaining 12 of the 93 registered tools are declared `assistant=False` and
 therefore unreachable from chat: every BrightHub / EarthDataHub tool — the read-only
 tier's contract is "no session mutation, no filesystem, **no network**", and the
 credential tools would additionally hand an injected prompt a view of the session's

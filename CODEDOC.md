@@ -42,7 +42,7 @@ README's "Deployment model" section first.
 |------|--------|
 | Backend Python | ~25.6k LOC across 85 files |
 | Frontend TS/TSX | ~17.6k LOC |
-| MCP tools registered | **90** (the 142 WindKit pass-throughs were removed 2026-11-19, decisions/0009) |
+| MCP tools registered | **93** (the 142 WindKit pass-throughs were removed 2026-11-19, decisions/0009) |
 | FastAPI endpoints | ~100 across 13 route files |
 | Backend tests | 83 pytest files (incl. an independent oracle harness) |
 | Frontend tests | 30 vitest files |
@@ -182,7 +182,8 @@ private helpers behind them. They total **90**.
 | `data_io.py` | 5 | Phase-1 timeseries + datamodel loading, sensor inventory, coverage. |
 | `datamodel_builder.py` | 2 | Draft a Task 43 reading of the loaded columns, and build/persist/load the declared data model (`server/core/datamodel_builder.py` does the work). |
 | `sweep_analysis.py` | 3 | Read and explain a persisted sweep: `list_sweeps`, `get_sweep_summary` (which axes varied, which the gates collapsed, which levels were duplicates of another), `analyze_sweep_spread`. The rest of the sweep engine is still HTTP-only. |
-| `config.py` | 5 | Run-configuration management (get/update/save/load/summary). |
+| `config.py` | 5 | Run-configuration management (get/update/save/load/summary). `update_run_config` attaches before and after snapshots (`config_snapshot`) to its log entry for undo. |
+| `history.py` | 3 | `undo_last_change`, `redo_last_change`, `get_operation_log`. Undo inverts the last undoable call (`UNDOABLE_OPERATIONS`): a cleaning rule through the replay undo, a configuration change by restoring exactly the paths and synced fields it changed; it refuses when a later change moved them. Redo calls the operation again with its logged parameters. `state.undo_stack` holds what was undone; any other change clears it. |
 | `cleaning.py` | 4 | Rule-based timeseries cleaning (list/apply/log/undo). Every record a rule removes gets a row in `state.cleaning_flags` (timestamp, sensor, rule sequence and type, reason code from `FLAG_REASONS`, actor, time), found by diffing the column before and after the rule; `_clean_series(raw, index, flags)` rebuilds the cleaned series from raw data, bit for bit. Undo replays the remaining rules as before and keeps each one's original actor and time (`_carry_flag_provenance`). `get_cleaning_log` returns a flag summary. Apply and undo have dry runs (`preview_cleaning_rule`, `preview_undo_cleaning_rule`): the real function runs on a replica of the session (`_replica`) and `_change_summary` reports rows inserted, columns dropped, and per column the records set missing, restored or changed with their runs (at most `PREVIEW_RANGE_LIMIT` listed, `ranges_truncated` saying so). |
 | `statistics.py` | 9 | Weibull, wind climate, turbulence, windrose, diurnal/monthly, MoMM, scatter. |
 | `shear.py` | 7 | Shear/roughness time series and 12×24 lookup tables, sector + aggregated-MoMM tables. |
@@ -255,7 +256,7 @@ logic as the MCP tools, and shape the response with the Pydantic models in `sche
 | `mcp.py` | 1 | MCP catalog endpoint. |
 | `health.py` | 1 | Health check. |
 | `chat.py` | 1 | OpenAI-compatible LLM chat proxy with MCP tool execution (drives the BYOK Copilot). |
-| `operations.py` | 91 | Generated from the registry: `POST /sessions/{id}/operations/{name}` for each of the 90 operations, with a body model built from the function signature (`<Name>Parameters`, extra fields refused), and `GET /operations` listing every declaration. Same session binding and error mapping as chat. |
+| `operations.py` | 91 | Generated from the registry: `POST /sessions/{id}/operations/{name}` for each of the 93 operations, with a body model built from the function signature (`<Name>Parameters`, extra fields refused), and `GET /operations` listing every declaration. Same session binding and error mapping as chat. |
 
 `api/mcp.py` additionally mounts a **session-aware MCP transport** into the FastAPI app, so a
 browser session and an MCP client can share the same live session state.

@@ -7,6 +7,7 @@ from __future__ import annotations
 import ast
 import copy
 import json
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 import numpy as np
@@ -14,7 +15,7 @@ import pandas as pd
 
 from server.core.validators import SENSOR_FIELDS, detect_timestep_minutes
 from server.operations import operation
-from server.state.session import SessionState, session
+from server.state.session import SessionProxy, SessionState, get_active_session, session
 
 # Physical bounds per sensor type for range_check (D16), in the units the
 # pipeline stores: m/s, degrees, degrees Celsius, Pascals, percent.  An unknown
@@ -802,13 +803,115 @@ def _undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
     return result
 
 
+#: A preview lists at most this many contiguous runs of changed records per column. The
+#: counts beside them are always complete; ``ranges_truncated`` says when runs were cut.
+PREVIEW_RANGE_LIMIT = 50
+
+
+def _replica(state: SessionState) -> SessionState:
+    """An isolated copy of the session for a dry run: the same data, nothing shared that a
+    rule or an undo could change."""
+    if isinstance(state, SessionProxy):
+        # A copy of the proxy would still forward every write to the bound session.
+        state = get_active_session()
+    replica = copy.copy(state)
+    for name in ("timeseries_df", "raw_timeseries_df"):
+        frame = getattr(state, name)
+        setattr(replica, name, None if frame is None else frame.copy(deep=True))
+    for name in ("runconfig", "sensor_mapping", "sensor_inventory", "cleaning_log", "derived_versions"):
+        setattr(replica, name, copy.deepcopy(getattr(state, name)))
+    return replica
+
+
+def _runs(index: pd.Index, flags: np.ndarray) -> list[list[str]]:
+    """Contiguous runs of flagged records, as [first, last] timestamps."""
+    positions = np.flatnonzero(flags)
+    if positions.size == 0:
+        return []
+    breaks = np.flatnonzero(np.diff(positions) > 1)
+    starts = np.concatenate(([positions[0]], positions[breaks + 1]))
+    ends = np.concatenate((positions[breaks], [positions[-1]]))
+    return [[pd.Timestamp(index[s]).isoformat(), pd.Timestamp(index[e]).isoformat()] for s, e in zip(starts, ends)]
+
+
+def _change_summary(before: pd.DataFrame, after: pd.DataFrame) -> dict[str, object]:
+    """What turned ``before`` into ``after``: rows inserted, columns dropped or added, and per
+    column the records set missing, restored or changed, with their runs."""
+    common = after.index.intersection(before.index)
+    columns: dict[str, object] = {}
+    for column in after.columns.intersection(before.columns):
+        old = before[column].reindex(common).to_numpy(dtype=float)
+        new = after[column].reindex(common).to_numpy(dtype=float)
+        same = (old == new) | (np.isnan(old) & np.isnan(new))
+        if same.all():
+            continue
+        set_missing = ~np.isnan(old) & np.isnan(new)
+        restored = np.isnan(old) & ~np.isnan(new)
+        changed = ~same & ~set_missing & ~restored
+        runs = _runs(common, ~same)
+        columns[str(column)] = {
+            "set_missing": int(set_missing.sum()),
+            "restored": int(restored.sum()),
+            "changed": int(changed.sum()),
+            "ranges": runs[:PREVIEW_RANGE_LIMIT],
+            "ranges_truncated": len(runs) > PREVIEW_RANGE_LIMIT,
+        }
+    return {
+        "rows_before": int(len(before)),
+        "rows_after": int(len(after)),
+        "rows_inserted": int(len(after.index.difference(before.index))),
+        "rows_removed": int(len(before.index.difference(after.index))),
+        "columns_dropped": [str(column) for column in before.columns.difference(after.columns)],
+        "columns_added": [str(column) for column in after.columns.difference(before.columns)],
+        "columns": columns,
+        "range_limit": PREVIEW_RANGE_LIMIT,
+    }
+
+
+def _preview(state: SessionState, run: Callable[[SessionState], dict]) -> dict:
+    before = _require_timeseries(state)
+    replica = _replica(state)
+    response = run(replica)
+    changes = _change_summary(before, replica.timeseries_df)
+    return {**response, "status": "preview", "applied": False, "changes": changes}
+
+
+def _preview_cleaning_rule(
+    state: SessionState,
+    rule_type: str,
+    sensor: str,
+    params: str,
+    start_date: str = "",
+    end_date: str = "",
+) -> dict:
+    """What applying the rule would return and change, computed on a replica of the session."""
+    return _preview(
+        state, lambda replica: _apply_cleaning_rule(replica, rule_type, sensor, params, start_date, end_date)
+    )
+
+
+def _preview_undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
+    """What undoing the log entry would return and change, computed on a replica of the session."""
+    return _preview(state, lambda replica: _undo_cleaning_rule(replica, entry_index))
+
+
+def preview_cleaning_rule(rule_type: str, sensor: str, params: str, start_date: str = "", end_date: str = "") -> dict:
+    """Show what apply_cleaning_rule would remove, without changing the session."""
+    return _preview_cleaning_rule(session, rule_type, sensor, params, start_date, end_date)
+
+
+def preview_undo_cleaning_rule(entry_index: int) -> dict:
+    """Show what undo_cleaning_rule would restore, without changing the session."""
+    return _preview_undo_cleaning_rule(session, entry_index)
+
+
 @operation(effect="read", stage="cleaning")
 def list_cleaning_rules() -> dict:
     """List supported cleaning rules and default parameters for the GoKaatru Phase 2 cleaning workflow."""
     return _list_cleaning_rules(session)
 
 
-@operation(effect="change", stage="cleaning")
+@operation(effect="change", stage="cleaning", dry_run=preview_cleaning_rule)
 def apply_cleaning_rule(rule_type: str, sensor: str, params: str, start_date: str = "", end_date: str = "") -> dict:
     """Apply one named cleaning rule to the active timeseries and log the operation for undo."""
     return _apply_cleaning_rule(session, rule_type, sensor, params, start_date, end_date)
@@ -820,7 +923,7 @@ def get_cleaning_log() -> dict:
     return _get_cleaning_log(session)
 
 
-@operation(effect="change", stage="cleaning")
+@operation(effect="change", stage="cleaning", dry_run=preview_undo_cleaning_rule)
 def undo_cleaning_rule(entry_index: int) -> dict:
     """Restore raw data and replay all cleaning steps except the selected log entry."""
     return _undo_cleaning_rule(session, entry_index)

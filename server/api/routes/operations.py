@@ -41,17 +41,17 @@ def request_model(declared: Operation) -> type[BaseModel]:
     return create_model(_model_name(declared), __config__=ConfigDict(extra="forbid"), **fields)
 
 
-def run_operation(declared: Operation, state: SessionState, arguments: dict[str, Any]) -> Any:
+def run_operation(function: Any, state: SessionState, arguments: dict[str, Any]) -> Any:
     with bind_session(state):
         try:
-            return declared.fn(**arguments)
+            return function(**arguments)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except RuntimeError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-def _endpoint(declared: Operation, model: type[BaseModel]):
+def _endpoint(declared: Operation, model: type[BaseModel], function: Any, suffix: str = ""):
     def endpoint(
         session_id: str,
         state: Annotated[SessionState, Depends(get_session_state)],
@@ -63,22 +63,33 @@ def _endpoint(declared: Operation, model: type[BaseModel]):
                 body = model()
             except ValidationError as exc:
                 raise RequestValidationError(exc.errors()) from exc
-        return run_operation(declared, state, body.model_dump())
+        return run_operation(function, state, body.model_dump())
 
-    endpoint.__name__ = f"operation_{declared.name}"
+    endpoint.__name__ = f"operation_{declared.name}{suffix}"
     endpoint.__doc__ = declared.description
     return endpoint
 
 
 def _add_routes() -> None:
     for declared in REGISTRY:
+        model = request_model(declared)
+        path = OPERATION_PATH.replace("{name}", declared.name)
         router.add_api_route(
-            OPERATION_PATH.replace("{name}", declared.name),
-            _endpoint(declared, request_model(declared)),
+            path,
+            _endpoint(declared, model, declared.fn),
             methods=["POST"],
             name=f"operation_{declared.name}",
             summary=declared.name,
         )
+        if declared.dry_run is not None:
+            # The same body as the operation itself: the preview is of exactly that request.
+            router.add_api_route(
+                f"{path}/preview",
+                _endpoint(declared, model, declared.dry_run, "_preview"),
+                methods=["POST"],
+                name=f"operation_{declared.name}_preview",
+                summary=f"{declared.name} (dry run)",
+            )
 
 
 @router.get("/operations")

@@ -13,6 +13,7 @@ parser that builds the MCP tool, so the two cannot disagree.
 """
 from __future__ import annotations
 
+import inspect
 import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -93,6 +94,13 @@ class Operation:
             raise ValueError(f"Operation '{self.name}': unknown stage {self.stage!r}")
         if self.dry_run is not None and self.effect == "read":
             raise ValueError(f"Operation '{self.name}' reads only, so it has nothing to dry-run")
+        if self.dry_run is not None and (
+            inspect.signature(self.dry_run).parameters != inspect.signature(self.fn).parameters
+        ):
+            raise ValueError(
+                f"Operation '{self.name}': its dry run must take exactly the operation's parameters, "
+                "so one request previews what it would apply"
+            )
         for field_name in self.disclosure:
             if not _FIELD_NAME.match(field_name):
                 raise ValueError(f"Operation '{self.name}': disclosure field {field_name!r} is not a field path")

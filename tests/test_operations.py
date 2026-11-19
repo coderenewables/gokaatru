@@ -64,6 +64,14 @@ def test_an_invalid_declaration_is_refused(overrides: dict, message: str) -> Non
         Operation(**fields)
 
 
+def test_a_dry_run_with_other_parameters_than_its_operation_is_refused() -> None:
+    def preview(sensor: str) -> dict:
+        return {"sensor": sensor}
+
+    with pytest.raises(ValueError, match="exactly the operation's parameters"):
+        Operation(name="noop", fn=_noop, effect="change", stage="cleaning", dry_run=preview)
+
+
 def test_a_traced_reference_and_a_dotted_disclosure_field_are_accepted() -> None:
     declared = Operation(
         name="noop",

@@ -186,6 +186,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/mcp/catalog` | GET | MCP tool/resource catalog for discovery |
 | `/operations` | GET | Every declared operation: effect, stage, canvas, assistant, network, parameters |
 | `/sessions/{id}/operations/{name}` | POST | Run one operation; JSON body of its parameters (generated, one route per operation) |
+| `/sessions/{id}/operations/{name}/preview` | POST | Dry run with the same body: what the operation would return and change, nothing applied (`apply_cleaning_rule`, `undo_cleaning_rule`) |
 
 ## Tool inventory
 

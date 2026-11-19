@@ -174,7 +174,7 @@ private helpers behind them. They total **90**.
 | `datamodel_builder.py` | 2 | Draft a Task 43 reading of the loaded columns, and build/persist/load the declared data model (`server/core/datamodel_builder.py` does the work). |
 | `sweep_analysis.py` | 3 | Read and explain a persisted sweep: `list_sweeps`, `get_sweep_summary` (which axes varied, which the gates collapsed, which levels were duplicates of another), `analyze_sweep_spread`. The rest of the sweep engine is still HTTP-only. |
 | `config.py` | 5 | Run-configuration management (get/update/save/load/summary). |
-| `cleaning.py` | 4 | Rule-based timeseries cleaning (list/apply/log/undo). |
+| `cleaning.py` | 4 | Rule-based timeseries cleaning (list/apply/log/undo). Apply and undo have dry runs (`preview_cleaning_rule`, `preview_undo_cleaning_rule`): the real function runs on a replica of the session (`_replica`) and `_change_summary` reports rows inserted, columns dropped, and per column the records set missing, restored or changed with their runs (at most `PREVIEW_RANGE_LIMIT` listed, `ranges_truncated` saying so). |
 | `statistics.py` | 9 | Weibull, wind climate, turbulence, windrose, diurnal/monthly, MoMM, scatter. |
 | `shear.py` | 7 | Shear/roughness time series and 12×24 lookup tables, sector + aggregated-MoMM tables. |
 | `extrapolation.py` | 2 | Hub-height extrapolation of measured masts and reanalysis. Sub-gate records are extrapolated and counted, not dropped (the gate governs the fit only); `extrapolate_reanalysis=False` skips the reanalysis side effect for sweep leaves. |

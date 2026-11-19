@@ -574,6 +574,9 @@ uploads stay untouched with their SHA-256 recorded, every frame is saved as Parq
 by its content hash, and every other field goes into `catalogue.sqlite`. Each operation call
 is logged with its actor, parameters (credentials redacted), code version and data versions,
 and every successful change saves the project, so a restarted server reopens it as it was.
+Each derived result records the call that built it (`derived_provenance`). A result built
+from older data, or by an earlier engine version, is listed by `staleness_report` with the
+reason (`stale_reasons`) and left as it is: nothing is recomputed silently.
 A project whose recorded raw input was changed or removed outside GoKaatru is refused (HTTP
 409) rather than shown with results the inputs no longer support. Credentials are never
 written to disk.

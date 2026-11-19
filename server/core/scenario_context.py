@@ -86,6 +86,7 @@ RESET_FIELDS: tuple[str, ...] = (
     "ltc_matching_disclosure",
     "latest_uncertainty",
     "derived_versions",
+    "derived_provenance",
     "executed_nodes",
     "workflow_execution",
     "operation_log",

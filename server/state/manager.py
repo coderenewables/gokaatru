@@ -120,6 +120,7 @@ class SessionManager:
         target.clipping_result = copy.deepcopy(source.clipping_result)
         target.data_version = copy.deepcopy(source.data_version)
         target.derived_versions = copy.deepcopy(source.derived_versions)
+        target.derived_provenance = copy.deepcopy(source.derived_provenance)
         target.ltc_matching_disclosure = copy.deepcopy(source.ltc_matching_disclosure)
         target.shear_clamp_stats = copy.deepcopy(source.shear_clamp_stats)
         target.roughness_clip_stats = copy.deepcopy(source.roughness_clip_stats)

@@ -28,7 +28,7 @@ from typing import Any, Literal, TypeVar
 from fastmcp.tools import FunctionTool
 
 from server.core.scenario_result import ENGINE_VERSION
-from server.state.session import get_active_session
+from server.state.session import current_operation, get_active_session
 
 Effect = Literal["read", "change"]
 EFFECTS: tuple[str, ...] = ("read", "change")
@@ -286,7 +286,15 @@ def _logged(fn: F, name: str, effect: Effect, code_version: str, secrets: tuple[
         except TypeError:
             arguments = {}
         parameters = _json_safe({key: REDACTED if key in secrets else value for key, value in arguments.items()})
-        before = get_active_session().data_version
+        state = get_active_session()
+        before = state.data_version
+        call = {
+            "operation": name,
+            "seq": len(state.operation_log) + 1,
+            "parameters": parameters,
+            "code_version": code_version,
+        }
+        token = current_operation.set(call)
         try:
             result = fn(*args, **kwargs)
         except Exception as exc:
@@ -297,6 +305,8 @@ def _logged(fn: F, name: str, effect: Effect, code_version: str, secrets: tuple[
                     message = message.replace(secret, REDACTED)
             _record(name, effect, code_version, parameters, before, "error", message)
             raise
+        finally:
+            current_operation.reset(token)
         _record(name, effect, code_version, parameters, before, "ok", None)
         if effect == "change":
             _save_project()

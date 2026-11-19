@@ -14,12 +14,18 @@ import pandas as pd
 
 from server.core.reanalysis import DEFAULT_REFERENCE_SOURCE, get_reference_source
 from server.core.runconfig import strip_mirrors
+from server.core.scenario_result import ENGINE_VERSION
 from server.schemas.common import Coordinate
 
 
 def _utcnow() -> datetime:
     """Return a timezone-aware UTC timestamp for session lifecycle tracking."""
     return datetime.now(timezone.utc)
+
+
+#: The operation call in flight, set by server.operations around each call, so a result
+#: stamped during it records which logged call produced it.
+current_operation: ContextVar[dict[str, object] | None] = ContextVar("gokaatru_current_operation", default=None)
 
 
 CLEANING_FLAG_COLUMNS: tuple[str, ...] = (
@@ -99,6 +105,9 @@ class SessionState:
     ltc_matching_disclosure: dict[str, object]
     data_version: int
     derived_versions: dict[str, int]
+    # For each derived artifact stamped during an operation call: which call, with what
+    # parameters, under which engine version. An artifact from another engine is stale.
+    derived_provenance: dict[str, dict[str, object]]
     latest_uncertainty: dict[str, object] | None
     scenarios: list[dict[str, object]]
     runconfig: dict[str, object]
@@ -155,6 +164,7 @@ class SessionState:
         self.ltc_matching_disclosure = {}
         self.data_version = 0
         self.derived_versions = {}
+        self.derived_provenance = {}
         self.latest_uncertainty = None
         self.scenarios = []
         self.runconfig = {}
@@ -329,20 +339,37 @@ class SessionState:
         return self.data_version
 
     def stamp_derived(self, name: str) -> None:
-        """Record which version of the measured data a derived artifact was built from."""
+        """Record which version of the measured data a derived artifact was built from, and,
+        inside an operation call, which logged call built it."""
         self.derived_versions[name] = self.data_version
+        call = current_operation.get()
+        if call is None:
+            self.derived_provenance.pop(name, None)
+        else:
+            self.derived_provenance[name] = {**call, "data_version": self.data_version}
+
+    def stale_reason(self, name: str) -> str | None:
+        """Why a derived artifact no longer matches, or None when it still does."""
+        stamped = self.derived_versions.get(name)
+        if stamped is None:
+            return None
+        if stamped < self.data_version:
+            return f"built from data version {stamped}; the data is now at {self.data_version}"
+        built_by = self.derived_provenance.get(name, {}).get("code_version")
+        if built_by is not None and built_by != ENGINE_VERSION:
+            return f"built by engine {built_by}; this is engine {ENGINE_VERSION}"
+        return None
 
     def derived_is_stale(self, name: str) -> bool:
-        """Return whether a derived artifact predates the current measured data."""
-        stamped = self.derived_versions.get(name)
-        return stamped is not None and stamped < self.data_version
+        """Return whether a derived artifact predates the current data or engine."""
+        return self.stale_reason(name) is not None
 
     def stale_artifacts(self) -> list[str]:
-        """List every derived artifact built from an older version of the measured data."""
+        """List every derived artifact built from older data or by another engine version."""
         return sorted(name for name in self.derived_versions if self.derived_is_stale(name))
 
     def staleness_report(self) -> dict[str, object]:
-        """Summarize derived artifacts that no longer match the measured data.
+        """Summarize derived artifacts that no longer match the measured data or the engine.
 
         Included in the responses of the tools that consume derived artifacts, so a stale
         input is visible at the point it is used rather than inferred later.
@@ -353,10 +380,11 @@ class SessionState:
             "stale_artifacts": stale,
         }
         if stale:
+            report["stale_reasons"] = {name: self.stale_reason(name) for name in stale}
             report["warning"] = (
-                f"{len(stale)} derived artifact(s) were built from an earlier version of the "
-                f"measured data and no longer match it: {', '.join(stale)}. Re-run those stages "
-                "before trusting any number that depends on them."
+                f"{len(stale)} derived artifact(s) no longer match the data or the engine that "
+                f"would build them now: {', '.join(stale)}. Re-run those stages before trusting "
+                "any number that depends on them."
             )
         return report
 

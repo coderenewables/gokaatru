@@ -28,6 +28,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
+from server.core.scenario_result import ENGINE_VERSION
 from server.schemas.common import Coordinate
 from server.state.session import SessionProxy, SessionState, get_active_session
 
@@ -294,9 +295,9 @@ class ProjectStore:
                 [(name, json.dumps(value)) for name, value in encoded.items()],
             )
             connection.executemany("INSERT INTO frames (path, sha256, columns, rows) VALUES (?, ?, ?, ?)", frame_rows)
-            connection.execute(
-                "INSERT OR REPLACE INTO meta (key, value) VALUES ('saved_at', ?)",
-                (datetime.now(timezone.utc).isoformat(),),
+            connection.executemany(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                [("saved_at", datetime.now(timezone.utc).isoformat()), ("engine_version", ENGINE_VERSION)],
             )
         live = {sha for _, sha, _, _ in frame_rows}
         for stale in self.working_dir.glob("*.parquet"):

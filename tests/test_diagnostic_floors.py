@@ -44,6 +44,22 @@ def test_readiness_passes_at_the_correction_floor() -> None:
     assert result["min_concurrent_hours"] == MIN_CONCURRENT_HOURS
 
 
+def test_readiness_works_when_the_mast_and_the_reference_share_a_column_name() -> None:
+    """A 100 m mast speed is often named Spd_100m, as ERA5's is. The join refused the
+    overlapping name and the diagnostic raised a raw pandas error (found by P1-7)."""
+    renamed = _readiness_session(MIN_CONCURRENT_HOURS)
+    same_name = _readiness_session(MIN_CONCURRENT_HOURS)
+    same_name.timeseries_df = same_name.timeseries_df.rename(columns={"Spd_80m": "Spd_100m"})
+
+    expected = _compute_mcp_readiness(renamed, "Spd_80m")
+    result = _compute_mcp_readiness(same_name, "Spd_100m")
+
+    assert {key: value for key, value in result.items() if key != "speed_sensor"} == {
+        key: value for key, value in expected.items() if key != "speed_sensor"
+    }
+    assert result["speed_sensor"] == "Spd_100m"
+
+
 def test_readiness_reports_a_low_r_squared_reason() -> None:
     state = _readiness_session(MIN_CONCURRENT_HOURS)
     rng = np.random.default_rng(1)

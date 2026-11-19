@@ -266,15 +266,17 @@ def _compute_mcp_readiness(state: SessionState, speed_sensor: str, reference_sen
         raise ValueError(
             f"Reference column '{reference}' is not available in the interpolated reference data"
         )
-    measured = to_utc_index(frame[[speed_sensor]]).resample("h").mean()
-    concurrent = measured.join(to_utc_index(state.era5_interpolated_df[[reference]]), how="inner").dropna()
+    # Fixed names on both sides: a 100 m mast speed is often named Spd_100m, as ERA5's is,
+    # and a join on two columns of one name raises.
+    measured = to_utc_index(frame[[speed_sensor]]).resample("h").mean().set_axis(["measured"], axis=1)
+    reference_series = to_utc_index(state.era5_interpolated_df[[reference]]).set_axis(["reference"], axis=1)
+    concurrent = measured.join(reference_series, how="inner").dropna()
     if len(concurrent) < 10:
         raise ValueError("MCP readiness requires at least 10 concurrent hourly points")
-    concurrent.columns = [speed_sensor, reference]
-    metrics = _comparison_metrics(concurrent, reference, speed_sensor)
+    metrics = _comparison_metrics(concurrent, "reference", "measured")
     adjustment = (
-        float(concurrent[reference].mean() / concurrent[speed_sensor].mean())
-        if concurrent[speed_sensor].mean() > 0
+        float(concurrent["reference"].mean() / concurrent["measured"].mean())
+        if concurrent["measured"].mean() > 0
         else float("nan")
     )
     reasons: list[str] = []

@@ -78,11 +78,20 @@ def _stable_hash(payload: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()[:16]
 
 
+#: Cleaning-log fields that record when a rule ran, not what it decided. Hashing them made
+#: the same cleaning applied a minute apart a different prefix, so no two sessions were
+#: ever comparable.
+CLEANING_LOG_UNHASHED_KEYS: frozenset[str] = frozenset({"applied_at"})
+
+
 def fixed_prefix_hash(state: Any) -> str:
     """Hash everything decided once, before the sweep opened (design doc §2)."""
     return _stable_hash(
         {
-            "cleaning_log": state.cleaning_log,
+            "cleaning_log": [
+                {key: value for key, value in entry.items() if key not in CLEANING_LOG_UNHASHED_KEYS}
+                for entry in state.cleaning_log
+            ],
             "reanalysis_identity": state.reanalysis_cache_identity,
             "reanalysis_sources": sorted(state.reanalysis_interpolated),
             "sensor_inventory": sorted(state.sensor_inventory or {}),

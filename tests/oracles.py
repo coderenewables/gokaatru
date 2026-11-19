@@ -376,10 +376,13 @@ def fixed_prefix_hash_oracle(
 
     Reimplements the sha256-of-sorted-JSON scheme by hand rather than importing
     ``server.core.scenario_result._stable_hash`` — an oracle that shares the hashing
-    code with the thing it verifies could not catch a change to that code itself.
+    code with the thing it verifies could not catch a change to that code itself. The
+    time each cleaning rule ran is not part of the prefix.
     """
     payload = {
-        "cleaning_log": cleaning_log,
+        "cleaning_log": [
+            {key: value for key, value in dict(entry).items() if key != "applied_at"} for entry in cleaning_log
+        ],
         "reanalysis_identity": reanalysis_identity,
         "reanalysis_sources": sorted(reanalysis_sources),
         "sensor_inventory": sorted(sensor_inventory),

@@ -66,7 +66,6 @@ export function createDefaultWindAnalysisConfig(): WindAnalysisConfig {
       directionSensor: "",
       aggregation: "mean",
       targetHubHeightM: 0,
-      useWindKit: false,
     },
     reanalysis: {
       preferredProvider: "era5",

@@ -82,7 +82,6 @@ export function buildDefaultWorkflowConfig(
   next.shear.directionSensor = directionSensor?.name ?? "";
   next.shear.aggregation = "mean";
   next.shear.targetHubHeightM = hubHeightM;
-  next.shear.useWindKit = false;
 
   next.reanalysis.preferredProvider = "brighthub";
   next.reanalysis.searchLatitude = next.site.latitude;

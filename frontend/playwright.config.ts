@@ -37,12 +37,6 @@ export default defineConfig({
       reuseExistingServer: false,
       // Importing the scientific stack makes a cold start take 20-40 s.
       timeout: 180_000,
-      env: {
-        // WindKit prompts for these on first import; a test run has no terminal.
-        WINDKIT_NAME: process.env.WINDKIT_NAME ?? "E2E",
-        WINDKIT_EMAIL: process.env.WINDKIT_EMAIL ?? "e2e@example.invalid",
-        WINDKIT_INSTITUTION: process.env.WINDKIT_INSTITUTION ?? "E2E",
-      },
     },
     {
       command: `npx vite --host 127.0.0.1 --port ${FRONTEND_PORT} --strictPort`,

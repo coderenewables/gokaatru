@@ -17,12 +17,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     env:
-      # WindKit prompts for these interactively on first import; a runner has no terminal.
-      WINDKIT_NAME: CI
-      WINDKIT_EMAIL: ci@example.invalid
-      WINDKIT_INSTITUTION: CI
       # Adding or removing an MCP tool is a deliberate change: update this with it.
-      EXPECTED_MCP_TOOLS: "232"
+      EXPECTED_MCP_TOOLS: "90"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -69,11 +65,6 @@ jobs:
   e2e:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest
-    env:
-      # WindKit prompts for these interactively on first import; a runner has no terminal.
-      WINDKIT_NAME: CI
-      WINDKIT_EMAIL: ci@example.invalid
-      WINDKIT_INSTITUTION: CI
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

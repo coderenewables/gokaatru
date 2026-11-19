@@ -32,7 +32,7 @@ class SessionManager:
     def _prepare_workspace(self, workspace_dir: Path) -> None:
         """Create the required directory structure and runconfig file for a workspace."""
         workspace_dir.mkdir(parents=True, exist_ok=True)
-        for child in ("uploads", "earthdatahub_cache", "brighthub_cache", "ltc_results", "windkit"):
+        for child in ("uploads", "earthdatahub_cache", "brighthub_cache", "ltc_results"):
             (workspace_dir / child).mkdir(parents=True, exist_ok=True)
         runconfig_path = workspace_dir / "runconfig.json"
         if not runconfig_path.exists():
@@ -103,7 +103,6 @@ class SessionManager:
         target.latest_uncertainty = copy.deepcopy(source.latest_uncertainty)
         target.scenarios = copy.deepcopy(source.scenarios)
         target.runconfig = copy.deepcopy(source.runconfig)
-        target.windkit_data = copy.deepcopy(source.windkit_data)
 
         target.workflow_execution = {
             "run_id": None,

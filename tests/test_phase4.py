@@ -137,4 +137,6 @@ def test_all_tools_registered() -> None:
     # had no way to reach a sensor mapping at all).
     # 229 + list_sweeps/get_sweep_summary/analyze_sweep_spread (2026-09: the sweep engine
     # was HTTP-only, so the assistant could not see a sweep and answered about one anyway).
-    assert len(tools) == 232
+    # 232 - the 142 WindKit pass-through wrappers (2026-11-19, decisions/0009: no stage called
+    # them, the assistant could not reach them, and the two LTC wrappers were broken).
+    assert len(tools) == 90

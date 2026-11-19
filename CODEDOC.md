@@ -42,9 +42,9 @@ README's "Deployment model" section first.
 |------|--------|
 | Backend Python | ~25.6k LOC across 85 files |
 | Frontend TS/TSX | ~17.6k LOC |
-| MCP tools registered | **232** (90 native GoKaatru + 142 WindKit pass-throughs) |
-| FastAPI endpoints | ~200 across 14 route files |
-| Backend tests | 77 pytest files (incl. an independent oracle harness) |
+| MCP tools registered | **90** (the 142 WindKit pass-throughs were removed 2026-11-19, decisions/0009) |
+| FastAPI endpoints | ~100 across 13 route files |
+| Backend tests | 83 pytest files (incl. an independent oracle harness) |
 | Frontend tests | 30 vitest files |
 
 ---
@@ -98,14 +98,13 @@ Rules that follow from this (enforced by reviewers and `tests/test_runconfig_con
 server/
 ├── main.py              # FastMCP server + tool registration entry point
 ├── api/                 # FastAPI web app
-│   ├── main.py          # FastAPI entry point; registers 14 routers under /api
+│   ├── main.py          # FastAPI entry point; registers 13 routers under /api
 │   ├── deps.py          # shared FastAPI dependencies (session resolution, etc.)
 │   ├── mcp.py           # session-aware MCP transport mounted into the FastAPI app
 │   ├── schemas.py       # thin request/response Pydantic models for the web layer
-│   ├── windkit_schemas.py # Pydantic models for the WindKit HTTP routes
-│   └── routes/          # 14 route files (~200 endpoints)
+│   └── routes/          # 13 route files (~100 endpoints)
 ├── core/                # pure math + orchestration (no interface code)
-├── tools/               # ~20 analytics modules + windkit/ (~180 wrappers)
+├── tools/               # ~20 analytics modules
 ├── state/               # per-session working data (SessionState, SessionManager, pool)
 └── schemas/             # shared Pydantic contracts
 ```
@@ -120,9 +119,9 @@ server/
   do `from server.main import mcp` without an import cycle.
   Run: `python -m server.main` (MCP over stdio).
 
-- **`server/api/main.py`** — the FastAPI app. `create_app()` includes 14 routers, all under
+- **`server/api/main.py`** — the FastAPI app. `create_app()` includes 13 routers, all under
   the `/api` prefix, in a fixed order (health, mcp, sessions, datasets, workflow_execution,
-  uploads, config, analysis, brighthub, results, sweep, exports, chat, windkit).
+  uploads, config, analysis, brighthub, results, sweep, exports, chat).
   Run: `python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000`.
 
 ### 4.2 `server/core/` — pure math + orchestration
@@ -154,8 +153,7 @@ The interface-free heart. Nothing here imports FastAPI or FastMCP.
 ### 4.3 `server/tools/` — analytics (the MCP tool surface)
 
 Each module owns one analysis area and exposes a handful of `@mcp.tool()` functions plus the
-private helpers behind them. The GoKaatru-native tools total **90**; the WindKit
-pass-throughs add **142**.
+private helpers behind them. They total **90**.
 
 | Module | Tools | Area |
 |--------|:----:|------|
@@ -183,23 +181,14 @@ pass-throughs add **142**.
 | `visualization/` | 11 | Plotly figure tools (see §4.4 — this is a package, not a single file). |
 | `brighthub.py` | 9 | BrightHub auth, dataset browsing, and data import. |
 
-#### `server/tools/windkit/` — the WindKit surface (~142 tools)
+#### WindKit
 
-Thin pass-through wrappers around the [`windkit`](https://pypi.org/project/windkit/) PyPI
-package (pinned `>=2.0,<2.1`). Grouped by concern:
-
-| Module | Tools | Area |
-|--------|:----:|------|
-| `spatial.py` | 31 | Spatial operations. |
-| `climate.py` | 29 | Wind climates (TSWC, BWC, WWC, GWC, GeoWC). |
-| `topography.py` | 19 | Landcover, elevation, raster/vector maps. |
-| `windfarm.py` | 18 | Turbines, WTG, losses/uncertainty. |
-| `other.py` | 14 | Weibull, WAsP, coordinates, ERA5 utilities. |
-| `wind.py` | 13 | Wind functions. |
-| `plotting.py` | 9 | WindKit plotting. |
-| `climate_stats.py` | 7 | Wind-climate statistics. |
-| `ltc.py` | 2 | WindKit long-term correction (linreg / variance-ratio MCP). |
-| `_serializers.py` | — | Shared xarray/geopandas/plotly serialization helpers used by all wrappers. |
+[`windkit`](https://pypi.org/project/windkit/) is pinned to exactly 2.2.0 and has no tool
+surface of its own. `statistics.py` calls `windkit.weibull.fit_weibull_wasp_m1_m3` for the
+WAsP Weibull fit; `tests/test_windkit_adopted.py` pins that fit and checks the native
+variance-ratio and linear corrections against WindKit's `VarRatMCP` and `LinRegMCP`. The
+`server/tools/windkit/` package of 142 pass-through wrappers and its HTTP mirror were removed
+on 2026-11-19; `decisions/0009-operation-registry.md` lists what is adopted and why.
 
 ### 4.4 `server/tools/visualization/` (Plotly figures)
 
@@ -231,7 +220,6 @@ logic as the MCP tools, and shape the response with the Pydantic models in `sche
 
 | Route file | Endpoints | Area |
 |------------|:--------:|------|
-| `windkit.py` | 142 | HTTP mirror of the entire WindKit tool surface. |
 | `analysis.py` | 37 | Workflow analysis (statistics, shear, extrapolation, ERA5, ensemble, clipping, homogeneity, uncertainty, scenarios). |
 | `workflow_execution.py` | 14 | Phase-3 Canvas DAG execution, snapshots, run comparison, branching. |
 | `brighthub.py` | 8 | BrightHub login/logout/status, location browsing, reanalysis, import. |
@@ -438,7 +426,7 @@ These are enforced by review and by tests, not by style tooling. Match them when
 
 ## 9. Testing
 
-### Backend (`tests/`, pytest — 79 files)
+### Backend (`tests/`, pytest — 83 files)
 
 - `tests/test_heldout_height.py` (T2): predicts a withheld sensor from the two below it on real
   campaigns (Launakalana 80 m, Boxkite 250 m) and asserts the series-mean bias is under 1%.
@@ -450,8 +438,8 @@ These are enforced by review and by tests, not by style tooling. Match them when
 - `tests/oracles.py` is an **independent-implementation oracle harness**: it imports nothing
   from `server/`, so a passing oracle test is real corroboration, not a tautology.
 - Coverage spans ingest/timebase, cleaning, statistics, shear, extrapolation, reanalysis,
-  LTC (incl. ML), ensemble, clipping, uncertainty, the sweep/Analysis Engine, the WindKit
-  surface, the runconfig contract, path-confinement, and the Sensor Overview.
+  LTC (incl. ML), ensemble, clipping, uncertainty, the sweep/Analysis Engine, the adopted
+  WindKit functions, the runconfig contract, path-confinement, and the Sensor Overview.
 - Some tests depend on **large, gitignored data fixtures** under `data/uploads/` (e.g. the
   Boxkite and WB-ESMAP campaign CSVs). On a fresh clone without those files, the tests that
   use the `uploaded_timeseries_path` fixture **error at setup** (missing file) — this is an
@@ -491,9 +479,9 @@ cd frontend && npm install && npm run dev                              # :5173, 
 ```
 
 Environment: no `.env` file needed — BrightHub and EarthDataHub credentials are entered per
-browser session through the UI. For headless deployments, set `WINDKIT_NAME`,
-`WINDKIT_EMAIL`, `WINDKIT_INSTITUTION` to avoid WindKit's interactive first-run prompts.
-`startup.ps1` is a Windows convenience launcher.
+browser session through the UI. WindKit 2.2.0 reads its optional attribution variables
+(`WINDKIT_NAME`, `WINDKIT_EMAIL`, `WINDKIT_INSTITUTION`) without ever prompting, so a
+headless run needs none of them. `startup.ps1` is a Windows convenience launcher.
 
 ---
 
@@ -541,6 +529,21 @@ See the README's "Known limitations" section for the full list and rationale.
   (URL-embedded credential or `.netrc`), confirmed against their live docs before removal.
   Tool count: 223 → 226.
 
+**2026-11-19 — WindKit narrowed (decisions/0009)**
+
+- Removed `server/tools/windkit/` (142 pass-through tools and `_serializers.py`),
+  `server/api/routes/windkit.py` (142 endpoints), `server/api/windkit_schemas.py`,
+  `tests/test_windkit.py` and `tests/test_windkit_submodule_smoke.py`. Also removed the dead
+  `SessionState.windkit_data` (initialised and cloned, never written), its `windkit`
+  completed-step token, the per-session `windkit/` directory, the WindKit-only executor
+  parameter aliases (`west_east`, `south_north`, `height`), and the frontend config values
+  that named WindKit modes the backend never implemented (`shear.useWindKit`, shear method
+  `windkit`, reanalysis provider `windkit`, LTC algorithms `windkit_linreg_mcp` /
+  `windkit_varrat_mcp`). Dropped `geopandas` and `pyproj` as direct dependencies; nothing
+  imports them, and WindKit still installs them. Tool count: 232 → 90.
+- WindKit pinned `>=2.0,<2.1` → `==2.2.0`. `tests/test_windkit_adopted.py` replaces the
+  removed smoke test's purpose (catch upstream drift) for the functions actually used.
+
 **Candidates for a future pass** (larger modules with a plausible seam, left intact here
 because the risk/benefit did not clearly favor churn):
 
@@ -548,7 +551,7 @@ because the risk/benefit did not clearly favor churn):
   independent plot builders, and are imported widely (`_parse_timeseries`, `_parse_datamodel`,
   `_list_sensors`, `_get_data_coverage`); a package split is feasible with the same
   re-export approach but needs care.
-- `server/api/routes/windkit.py` (142 endpoints) and `server/api/routes/analysis.py`.
+- `server/api/routes/analysis.py` (37 endpoints).
 - `frontend/src/store/useWorkspaceStore.ts` (~2k LOC) — the single largest frontend file;
   the sweep state was already peeled off into `useSweepStore.ts`, and further slicing by
   concern is possible.

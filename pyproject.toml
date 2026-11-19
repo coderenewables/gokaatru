@@ -30,11 +30,9 @@ dependencies = [
                       # list it as directly required for the Zarr HTTP store access
     "fsspec>=2023.1",
     "s3fs>=2023.1",
-    "windkit>=2.0,<2.1",  # pin: widen deliberately after testing new major.minor
-                         # headless deployments must set WINDKIT_NAME, WINDKIT_EMAIL,
-                         # WINDKIT_INSTITUTION to avoid interactive first-run prompts
-    "geopandas>=0.14",
-    "pyproj>=3.6",
+    "windkit==2.2.0",  # exact: a WindKit release can change defaults (LinRegMCP's ws_cutoff went
+                       # 3.0 -> 0.0 between 2.0.1 and 2.2.0); upgrade only with
+                       # tests/test_windkit_adopted.py green. decisions/0009 lists what is adopted.
 ]
 
 [project.optional-dependencies]

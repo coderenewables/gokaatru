@@ -39,15 +39,6 @@ TOOL_MODULE_PATHS = [
     "server.tools.atmosphere",
     "server.tools.diagnostics",
     "server.tools.overview_summary",
-    "server.tools.windkit.wind",
-    "server.tools.windkit.climate",
-    "server.tools.windkit.climate_stats",
-    "server.tools.windkit.topography",
-    "server.tools.windkit.windfarm",
-    "server.tools.windkit.spatial",
-    "server.tools.windkit.ltc",
-    "server.tools.windkit.other",
-    "server.tools.windkit.plotting",
 ]
 
 # Canonical pipeline order, used only to tie-break nodes the topological sort cannot order
@@ -59,8 +50,7 @@ TOOL_MODULE_PATHS = [
 # list is deliberately separate and follows the real data-flow chain instead:
 # data_io/cleaning -> brighthub -> era5/homogeneity -> shear -> extrapolation -> air_density
 # -> ltc/ltc_ml -> ensemble -> clipping -> uncertainty, with read-only/diagnostic tool
-# modules after the pipeline they report on, and windkit (a self-contained tool surface, not
-# part of the session pipeline) last. A tie between two nodes that share a stage (e.g. two
+# modules after the pipeline they report on. A tie between two nodes that share a stage (e.g. two
 # era5 sub-steps) still falls back to node id, same as before this fix - this only replaces
 # "everything with no edge sorts by id" with "everything with no edge sorts by pipeline stage,
 # then by id within a stage".
@@ -86,15 +76,6 @@ CANONICAL_STAGE_ORDER = [
     "server.tools.atmosphere",
     "server.tools.diagnostics",
     "server.tools.overview_summary",
-    "server.tools.windkit.wind",
-    "server.tools.windkit.climate",
-    "server.tools.windkit.climate_stats",
-    "server.tools.windkit.topography",
-    "server.tools.windkit.windfarm",
-    "server.tools.windkit.spatial",
-    "server.tools.windkit.ltc",
-    "server.tools.windkit.other",
-    "server.tools.windkit.plotting",
 ]
 _STAGE_RANK: dict[str, int] = {module_path: index for index, module_path in enumerate(CANONICAL_STAGE_ORDER)}
 _UNKNOWN_STAGE_RANK = len(CANONICAL_STAGE_ORDER)
@@ -108,9 +89,6 @@ PARAM_ALIASES: dict[str, tuple[str, ...]] = {
     "sensor_names": ("sensors",),
     "nodes_json": ("nodes",),
     "params": ("rule_params", "parameters"),
-    "west_east": ("we",),
-    "south_north": ("sn",),
-    "height": ("h",),
 }
 
 _TOOL_REGISTRY: dict[str, tuple[ModuleType, Callable[..., Any]]] | None = None

@@ -25,7 +25,6 @@ from server.api.routes.results import router as results_router
 from server.api.routes.sessions import router as sessions_router
 from server.api.routes.sweep import router as sweep_router
 from server.api.routes.uploads import router as uploads_router
-from server.api.routes.windkit import router as windkit_router
 from server.api.routes.workflow_execution import router as workflow_execution_router
 
 
@@ -79,7 +78,6 @@ def create_app() -> FastAPI:
     app.include_router(sweep_router, prefix="/api")
     app.include_router(exports_router, prefix="/api")
     app.include_router(chat_router, prefix="/api")
-    app.include_router(windkit_router, prefix="/api")
 
     def _session_manager_provider():
         override = app.dependency_overrides.get(get_session_manager)

@@ -659,9 +659,9 @@ export const sensorKindSchema = z.enum([
   "other",
 ]);
 
-export const shearMethodSchema = z.enum(["power_law", "log_law", "roughness", "windkit"]);
+export const shearMethodSchema = z.enum(["power_law", "log_law", "roughness"]);
 
-export const reanalysisProviderSchema = z.enum(["era5", "merra2", "brighthub", "windkit"]);
+export const reanalysisProviderSchema = z.enum(["era5", "merra2", "brighthub"]);
 
 /** Where the reanalysis is downloaded from — distinct from which dataset is preferred. */
 export const reanalysisAcquisitionSourceSchema = z.enum(["brighthub", "earthdatahub"]);
@@ -673,8 +673,6 @@ export const ltcAlgorithmConfigSchema = z.enum([
   "variance_ratio",
   "xgboost",
   "ensemble",
-  "windkit_linreg_mcp",
-  "windkit_varrat_mcp",
 ]);
 
 const locationSchema = z.object({
@@ -733,7 +731,6 @@ const shearConfigSchema = z.object({
   directionSensor: z.string(),
   aggregation: z.enum(["mean", "median", "p90", "momm"]),
   targetHubHeightM: z.number().nonnegative(),
-  useWindKit: z.boolean(),
 });
 
 const reanalysisNodeSchema = z.object({

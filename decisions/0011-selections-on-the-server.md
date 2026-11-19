@@ -1,7 +1,7 @@
 # 0011. Selections are server objects resolved from drawn bounds
 
-**Status:** Proposed. Designed in the build plan; part of the chart decision's evidence
-([0005](0005-charts-uplot-regl-scatterplot.md)); to be confirmed before Phase 1 starts.
+**Status:** Accepted (owner), 2026-11-19. Built in Phase 1. Part of the chart decision's
+evidence ([0005](0005-charts-uplot-regl-scatterplot.md)).
 
 ## Context
 
@@ -10,7 +10,7 @@ that report selected indices disagreed slightly with an independent count (+11 o
 for Plotly; -1 of 50,302 for regl-scatterplot), and line traces in Plotly and sampled series
 in ECharts report no indices at all.
 
-## Proposal
+## Decision
 
 - A **selection** is a named server object: time ranges, direction sectors, value bands on a
   named channel, or an explicit record set, combined by union and intersection.

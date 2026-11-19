@@ -1,6 +1,6 @@
 # 0010. A project store on disk; cleaning as flags, not deletions; one operation log
 
-**Status:** Proposed. Designed in the build plan; to be confirmed before Phase 1 starts.
+**Status:** Accepted (owner), 2026-11-19. Built in Phase 1.
 
 ## Context
 
@@ -8,7 +8,7 @@ A session's data lives in server memory. After a restart only `runconfig.json` i
 the timeseries, cleaning log, tables and results are lost. Cleaning writes "missing" into the
 working table, so the record of why a value is missing exists only in the cleaning log.
 
-## Proposal
+## Decision
 
 - **Project on disk:** raw input files kept untouched, each with its SHA-256; working data
   as Parquet; a small SQLite catalogue for the operation log, selections, flags and the

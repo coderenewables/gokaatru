@@ -184,6 +184,8 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/sessions/{id}/map/site` | GET | Site-overview GeoJSON (mast + ERA5 nodes) |
 | `/sessions/{id}/chat` | POST | BYOK LLM chat proxy with server-side tool execution (read-only by default; see [Chat tool authority](#chat-tool-authority)) |
 | `/mcp/catalog` | GET | MCP tool/resource catalog for discovery |
+| `/operations` | GET | Every declared operation: effect, stage, canvas, assistant, network, parameters |
+| `/sessions/{id}/operations/{name}` | POST | Run one operation; JSON body of its parameters (generated, one route per operation) |
 
 ## Tool inventory
 

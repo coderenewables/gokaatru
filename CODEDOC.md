@@ -246,6 +246,7 @@ logic as the MCP tools, and shape the response with the Pydantic models in `sche
 | `mcp.py` | 1 | MCP catalog endpoint. |
 | `health.py` | 1 | Health check. |
 | `chat.py` | 1 | OpenAI-compatible LLM chat proxy with MCP tool execution (drives the BYOK Copilot). |
+| `operations.py` | 91 | Generated from the registry: `POST /sessions/{id}/operations/{name}` for each of the 90 operations, with a body model built from the function signature (`<Name>Parameters`, extra fields refused), and `GET /operations` listing every declaration. Same session binding and error mapping as chat. |
 
 `api/mcp.py` additionally mounts a **session-aware MCP transport** into the FastAPI app, so a
 browser session and an MCP client can share the same live session state.

@@ -570,6 +570,11 @@ python -m pytest tests/test_sensor_selection.py tests/test_uploaded_dataset.py -
 python -c "import asyncio, json; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())), 'tools')"
 ```
 
+`python -m tests.published_numbers --check` reruns the pipeline on the three reference
+campaigns and compares every number it returns, and a SHA-256 of every series, with the
+committed snapshot `tests/snapshots/published_numbers.json`; any difference, down to the
+last bit, fails. `--write` refreshes the snapshot when a number is meant to move.
+
 Tests that read the real reference campaigns (Boxkite, Horns Rev, Launakalana) need files
 under the gitignored `data/uploads/` (set `GOKAATRU_TEST_UPLOADS_DIR` to read them from
 elsewhere). Without them those tests skip with a message naming the missing file; they do

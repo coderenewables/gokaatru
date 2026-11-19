@@ -698,19 +698,50 @@ def _run_ltc_variance_ratio(state: SessionState, short_col: str, long_col: str) 
     return _ltc_response(state, "variance_ratio", long_df, corrected, metrics)
 
 
-@operation(effect="change", stage="ltc")
+@operation(
+    effect="change", stage="ltc",
+    disclosure=(
+        "measured_resampled_to_hourly",
+        "resampling_note",
+        "negative_predictions_clipped",
+        "variance_ratio_to_reference",
+        "reference_temporal_semantics",
+        "estimator",
+        "huber_delta",
+    ),
+)
 def run_ltc_linear_least_squares(short_col: str, long_col: str) -> dict:
     """Run robust linear MCP using Huber IRLS and apply the fit to the full long-term record."""
     return _run_ltc_linear_least_squares(session, short_col, long_col)
 
 
-@operation(effect="change", stage="ltc")
+@operation(
+    effect="change", stage="ltc",
+    disclosure=(
+        "measured_resampled_to_hourly",
+        "resampling_note",
+        "negative_predictions_clipped",
+        "variance_ratio_to_reference",
+        "reference_temporal_semantics",
+        "error_variance_ratio_assumed",
+    ),
+)
 def run_ltc_total_least_squares(short_col: str, long_col: str) -> dict:
     """Run orthogonal total least squares MCP and apply the fit to the full long-term record."""
     return _run_ltc_total_least_squares(session, short_col, long_col)
 
 
-@operation(effect="change", stage="ltc")
+@operation(
+    effect="change", stage="ltc",
+    disclosure=(
+        "measured_resampled_to_hourly",
+        "resampling_note",
+        "negative_predictions_clipped",
+        "variance_ratio_to_reference",
+        "reference_temporal_semantics",
+        "fit_basis",
+    ),
+)
 def run_ltc_speedsort(
     short_col: str,
     long_col: str,
@@ -728,7 +759,16 @@ def run_ltc_speedsort(
     return _run_ltc_speedsort(session, short_col, long_col, short_dir_col, long_dir_col)
 
 
-@operation(effect="change", stage="ltc")
+@operation(
+    effect="change", stage="ltc",
+    disclosure=(
+        "measured_resampled_to_hourly",
+        "resampling_note",
+        "negative_predictions_clipped",
+        "variance_ratio_to_reference",
+        "reference_temporal_semantics",
+    ),
+)
 def run_ltc_variance_ratio(short_col: str, long_col: str) -> dict:
     """Run variance-ratio MCP using mean and standard-deviation scaling of the reference series."""
     return _run_ltc_variance_ratio(session, short_col, long_col)

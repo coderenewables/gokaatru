@@ -501,7 +501,16 @@ def compute_energy_metrics(speed_sensor: str, direction_sensor: str = "") -> dic
     return _compute_energy_metrics(session, speed_sensor, direction_sensor)
 
 
-@operation(effect="read", stage="analysis")
+@operation(
+    effect="read", stage="analysis",
+    disclosure=(
+        "gev.available",
+        "plausible",
+        "below_largest_observed",
+        "years_excluded",
+        "min_year_coverage",
+    ),
+)
 def compute_extreme_winds(
     speed_sensor: str,
     source: str = "auto",

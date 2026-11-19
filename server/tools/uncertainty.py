@@ -395,7 +395,16 @@ def _calculate_uncertainty(
     return result
 
 
-@operation(effect="change", stage="uncertainty")
+@operation(
+    effect="change", stage="uncertainty",
+    disclosure=(
+        "mcp_sampling_cap",
+        "combination",
+        "k_shear",
+        "k_shear_basis",
+        "density_normalisation",
+    ),
+)
 def calculate_uncertainty(
     measurement_uncertainty_pct: float,
     measurement_height_m: float,
@@ -460,7 +469,7 @@ def _compute_energy_sensitivity(state: SessionState, speed_uncertainty_pct: floa
     return {"status": "ok", **block, **state.staleness_report()}
 
 
-@operation(effect="read", stage="uncertainty")
+@operation(effect="read", stage="uncertainty", disclosure=("density_normalisation",))
 def compute_energy_sensitivity(speed_uncertainty_pct: float = 0.0) -> dict:
     """Measure S = d(lnAEP)/d(lnU) on the long-term series and explain the energy conversion.
 

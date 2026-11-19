@@ -326,7 +326,7 @@ def _run_clipping_analysis(
     return payload
 
 
-@operation(effect="read", stage="clipping")
+@operation(effect="read", stage="clipping", disclosure=("years_used", "years_excluded", "excluded_reason",))
 def run_clipping_analysis(
     speed_col: str,
     source: str = "ensemble",

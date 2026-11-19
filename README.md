@@ -331,6 +331,11 @@ invites use:
 
 ### Disclosure fields — read these before trusting a number
 
+Each field below is declared on the operation that returns it (`disclosure` in
+`server/operations.py`). `tests/test_disclosure_fields.py` checks this table against those
+declarations in both directions, and runs a synthetic pipeline to find every declared field
+in its operation's response.
+
 | Field | Appears in | Meaning |
 |---|---|---|
 | `records_clamped`, `clamped_fraction` | every shear response | How often α hit the [−1, 1] backstop. A clamped α = 1.0 turns 8.7 m/s at 150 m into 15.0 m/s. Above 5% the response carries an explicit `warning`. |

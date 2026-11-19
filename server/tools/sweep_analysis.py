@@ -155,19 +155,19 @@ def _sweep_spread(
 # address is the session's own sweeps directory, through the confined ``_sweep_dir``, and a
 # sweep id is the sole input. Without them the assistant cannot see a sweep at all and
 # answers about one from session state that never held it.
-@operation(effect="read", stage="sweep", canvas=False)
+@operation(effect="read", stage="sweep", canvas=False, disclosure=("in_progress",))
 def list_sweeps() -> dict:
     """List every scenario sweep persisted in the current session."""
     return _list_sweeps(session)
 
 
-@operation(effect="read", stage="sweep", canvas=False)
+@operation(effect="read", stage="sweep", canvas=False, disclosure=("engine_version", "duplicate_levels",))
 def get_sweep_summary(sweep_id: str) -> dict:
     """Summarise a sweep: which axes varied, which the gates collapsed, and why."""
     return _sweep_summary(session, sweep_id)
 
 
-@operation(effect="read", stage="sweep", canvas=False)
+@operation(effect="read", stage="sweep", canvas=False, disclosure=("duplicate_levels", "uncertainty_substitution",))
 def analyze_sweep_spread(sweep_id: str, metric: str = "long_term_mean_speed_mps") -> dict:
     """Decompose a sweep metric's variance across the five scenario axes."""
     return _sweep_spread(session, sweep_id, metric)

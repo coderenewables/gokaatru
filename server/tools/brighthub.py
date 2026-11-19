@@ -110,7 +110,12 @@ def brighthub_get_data_model(uuid: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@operation(effect="change", stage="reanalysis_download", assistant=False, network=True)
+@operation(
+    effect="change", stage="reanalysis_download", assistant=False, network=True,
+    disclosure=(
+        "upstream_processing",
+    ),
+)
 def brighthub_import_location(
     uuid: str,
     name: str = "",

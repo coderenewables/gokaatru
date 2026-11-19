@@ -471,7 +471,7 @@ def _sensor_statistics(state: SessionState, sensor_name: str) -> dict:
     }
 
 
-@operation(effect="read", stage="statistics")
+@operation(effect="read", stage="statistics", disclosure=("calm_fraction", "fit_excludes_calms", "fit_method",))
 def compute_weibull_params(sensor_name: str, method: str = "wasp_m1_m3") -> dict:
     """Fit Weibull A and k using WAsP m1/m3 moment method (default) or scipy MLE."""
     return _compute_weibull_params(session, sensor_name, method)
@@ -483,7 +483,7 @@ def compute_wind_climate(speed_sensor: str, direction_sensor: str = "") -> dict:
     return _compute_wind_climate(session, speed_sensor, direction_sensor)
 
 
-@operation(effect="read", stage="statistics")
+@operation(effect="read", stage="statistics", disclosure=("iec_ti_at_15ms", "iec_ti_bin_mps", "iec_ti_bin_records",))
 def compute_turbulence_analysis(speed_sensor: str, min_speed_mps: float = TI_MIN_SPEED_MPS) -> dict:
     """Compute mean, P90, representative, and 15 m/s IEC turbulence intensity metrics.
 
@@ -518,7 +518,7 @@ def compute_windrose_data(speed_sensor: str, direction_sensor: str, num_sectors:
     return {"sectors": sectors}
 
 
-@operation(effect="read", stage="statistics")
+@operation(effect="read", stage="statistics", disclosure=("hour_basis", "site_utc_offset_hours",))
 def compute_diurnal_profile(sensor_name: str) -> dict:
     """Compute hour-of-day mean wind speed using the Phase 1 diurnal profile convention."""
     return _compute_diurnal_profile(session, sensor_name)

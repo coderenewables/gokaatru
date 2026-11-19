@@ -764,7 +764,7 @@ def _build_aggr_momm_shear_table(
     return response
 
 
-@operation(effect="change", stage="shear")
+@operation(effect="change", stage="shear", disclosure=("records_clamped", "clamped_fraction",))
 def calculate_shear_timeseries(height_sensors: str, min_speed_mps: float | None = None) -> dict:
     """Calculate timestamp-wise power-law shear coefficients traced to IEC 61400-12-1 Section B.2.
 
@@ -791,19 +791,37 @@ def compute_vertical_structure(
     return _compute_vertical_structure(session, speed_sensors, direction_sensors, min_speed_mps)
 
 
-@operation(effect="change", stage="shear")
+@operation(
+    effect="change", stage="shear",
+    disclosure=(
+        "fallback_alpha",
+        "fallback_source",
+        "table_coverage",
+        "hour_basis",
+        "site_utc_offset_hours",
+    ),
+)
 def build_shear_table(aggregation: str = "mean") -> dict:
     """Build a 12x24 power-law shear lookup table using mean, median, or Windographer MoMM aggregation."""
     return _build_shear_table(session, aggregation)
 
 
-@operation(effect="change", stage="shear")
+@operation(
+    effect="change", stage="shear",
+    disclosure=(
+        "fallback_z0",
+        "fallback_source",
+        "table_coverage",
+        "hour_basis",
+        "site_utc_offset_hours",
+    ),
+)
 def build_roughness_table(aggregation: str = "mean") -> dict:
     """Build a 12x24 roughness lookup table in log-space traced to IEC logarithmic profile practice."""
     return _build_roughness_table(session, aggregation)
 
 
-@operation(effect="read", stage="shear")
+@operation(effect="read", stage="shear", disclosure=("hour_basis", "site_utc_offset_hours",))
 def build_sector_shear_tables(
     direction_sensor: str,
     num_sectors: int = 12,
@@ -816,7 +834,16 @@ def build_sector_shear_tables(
     )
 
 
-@operation(effect="change", stage="shear")
+@operation(
+    effect="change", stage="shear",
+    disclosure=(
+        "records_clamped",
+        "clamped_fraction",
+        "fallback_alpha",
+        "fallback_source",
+        "table_coverage",
+    ),
+)
 def build_aggr_momm_shear_table(height_sensors: str, min_speed_mps: float | None = None) -> dict:
     """Build an aggregate MoMM shear table by deriving alpha from per-height Windographer MoMM wind tables."""
     return _build_aggr_momm_shear_table(session, height_sensors, min_speed_mps)

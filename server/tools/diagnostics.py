@@ -323,13 +323,29 @@ def compute_mast_effects(
     )
 
 
-@operation(effect="read", stage="diagnostics")
+@operation(
+    effect="read", stage="diagnostics",
+    disclosure=(
+        "range_failures",
+        "range_min",
+        "range_max",
+        "range_bounds_source",
+    ),
+)
 def compute_qc_diagnostics() -> dict:
     """Report non-mutating range, flat-line, and cleaning-removal diagnostics."""
     return _compute_qc_diagnostics(session)
 
 
-@operation(effect="read", stage="diagnostics")
+@operation(
+    effect="read", stage="diagnostics",
+    disclosure=(
+        "ready",
+        "not_ready_reasons",
+        "min_concurrent_hours",
+        "min_r_squared",
+    ),
+)
 def compute_mcp_readiness(speed_sensor: str, reference_sensor: str = "") -> dict:
     """Assess ERA5 concurrent-period correlation and long-term adjustment readiness."""
     return _compute_mcp_readiness(session, speed_sensor, reference_sensor)

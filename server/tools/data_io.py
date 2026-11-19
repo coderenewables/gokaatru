@@ -1100,7 +1100,7 @@ def _get_data_coverage(state: SessionState, sensor_name: str) -> dict:
     }
 
 
-@operation(effect="change", stage="ingest")
+@operation(effect="change", stage="ingest", disclosure=("duplicate_timestamps",))
 def parse_timeseries(file_path: str) -> dict:
     """Parse a wind timeseries file into session state following the GoKaatru Phase 1 ingest spec."""
     return _parse_timeseries(session, file_path)

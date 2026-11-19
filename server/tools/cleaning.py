@@ -911,7 +911,15 @@ def list_cleaning_rules() -> dict:
     return _list_cleaning_rules(session)
 
 
-@operation(effect="change", stage="cleaning", dry_run=preview_cleaning_rule)
+@operation(
+    effect="change", stage="cleaning", dry_run=preview_cleaning_rule,
+    disclosure=(
+        "bounds_source",
+        "min_applied",
+        "max_applied",
+        "order_dependence",
+    ),
+)
 def apply_cleaning_rule(rule_type: str, sensor: str, params: str, start_date: str = "", end_date: str = "") -> dict:
     """Apply one named cleaning rule to the active timeseries and log the operation for undo."""
     return _apply_cleaning_rule(session, rule_type, sensor, params, start_date, end_date)

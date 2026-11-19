@@ -665,7 +665,7 @@ def compute_era5_wind_speed(latitude: float, longitude: float) -> dict:
     return _compute_era5_wind_speed(session, latitude, longitude)
 
 
-@operation(effect="change", stage="reanalysis")
+@operation(effect="change", stage="reanalysis", disclosure=("method_by_variable", "skipped_variables",))
 def interpolate_era5_to_site(source: str = "era5") -> dict:
     """Spatially interpolate reanalysis node data to the site with linear interpolation and IDW fallback.
 

@@ -11,6 +11,7 @@ and that the two backend strippers cannot drift apart.
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 from pathlib import Path
@@ -28,7 +29,7 @@ from server.core.runconfig import (
     strip_mirrors,
 )
 from server.state.session import SessionState
-from server.tools.config import _normalize_runconfig, _sync_state_from_runconfig
+from server.tools.config import _get_run_config, _normalize_runconfig, _sync_state_from_runconfig
 
 CONFIG_SYNC_TS = Path("frontend/src/lib/configSync.ts")
 
@@ -61,6 +62,25 @@ def _frontend_shaped_config() -> dict:
         },
         "ltc": {"uncertainty": {"hubHeightM": 150.0, "iavPct": 5.0}},
     }
+
+
+def test_reading_the_run_config_changes_nothing_and_returns_what_it_did() -> None:
+    """``get_run_config`` is declared a read. It normalised ``state.runconfig`` in place and
+    wrote the sensor mapping, cleaning log and table shapes back into it on every call."""
+    state = SessionState()
+    state.reset()
+    state.runconfig = _frontend_shaped_config()
+    state.sensor_mapping = {100.0: {"speed_col": "Spd_100m", "dir_col": "Dir_100m"}}
+    state.cleaning_log = [{"rule_type": "range_check", "sensor": "Spd_100m", "records_affected": 3}]
+    before = copy.deepcopy(state.runconfig)
+
+    legacy = copy.deepcopy(state)
+    _normalize_runconfig(legacy.runconfig)
+    expected = _normalize_runconfig(legacy.to_runconfig())
+
+    assert _get_run_config(state) == expected
+    assert state.runconfig == before
+    assert _get_run_config(state) == expected
 
 
 class TestEveryMirrorIsReproducible:

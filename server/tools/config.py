@@ -4,6 +4,7 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
+import copy
 import json
 import math
 from pathlib import Path
@@ -128,10 +129,14 @@ def _runconfig_path(state: SessionState) -> Path:
 
 
 def _get_run_config(state: SessionState) -> dict:
-    """Return the active run configuration dictionary defined by the GoKaatru Phase 1 config spec."""
-    _normalize_runconfig(state.runconfig)
-    state.runconfig = _normalize_runconfig(state.to_runconfig())
-    return dict(state.runconfig)
+    """Return the active run configuration, canonicalised, without changing the session.
+
+    Built from a deep copy. It is declared a read, and normalising in place had rewritten
+    ``state.runconfig`` with the sensor mapping, the cleaning log and the table shapes on
+    every call (found by tests/test_operation_routes.py).
+    """
+    base = _normalize_runconfig(copy.deepcopy(state.runconfig))
+    return dict(_normalize_runconfig(state.to_runconfig(base)))
 
 
 def _update_run_config(state: SessionState, key: str, value: str) -> dict:

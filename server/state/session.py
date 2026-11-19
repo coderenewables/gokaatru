@@ -473,9 +473,14 @@ class SessionState:
         shear["minSpeedMps"] = float(min_speed_mps)
         self.touch()
 
-    def to_runconfig(self) -> dict[str, object]:
-        """Serialize current state into a run configuration dictionary for GoKaatru tools."""
-        config: dict[str, object] = dict(self.runconfig)
+    def to_runconfig(self, base: dict[str, object] | None = None) -> dict[str, object]:
+        """Serialize current state into a run configuration dictionary for GoKaatru tools.
+
+        ``base`` stands in for ``self.runconfig``. The copy taken here is shallow, so a
+        caller that must not change the session passes a deep copy.
+        """
+        source = self.runconfig if base is None else base
+        config: dict[str, object] = dict(source)
         if "project_name" not in config and self.project_name is not None:
             config["project_name"] = self.project_name
         if "location" not in config and self.coordinate is not None:
@@ -490,7 +495,7 @@ class SessionState:
             }
         if self.timezone is not None:
             config.setdefault("site", {})["timezone"] = str(self.timezone)
-        excluded = self.runconfig.get("excluded_sensors")
+        excluded = source.get("excluded_sensors")
         if isinstance(excluded, list) and excluded:
             config["excluded_sensors"] = [str(name) for name in excluded]
         if self.cleaning_log:

@@ -22,6 +22,31 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+CLEANING_FLAG_COLUMNS: tuple[str, ...] = (
+    "timestamp",
+    "sensor",
+    "rule_sequence",
+    "rule_type",
+    "reason",
+    "actor",
+    "flagged_at",
+)
+
+
+def empty_cleaning_flags() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "timestamp": pd.Series(dtype="datetime64[ns, UTC]"),
+            "sensor": pd.Series(dtype="object"),
+            "rule_sequence": pd.Series(dtype="int64"),
+            "rule_type": pd.Series(dtype="object"),
+            "reason": pd.Series(dtype="object"),
+            "actor": pd.Series(dtype="object"),
+            "flagged_at": pd.Series(dtype="object"),
+        }
+    )
+
+
 class SessionState:
     """Store the active project state following the GoKaatru session contract."""
 
@@ -38,6 +63,9 @@ class SessionState:
     sensor_mapping: dict[float, dict[str, str | None]]
     sensor_inventory: dict[str, dict[str, object]]
     cleaning_log: list[dict[str, object]]
+    # One row per record a cleaning rule set missing: when, which sensor, which rule and
+    # why, who and when (decisions/0010). Raw data with these applied is the clean series.
+    cleaning_flags: pd.DataFrame
     shear_timeseries_df: pd.DataFrame | None
     shear_clamp_stats: dict[str, object] | None
     roughness_timeseries_df: pd.DataFrame | None
@@ -104,6 +132,7 @@ class SessionState:
         self.sensor_mapping = {}
         self.sensor_inventory = {}
         self.cleaning_log = []
+        self.cleaning_flags = empty_cleaning_flags()
         self.shear_timeseries_df = None
         self.shear_clamp_stats = None
         self.roughness_timeseries_df = None

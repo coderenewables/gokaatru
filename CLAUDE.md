@@ -184,11 +184,11 @@ the synthetic-data tests; `GOKAATRU_TEST_UPLOADS_DIR` points the suite at anothe
 folder, and a missing campaign file skips its test by name (`require_campaign_file` in
 `tests/conftest.py`), never errors.
 
-Current baseline (verified 2026-11-19, branch `phase0-stabilise` at P0-14):
+Current baseline (verified 2026-11-19, branch `p0-14-windkit-narrowed` at P0-14):
 1039 backend tests passing / 0 skipped, 266 frontend tests passing, 1 Playwright smoke test
 passing, frontend typecheck clean, 90 MCP tools registered, and `ruff check server/ tests/`
-clean. Without the campaign files: 1055 passed / 61 skipped at P0-8 (59 campaign skips),
-before P0-14 removed 94 WindKit tests. These numbers move as the project
+clean. Without the campaign files (CI run 44428167646, Ubuntu and Windows): 984 passed / 55
+skipped; all four CI jobs passed. These numbers move as the project
 grows — `validate-gokaatru` always re-derives the live count rather than trusting any written
 baseline, this one included. Backend count assumes the gitignored `data/uploads/` fixtures are
 present (see the `tests/` layout note above); without them the tests that need them skip.
@@ -199,7 +199,7 @@ run to zero. They are all fixed now; keep it at zero rather than letting a secon
 
 ## Current state (last verified 2026-11-19)
 
-**2026-11-17 to 2026-11-19: workbench Phase 0 on branch `phase0-stabilise` (pushed, not merged).** One task per commit; the task list and status are in `Claude outputs/WORKBENCH_PLAN.md` §8a.
+**2026-11-17 to 2026-11-19: workbench Phase 0.** P0-1 to P0-13 were on branch `phase0-stabilise`, merged into `master` by the owner as PR #5 (`f8a24ca`, 2026-11-18). P0-14 is on branch `p0-14-windkit-narrowed` (`f2191ea`), not merged. One task per commit; the task list and status are in `Claude outputs/WORKBENCH_PLAN.md` §8a.
 
 - **P0-1 `e04446e`:** `K_SHEAR_ANALYST_SUPPLIED` 0.07 (entry below). `startup.ps1 -IncludeMcp` bound the unauthenticated SSE transport to `0.0.0.0`; it now binds to `127.0.0.1`. The "follows IEC 61400-12-1 / 61400-12-2" claim is replaced by a statement that no conformance claim is made.
 - **P0-2 `ee24eac` (F1):** `normalise_speed_to_reference_density` carried the stall and pitch labels the wrong way round. IEC 61400-12-1 normalises wind speed for a pitch-regulated turbine and power for a stall-regulated one. The arithmetic applied was already the pitch one, so no number moved; `regulation` now defaults to `"pitch"`, `"stall"` is refused, and `density_normalisation.method` is `iec_61400_12_1_wind_speed_normalisation` (was `iec_61400_12_1_stall`). Basis: a public ECN/TNO report; the clause text has not been read.

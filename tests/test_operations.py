@@ -5,8 +5,10 @@ import asyncio
 
 import pytest
 
-from server.core.operations import STAGES, Operation, OperationRegistry, operation
+from server.api.routes.chat import _MUTATING_TOOLS, _READ_ONLY_TOOLS
+from server.core.executor import CANONICAL_STAGE_ORDER, _tool_registry
 from server.main import mcp
+from server.operations import REGISTRY, STAGES, Operation, OperationRegistry, operation
 
 
 def _mcp_tools() -> dict:
@@ -82,12 +84,56 @@ def test_tiers_and_canvas_set_follow_the_declarations() -> None:
         Operation(name="logs_in", fn=_noop, effect="change", stage="reanalysis_download", assistant=False)
     )
     registry.register(Operation(name="reads_sweep", fn=_noop, effect="read", stage="sweep", canvas=False))
+    registry.register(Operation(name="fetches", fn=_noop, effect="read", stage="reanalysis", network=True))
 
     assert registry.assistant_tier("read") == {"looks", "reads_sweep"}
-    assert registry.assistant_tier("change") == {"writes"}
-    assert set(registry.canvas_operations()) == {"looks", "writes", "logs_in"}
-    assert [op.name for op in registry] == ["logs_in", "looks", "reads_sweep", "writes"]
+    assert registry.assistant_tier("change") == {"writes", "fetches"}
+    assert set(registry.canvas_operations()) == {"looks", "writes", "logs_in", "fetches"}
+    assert [op.name for op in registry] == ["fetches", "logs_in", "looks", "reads_sweep", "writes"]
 
 
 def test_stages_are_unique() -> None:
     assert len(STAGES) == len(set(STAGES))
+
+
+# ---------------------------------------------------------------------------
+# P1-2: the declarations reproduce today's surfaces exactly
+# ---------------------------------------------------------------------------
+
+
+def test_every_mcp_tool_is_declared_once_as_the_same_function() -> None:
+    tools = _mcp_tools()
+    assert REGISTRY.names() == set(tools)
+    for name, tool in tools.items():
+        assert REGISTRY.get(name).fn is tool.fn, name
+
+
+def test_the_declared_tiers_are_todays_chat_tiers() -> None:
+    assert REGISTRY.assistant_tier("read") == _READ_ONLY_TOOLS
+    assert REGISTRY.assistant_tier("change") == _MUTATING_TOOLS
+
+
+def test_the_canvas_operations_are_todays_executor_dispatch() -> None:
+    dispatch = _tool_registry()
+    canvas = REGISTRY.canvas_operations()
+    assert set(canvas) == set(dispatch)
+    for name, declared in canvas.items():
+        assert declared.fn is dispatch[name][1], name
+
+
+def test_stage_order_reproduces_the_executor_module_order() -> None:
+    """Stages map one-to-one onto the executor's modules, in the same order, so a canvas
+    tie breaks exactly as before (F-09)."""
+    pairs = {
+        (CANONICAL_STAGE_ORDER.index(declared.module), declared.stage_rank)
+        for declared in REGISTRY.canvas_operations().values()
+    }
+    assert len({module for module, _ in pairs}) == len(pairs) == len({stage for _, stage in pairs})
+    stage_ranks = [stage for _, stage in sorted(pairs)]
+    assert stage_ranks == sorted(stage_ranks)
+
+
+def test_no_network_operation_is_in_the_read_tier() -> None:
+    network = {declared.name for declared in REGISTRY if declared.network}
+    assert network
+    assert network.isdisjoint(REGISTRY.assistant_tier("read"))

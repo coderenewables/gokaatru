@@ -12,9 +12,11 @@ from __future__ import annotations
 
 from server.core.scenario_result import fixed_prefix_hash
 from server.main import mcp
+from server.operations import operation
 from server.state.session import session
 
 
+@operation(effect="read", stage="sweep", canvas=False)
 @mcp.tool()
 def get_fixed_prefix_hash() -> dict:
     """Return the fixed-prefix hash for the current session, stamped before any sweep runs."""

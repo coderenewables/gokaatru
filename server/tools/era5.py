@@ -19,6 +19,7 @@ from server.core.reanalysis import (
 )
 from server.core.spatial import bearing_compass, haversine_km, interpolate_spatial
 from server.main import mcp
+from server.operations import operation
 from server.schemas.common import Coordinate
 from server.state.session import SessionState, session
 
@@ -619,6 +620,7 @@ def _interpolate_era5_to_site(state: SessionState, source: str = "era5") -> dict
     return payload
 
 
+@operation(effect="change", stage="reanalysis", assistant=False)
 @mcp.tool()
 def earthdatahub_set_credential(pat: str) -> dict:
     """Store an EarthDataHub PAT in the session for the direct-ERA5 (non-BrightHub) path.
@@ -630,24 +632,28 @@ def earthdatahub_set_credential(pat: str) -> dict:
     return _set_earthdatahub_credential(session, pat)
 
 
+@operation(effect="change", stage="reanalysis", assistant=False)
 @mcp.tool()
 def earthdatahub_clear_credential() -> dict:
     """Remove the session's stored EarthDataHub PAT."""
     return _clear_earthdatahub_credential(session)
 
 
+@operation(effect="read", stage="reanalysis", assistant=False)
 @mcp.tool()
 def earthdatahub_status() -> dict:
     """Check whether the session has an EarthDataHub PAT configured."""
     return _earthdatahub_status(session)
 
 
+@operation(effect="change", stage="reanalysis", network=True)
 @mcp.tool()
 def find_era5_nodes(latitude: float, longitude: float) -> dict:
     """Find the four surrounding ERA5 grid nodes using 0.25° bounds and haversine distance."""
     return _find_era5_nodes(session, latitude, longitude)
 
 
+@operation(effect="change", stage="reanalysis", network=True)
 @mcp.tool()
 def extract_era5_data(
     latitude: float,
@@ -659,12 +665,14 @@ def extract_era5_data(
     return _extract_era5_data(session, latitude, longitude, start_date, end_date)
 
 
+@operation(effect="change", stage="reanalysis")
 @mcp.tool()
 def compute_era5_wind_speed(latitude: float, longitude: float) -> dict:
     """Compute 100 m wind speed and meteorological direction from ERA5 u and v components."""
     return _compute_era5_wind_speed(session, latitude, longitude)
 
 
+@operation(effect="change", stage="reanalysis")
 @mcp.tool()
 def interpolate_era5_to_site(source: str = "era5") -> dict:
     """Spatially interpolate reanalysis node data to the site with linear interpolation and IDW fallback.

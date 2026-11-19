@@ -10,6 +10,7 @@ from pathlib import Path
 
 from server.core.runconfig import strip_mirrors
 from server.main import mcp
+from server.operations import operation
 from server.schemas.common import Coordinate
 from server.state.session import SessionState, session
 
@@ -198,30 +199,35 @@ def _get_analysis_summary(state: SessionState) -> dict:
     }
 
 
+@operation(effect="read", stage="config")
 @mcp.tool()
 def get_run_config() -> dict:
     """Return the active run configuration dictionary defined by the GoKaatru Phase 1 config spec."""
     return _get_run_config(session)
 
 
+@operation(effect="change", stage="config")
 @mcp.tool()
 def update_run_config(key: str, value: str) -> dict:
     """Update a dotted runconfig key using JSON parsing rules from the Phase 1 config manager spec."""
     return _update_run_config(session, key, value)
 
 
+@operation(effect="change", stage="config")
 @mcp.tool()
 def save_run_config() -> dict:
     """Write the current run configuration to data/runconfig.json per the Phase 1 persistence spec."""
     return _save_run_config(session)
 
 
+@operation(effect="change", stage="config")
 @mcp.tool()
 def load_run_config() -> dict:
     """Load data/runconfig.json into session state following the Phase 1 configuration workflow."""
     return _load_run_config(session)
 
 
+@operation(effect="read", stage="config")
 @mcp.tool()
 def get_analysis_summary() -> dict:
     """Report Phase 1 analysis readiness flags based on populated session-state fields."""

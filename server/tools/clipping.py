@@ -9,6 +9,7 @@ import pandas as pd
 from scipy.stats import norm
 
 from server.main import mcp
+from server.operations import operation
 from server.state.session import SessionState, session
 
 # Minimum fraction of a calendar year that must carry data before that year's
@@ -326,6 +327,7 @@ def _run_clipping_analysis(
     return payload
 
 
+@operation(effect="read", stage="clipping")
 @mcp.tool()
 def run_clipping_analysis(
     speed_col: str,

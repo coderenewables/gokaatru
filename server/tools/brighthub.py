@@ -21,6 +21,7 @@ from server.core.brighthub import (
 )
 from server.core.reanalysis import DEFAULT_REFERENCE_SOURCE, reference_source_names
 from server.main import mcp
+from server.operations import operation
 from server.schemas.common import Coordinate
 from server.state.session import SessionState, get_active_session, session
 from server.tools.era5 import _era5_key
@@ -39,6 +40,7 @@ def _require_token(state: SessionState) -> str:
 # ---------------------------------------------------------------------------
 
 
+@operation(effect="change", stage="reanalysis_download", assistant=False, network=True)
 @mcp.tool()
 def brighthub_login(client_id: str, client_secret: str) -> dict:
     """Authenticate with BrightHub using API key credentials and store token in session."""
@@ -51,6 +53,7 @@ def brighthub_login(client_id: str, client_secret: str) -> dict:
     return {"status": "ok", "authenticated": True}
 
 
+@operation(effect="change", stage="reanalysis_download", assistant=False)
 @mcp.tool()
 def brighthub_logout() -> dict:
     """Clear the stored BrightHub authentication token."""
@@ -59,6 +62,7 @@ def brighthub_logout() -> dict:
     return {"status": "ok", "authenticated": False}
 
 
+@operation(effect="read", stage="reanalysis_download", assistant=False)
 @mcp.tool()
 def brighthub_status() -> dict:
     """Check whether the session holds a valid BrightHub token."""
@@ -71,6 +75,7 @@ def brighthub_status() -> dict:
 # ---------------------------------------------------------------------------
 
 
+@operation(effect="read", stage="reanalysis_download", assistant=False, network=True)
 @mcp.tool()
 def brighthub_list_locations() -> dict:
     """List measurement locations available to the authenticated BrightHub user."""
@@ -91,6 +96,7 @@ def brighthub_list_locations() -> dict:
     return {"locations": locations, "count": len(locations)}
 
 
+@operation(effect="read", stage="reanalysis_download", assistant=False, network=True)
 @mcp.tool()
 def brighthub_get_data_model(uuid: str) -> dict:
     """Fetch the IEA Task 43 data model for a BrightHub measurement location."""
@@ -107,6 +113,7 @@ def brighthub_get_data_model(uuid: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
+@operation(effect="change", stage="reanalysis_download", assistant=False, network=True)
 @mcp.tool()
 def brighthub_import_location(
     uuid: str,
@@ -231,6 +238,7 @@ def brighthub_import_location(
 # ---------------------------------------------------------------------------
 
 
+@operation(effect="read", stage="reanalysis_download", assistant=False, network=True)
 @mcp.tool()
 def brighthub_find_reanalysis_nodes(latitude: float, longitude: float) -> dict:
     """Find nearest ERA5 and MERRA-2 reanalysis nodes via BrightHub for a coordinate."""
@@ -247,6 +255,7 @@ def brighthub_find_reanalysis_nodes(latitude: float, longitude: float) -> dict:
     }
 
 
+@operation(effect="change", stage="reanalysis_download", assistant=False, network=True)
 @mcp.tool()
 def brighthub_download_reanalysis(
     dataset: str,
@@ -528,6 +537,7 @@ def _prepare_brighthub_reanalysis(
     }
 
 
+@operation(effect="change", stage="reanalysis_download", assistant=False, network=True)
 @mcp.tool()
 def brighthub_prepare_reanalysis(latitude: float, longitude: float, source: str = "brighthub") -> dict:
     """Load BrightHub ERA5 and MERRA-2, then interpolate ERA5 to the project site."""

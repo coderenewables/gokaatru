@@ -5,6 +5,7 @@ import pandas as pd
 
 from server.core.formulas import moist_air_density, saturation_vapour_pressure_pa
 from server.main import mcp
+from server.operations import operation
 from server.state.session import SessionState, session
 
 # ISA sea-level density, the reference the density correction factor is quoted against.
@@ -211,6 +212,7 @@ def _compute_atmospheric_conditions(
     return result
 
 
+@operation(effect="read", stage="atmosphere")
 @mcp.tool()
 def compute_atmospheric_conditions(
     temperature_sensor: str = "",

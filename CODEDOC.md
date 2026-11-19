@@ -148,8 +148,17 @@ The interface-free heart. Nothing here imports FastAPI or FastMCP.
 | `sweep_analysis.py` | Decomposes a sweep metric's variance across the five axes (design doc §7.9). Ported from `frontend/src/lib/sweepAnalysis.ts`, which was deleted — the statistic now has one implementation, reachable from both the Interrogate page and the chat tools. `duplicate_levels(rows, duplicates)` maps each policy level skipped as a duplicate to the level whose rows it shares, so an axis varied between two policies that picked the same sensors does not read as single-level. Also `uncertainty_substitution` (design doc §8.1, F9): folds each axis's level-mean spread of the long-term speed into the MCP and vertical terms by `max()`, adds the reference-source spread, and reports scenario totals with and without it; formerly browser-only. |
 | `sensor_selection.py` | Resolves a sensor-selection *policy* (e.g. `availability_90`, `widest_lever`) to concrete sensors. |
 | `datamodel_builder.py` | Builds a minimal IEA Task 43 data model from CSV column headers alone, for campaigns delivered without one. Header inference (`draft_columns`), spec validation and Task 43 emission (`build_datamodel`); emits a *document*, never session state. |
-| `operations.py` | The operation registry (decisions/0009): `Operation` (effect, stage, canvas, assistant, network, disclosure fields, standards references, code version, dry run), `OperationRegistry`, the global `REGISTRY` and the `@operation` decorator. The parameter schema is read from the signature by FastMCP's own parser. `STAGES` is the pipeline order used for the canvas tie-break. |
 | `uncertainty_inputs.py` | Derives a scenario's uncertainty inputs from its own results. `is_hub_interpolated` takes the scenario's reference heights; `derive_uncertainty_inputs` selects `analyst_supplied` or `log_law` shear methods where the source is an analyst exponent or a roughness-only profile. |
+
+### 4.2a `server/operations.py` — the operation registry
+
+Every tool is declared once as an operation (decisions/0009): `@operation(effect=..., stage=...)`
+above its `@mcp.tool()`, with `canvas`, `assistant` and `network` where they differ from the
+defaults. `Operation` also carries disclosure fields, standards references, a code version and
+an optional dry run; `REGISTRY` holds all 90. The parameter schema is read from the signature
+by FastMCP's own parser. `STAGES` is the pipeline order used for the canvas tie-break. It lives
+outside `core/` because it imports FastMCP. `tests/test_operations.py` pins the declarations to
+today's chat tiers, executor dispatch and stage order.
 
 ### 4.3 `server/tools/` — analytics (the MCP tool surface)
 

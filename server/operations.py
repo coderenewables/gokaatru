@@ -63,11 +63,11 @@ F = TypeVar("F", bound=Callable[..., Any])
 class Operation:
     """One analysis step and everything the surfaces generated from it need to know.
 
-    ``effect`` is ``"read"`` when the step changes no session state, writes no file and
-    calls no external service; anything else is ``"change"``. ``network`` marks a step
-    that reaches an external service, whichever its effect. ``canvas`` says whether a
-    workflow node may dispatch it, and ``assistant`` whether the chat assistant may be
-    offered it at all; its tier there follows from ``effect``.
+    ``effect`` is ``"read"`` when the step changes no session state and writes no file;
+    anything else is ``"change"``. ``network`` marks a step that reaches an external
+    service, whichever its effect. ``canvas`` says whether a workflow node may dispatch
+    it, and ``assistant`` whether the chat assistant may be offered it at all; there, a
+    network call needs the same opt-in as a change.
     """
 
     name: str
@@ -154,8 +154,14 @@ class OperationRegistry:
         return frozenset(self._operations)
 
     def assistant_tier(self, effect: Effect) -> frozenset[str]:
-        """The operations the assistant may be offered with this effect."""
-        return frozenset(op.name for op in self if op.assistant and op.effect == effect)
+        """The operations the assistant may be offered at this tier.
+
+        The read tier's contract is no session change, no file written and no network
+        call; everything else the assistant may see needs the per-request opt-in.
+        """
+        if effect == "read":
+            return frozenset(op.name for op in self if op.assistant and op.effect == "read" and not op.network)
+        return frozenset(op.name for op in self if op.assistant and (op.effect == "change" or op.network))
 
     def canvas_operations(self) -> dict[str, Operation]:
         return {op.name: op for op in self if op.canvas}

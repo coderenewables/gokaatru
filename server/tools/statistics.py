@@ -11,6 +11,7 @@ from scipy.stats import weibull_min
 from server.core.momm import MEAN_DAYS_IN_MONTH, compute_weighted_momm_table
 from server.core.validators import detect_timestep_minutes
 from server.main import mcp
+from server.operations import operation
 from server.state.session import SessionState, session
 
 COMPASS_16 = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
@@ -471,18 +472,21 @@ def _sensor_statistics(state: SessionState, sensor_name: str) -> dict:
     }
 
 
+@operation(effect="read", stage="statistics")
 @mcp.tool()
 def compute_weibull_params(sensor_name: str, method: str = "wasp_m1_m3") -> dict:
     """Fit Weibull A and k using WAsP m1/m3 moment method (default) or scipy MLE."""
     return _compute_weibull_params(session, sensor_name, method)
 
 
+@operation(effect="read", stage="statistics")
 @mcp.tool()
 def compute_wind_climate(speed_sensor: str, direction_sensor: str = "") -> dict:
     """Summarize Weibull fit quality, exceedance levels, and optional directional energy contribution."""
     return _compute_wind_climate(session, speed_sensor, direction_sensor)
 
 
+@operation(effect="read", stage="statistics")
 @mcp.tool()
 def compute_turbulence_analysis(speed_sensor: str, min_speed_mps: float = TI_MIN_SPEED_MPS) -> dict:
     """Compute mean, P90, representative, and 15 m/s IEC turbulence intensity metrics.
@@ -495,6 +499,7 @@ def compute_turbulence_analysis(speed_sensor: str, min_speed_mps: float = TI_MIN
     return _compute_turbulence_analysis(session, speed_sensor, min_speed_mps)
 
 
+@operation(effect="read", stage="statistics")
 @mcp.tool()
 def compute_windrose_data(speed_sensor: str, direction_sensor: str, num_sectors: int = 16) -> dict:
     """Aggregate windrose sector frequency and mean speed traced to IEC 61400-12-1 directional binning practice."""
@@ -518,18 +523,21 @@ def compute_windrose_data(speed_sensor: str, direction_sensor: str, num_sectors:
     return {"sectors": sectors}
 
 
+@operation(effect="read", stage="statistics")
 @mcp.tool()
 def compute_diurnal_profile(sensor_name: str) -> dict:
     """Compute hour-of-day mean wind speed using the Phase 1 diurnal profile convention."""
     return _compute_diurnal_profile(session, sensor_name)
 
 
+@operation(effect="read", stage="statistics")
 @mcp.tool()
 def compute_monthly_stats(sensor_name: str) -> dict:
     """Compute monthly mean, min, max, and coverage using the Phase 1 monthly-summary specification."""
     return _compute_monthly_stats(session, sensor_name)
 
 
+@operation(effect="read", stage="statistics")
 @mcp.tool()
 def compute_turbulence_intensity(
     speed_sensor: str,
@@ -570,6 +578,7 @@ def compute_turbulence_intensity(
     }
 
 
+@operation(effect="read", stage="statistics")
 @mcp.tool()
 def compute_momm(sensor_name: str) -> dict:
     """Compute Windographer-style MoMM using completeness and month-length weighting from TR6.
@@ -621,6 +630,7 @@ def compute_momm(sensor_name: str) -> dict:
     return result
 
 
+@operation(effect="read", stage="statistics")
 @mcp.tool()
 def compute_scatter_stats(sensor_a: str, sensor_b: str) -> dict:
     """Compute OLS scatter metrics using standard regression diagnostics from least-squares analysis."""

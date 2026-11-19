@@ -14,6 +14,7 @@ import pandas as pd
 
 from server.core.validators import SENSOR_FIELDS, detect_timestep_minutes
 from server.main import mcp
+from server.operations import operation
 from server.state.session import SessionState, session
 
 # Physical bounds per sensor type for range_check (D16), in the units the
@@ -802,24 +803,28 @@ def _undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
     return result
 
 
+@operation(effect="read", stage="cleaning")
 @mcp.tool()
 def list_cleaning_rules() -> dict:
     """List supported cleaning rules and default parameters for the GoKaatru Phase 2 cleaning workflow."""
     return _list_cleaning_rules(session)
 
 
+@operation(effect="change", stage="cleaning")
 @mcp.tool()
 def apply_cleaning_rule(rule_type: str, sensor: str, params: str, start_date: str = "", end_date: str = "") -> dict:
     """Apply one named cleaning rule to the active timeseries and log the operation for undo."""
     return _apply_cleaning_rule(session, rule_type, sensor, params, start_date, end_date)
 
 
+@operation(effect="read", stage="cleaning")
 @mcp.tool()
 def get_cleaning_log() -> dict:
     """Return the recorded cleaning operations applied to the active session timeseries."""
     return _get_cleaning_log(session)
 
 
+@operation(effect="change", stage="cleaning")
 @mcp.tool()
 def undo_cleaning_rule(entry_index: int) -> dict:
     """Restore raw data and replay all cleaning steps except the selected log entry."""

@@ -8,6 +8,7 @@ from scipy.stats import genextreme, gumbel_r
 from server.core.formulas import adjust_density_to_height
 from server.core.validators import detect_timestep_minutes
 from server.main import mcp
+from server.operations import operation
 from server.state.session import SessionState, session
 from server.tools.atmosphere import _atmospheric_series, _sensor_height
 
@@ -495,12 +496,14 @@ def _compute_persistence(
     }
 
 
+@operation(effect="read", stage="analysis")
 @mcp.tool()
 def compute_energy_metrics(speed_sensor: str, direction_sensor: str = "") -> dict:
     """Compute measured wind-power density, cube-mean speed, and optional sector energy contribution."""
     return _compute_energy_metrics(session, speed_sensor, direction_sensor)
 
 
+@operation(effect="read", stage="analysis")
 @mcp.tool()
 def compute_extreme_winds(
     speed_sensor: str,
@@ -526,12 +529,14 @@ def compute_extreme_winds(
     return _compute_extremes(session, speed_sensor, source, min_year_coverage)
 
 
+@operation(effect="read", stage="analysis")
 @mcp.tool()
 def compute_wind_ramps(speed_sensor: str, event_threshold_m_s: float = 3.0) -> dict:
     """Summarize consecutive wind-speed ramp magnitudes and threshold events."""
     return _compute_ramps(session, speed_sensor, event_threshold_m_s)
 
 
+@operation(effect="read", stage="analysis")
 @mcp.tool()
 def compute_wind_persistence(
     speed_sensor: str,

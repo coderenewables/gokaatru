@@ -30,6 +30,7 @@ from server.core.sweep_analysis import (
     uncertainty_substitution,
 )
 from server.main import mcp
+from server.operations import operation
 from server.state.session import SessionState, session
 
 #: Rows are wide and a sweep can hold hundreds of them, so a summary is returned by
@@ -151,18 +152,21 @@ def _sweep_spread(
     }
 
 
+@operation(effect="read", stage="sweep", canvas=False)
 @mcp.tool()
 def list_sweeps() -> dict:
     """List every scenario sweep persisted in the current session."""
     return _list_sweeps(session)
 
 
+@operation(effect="read", stage="sweep", canvas=False)
 @mcp.tool()
 def get_sweep_summary(sweep_id: str) -> dict:
     """Summarise a sweep: which axes varied, which the gates collapsed, and why."""
     return _sweep_summary(session, sweep_id)
 
 
+@operation(effect="read", stage="sweep", canvas=False)
 @mcp.tool()
 def analyze_sweep_spread(sweep_id: str, metric: str = "long_term_mean_speed_mps") -> dict:
     """Decompose a sweep metric's variance across the five scenario axes."""

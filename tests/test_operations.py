@@ -104,7 +104,7 @@ def test_stages_are_unique() -> None:
 # No session change, no file written, no network: always offered to the assistant.
 PINNED_READ_TIER = frozenset({
     "analyze_homogeneity", "analyze_sweep_spread", "build_sector_shear_tables", "compute_air_density",
-    "compute_air_density_timeseries", "compute_atmospheric_conditions", "compute_diurnal_profile",
+    "compute_air_density_timeseries", "compute_diurnal_profile",
     "compute_energy_metrics", "compute_energy_sensitivity", "compute_extreme_winds", "compute_mast_effects",
     "compute_mcp_readiness", "compute_momm", "compute_monthly_stats", "compute_qc_diagnostics",
     "compute_scatter_stats", "compute_sensor_comparison", "compute_turbulence_analysis",
@@ -121,7 +121,8 @@ PINNED_READ_TIER = frozenset({
 PINNED_CHANGE_TIER = frozenset({
     "apply_cleaning_rule", "apply_homogeneity_cutoff", "build_aggr_momm_shear_table", "build_data_model",
     "build_roughness_table", "build_shear_table", "calculate_roughness_timeseries",
-    "calculate_shear_timeseries", "calculate_uncertainty", "compute_era5_wind_speed", "extract_era5_data",
+    "calculate_shear_timeseries", "calculate_uncertainty", "compute_atmospheric_conditions", "compute_era5_wind_speed",
+    "extract_era5_data",
     "extrapolate_reanalysis_to_hub", "extrapolate_to_hub_height", "find_era5_nodes",
     "interpolate_era5_to_site", "load_run_config", "parse_datamodel", "parse_timeseries", "run_ensemble",
     "run_ltc_linear_least_squares", "run_ltc_speedsort", "run_ltc_total_least_squares",

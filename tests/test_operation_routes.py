@@ -87,6 +87,8 @@ def _populate(state: SessionState) -> None:
         "Spd_80m": {"height_m": 80.0, "sensor_type": "wind_speed"},
         "Spd_60m": {"height_m": 60.0, "sensor_type": "wind_speed"},
         "Dir_100m": {"height_m": 100.0, "sensor_type": "wind_direction"},
+        "Tmp_2m": {"height_m": 2.0, "sensor_type": "temperature"},
+        "Prs_2m": {"height_m": 2.0, "sensor_type": "pressure"},
     }
     state.set_measurement_type("mast")
     state.set_hub_height_m(120.0)

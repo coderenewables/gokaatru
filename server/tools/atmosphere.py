@@ -211,7 +211,9 @@ def _compute_atmospheric_conditions(
     return result
 
 
-@operation(effect="read", stage="atmosphere")
+# A change, not a read: it records the mean measured density in the run configuration, and
+# the energy-sensitivity factor normalises speed with it, so running it moves that number.
+@operation(effect="change", stage="atmosphere")
 def compute_atmospheric_conditions(
     temperature_sensor: str = "",
     pressure_sensor: str = "",

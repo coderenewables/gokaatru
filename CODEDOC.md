@@ -159,8 +159,9 @@ publishes the MCP tool itself (`_publish_to_mcp`, through `mcp.tool()`); no tool
 `tests/snapshots/mcp_tools.json` (`python -m tests.mcp_surface --write` to refresh). `Operation` also carries disclosure fields, standards references, a code version and
 an optional dry run; `REGISTRY` holds all 90. The parameter schema is read from the signature
 by FastMCP's own parser. `STAGES` is the pipeline order used for the canvas tie-break. It lives
-outside `core/` because it imports FastMCP. `tests/test_operations.py` pins the declarations to
-today's chat tiers, executor dispatch and stage order.
+outside `core/` because it imports FastMCP. The chat route's two tiers and callables, the
+executor's canvas dispatch (`_tool_registry`) and its stage tie-break are all read from it;
+`tests/test_operations.py` pins the tiers, the non-canvas set and the stage order by name.
 
 ### 4.3 `server/tools/` — analytics (the MCP tool surface)
 

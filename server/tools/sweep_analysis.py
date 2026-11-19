@@ -151,6 +151,10 @@ def _sweep_spread(
     }
 
 
+# These three read files, and are still reads for the assistant: the only path they can
+# address is the session's own sweeps directory, through the confined ``_sweep_dir``, and a
+# sweep id is the sole input. Without them the assistant cannot see a sweep at all and
+# answers about one from session state that never held it.
 @operation(effect="read", stage="sweep", canvas=False)
 def list_sweeps() -> dict:
     """List every scenario sweep persisted in the current session."""

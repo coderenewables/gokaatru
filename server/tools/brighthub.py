@@ -36,6 +36,9 @@ def _require_token(state: SessionState) -> str:
 
 # ---------------------------------------------------------------------------
 # Authentication tools
+#
+# No BrightHub tool is offered to the assistant: they call the network, and the credential
+# ones would hand an injected prompt a view of the session's authentication state.
 # ---------------------------------------------------------------------------
 
 

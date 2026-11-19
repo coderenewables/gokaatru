@@ -530,16 +530,18 @@ These must be addressed first:
 ### Chat tool authority
 
 `POST /sessions/{id}/chat` executes MCP tools on the model's behalf, so the tool
-surface is an explicit **name allowlist**, deny-by-default. A tool in neither
-tier is not exposed at all, so adding a new MCP tool does not silently widen the
-model's authority.
+surface is deny-by-default. Each tool's operation declaration (`server/operations.py`)
+says whether the assistant may be offered it and whether it changes data or calls the
+network; the two tiers are generated from that, and `tests/test_operations.py` pins
+both by name, so moving a tool between tiers is a visible test edit. A tool declared
+with `assistant=False` is not exposed at all.
 
 | Tier | Count | Exposed when |
 |---|---|---|
 | Read-only — query, compute, plot | 51 | always |
 | Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty | 27 | only with `allow_mutating_tools: true` |
 
-The remaining 12 of the 90 registered tools are deliberately unclassified and
+The remaining 12 of the 90 registered tools are declared `assistant=False` and
 therefore unreachable from chat: every BrightHub / EarthDataHub tool — the read-only
 tier's contract is "no session mutation, no filesystem, **no network**", and the
 credential tools would additionally hand an injected prompt a view of the session's

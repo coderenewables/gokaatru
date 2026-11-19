@@ -26,8 +26,10 @@ from server.core.scenario_result import ENGINE_VERSION
 Effect = Literal["read", "change"]
 EFFECTS: tuple[str, ...] = ("read", "change")
 
-#: Pipeline order, used to break a tie between two canvas nodes that no edge orders (F-09).
-#: The same order the executor's module list gave; a stage is unranked by id within it.
+#: Pipeline order, used to break a tie between two canvas nodes that no edge orders (F-09:
+#: canvas edges are advisory; the real dependency runs through session state). It follows
+#: the data flow, not import order: ``reanalysis_download`` (BrightHub) writes the node frames
+#: that ``reanalysis`` reads, so it comes first. Within a stage, ties fall back to node id.
 STAGES: tuple[str, ...] = (
     "ingest",
     "cleaning",

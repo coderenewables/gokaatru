@@ -120,6 +120,8 @@ def _build_data_model(state: SessionState, spec: dict) -> dict:
     }
 
 
+# The draft proposes a reading of the column headers and writes nothing; the build writes a
+# data model into the workspace and replaces the sensor mapping and timezone in one call.
 @operation(effect="read", stage="ingest", canvas=False)
 def draft_data_model() -> dict:
     """Draft a Task 43 reading of the loaded timeseries columns for review."""

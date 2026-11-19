@@ -12,7 +12,10 @@ from fastmcp import FastMCP
 mcp = FastMCP(
     name="GoKaatru",
     version="0.1.0",
-    instructions="Wind Resource Assessment MCP Server - IEC-compliant wind data analysis tools",
+    instructions=(
+        "Wind Resource Assessment MCP Server - wind data analysis tools. Methods are traced to "
+        "public IEC 61400 and MEASNET material; no conformance with any standard is claimed."
+    ),
 )
 
 sys.modules.setdefault("server.main", sys.modules[__name__])

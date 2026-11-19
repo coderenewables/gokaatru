@@ -174,7 +174,7 @@ def _compute_atmospheric_conditions(
     mean_density = float(density.dropna().mean())
     # F-57: the correction factor used to be computed here, displayed, and applied to
     # nothing. Persisting the mean density is what lets the energy-sensitivity path
-    # normalise speed to the power curve's reference density, per IEC 61400-12-1.
+    # normalise speed to the power curve's reference density, traced to IEC 61400-12-1.
     if mean_density > 0.0:
         state.runconfig["mean_air_density_kgm3"] = mean_density
         state.touch()

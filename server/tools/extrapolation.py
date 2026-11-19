@@ -223,7 +223,7 @@ def _extrapolate_to_hub_height(
     reference_columns: list[str] | None = None,
     extrapolate_reanalysis: bool = True,
 ) -> dict:
-    """Create a hub-height wind-speed series using power-law or log-law shear per IEC 61400-12-1 Annex B."""
+    """Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B."""
     if shear_model not in {"power_law", "log_law"}:
         raise ValueError(f"shear_model must be 'power_law' or 'log_law', got '{shear_model}'")
     if state.timeseries_df is None:
@@ -576,7 +576,7 @@ def _add_shear_to_timeseries(state: SessionState) -> bool:
 
 @mcp.tool()
 def extrapolate_to_hub_height(hub_height_m: float, shear_model: str = "power_law") -> dict:
-    """Create a hub-height wind-speed series using power-law or log-law shear per IEC 61400-12-1 Annex B."""
+    """Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B."""
     return _extrapolate_to_hub_height(session, hub_height_m, shear_model)
 
 

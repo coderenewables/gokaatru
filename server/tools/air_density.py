@@ -66,7 +66,7 @@ def _source_frame(source: str) -> pd.DataFrame:
 
 @mcp.tool()
 def compute_air_density(pressure_pa: float, temperature_k: float, dewpoint_k: float) -> dict:
-    """Compute moist-air density from pressure and dew point per IEC 61400-12-1 Section A.5."""
+    """Compute moist-air density from pressure and dew point traced to IEC 61400-12-1 Section A.5."""
     density, dewpoint_clamped = air_density_iec(pressure_pa, temperature_k, dewpoint_k)
     result = {
         "status": "ok",

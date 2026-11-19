@@ -374,7 +374,7 @@ def _calculate_shear_timeseries(
     height_sensors: str,
     min_speed_mps: float | None = None,
 ) -> dict:
-    """Calculate timestamp-wise power-law shear coefficients per IEC 61400-12-1 Section B.2."""
+    """Calculate timestamp-wise power-law shear coefficients traced to IEC 61400-12-1 Section B.2."""
     df = _require_timeseries(state)
     height_map = _parse_height_sensors(height_sensors)
     _require_columns(df, height_map)
@@ -397,7 +397,7 @@ def _calculate_shear_timeseries(
 
 
 def _calculate_roughness_timeseries(state: SessionState, height_sensors: str) -> dict:
-    """Calculate timestamp-wise roughness lengths from U versus ln(z) fits per IEC 61400-12-1 Section B.3."""
+    """Calculate timestamp-wise roughness lengths from U versus ln(z) fits traced to IEC 61400-12-1 Section B.3."""
     df = _require_timeseries(state)
     height_map = _parse_height_sensors(height_sensors)
     _require_columns(df, height_map)
@@ -630,7 +630,7 @@ def _build_shear_table(state: SessionState, aggregation: str = "mean") -> dict:
 
 
 def _build_roughness_table(state: SessionState, aggregation: str = "mean") -> dict:
-    """Build a 12x24 roughness lookup table in log-space per IEC logarithmic profile practice."""
+    """Build a 12x24 roughness lookup table in log-space traced to IEC logarithmic profile practice."""
     if aggregation not in {"mean", "median", "momm"}:
         raise ValueError(f"aggregation must be one of mean, median, momm, got '{aggregation}'")
     if state.roughness_timeseries_df is None:
@@ -766,7 +766,7 @@ def _build_aggr_momm_shear_table(
 
 @mcp.tool()
 def calculate_shear_timeseries(height_sensors: str, min_speed_mps: float | None = None) -> dict:
-    """Calculate timestamp-wise power-law shear coefficients per IEC 61400-12-1 Section B.2.
+    """Calculate timestamp-wise power-law shear coefficients traced to IEC 61400-12-1 Section B.2.
 
     ``min_speed_mps`` gates which records contribute (default 3.0 m/s): below
     that, ln(v2/v1) is anemometer noise rather than profile. The resolved value
@@ -777,7 +777,7 @@ def calculate_shear_timeseries(height_sensors: str, min_speed_mps: float | None 
 
 @mcp.tool()
 def calculate_roughness_timeseries(height_sensors: str) -> dict:
-    """Calculate timestamp-wise roughness lengths from U versus ln(z) fits per IEC 61400-12-1 Section B.3."""
+    """Calculate timestamp-wise roughness lengths from U versus ln(z) fits traced to IEC 61400-12-1 Section B.3."""
     return _calculate_roughness_timeseries(session, height_sensors)
 
 
@@ -799,7 +799,7 @@ def build_shear_table(aggregation: str = "mean") -> dict:
 
 @mcp.tool()
 def build_roughness_table(aggregation: str = "mean") -> dict:
-    """Build a 12x24 roughness lookup table in log-space per IEC logarithmic profile practice."""
+    """Build a 12x24 roughness lookup table in log-space traced to IEC logarithmic profile practice."""
     return _build_roughness_table(session, aggregation)
 
 

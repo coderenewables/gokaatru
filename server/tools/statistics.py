@@ -497,7 +497,7 @@ def compute_turbulence_analysis(speed_sensor: str, min_speed_mps: float = TI_MIN
 
 @mcp.tool()
 def compute_windrose_data(speed_sensor: str, direction_sensor: str, num_sectors: int = 16) -> dict:
-    """Aggregate windrose sector frequency and mean speed per IEC 61400-12-1 directional binning practice."""
+    """Aggregate windrose sector frequency and mean speed traced to IEC 61400-12-1 directional binning practice."""
     if num_sectors <= 0:
         raise ValueError(f"num_sectors must be positive, got {num_sectors}")
     aligned = _align_pair(speed_sensor, direction_sensor)
@@ -536,7 +536,7 @@ def compute_turbulence_intensity(
     sd_sensor: str,
     min_speed_mps: float = TI_MIN_SPEED_MPS,
 ) -> dict:
-    """Compute mean and representative TI by 1 m/s bins per IEC 61400-1 Ed.4 Section 6.3.
+    """Compute mean and representative TI by 1 m/s bins traced to IEC 61400-1 Ed.4 Section 6.3.
 
     ``min_speed_mps`` defaults to the same 3 m/s gate ``compute_turbulence_analysis`` uses.
     Below cut-in, sigma/U is the ratio of two small numbers; the two tools previously gated

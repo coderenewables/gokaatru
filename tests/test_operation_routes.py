@@ -47,6 +47,7 @@ ARGUMENT_VALUES: dict[str, object] = {
     "sd_sensor": "Spd_100m_sd",
     "sensor_names": "Spd_100m,Spd_80m",
     "sweep_id": "no-such-sweep",
+    "name": "no-such-selection",
     "pressure_pa": 101325.0,
     "temperature_k": 288.15,
     "dewpoint_k": 280.0,

@@ -53,6 +53,7 @@ SHARED_FIELDS: tuple[str, ...] = (
     "sensor_inventory",
     "cleaning_log",
     "cleaning_flags",
+    "selections",
     "brighthub_token",
     "earthdatahub_pat",
     "era5_nodes",

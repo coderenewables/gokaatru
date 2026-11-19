@@ -15,7 +15,7 @@ those citations have not been checked against the clause text, and the only word
 is "traced to", never "compliant with" or "follows".
 
 Two parts, one logic core:
-- **`server/`** — Python MCP server (FastMCP) + FastAPI web API. 93 tools across ingest,
+- **`server/`** — Python MCP server (FastMCP) + FastAPI web API. 97 tools across ingest,
   cleaning, statistics, shear/extrapolation, ERA5+MERRA-2 reanalysis, homogeneity, 5 LTC/MCP
   algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration,
   and a scenario **sweep/Analysis Engine**. DTU's WindKit (pinned `==2.2.0`) is used only
@@ -225,6 +225,7 @@ run to zero. They are all fixed now; keep it at zero rather than letting a secon
 - **P1-14a:** concurrent saves of one project collided. The interface sends several changing requests at once; two saves wrote the same content-addressed frame through one temporary name and the rename failed on Windows (`PermissionError`, found by the Playwright run), and unserialised, one save's clean-up could delete a frame another had just recorded. Saves and loads of a workspace now take a lock, and each write uses its own temporary name. The session state itself can still be read by a save while another request changes it; single-user, not addressed.
 - **P1-14:** `tests/test_restart.py` runs a real uvicorn process: upload, data model build, a configuration change, cleaning, shear and extrapolation over HTTP, then kills the process outright and starts a new one on the same workspace. Every read answers the same, and every change in the log survives (gate item 3). About 17 s, runs in CI.
 - **P1-18:** `GET /sessions/{id}/sensors` answered 400 on a new session because it matched on the wrong error text; it now returns an empty inventory when no data is loaded, and the Playwright smoke test has no allow-listed error left.
+- **P1-15:** selections (decisions/0011), four new tools (93 → 97). `server/core/selection.py` resolves a tree of time ranges, direction sectors, value bands and record sets, combined by union and intersection, to a record mask: half-open bounds, sectors wrap through north, a missing value is never selected, and a definition that names a missing channel, an offset-less time or bounds that describe nothing is refused. `define_selection`, `delete_selection`, `list_selections`, `resolve_selection` keep named selections on `state.selections` (saved with the project) and resolve them against the working data on every use. 200 random nested definitions agree with an independent per-record evaluator in `tests/oracles.py`. Tiers 53 read / 32 change.
 
 **2026-11-17 to 2026-11-19: workbench Phase 0.** P0-1 to P0-13 were on branch `phase0-stabilise`, merged into `master` by the owner as PR #5 (`f8a24ca`, 2026-11-18). P0-14 (`f2191ea`) was merged as PR #6 (`2c2f069`, 2026-11-19). Phase 1 runs on branch `phase1-foundations`. One task per commit; the task list and status are in `Claude outputs/WORKBENCH_PLAN.md` §8a.
 

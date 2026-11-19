@@ -120,6 +120,9 @@ class SessionState:
     operation_log: list[dict[str, object]]
     # Log sequence numbers of the changes undone and not yet redone, most recent last.
     undo_stack: list[int]
+    # Named record selections (decisions/0011): each a definition from server.core.selection
+    # plus who made it and when. Resolved against the data each time they are used.
+    selections: dict[str, dict[str, object]]
 
     def __init__(self) -> None:
         """Initialize the singleton session state per the GoKaatru build spec."""
@@ -184,6 +187,7 @@ class SessionState:
         self.workflow_runs = []
         self.operation_log = []
         self.undo_stack = []
+        self.selections = {}
         self.session_id = preserved_session_id
         self.workspace_dir = preserved_workspace_dir
         self.created_at = preserved_created_at

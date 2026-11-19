@@ -141,4 +141,6 @@ def test_all_tools_registered() -> None:
     # them, the assistant could not reach them, and the two LTC wrappers were broken).
     # 90 + undo_last_change/redo_last_change/get_operation_log (2026-11-19, P1-13: server-side
     # undo and redo over the operation log, and the log itself as a read).
-    assert len(tools) == 93
+    # 93 + define_selection/delete_selection/list_selections/resolve_selection (2026-11-19,
+    # P1-15: selections are server objects every view resolves the same way).
+    assert len(tools) == 97

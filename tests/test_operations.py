@@ -110,7 +110,7 @@ def test_stages_are_unique() -> None:
 
 # No session change, no file written, no network: always offered to the assistant.
 PINNED_READ_TIER = frozenset({
-    "get_operation_log",
+    "get_operation_log", "list_selections", "resolve_selection",
     "analyze_homogeneity", "analyze_sweep_spread", "build_sector_shear_tables", "compute_air_density",
     "compute_air_density_timeseries", "compute_diurnal_profile",
     "compute_energy_metrics", "compute_energy_sensitivity", "compute_extreme_winds", "compute_mast_effects",
@@ -127,7 +127,7 @@ PINNED_READ_TIER = frozenset({
 })
 # Changes, file writes and network calls: offered only with allow_mutating_tools.
 PINNED_CHANGE_TIER = frozenset({
-    "undo_last_change", "redo_last_change",
+    "undo_last_change", "redo_last_change", "define_selection", "delete_selection",
     "apply_cleaning_rule", "apply_homogeneity_cutoff", "build_aggr_momm_shear_table", "build_data_model",
     "build_roughness_table", "build_shear_table", "calculate_roughness_timeseries",
     "calculate_shear_timeseries", "calculate_uncertainty", "compute_atmospheric_conditions", "compute_era5_wind_speed",
@@ -146,6 +146,7 @@ PINNED_UNEXPOSED = frozenset({
 })
 PINNED_NOT_ON_CANVAS = frozenset({
     "get_operation_log", "undo_last_change", "redo_last_change",
+    "define_selection", "delete_selection", "list_selections", "resolve_selection",
     "analyze_sweep_spread", "build_data_model", "draft_data_model", "get_fixed_prefix_hash",
     "get_sweep_summary", "list_sweeps",
 })
@@ -157,12 +158,12 @@ PINNED_STAGE_BY_MODULE = {
     "ltc_ml": "ltc_ml", "ensemble": "ensemble", "clipping": "clipping", "uncertainty": "uncertainty",
     "statistics": "statistics", "visualization": "visualization", "map": "map", "config": "config",
     "advanced_analysis": "analysis", "atmosphere": "atmosphere", "diagnostics": "diagnostics",
-    "scenario_result": "sweep", "sweep_analysis": "sweep", "history": "config",
+    "scenario_result": "sweep", "sweep_analysis": "sweep", "history": "config", "selections": "selection",
 }
 PINNED_STAGES = (
     "ingest", "cleaning", "reanalysis_download", "reanalysis", "homogeneity", "shear", "extrapolation",
     "air_density", "ltc", "ltc_ml", "ensemble", "clipping", "uncertainty", "statistics", "visualization",
-    "map", "config", "analysis", "atmosphere", "diagnostics", "sweep",
+    "map", "config", "analysis", "atmosphere", "diagnostics", "sweep", "selection",
 )
 
 

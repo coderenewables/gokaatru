@@ -42,7 +42,7 @@ README's "Deployment model" section first.
 |------|--------|
 | Backend Python | ~25.6k LOC across 85 files |
 | Frontend TS/TSX | ~17.6k LOC |
-| MCP tools registered | **93** (the 142 WindKit pass-throughs were removed 2026-11-19, decisions/0009) |
+| MCP tools registered | **97** (the 142 WindKit pass-throughs were removed 2026-11-19, decisions/0009) |
 | FastAPI endpoints | ~100 across 13 route files |
 | Backend tests | 83 pytest files (incl. an independent oracle harness) |
 | Frontend tests | 30 vitest files |
@@ -148,6 +148,7 @@ The interface-free heart. Nothing here imports FastAPI or FastMCP.
 | `sweep_analysis.py` | Decomposes a sweep metric's variance across the five axes (design doc §7.9). Ported from `frontend/src/lib/sweepAnalysis.ts`, which was deleted — the statistic now has one implementation, reachable from both the Interrogate page and the chat tools. `duplicate_levels(rows, duplicates)` maps each policy level skipped as a duplicate to the level whose rows it shares, so an axis varied between two policies that picked the same sensors does not read as single-level. Also `uncertainty_substitution` (design doc §8.1, F9): folds each axis's level-mean spread of the long-term speed into the MCP and vertical terms by `max()`, adds the reference-source spread, and reports scenario totals with and without it; formerly browser-only. |
 | `sensor_selection.py` | Resolves a sensor-selection *policy* (e.g. `availability_90`, `widest_lever`) to concrete sensors. |
 | `datamodel_builder.py` | Builds a minimal IEA Task 43 data model from CSV column headers alone, for campaigns delivered without one. Header inference (`draft_columns`), spec validation and Task 43 emission (`build_datamodel`); emits a *document*, never session state. |
+| `selection.py` | Record selections (decisions/0011): `validate` and `resolve` a tree of time ranges, direction sectors, value bands and record sets combined by union and intersection, to a boolean mask over the working frame. Half-open bounds, sectors wrap through north, a missing value is never selected; tested against `tests/oracles.py`'s per-record evaluator. |
 | `uncertainty_inputs.py` | Derives a scenario's uncertainty inputs from its own results. `is_hub_interpolated` takes the scenario's reference heights; `derive_uncertainty_inputs` selects `analyst_supplied` or `log_law` shear methods where the source is an analyst exponent or a roughness-only profile. |
 
 ### 4.2a `server/operations.py` — the operation registry
@@ -183,6 +184,7 @@ private helpers behind them. They total **90**.
 | `datamodel_builder.py` | 2 | Draft a Task 43 reading of the loaded columns, and build/persist/load the declared data model (`server/core/datamodel_builder.py` does the work). |
 | `sweep_analysis.py` | 3 | Read and explain a persisted sweep: `list_sweeps`, `get_sweep_summary` (which axes varied, which the gates collapsed, which levels were duplicates of another), `analyze_sweep_spread`. The rest of the sweep engine is still HTTP-only. |
 | `config.py` | 5 | Run-configuration management (get/update/save/load/summary). `update_run_config` attaches before and after snapshots (`config_snapshot`) to its log entry for undo. |
+| `selections.py` | 4 | `define_selection`, `delete_selection`, `list_selections`, `resolve_selection`; named selections live on `state.selections` and are resolved against the working data each time (`selection_mask`). |
 | `history.py` | 3 | `undo_last_change`, `redo_last_change`, `get_operation_log`. Undo inverts the last undoable call (`UNDOABLE_OPERATIONS`): a cleaning rule through the replay undo, a configuration change by restoring exactly the paths and synced fields it changed; it refuses when a later change moved them. Redo calls the operation again with its logged parameters. `state.undo_stack` holds what was undone; any other change clears it. |
 | `cleaning.py` | 4 | Rule-based timeseries cleaning (list/apply/log/undo). Every record a rule removes gets a row in `state.cleaning_flags` (timestamp, sensor, rule sequence and type, reason code from `FLAG_REASONS`, actor, time), found by diffing the column before and after the rule; `_clean_series(raw, index, flags)` rebuilds the cleaned series from raw data, bit for bit. Undo replays the remaining rules as before and keeps each one's original actor and time (`_carry_flag_provenance`). `get_cleaning_log` returns a flag summary. Apply and undo have dry runs (`preview_cleaning_rule`, `preview_undo_cleaning_rule`): the real function runs on a replica of the session (`_replica`) and `_change_summary` reports rows inserted, columns dropped, and per column the records set missing, restored or changed with their runs (at most `PREVIEW_RANGE_LIMIT` listed, `ranges_truncated` saying so). |
 | `statistics.py` | 9 | Weibull, wind climate, turbulence, windrose, diurnal/monthly, MoMM, scatter. |
@@ -256,7 +258,7 @@ logic as the MCP tools, and shape the response with the Pydantic models in `sche
 | `mcp.py` | 1 | MCP catalog endpoint. |
 | `health.py` | 1 | Health check. |
 | `chat.py` | 1 | OpenAI-compatible LLM chat proxy with MCP tool execution (drives the BYOK Copilot). |
-| `operations.py` | 91 | Generated from the registry: `POST /sessions/{id}/operations/{name}` for each of the 93 operations, with a body model built from the function signature (`<Name>Parameters`, extra fields refused), and `GET /operations` listing every declaration. Same session binding and error mapping as chat. |
+| `operations.py` | 100 | Generated from the registry: `POST /sessions/{id}/operations/{name}` for each of the 97 operations, `.../preview` for the two with a dry run, with a body model built from the function signature (`<Name>Parameters`, extra fields refused), and `GET /operations` listing every declaration. Same session binding and error mapping as chat. |
 
 `api/mcp.py` additionally mounts a **session-aware MCP transport** into the FastAPI app, so a
 browser session and an MCP client can share the same live session state.

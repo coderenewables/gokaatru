@@ -393,3 +393,47 @@ def fixed_prefix_hash_oracle(
     }
     encoded = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()[:16]
+
+
+def selection_mask_oracle(definition: dict, timestamps: list, channels: dict) -> list:
+    """Evaluate a selection one record at a time, with no vectorisation and no shared code.
+
+    ``timestamps`` are UTC ``pd.Timestamp``s; ``channels`` maps a channel name to a list of
+    floats (NaN for missing). Half-open bounds; a sector wraps through north when its
+    opening edge is past its closing edge; a missing value is never selected.
+    """
+    import math
+
+    def held(node: dict, row: int) -> bool:
+        kind = node["kind"]
+        if kind == "union":
+            return any(held(part, row) for part in node["of"])
+        if kind == "intersection":
+            return all(held(part, row) for part in node["of"])
+        stamp = timestamps[row]
+        if kind == "time_range":
+            if node.get("start") is not None and stamp < pd.Timestamp(node["start"]).tz_convert("UTC"):
+                return False
+            if node.get("end") is not None and not stamp < pd.Timestamp(node["end"]).tz_convert("UTC"):
+                return False
+            return True
+        if kind == "records":
+            return any(stamp == pd.Timestamp(value).tz_convert("UTC") for value in node["timestamps"])
+        value = channels[node["channel"]][row]
+        if value is None or math.isnan(value):
+            return False
+        if kind == "band":
+            if node.get("min") is not None and value < node["min"]:
+                return False
+            if node.get("max") is not None and value >= node["max"]:
+                return False
+            return True
+        bearing = value % 360.0
+        low, high = node["from_deg"] % 360.0, node["to_deg"] % 360.0
+        if node["to_deg"] == 360.0:
+            high = 360.0
+        if low < high:
+            return low <= bearing < high
+        return bearing >= low or bearing < high
+
+    return [held(definition, row) for row in range(len(timestamps))]

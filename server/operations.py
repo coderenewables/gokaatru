@@ -84,6 +84,7 @@ STAGES: tuple[str, ...] = (
     "atmosphere",
     "diagnostics",
     "sweep",
+    "selection",
 )
 
 # Standards references may only say what a method is traced to (decisions/0004).

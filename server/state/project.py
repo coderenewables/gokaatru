@@ -19,10 +19,12 @@ import json
 import math
 import os
 import sqlite3
+import threading
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -61,6 +63,18 @@ _FLOAT = "__float__"
 
 class ProjectIntegrityError(ValueError):
     """A raw input recorded in the catalogue was changed or removed outside GoKaatru."""
+
+
+# The interface sends several changing requests at once, each saving the same project. Two
+# saves interleaved could each delete frame files the other had just recorded, so saves and
+# loads of one workspace take turns.
+_WORKSPACE_LOCKS: dict[Path, threading.Lock] = {}
+_WORKSPACE_LOCKS_GUARD = threading.Lock()
+
+
+def _workspace_lock(workspace_dir: Path) -> threading.Lock:
+    with _WORKSPACE_LOCKS_GUARD:
+        return _WORKSPACE_LOCKS.setdefault(Path(workspace_dir).resolve(), threading.Lock())
 
 
 def _resolved(state: SessionState) -> SessionState:
@@ -255,7 +269,10 @@ class ProjectStore:
 
     def save(self, state: SessionState) -> dict[str, object]:
         """Write the session's state; frames already on disk with the same content are reused."""
-        state = _resolved(state)
+        with _workspace_lock(self.workspace_dir):
+            return self._save(_resolved(state))
+
+    def _save(self, state: SessionState) -> dict[str, object]:
         encoder = _Encoder()
         encoded = {name: encoder.encode(getattr(state, name), name) for name in persisted_fields(state)}
         self.working_dir.mkdir(parents=True, exist_ok=True)
@@ -269,7 +286,7 @@ class ProjectStore:
             else:
                 stored = frame.copy(deep=False)
                 stored.columns = [str(column) for column in frame.columns]
-                temporary = target.with_suffix(".tmp")
+                temporary = target.with_name(f"{sha}.{uuid4().hex}.tmp")
                 stored.to_parquet(temporary)
                 os.replace(temporary, target)
                 written += 1
@@ -307,7 +324,10 @@ class ProjectStore:
 
     def load(self, state: SessionState) -> bool:
         """Restore a saved session into ``state``. Returns False when nothing was saved."""
-        state = _resolved(state)
+        with _workspace_lock(self.workspace_dir):
+            return self._load(_resolved(state))
+
+    def _load(self, state: SessionState) -> bool:
         if not self.has_snapshot():
             return False
         self.verify_raw()

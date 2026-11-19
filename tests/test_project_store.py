@@ -225,6 +225,27 @@ def test_the_api_refuses_a_project_whose_raw_input_changed(tmp_path: Path) -> No
     assert "mast.csv" in response.json()["detail"]
 
 
+def test_concurrent_saves_of_one_project_leave_it_loadable(tmp_path: Path) -> None:
+    """The interface sends several changing requests at once. Two saves wrote the same frame
+    through one temporary name and the rename failed on Windows (found by the Playwright run);
+    unserialised, one save's clean-up could also delete a frame another had just recorded."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    states = []
+    for index in range(8):
+        state = _rich_state(tmp_path)
+        state.timeseries_df.iloc[0, 0] = float(index)
+        states.append(state)
+    store = ProjectStore(tmp_path)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(store.save, states * 3))
+
+    restored = SessionState()
+    assert store.load(restored) is True
+    assert restored.timeseries_df.iloc[0, 0] in {float(index) for index in range(8)}
+    assert not list((tmp_path / "working").glob("*.tmp"))
+
+
 def test_the_catalogue_records_frames_by_content_hash(tmp_path: Path) -> None:
     state = _rich_state(tmp_path)
     ProjectStore(tmp_path).save(state)

@@ -12,7 +12,6 @@ import pandas as pd
 
 from server.core.formulas import ROUGHNESS_MAX_M, ROUGHNESS_MIN_M
 from server.core.momm import compute_weighted_momm_table
-from server.main import mcp
 from server.operations import operation
 from server.state.session import SessionState, session
 
@@ -766,7 +765,6 @@ def _build_aggr_momm_shear_table(
 
 
 @operation(effect="change", stage="shear")
-@mcp.tool()
 def calculate_shear_timeseries(height_sensors: str, min_speed_mps: float | None = None) -> dict:
     """Calculate timestamp-wise power-law shear coefficients traced to IEC 61400-12-1 Section B.2.
 
@@ -778,14 +776,12 @@ def calculate_shear_timeseries(height_sensors: str, min_speed_mps: float | None 
 
 
 @operation(effect="change", stage="shear")
-@mcp.tool()
 def calculate_roughness_timeseries(height_sensors: str) -> dict:
     """Calculate timestamp-wise roughness lengths from U versus ln(z) fits traced to IEC 61400-12-1 Section B.3."""
     return _calculate_roughness_timeseries(session, height_sensors)
 
 
 @operation(effect="read", stage="shear")
-@mcp.tool()
 def compute_vertical_structure(
     speed_sensors: str = "",
     direction_sensors: str = "",
@@ -796,21 +792,18 @@ def compute_vertical_structure(
 
 
 @operation(effect="change", stage="shear")
-@mcp.tool()
 def build_shear_table(aggregation: str = "mean") -> dict:
     """Build a 12x24 power-law shear lookup table using mean, median, or Windographer MoMM aggregation."""
     return _build_shear_table(session, aggregation)
 
 
 @operation(effect="change", stage="shear")
-@mcp.tool()
 def build_roughness_table(aggregation: str = "mean") -> dict:
     """Build a 12x24 roughness lookup table in log-space traced to IEC logarithmic profile practice."""
     return _build_roughness_table(session, aggregation)
 
 
 @operation(effect="read", stage="shear")
-@mcp.tool()
 def build_sector_shear_tables(
     direction_sensor: str,
     num_sectors: int = 12,
@@ -824,7 +817,6 @@ def build_sector_shear_tables(
 
 
 @operation(effect="change", stage="shear")
-@mcp.tool()
 def build_aggr_momm_shear_table(height_sensors: str, min_speed_mps: float | None = None) -> dict:
     """Build an aggregate MoMM shear table by deriving alpha from per-height Windographer MoMM wind tables."""
     return _build_aggr_momm_shear_table(session, height_sensors, min_speed_mps)

@@ -18,7 +18,6 @@ from server.core.powercurve import (
     indicative_capacity_factor,
     normalise_speed_to_reference_density,
 )
-from server.main import mcp
 from server.operations import operation
 from server.state.session import SessionState, session
 
@@ -397,7 +396,6 @@ def _calculate_uncertainty(
 
 
 @operation(effect="change", stage="uncertainty")
-@mcp.tool()
 def calculate_uncertainty(
     measurement_uncertainty_pct: float,
     measurement_height_m: float,
@@ -463,7 +461,6 @@ def _compute_energy_sensitivity(state: SessionState, speed_uncertainty_pct: floa
 
 
 @operation(effect="read", stage="uncertainty")
-@mcp.tool()
 def compute_energy_sensitivity(speed_uncertainty_pct: float = 0.0) -> dict:
     """Measure S = d(lnAEP)/d(lnU) on the long-term series and explain the energy conversion.
 

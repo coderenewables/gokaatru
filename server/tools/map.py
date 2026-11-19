@@ -4,7 +4,6 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
-from server.main import mcp
 from server.operations import operation
 from server.state.session import SessionState, session
 
@@ -79,21 +78,18 @@ def _get_site_overview_map(state: SessionState) -> dict:
 
 
 @operation(effect="read", stage="map")
-@mcp.tool()
 def get_mast_marker() -> dict:
     """Return the site measurement mast as a GeoJSON feature for site overview mapping."""
     return _get_mast_marker(session)
 
 
 @operation(effect="read", stage="map")
-@mcp.tool()
 def get_era5_node_markers() -> dict:
     """Return all surrounding ERA5 nodes as a GeoJSON FeatureCollection with distance and bearing metadata."""
     return _get_era5_node_markers(session)
 
 
 @operation(effect="read", stage="map")
-@mcp.tool()
 def get_site_overview_map() -> dict:
     """Return a combined GeoJSON FeatureCollection of the mast and ERA5 support nodes."""
     return _get_site_overview_map(session)

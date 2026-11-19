@@ -152,9 +152,11 @@ The interface-free heart. Nothing here imports FastAPI or FastMCP.
 
 ### 4.2a `server/operations.py` — the operation registry
 
-Every tool is declared once as an operation (decisions/0009): `@operation(effect=..., stage=...)`
-above its `@mcp.tool()`, with `canvas`, `assistant` and `network` where they differ from the
-defaults. `Operation` also carries disclosure fields, standards references, a code version and
+Every tool is declared once as an operation (decisions/0009): `@operation(effect=..., stage=...)`,
+with `canvas`, `assistant` and `network` where they differ from the defaults. The declaration
+publishes the MCP tool itself (`_publish_to_mcp`, through `mcp.tool()`); no tool module touches
+`mcp` directly, and `tests/test_mcp_surface.py` compares what clients receive with
+`tests/snapshots/mcp_tools.json` (`python -m tests.mcp_surface --write` to refresh). `Operation` also carries disclosure fields, standards references, a code version and
 an optional dry run; `REGISTRY` holds all 90. The parameter schema is read from the signature
 by FastMCP's own parser. `STAGES` is the pipeline order used for the canvas tie-break. It lives
 outside `core/` because it imports FastMCP. `tests/test_operations.py` pins the declarations to

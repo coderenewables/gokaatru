@@ -17,7 +17,6 @@ from server.core.validators import (
     detect_timestep_minutes,
     to_utc_index,
 )
-from server.main import mcp
 from server.operations import operation
 from server.state.session import SessionState, session
 
@@ -700,21 +699,18 @@ def _run_ltc_variance_ratio(state: SessionState, short_col: str, long_col: str) 
 
 
 @operation(effect="change", stage="ltc")
-@mcp.tool()
 def run_ltc_linear_least_squares(short_col: str, long_col: str) -> dict:
     """Run robust linear MCP using Huber IRLS and apply the fit to the full long-term record."""
     return _run_ltc_linear_least_squares(session, short_col, long_col)
 
 
 @operation(effect="change", stage="ltc")
-@mcp.tool()
 def run_ltc_total_least_squares(short_col: str, long_col: str) -> dict:
     """Run orthogonal total least squares MCP and apply the fit to the full long-term record."""
     return _run_ltc_total_least_squares(session, short_col, long_col)
 
 
 @operation(effect="change", stage="ltc")
-@mcp.tool()
 def run_ltc_speedsort(
     short_col: str,
     long_col: str,
@@ -733,7 +729,6 @@ def run_ltc_speedsort(
 
 
 @operation(effect="change", stage="ltc")
-@mcp.tool()
 def run_ltc_variance_ratio(short_col: str, long_col: str) -> dict:
     """Run variance-ratio MCP using mean and standard-deviation scaling of the reference series."""
     return _run_ltc_variance_ratio(session, short_col, long_col)

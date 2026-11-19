@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 
 from server.core.formulas import air_density_iec, moist_air_density, saturation_vapour_pressure_pa
-from server.main import mcp
 from server.operations import operation
 from server.state.session import session
 
@@ -66,7 +65,6 @@ def _source_frame(source: str) -> pd.DataFrame:
 
 
 @operation(effect="read", stage="air_density")
-@mcp.tool()
 def compute_air_density(pressure_pa: float, temperature_k: float, dewpoint_k: float) -> dict:
     """Compute moist-air density from pressure and dew point traced to IEC 61400-12-1 Section A.5."""
     density, dewpoint_clamped = air_density_iec(pressure_pa, temperature_k, dewpoint_k)
@@ -86,7 +84,6 @@ def compute_air_density(pressure_pa: float, temperature_k: float, dewpoint_k: fl
 
 
 @operation(effect="read", stage="air_density")
-@mcp.tool()
 def compute_air_density_timeseries(
     pressure_col: str,
     temperature_col: str,

@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 
 from server.core.validators import to_utc_index
-from server.main import mcp
 from server.operations import operation
 from server.state.session import SessionState, session
 from server.tools.cleaning import _resolve_range_bounds
@@ -299,14 +298,12 @@ def _compute_mcp_readiness(state: SessionState, speed_sensor: str, reference_sen
 
 
 @operation(effect="read", stage="diagnostics")
-@mcp.tool()
 def compute_sensor_comparison(sensor_a: str = "", sensor_b: str = "") -> dict:
     """Compute correlation, residual, bias, and regression metrics for two measured speed sensors."""
     return _compute_sensor_comparison(session, sensor_a, sensor_b)
 
 
 @operation(effect="read", stage="diagnostics")
-@mcp.tool()
 def compute_mast_effects(
     sensor_a: str = "",
     sensor_b: str = "",
@@ -325,14 +322,12 @@ def compute_mast_effects(
 
 
 @operation(effect="read", stage="diagnostics")
-@mcp.tool()
 def compute_qc_diagnostics() -> dict:
     """Report non-mutating range, flat-line, and cleaning-removal diagnostics."""
     return _compute_qc_diagnostics(session)
 
 
 @operation(effect="read", stage="diagnostics")
-@mcp.tool()
 def compute_mcp_readiness(speed_sensor: str, reference_sensor: str = "") -> dict:
     """Assess ERA5 concurrent-period correlation and long-term adjustment readiness."""
     return _compute_mcp_readiness(session, speed_sensor, reference_sensor)

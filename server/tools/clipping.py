@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 from scipy.stats import norm
 
-from server.main import mcp
 from server.operations import operation
 from server.state.session import SessionState, session
 
@@ -328,7 +327,6 @@ def _run_clipping_analysis(
 
 
 @operation(effect="read", stage="clipping")
-@mcp.tool()
 def run_clipping_analysis(
     speed_col: str,
     source: str = "ensemble",

@@ -170,6 +170,14 @@ class OperationRegistry:
 REGISTRY = OperationRegistry()
 
 
+def _publish_to_mcp(declared: Operation) -> None:
+    # Imported here, not at module level: server.main imports every tool module, and each of
+    # those imports this one, so the server object exists by the time a tool is declared.
+    from server.main import mcp
+
+    mcp.tool(name=declared.name)(declared.fn)
+
+
 def operation(
     *,
     effect: Effect,
@@ -183,10 +191,14 @@ def operation(
     name: str | None = None,
     registry: OperationRegistry | None = None,
 ) -> Callable[[F], F]:
-    """Declare a tool function as an operation; the function itself is returned unchanged."""
+    """Declare a tool function as an operation and publish it as an MCP tool.
+
+    The function itself is returned unchanged. A declaration into a registry other than the
+    global one is not published, so tests can build registries of their own.
+    """
 
     def declare(fn: F) -> F:
-        (REGISTRY if registry is None else registry).register(
+        declared = (REGISTRY if registry is None else registry).register(
             Operation(
                 name=name or fn.__name__,
                 fn=fn,
@@ -200,6 +212,8 @@ def operation(
                 dry_run=dry_run,
             )
         )
+        if registry is None:
+            _publish_to_mcp(declared)
         return fn
 
     return declare

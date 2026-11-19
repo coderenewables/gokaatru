@@ -21,12 +21,11 @@ from server.core.datamodel_builder import (
     build_datamodel,
     draft_columns,
 )
-from server.main import mcp
 from server.operations import operation
 from server.state.session import SessionState, session
 
-# data_io is imported inside the functions, not here: importing ``server.main`` for the
-# ``mcp`` decorator runs main's own tool-registration imports, so a tool module that
+# data_io is imported inside the functions, not here: declaring an operation imports
+# ``server.main``, which runs its own tool-registration imports, so a tool module that
 # reaches for a sibling at import time lands in a partially initialised one.
 
 # The file the builder writes into the session uploads directory. Fixed rather than
@@ -122,14 +121,12 @@ def _build_data_model(state: SessionState, spec: dict) -> dict:
 
 
 @operation(effect="read", stage="ingest", canvas=False)
-@mcp.tool()
 def draft_data_model() -> dict:
     """Draft a Task 43 reading of the loaded timeseries columns for review."""
     return _draft_data_model(session)
 
 
 @operation(effect="change", stage="ingest", canvas=False)
-@mcp.tool()
 def build_data_model(spec: dict) -> dict:
     """Build a minimal IEA Task 43 data model from declared columns and load it."""
     return _build_data_model(session, spec)

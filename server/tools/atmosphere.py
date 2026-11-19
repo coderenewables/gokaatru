@@ -4,7 +4,6 @@ from __future__ import annotations
 import pandas as pd
 
 from server.core.formulas import moist_air_density, saturation_vapour_pressure_pa
-from server.main import mcp
 from server.operations import operation
 from server.state.session import SessionState, session
 
@@ -213,7 +212,6 @@ def _compute_atmospheric_conditions(
 
 
 @operation(effect="read", stage="atmosphere")
-@mcp.tool()
 def compute_atmospheric_conditions(
     temperature_sensor: str = "",
     pressure_sensor: str = "",

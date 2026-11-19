@@ -44,9 +44,9 @@ class TestAllowlistIsComplete:
         assert _unclassified_tools() == registry - classified
 
     def test_the_registry_is_not_fully_classified_and_the_guard_can_say_so(self) -> None:
-        """The guard's whole purpose is to be capable of failing. Most of the 227-tool
-        surface (the WindKit wrappers especially) is deliberately unexposed, so a non-empty
-        result here is correct — what matters is that it is *reported* rather than invisible.
+        """The guard's whole purpose is to be capable of failing. The BrightHub and
+        EarthDataHub tools are deliberately unexposed, so a non-empty result here is correct —
+        what matters is that it is *reported* rather than invisible.
         """
         assert _unclassified_tools(), "the guard cannot detect an unclassified tool"
 
@@ -146,7 +146,7 @@ class TestServerSideEnforcement:
         state.reset()
         for allow in (False, True):
             with pytest.raises(HTTPException) as excinfo:
-                _execute_tool("windkit_read_bwc", {}, state, allow_mutating=allow)
+                _execute_tool("brighthub_status", {}, state, allow_mutating=allow)
             assert excinfo.value.status_code == 400
             assert "Unknown tool" in excinfo.value.detail
 

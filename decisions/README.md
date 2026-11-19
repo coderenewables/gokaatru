@@ -27,7 +27,7 @@ gets a new record that supersedes the old one.
 | [0006](0006-docking-dockview.md) | Docking layout: Dockview, with a custom tab component and theme class | Accepted (measured), 2026-11-19 |
 | [0007](0007-assistant-byok-with-approval.md) | Assistant: bring your own key; every data change needs approval | Accepted (owner), 2026-11-17 |
 | [0008](0008-bring-your-own-models.md) | Your own models: Python plugin and ONNX file first; pickle refused | Accepted (owner), 2026-11-17 |
-| [0009](0009-operation-registry.md) | One operation registry generates every surface | Proposed |
+| [0009](0009-operation-registry.md) | One operation registry generates every surface; WindKit only where it is the reference | Accepted (owner), 2026-11-19 |
 | [0010](0010-project-store-and-flags.md) | A project store on disk; cleaning as flags, not deletions; one operation log | Proposed |
 | [0011](0011-selections-on-the-server.md) | Selections are server objects resolved from drawn bounds | Proposed |
 | [0012](0012-frontend-stack.md) | Frontend stack for the new shell | Proposed |

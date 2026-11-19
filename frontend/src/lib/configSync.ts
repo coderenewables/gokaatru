@@ -185,7 +185,6 @@ export function serializeConfigToRunconfig(config: WindAnalysisConfig): AnyRecor
       speedSensorPair: config.shear.speedSensorPair,
       directionSensor: config.shear.directionSensor,
       aggregation: config.shear.aggregation,
-      useWindKit: config.shear.useWindKit,
     },
     reanalysis: {
       preferredProvider: config.reanalysis.preferredProvider,

@@ -75,7 +75,6 @@ class SessionState:
     scenarios: list[dict[str, object]]
     runconfig: dict[str, object]
     timezone: object | None  # datetime.timezone or ZoneInfo — set from datamodel
-    windkit_data: dict[str, object]
     executed_nodes: set[str]
     workflow_execution: dict[str, object]
     workflow_runs: list[dict[str, object]]
@@ -128,7 +127,6 @@ class SessionState:
         self.scenarios = []
         self.runconfig = {}
         self.timezone = None
-        self.windkit_data = {}
         # Node ids this session actually executed, so a client-supplied "done" can be
         # corroborated instead of taken on trust (F-10).
         self.executed_nodes = set()

@@ -58,7 +58,6 @@ SHARED_FIELDS: tuple[str, ...] = (
     "merra_nodes",
     "reanalysis_cache_identity",
     "timezone",
-    "windkit_data",
     "scenarios",
     "workflow_runs",
     "data_version",

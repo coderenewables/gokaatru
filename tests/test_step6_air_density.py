@@ -360,8 +360,7 @@ def test_wind_speed_is_never_density_normalised():
     IEC 61400-12-1 normalises measured speed to a reference density before power-curve
     work — ``U_n = U * (rho/rho_0)^(1/3)`` for pitch-regulated machines, with the power output
     normalised instead for stall-regulated ones. Grepping the codebase finds no such expression:
-    ``np.cbrt`` appears only for the cube-mean speed. ``windkit_estimate_regulation_type``
-    exists as a WindKit passthrough that no pipeline stage calls.
+    ``np.cbrt`` appears only for the cube-mean speed.
 
     This is currently harmless — there is no power curve to normalise against (F-29), and
     power density correctly uses actual density with actual speed, so no double correction

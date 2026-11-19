@@ -179,8 +179,8 @@ def _build_sensor_inventory(points: list[dict[str, object]]) -> dict[str, dict[s
 def _confined_file_path(state: SessionState, filename: str, subdir: str = "") -> Path:
     """Resolve *filename* within the session data directory, rejecting traversal.
 
-    Mirrors the ``windkit_file_path`` pattern: resolve the base, then join +
-    resolve the candidate and verify containment via ``is_relative_to``.
+    Resolve the base, then join + resolve the candidate and verify containment via
+    ``is_relative_to``.
     Absolute paths are accepted only if they resolve inside the base directory.
     """
     base = Path(state.get_data_dir())

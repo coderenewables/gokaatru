@@ -52,7 +52,6 @@ def _frontend_shaped_config() -> dict:
             "method": "power_law",
             "targetHubHeightM": 150.0,
             "aggregation": "mean",
-            "useWindKit": False,
         },
         "reanalysis": {
             "searchLatitude": 52.5,

@@ -15,10 +15,11 @@ those citations have not been checked against the clause text, and the only word
 is "traced to", never "compliant with" or "follows".
 
 Two parts, one logic core:
-- **`server/`** — Python MCP server (FastMCP) + FastAPI web API. 232 tools across ingest,
+- **`server/`** — Python MCP server (FastMCP) + FastAPI web API. 90 tools across ingest,
   cleaning, statistics, shear/extrapolation, ERA5+MERRA-2 reanalysis, homogeneity, 5 LTC/MCP
   algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration,
-  a scenario **sweep/Analysis Engine**, and a WindKit tool surface (~180 tools).
+  and a scenario **sweep/Analysis Engine**. DTU's WindKit (pinned `==2.2.0`) is used only
+  where it is the reference implementation and has no tools of its own (`decisions/0009`).
 - **`frontend/`** — React 19 + Vite + TypeScript app, navigated by a **3-phase primary rail**
   (`PhaseRail`: Prepare / Run / Interrogate) plus two independent entries (Canvas, Copilot).
   **Prepare** merges data import, cleaning, reanalysis, Sensor Overview and the Stepper into
@@ -72,11 +73,10 @@ server/
 ├── tools/                # ~20 tool modules (data_io, cleaning, shear, extrapolation,
 │                         #   era5, ltc, ltc_ml, ensemble, clipping, uncertainty,
 │                         #   advanced_analysis, homogeneity, brighthub, ...)
-│   ├── visualization/    # Plotly figure builders — a themed PACKAGE, not a single file
+│   └── visualization/    # Plotly figure builders — a themed PACKAGE, not a single file
 │                         #   (split from a 1,856-line module 2026-09; __init__.py wires the
 │                         #   @mcp.tool() wrappers and re-exports every builder, so every
 │                         #   existing `server.tools.visualization.*` import path is unchanged)
-│   └── windkit/          # ~180 pass-through wrappers around the windkit PyPI package
 ├── state/                # session.py (SessionState), manager.py (SessionManager,
 │                         #   ContextVar-bound), dataset_pool.py
 └── schemas/              # Pydantic v2 contracts
@@ -89,7 +89,7 @@ frontend/src/
 │                         #   defaultWorkflowPlan, sweepApi, sweepAnalysis, copilotAgent
 └── types/analysis.ts     # canonical config schema + response interfaces
 
-tests/                    # 79 backend test files (pytest) — includes oracles.py, an
+tests/                    # 83 backend test files (pytest) — includes oracles.py, an
                            #   independent-implementation oracle harness used to verify
                            #   fixes without importing from server/. Some depend on
                            #   gitignored fixtures under data/uploads/ (e.g. Boxkite,
@@ -184,10 +184,11 @@ the synthetic-data tests; `GOKAATRU_TEST_UPLOADS_DIR` points the suite at anothe
 folder, and a missing campaign file skips its test by name (`require_campaign_file` in
 `tests/conftest.py`), never errors.
 
-Current baseline (verified 2026-11-18, branch `phase0-stabilise` at P0-6):
-1125 backend tests passing / 2 skipped, 266 frontend tests passing, 1 Playwright smoke test
-passing, frontend typecheck clean, 232 MCP tools registered, and `ruff check server/ tests/`
-clean. Without the campaign files: 1055 passed / 61 skipped at P0-8 (59 campaign skips). These numbers move as the project
+Current baseline (verified 2026-11-19, branch `p0-14-windkit-narrowed` at P0-14):
+1039 backend tests passing / 0 skipped, 266 frontend tests passing, 1 Playwright smoke test
+passing, frontend typecheck clean, 90 MCP tools registered, and `ruff check server/ tests/`
+clean. Without the campaign files (CI run 44428167646, Ubuntu and Windows): 984 passed / 55
+skipped; all four CI jobs passed. These numbers move as the project
 grows — `validate-gokaatru` always re-derives the live count rather than trusting any written
 baseline, this one included. Backend count assumes the gitignored `data/uploads/` fixtures are
 present (see the `tests/` layout note above); without them the tests that need them skip.
@@ -196,9 +197,9 @@ present (see the `tests/` layout note above); without them the tests that need t
 3 F841, 1 F811) had accumulated because `ruff>=0.1` is unpinned and the check was not being
 run to zero. They are all fixed now; keep it at zero rather than letting a second wall build.
 
-## Current state (last verified 2026-11-18)
+## Current state (last verified 2026-11-19)
 
-**2026-11-17 to 2026-11-18: workbench Phase 0 on branch `phase0-stabilise` (not pushed).** One task per commit; the task list and status are in `Claude outputs/WORKBENCH_PLAN.md` §8a.
+**2026-11-17 to 2026-11-19: workbench Phase 0.** P0-1 to P0-13 were on branch `phase0-stabilise`, merged into `master` by the owner as PR #5 (`f8a24ca`, 2026-11-18). P0-14 is on branch `p0-14-windkit-narrowed` (`f2191ea`), not merged. One task per commit; the task list and status are in `Claude outputs/WORKBENCH_PLAN.md` §8a.
 
 - **P0-1 `e04446e`:** `K_SHEAR_ANALYST_SUPPLIED` 0.07 (entry below). `startup.ps1 -IncludeMcp` bound the unauthenticated SSE transport to `0.0.0.0`; it now binds to `127.0.0.1`. The "follows IEC 61400-12-1 / 61400-12-2" claim is replaced by a statement that no conformance claim is made.
 - **P0-2 `ee24eac` (F1):** `normalise_speed_to_reference_density` carried the stall and pitch labels the wrong way round. IEC 61400-12-1 normalises wind speed for a pitch-regulated turbine and power for a stall-regulated one. The arithmetic applied was already the pitch one, so no number moved; `regulation` now defaults to `"pitch"`, `"stall"` is refused, and `density_normalisation.method` is `iec_61400_12_1_wind_speed_normalisation` (was `iec_61400_12_1_stall`). Basis: a public ECN/TNO report; the clause text has not been read.
@@ -211,7 +212,8 @@ run to zero. They are all fixed now; keep it at zero rather than letting a secon
 - **P0-11 `7cc16dd`:** chart-library spike, `spikes/chart-libraries/FINDINGS.md`. At one channel of 262,800 points, uPlot renders in 62 ms and brushes in 19.7 ms (Plotly 455 / 478, ECharts 123 / 245); regl-scatterplot renders 252,665 points in 256 ms and brushes in 50 ms (Plotly 407 / 182, ECharts 663 / 922). Plotly spends over 100 ms before its own selection callback. Recommendation: uPlot for time series, regl-scatterplot for scatters, server-side decimation with refetch on zoom, selections resolved on the server from the drawn bounds, Plotly only for the existing static figures.
 - **P0-12 `e0987cb`, `40b31ba`:** docking-layout spike, `spikes/docking-layout/FINDINGS.md`. Dockview 8.9.1 and FlexLayout 0.11.2 behaved the same on every functional check under React 19; Dockview chosen on maintenance (70 releases in 12 months against 17), with a custom tab component to remove its `nested-interactive` axe violation.
 - **P0-13:** twelve decision records in `decisions/`. Eight are decided (by the owner or by measurement); four are proposed and must be confirmed before Phase 1: the operation registry (0009), the project store with flags (0010), server-side selections (0011), and the frontend stack (0012).
-- **Open owner decisions:** records 0009-0012, and the six in `docs/design/long-term-direction-temperature.md` §9.
+- **P0-14 (decision 0009, accepted by the owner 2026-11-19, with WindKit narrowed):** the owner asked whether WindKit should become the core; the answer recorded in `decisions/0009-operation-registry.md` is no, only where it is the reference implementation. Removed the 142 pass-through tools in `server/tools/windkit/`, their 142 HTTP routes and `windkit_schemas.py`, `tests/test_windkit.py` and `tests/test_windkit_submodule_smoke.py` (94 tests), the never-written `SessionState.windkit_data` and its `windkit` completed-step token, and the frontend config values naming WindKit modes the backend never implemented. Tool count 232 → 90 (`EXPECTED_MCP_TOOLS`, `tests/test_phase4.py`). The two LTC wrappers were broken: on 2.0.1 every call raised inside WindKit, and they passed the measured series where WindKit expects the reference, so on 2.2.0 they would have returned a long-term mean 38.9% low on a synthetic year. WindKit pinned `>=2.0,<2.1` → `==2.2.0`: Weibull A and k bit-identical on all 16 campaign speed sensors; 2.2.0 never prompts for attribution, so the `WINDKIT_*` variables left CI and the Playwright config. `tests/test_windkit_adopted.py` pins the version and the Weibull fit against exact moments, and checks native variance ratio against `VarRatMCP` (equal to 1e-9) and native Huber linear against `LinRegMCP` OLS within 0.25% (measured: slope +0.081%, long-term mean -0.066%). No published number moved; `ENGINE_VERSION` unchanged.
+- **Open owner decisions:** records 0010-0012, and the six in `docs/design/long-term-direction-temperature.md` §9.
 
 **2026-11-17: owner decisions for the workbench build, and the analyst-supplied constant raised.**
 

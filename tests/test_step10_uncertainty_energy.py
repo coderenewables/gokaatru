@@ -169,7 +169,6 @@ def test_no_aep_or_power_curve_exists_anywhere_in_the_pipeline():
     ``compute_energy_metrics`` returns wind power density (0.5*rho*v^3, W/m2) and a
     directional energy split. There is no power curve, no turbine, no AEP, no
     capacity factor and no loss model anywhere in the executable pipeline.
-    ``windkit_wtg_power`` exists as a WindKit passthrough but no stage calls it.
 
     So the tool characterises the *resource* and stops short of the *yield*, while
     publishing P50/P75/P90/P99 — quantities that in wind resource assessment name

@@ -75,7 +75,7 @@ def test_completed_steps_token_set_is_stable() -> None:
     """Pin the full emitted token vocabulary so renames surface here first."""
     state = _configured_session()
     emitted = set(completed_steps(state))
-    # The backend may emit extra tokens (windkit, cleaning, shear_timeseries,
+    # The backend may emit extra tokens (cleaning, shear_timeseries,
     # roughness_timeseries) — that's fine. The known vocabulary is:
     expected_vocabulary = {
         "timeseries",
@@ -91,7 +91,6 @@ def test_completed_steps_token_set_is_stable() -> None:
         "era5_interpolate",
         "ltc",
         "ensemble",
-        "windkit",
     }
     # Every emitted token must be in the documented vocabulary (no surprises).
     unexpected = emitted - expected_vocabulary

@@ -165,7 +165,7 @@ def test_workflow_execute_and_status(execution_client: tuple[TestClient, Session
                 "id": "op-1",
                 "kind": "operation",
                 "label": "Placeholder",
-                    "template_id": "windkit_create_sector_coords",
+                    "template_id": "get_run_config",
                 "config": {"params_json": "{}"},
             },
         ],
@@ -210,7 +210,7 @@ def test_workflow_step_respects_input_status(execution_client: tuple[TestClient,
                 "id": "op-1",
                 "kind": "operation",
                 "label": "First",
-                "template_id": "windkit_create_sector_coords",
+                "template_id": "get_run_config",
                 "config": {"params_json": "{}"},
                 "status": "done",
             },
@@ -218,7 +218,7 @@ def test_workflow_step_respects_input_status(execution_client: tuple[TestClient,
                 "id": "op-2",
                 "kind": "operation",
                 "label": "Second",
-                "template_id": "windkit_create_sector_coords",
+                "template_id": "get_run_config",
                 "config": {"params_json": "{}"},
                 "status": "pending",
             },
@@ -255,7 +255,7 @@ def test_workflow_stream_endpoint_emits_events(execution_client: tuple[TestClien
                 "id": "op-1",
                 "kind": "operation",
                 "label": "Only Node",
-                "template_id": "windkit_create_sector_coords",
+                "template_id": "get_run_config",
                 "config": {"params_json": "{}"},
             }
         ],
@@ -288,8 +288,8 @@ def test_workflow_runs_preserve_config_and_step_results_for_comparison(
         "nodes": [{
             "id": "op-1",
             "kind": "operation",
-            "label": "Sector coordinates",
-            "template_id": "windkit_create_sector_coords",
+            "label": "Run config",
+            "template_id": "get_run_config",
             "config": {"params_json": "{}"},
         }],
         "edges": [],
@@ -354,16 +354,15 @@ def test_workflow_capabilities_endpoint_returns_signature_hints(
 
     by_template = {item["template_id"]: item for item in capabilities}
     assert "parse_timeseries" in by_template
-    assert "windkit_create_sector_coords" in by_template
+    assert "build_shear_table" in by_template
 
     parse_timeseries = by_template["parse_timeseries"]
     assert parse_timeseries["required_params"] == ["file_path"]
     assert parse_timeseries["optional_params"] == []
 
-    sector_coords = by_template["windkit_create_sector_coords"]
-    assert sector_coords["required_params"] == []
-    assert "bins" in sector_coords["optional_params"]
-    assert "start" in sector_coords["optional_params"]
+    shear_table = by_template["build_shear_table"]
+    assert shear_table["required_params"] == []
+    assert "aggregation" in shear_table["optional_params"]
 
 
 def test_workflow_branch_fork_clones_session_state(

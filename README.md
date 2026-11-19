@@ -4,8 +4,8 @@
 
 GoKaatru ships as two parts that work together:
 
-- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **232 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration, and WindKit.
-- **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison. (The backend WindKit tool surface remains available via the API/MCP server, but the frontend no longer ships a dedicated WindKit tab.)
+- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **90 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
+- **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison.
 
 State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The frontend's convenience fields are **derived mirrors** of canonical backend keys, not independent state — the mapping is defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
 
@@ -129,10 +129,9 @@ npm run test                         # vitest
 
 ```
 server/                 # Python MCP server + FastAPI web API
-├── api/                # FastAPI routes (sessions, analysis, brighthub, workflow, windkit, …)
+├── api/                # FastAPI routes (sessions, analysis, brighthub, workflow, …)
 ├── core/               # executor, regression, spatial, formulas, validators, runconfig contract
 ├── tools/              # MCP tools: data_io, cleaning, shear, extrapolation, era5, ltc, …
-│   └── windkit/        # WindKit tools
 ├── state/              # session + dataset pool managers
 └── schemas/            # Pydantic models (Coordinate, SensorInfo, PlotResult, …)
 
@@ -184,7 +183,6 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/sessions/{id}/workflow/{execute,step,status,…}` | various | Workflow canvas execution + snapshots + compare |
 | `/sessions/{id}/map/site` | GET | Site-overview GeoJSON (mast + ERA5 nodes) |
 | `/sessions/{id}/chat` | POST | BYOK LLM chat proxy with server-side tool execution (read-only by default; see [Chat tool authority](#chat-tool-authority)) |
-| `/windkit/*` | POST | ~95 WindKit endpoints (OpenAPI-documented) |
 | `/mcp/catalog` | GET | MCP tool/resource catalog for discovery |
 
 ## Tool inventory
@@ -241,51 +239,23 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 
 Additional figures are reachable through `POST /sessions/{id}/plots/{name}` without being MCP tools in their own right — including `shear_profile`, `shear_timeseries`, `era5_scatter`, `mast_shadow`, `qc_flags`, `ltc_scatter`, `ltc_residuals`, `ltc_monthly`, `ltc_convergence`, and `uncertainty_tornado`.
 
-### WindKit — Wind Functions (13 tools)
-- `windkit_wind_speed`, `windkit_wind_direction`, `windkit_wind_speed_and_direction`, `windkit_wind_vectors`, `windkit_wind_direction_difference`, `windkit_wd_to_sector`, `windkit_vinterp_wind_direction`, `windkit_vinterp_wind_speed`, `windkit_rotor_equivalent_wind_speed`, `windkit_shear_extrapolate`, `windkit_shear_exponent`, `windkit_veer_extrapolate`, `windkit_wind_veer`
+### WindKit
 
-### WindKit — Climate (30 tools)
-- `windkit_validate_tswc` / `windkit_is_tswc` / `windkit_create_tswc` / `windkit_read_tswc` / `windkit_tswc_from_dataframe` / `windkit_tswc_resample`
-- `windkit_validate_bwc` / `windkit_is_bwc` / `windkit_create_bwc` / `windkit_read_bwc` / `windkit_bwc_from_tswc` / `windkit_bwc_to_file` / `windkit_combine_bwcs` / `windkit_weibull_fit`
-- `windkit_validate_wwc` / `windkit_is_wwc` / `windkit_create_wwc` / `windkit_read_wwc` / `windkit_read_mfwwc` / `windkit_wwc_to_file` / `windkit_wwc_to_bwc` / `windkit_weibull_combined`
-- `windkit_validate_gwc` / `windkit_is_gwc` / `windkit_create_gwc` / `windkit_read_gwc` / `windkit_gwc_to_file`
-- `windkit_validate_geowc` / `windkit_is_geowc`
+GoKaatru uses DTU's [WindKit](https://pypi.org/project/windkit/), pinned to exactly 2.2.0,
+only where it is the reference implementation, and exposes none of it as a tool of its own
+([decisions/0009](decisions/0009-operation-registry.md)). Today that is the WAsP mean and
+third-moment Weibull fit behind `compute_weibull_params` (`method="wasp_m1_m3"`, the default)
+and the wind-climate statistics. Its two sectorwise long-term corrections
+are not used in any result; `tests/test_windkit_adopted.py` runs them as a second
+implementation that the native variance-ratio and linear corrections are checked against.
+The WAsP TAB writer, the windIO and turbine-file readers, and direction interpolation to hub
+height are adopted for later work and enter the registry when that work is built.
 
-### WindKit — Climate Statistics (7 tools)
-- `windkit_create_met_fields`, `windkit_mean_ws_moment`, `windkit_ws_cdf`, `windkit_ws_freq_gt_mean`, `windkit_mean_wind_speed`, `windkit_mean_power_density`, `windkit_get_cross_predictions`
-
-### WindKit — LTC (2 tools)
-- `windkit_ltc_linreg_mcp`, `windkit_ltc_varrat_mcp`
-
-### WindKit — Topography (18 tools)
-- Landcover: `windkit_get_landcover_table` / `windkit_add_landcover` / `windkit_roughness_to_landcover` / `windkit_landcover_to_roughness` / `windkit_read_landcover_map` / `windkit_write_landcover_map` / `windkit_get_landcover_from_gwa` / `windkit_get_landcover_from_remote`
-- Elevation: `windkit_read_elevation_map` / `windkit_write_elevation_map`
-- Raster: `windkit_create_raster_map` / `windkit_get_raster_from_remote`
-- Vector: `windkit_create_vector_map` / `windkit_get_vector_from_gwa`
-- Conversion: `windkit_lines_to_polygons` / `windkit_polygons_to_lines` / `windkit_snap_to_layer` / `windkit_check_dead_ends` / `windkit_check_lines_cross`
-
-### WindKit — Wind Farm (16 tools)
-- Turbines: `windkit_validate_wind_turbines` / `windkit_is_wind_turbines` / `windkit_check_wtg_keys` / `windkit_create_wt_from_dataframe` / `windkit_create_wt_from_arrays` / `windkit_wt_to_geodataframe`
-- WTG: `windkit_validate_wtg` / `windkit_is_wtg` / `windkit_estimate_regulation_type` / `windkit_read_wtg` / `windkit_wtg_power` / `windkit_wtg_cp` / `windkit_wtg_ct`
-- Losses: `windkit_validate_uncertainty_table` / `windkit_get_uncertainty_table` / `windkit_total_uncertainty` / `windkit_uncertainty_table_summary` / `windkit_total_uncertainty_factor`
-
-### WindKit — Spatial (25+ tools)
-- CRS: `windkit_get_crs` / `windkit_set_crs` / `windkit_crs_are_equal`
-- Create: `windkit_create_dataset` / `windkit_create_raster` / `windkit_create_point` / `windkit_create_stacked_point` / `windkit_create_cuboid`
-- Validate: `windkit_is_point` / `windkit_is_stacked_point` / `windkit_is_cuboid` / `windkit_is_raster`
-- Convert: `windkit_to_point` / `windkit_to_cuboid` / `windkit_to_stacked_point` / `windkit_to_raster` / `windkit_gdf_to_ds` / `windkit_ds_to_gdf`
-- Interpolation: `windkit_interp_structured_like` / `windkit_interp_unstructured` / `windkit_interp_unstructured_like`
-- Comparison: `windkit_are_spatially_equal` / `windkit_equal_spatial_shape` / `windkit_covers`
-
-### WindKit — Plotting (9 tools)
-- `windkit_plot_histogram` / `windkit_plot_histogram_lines` / `windkit_plot_operational_curves` / `windkit_plot_raster` / `windkit_plot_roughness_rose` / `windkit_plot_time_series` / `windkit_plot_vertical_profile` / `windkit_plot_wind_rose` / `windkit_plot_landcover_map`
-
-### WindKit — Other (14 tools)
-- Tutorial: `windkit_get_tutorial_data` / `windkit_load_tutorial_data`
-- Weibull: `windkit_fit_weibull_wasp_m1_m3_fgtm` / `windkit_fit_weibull_wasp_m1_m3` / `windkit_fit_weibull_k_sumlogm` / `windkit_weibull_moment` / `windkit_weibull_pdf` / `windkit_weibull_cdf` / `windkit_weibull_freq_gt_mean` / `windkit_get_weibull_probability`
-- Coordinates: `windkit_create_sector_coords` / `windkit_create_wsbin_coords`
-- WAsP: `windkit_read_cfdres`
-- ERA5: `windkit_get_era5`
+The 142 pass-through wrappers that exposed WindKit's API one function at a time were removed
+on 2026-11-19. No pipeline stage called them and the assistant could not reach them. The two
+long-term correction wrappers were broken: on 2.0.1 every call raised inside WindKit, and they
+passed the measured series where WindKit expects the reference, which on 2.2.0 would have
+returned a long-term mean 38.9% low on a synthetic year.
 
 ## Methodology, defaults and disclosure
 
@@ -569,12 +539,11 @@ model's authority.
 | Read-only — query, compute, plot | 51 | always |
 | Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty | 27 | only with `allow_mutating_tools: true` |
 
-The remaining 154 of the 232 registered tools are deliberately unclassified and
-therefore unreachable from chat: the WindKit wrappers, and every BrightHub /
-EarthDataHub tool — the read-only tier's contract is "no session mutation, no
-filesystem, **no network**", and the credential tools would additionally hand an
-injected prompt a view of the session's authentication state. Both exclusions are
-pinned by tests.
+The remaining 12 of the 90 registered tools are deliberately unclassified and
+therefore unreachable from chat: every BrightHub / EarthDataHub tool — the read-only
+tier's contract is "no session mutation, no filesystem, **no network**", and the
+credential tools would additionally hand an injected prompt a view of the session's
+authentication state. The exclusion is pinned by tests.
 
 The authority check is repeated server-side at execution rather than trusted
 from the tool list sent upstream, because a model can name a tool it was never
@@ -596,7 +565,7 @@ Backend (registered tool count changes as capabilities are added; verify it with
 python -m ruff check server/ tests/
 python -m pytest tests/ -v
 python -m pytest tests/test_api_sessions.py tests/test_api_workflow.py -v
-python -m pytest tests/test_windkit.py -v
+python -m pytest tests/test_windkit_adopted.py -v
 python -m pytest tests/test_sensor_selection.py tests/test_uploaded_dataset.py -v
 python -c "import asyncio, json; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())), 'tools')"
 ```
@@ -606,7 +575,7 @@ under the gitignored `data/uploads/` (set `GOKAATRU_TEST_UPLOADS_DIR` to read th
 elsewhere). Without them those tests skip with a message naming the missing file; they do
 not error.
 
-Frontend (Vitest coverage across types, store, import, stages, Canvas, copilot, compare, and WindKit):
+Frontend (Vitest coverage across types, store, import, stages, Canvas, copilot, and compare):
 
 ```bash
 cd frontend && npm run test

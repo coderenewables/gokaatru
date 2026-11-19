@@ -13,19 +13,40 @@ parser that builds the MCP tool, so the two cannot disagree.
 """
 from __future__ import annotations
 
+import functools
 import inspect
+import json
 import re
 from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from functools import cached_property
 from typing import Any, Literal, TypeVar
 
 from fastmcp.tools import FunctionTool
 
 from server.core.scenario_result import ENGINE_VERSION
+from server.state.session import get_active_session
 
 Effect = Literal["read", "change"]
 EFFECTS: tuple[str, ...] = ("read", "change")
+
+#: Who is calling, for the operation log: "user" (HTTP), "assistant:<provider>/<model>"
+#: (chat), "canvas" (the workflow executor), "mcp" (an MCP client). A call none of those
+#: surfaces wrapped, such as a test or a script, is "direct".
+ACTOR: ContextVar[str] = ContextVar("gokaatru_actor", default="direct")
+REDACTED = "[redacted]"
+
+
+@contextmanager
+def acting_as(actor: str) -> Iterator[None]:
+    token = ACTOR.set(actor)
+    try:
+        yield
+    finally:
+        ACTOR.reset(token)
 
 #: Pipeline order, used to break a tie between two canvas nodes that no edge orders (F-09:
 #: canvas edges are advisory; the real dependency runs through session state). It follows
@@ -84,6 +105,8 @@ class Operation:
     standards: tuple[str, ...] = ()
     code_version: str = ENGINE_VERSION
     dry_run: Callable[..., Any] | None = None
+    #: Parameters the operation log records as "[redacted]" (credentials).
+    secret_parameters: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name.isidentifier():
@@ -101,6 +124,9 @@ class Operation:
                 f"Operation '{self.name}': its dry run must take exactly the operation's parameters, "
                 "so one request previews what it would apply"
             )
+        unknown_secrets = set(self.secret_parameters) - set(inspect.signature(self.fn).parameters)
+        if unknown_secrets:
+            raise ValueError(f"Operation '{self.name}': no parameter named {sorted(unknown_secrets)} to redact")
         for field_name in self.disclosure:
             if not _FIELD_NAME.match(field_name):
                 raise ValueError(f"Operation '{self.name}': disclosure field {field_name!r} is not a field path")
@@ -188,6 +214,97 @@ def _publish_to_mcp(declared: Operation) -> None:
     mcp.tool(name=declared.name)(declared.fn)
 
 
+def _json_safe(value: Any) -> Any:
+    return json.loads(json.dumps(value, default=str))
+
+
+def _record(
+    name: str,
+    effect: Effect,
+    code_version: str,
+    parameters: dict[str, Any],
+    before: int,
+    status: str,
+    error: str | None,
+) -> None:
+    state = get_active_session()
+    state.operation_log.append(
+        {
+            "seq": len(state.operation_log) + 1,
+            "at": datetime.now(timezone.utc).isoformat(),
+            "actor": ACTOR.get(),
+            "operation": name,
+            "effect": effect,
+            "parameters": parameters,
+            "code_version": code_version,
+            "data_version_before": before,
+            "data_version_after": state.data_version,
+            "status": status,
+            "error": error,
+        }
+    )
+
+
+def _save_project() -> None:
+    from server.state.project import ProjectStore
+
+    state = get_active_session()
+    if state.workspace_dir is not None:
+        ProjectStore(state.workspace_dir).save(state)
+
+
+def record_route_change(state: Any, method: str, route: str) -> None:
+    """Log and save a change made through a hand-written HTTP route.
+
+    Those routes call the private functions, not the operations, so the wrapper never sees
+    them. The request body is not recorded: it can carry a credential (BrightHub login).
+    Kept until Phases 2 and 3 move the interface onto the generated routes.
+    """
+    from server.state.project import ProjectStore
+    from server.state.session import bind_session
+
+    with bind_session(state), acting_as("user"):
+        _record(f"http {method} {route}", "change", ENGINE_VERSION, {}, state.data_version, "ok", None)
+    if state.workspace_dir is not None:
+        ProjectStore(state.workspace_dir).save(state)
+
+
+def _logged(fn: F, name: str, effect: Effect, code_version: str, secrets: tuple[str, ...]) -> F:
+    """Wrap an operation so every call is logged and every successful change is saved.
+
+    ``functools.wraps`` keeps the signature and annotations, so the MCP schema and the
+    generated routes read exactly what they read from the bare function.
+    """
+    signature = inspect.signature(fn)
+
+    @functools.wraps(fn)
+    def logged(*args: Any, **kwargs: Any) -> Any:
+        try:
+            bound = signature.bind_partial(*args, **kwargs)
+            bound.apply_defaults()
+            arguments = dict(bound.arguments)
+        except TypeError:
+            arguments = {}
+        parameters = _json_safe({key: REDACTED if key in secrets else value for key, value in arguments.items()})
+        before = get_active_session().data_version
+        try:
+            result = fn(*args, **kwargs)
+        except Exception as exc:
+            message = f"{type(exc).__name__}: {exc}"
+            for key in secrets:
+                secret = arguments.get(key)
+                if isinstance(secret, str) and secret:
+                    message = message.replace(secret, REDACTED)
+            _record(name, effect, code_version, parameters, before, "error", message)
+            raise
+        _record(name, effect, code_version, parameters, before, "ok", None)
+        if effect == "change":
+            _save_project()
+        return result
+
+    return logged  # type: ignore[return-value]
+
+
 def operation(
     *,
     effect: Effect,
@@ -198,20 +315,29 @@ def operation(
     disclosure: tuple[str, ...] = (),
     standards: tuple[str, ...] = (),
     dry_run: Callable[..., Any] | None = None,
+    secret_parameters: tuple[str, ...] = (),
     name: str | None = None,
     registry: OperationRegistry | None = None,
 ) -> Callable[[F], F]:
     """Declare a tool function as an operation and publish it as an MCP tool.
 
-    The function itself is returned unchanged. A declaration into a registry other than the
-    global one is not published, so tests can build registries of their own.
+    The global registry's operations are logged (``state.operation_log``) on every call and
+    save the project after every successful change; the logging wrapper is what is published
+    and returned. A declaration into another registry is neither wrapped nor published, so
+    tests can build registries of their own.
     """
 
     def declare(fn: F) -> F:
+        operation_name = name or fn.__name__
+        published = (
+            fn
+            if registry is not None
+            else _logged(fn, operation_name, effect, ENGINE_VERSION, tuple(secret_parameters))
+        )
         declared = (REGISTRY if registry is None else registry).register(
             Operation(
-                name=name or fn.__name__,
-                fn=fn,
+                name=operation_name,
+                fn=published,
                 effect=effect,
                 stage=stage,
                 canvas=canvas,
@@ -220,10 +346,11 @@ def operation(
                 disclosure=tuple(disclosure),
                 standards=tuple(standards),
                 dry_run=dry_run,
+                secret_parameters=tuple(secret_parameters),
             )
         )
         if registry is None:
             _publish_to_mcp(declared)
-        return fn
+        return published
 
     return declare

@@ -42,7 +42,13 @@ def _require_token(state: SessionState) -> str:
 # ---------------------------------------------------------------------------
 
 
-@operation(effect="change", stage="reanalysis_download", assistant=False, network=True)
+@operation(
+    effect="change",
+    stage="reanalysis_download",
+    assistant=False,
+    network=True,
+    secret_parameters=("client_id", "client_secret"),
+)
 def brighthub_login(client_id: str, client_secret: str) -> dict:
     """Authenticate with BrightHub using API key credentials and store token in session."""
     try:

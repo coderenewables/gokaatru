@@ -113,6 +113,7 @@ class SessionManager:
             "events": [],
         }
         target.workflow_runs = copy.deepcopy(source.workflow_runs)
+        target.operation_log = copy.deepcopy(source.operation_log)
 
         target.timezone = source.timezone
         target.clipping_result = copy.deepcopy(source.clipping_result)
@@ -135,6 +136,10 @@ class SessionManager:
         state.touch()
         self._sessions[session_id] = state
         return state
+
+    def loaded(self, session_id: str) -> SessionState | None:
+        """Return a session already in memory, without restoring one from disk."""
+        return self._sessions.get(session_id)
 
     def get_session(self, session_id: str) -> SessionState:
         """Return an existing managed session or raise when the id is unknown."""

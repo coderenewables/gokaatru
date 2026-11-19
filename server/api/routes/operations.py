@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError, create_model
 
 import server.main  # noqa: F401 — importing it declares every operation
 from server.api.deps import get_session_state
-from server.operations import REGISTRY, Operation
+from server.operations import REGISTRY, Operation, acting_as
 from server.state.session import SessionState, bind_session
 
 router = APIRouter(tags=["operations"])
@@ -42,7 +42,7 @@ def request_model(declared: Operation) -> type[BaseModel]:
 
 
 def run_operation(function: Any, state: SessionState, arguments: dict[str, Any]) -> Any:
-    with bind_session(state):
+    with bind_session(state), acting_as("user"):
         try:
             return function(**arguments)
         except ValueError as exc:

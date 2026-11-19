@@ -619,7 +619,7 @@ def _interpolate_era5_to_site(state: SessionState, source: str = "era5") -> dict
     return payload
 
 
-@operation(effect="change", stage="reanalysis", assistant=False)
+@operation(effect="change", stage="reanalysis", assistant=False, secret_parameters=("pat",))
 def earthdatahub_set_credential(pat: str) -> dict:
     """Store an EarthDataHub PAT in the session for the direct-ERA5 (non-BrightHub) path.
 

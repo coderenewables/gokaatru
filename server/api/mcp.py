@@ -12,6 +12,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from server.api.deps import SESSION_HEADER_NAME
 from server.main import mcp
+from server.operations import acting_as
 from server.state.manager import SessionManager
 from server.state.session import bind_session
 
@@ -43,7 +44,7 @@ class SessionAwareMcpApp:
             await self._send_json_error(send, exc.status_code, exc.detail)
             return
 
-        with bind_session(state):
+        with bind_session(state), acting_as("mcp"):
             await self._app(scope, receive, send)
 
     async def startup(self) -> None:

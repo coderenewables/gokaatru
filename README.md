@@ -567,6 +567,17 @@ When on, the assistant can change session data without asking for each change;
 per-action approval is not built yet, so it is off until the user opts in. The API
 default is read-only as well.
 
+### Projects survive a restart
+
+A session's workspace is a project (`server/state/project.py`, decisions/0010). Raw
+uploads stay untouched with their SHA-256 recorded, every frame is saved as Parquet named
+by its content hash, and every other field goes into `catalogue.sqlite`. Each operation call
+is logged with its actor, parameters (credentials redacted), code version and data versions,
+and every successful change saves the project, so a restarted server reopens it as it was.
+A project whose recorded raw input was changed or removed outside GoKaatru is refused (HTTP
+409) rather than shown with results the inputs no longer support. Credentials are never
+written to disk.
+
 ## Validation
 
 Backend (registered tool count changes as capabilities are added; verify it with the command below):

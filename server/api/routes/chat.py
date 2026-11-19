@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, JsonValue
 
 import server.main  # noqa: F401 — importing it declares every operation
 from server.api.deps import get_session_state
-from server.operations import REGISTRY
+from server.operations import REGISTRY, acting_as
 from server.state.session import SessionState, bind_session
 
 router = APIRouter(prefix="/sessions/{session_id}", tags=["chat"])
@@ -402,7 +402,8 @@ def chat(
                         raise ValueError("tool arguments must decode to a JSON object")
                     # Tool failures raise HTTPException (ValueError→400, RuntimeError→502)
                     # and propagate out of the chat loop, honoring the error contract.
-                    result: Any = _execute_tool(tool_name, arguments, state, allow_mutating)
+                    with acting_as(f"assistant:{provider}/{model}"):
+                        result: Any = _execute_tool(tool_name, arguments, state, allow_mutating)
                 except (json.JSONDecodeError, ValueError, TypeError) as exc:
                     # Argument-shape errors are fed back to the LLM as a tool result.
                     arguments = {}

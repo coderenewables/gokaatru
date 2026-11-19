@@ -159,7 +159,16 @@ publishes the MCP tool itself (`_publish_to_mcp`, through `mcp.tool()`); no tool
 `tests/snapshots/mcp_tools.json` (`python -m tests.mcp_surface --write` to refresh). `Operation` also carries disclosure fields, standards references, a code version and
 an optional dry run; `REGISTRY` holds all 90. The parameter schema is read from the signature
 by FastMCP's own parser. `STAGES` is the pipeline order used for the canvas tie-break. It lives
-outside `core/` because it imports FastMCP. The chat route's two tiers and callables, the
+outside `core/` because it imports FastMCP. Each declaration wraps its function (`_logged`,
+`functools.wraps`, so the MCP schema is unchanged): every call appends to
+`state.operation_log` (actor, operation, effect, parameters with `secret_parameters`
+redacted, code version, data version before and after, status), and a successful change
+saves the project. The actor comes from the `ACTOR` context variable that each surface sets
+(`acting_as`): `user` (generated routes), `assistant:<provider>/<model>` (chat), `canvas`
+(executor), `mcp` (the MCP mount and stdio server); otherwise `direct`. Hand-written session
+routes bypass the operations, so a middleware in `server/api/main.py` logs and saves after a
+successful change through one (`record_route_change`, route template only, never the body)
+until Phases 2-3 move the interface onto the generated routes. The chat route's two tiers and callables, the
 executor's canvas dispatch (`_tool_registry`) and its stage tie-break are all read from it;
 `tests/test_operations.py` pins the tiers, the non-canvas set and the stage order by name.
 

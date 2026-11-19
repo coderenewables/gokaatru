@@ -444,7 +444,9 @@ class WorkflowExecutor:
         # import the SessionProxy, which resolves through the bound session, so this
         # is equivalent for a single run and — unlike a module-level setattr — safe
         # when several executors run concurrently in one process.
-        with bind_session(self.state):
+        from server.operations import acting_as
+
+        with bind_session(self.state), acting_as("canvas"):
             result = function(**kwargs)
 
         if result is None:

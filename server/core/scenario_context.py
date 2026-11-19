@@ -87,6 +87,7 @@ RESET_FIELDS: tuple[str, ...] = (
     "derived_versions",
     "executed_nodes",
     "workflow_execution",
+    "operation_log",
 )
 
 #: Handled explicitly rather than by category.

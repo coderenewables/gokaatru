@@ -9,6 +9,7 @@ import shutil
 from pathlib import Path
 from uuid import uuid4
 
+from server.state.project import ProjectStore
 from server.state.session import SessionState
 
 #: Session identity and bookkeeping that a fork must not inherit. Every other
@@ -140,9 +141,20 @@ class SessionManager:
         state = self._sessions.get(session_id)
         if state is not None:
             return state
-        # Restore from the on-disk workspace if it exists (e.g. after a server
-        # restart). runconfig.json is the single source of truth, so reload it.
+        # Restore from the on-disk workspace if it exists (e.g. after a server restart): the
+        # whole saved project when there is one, otherwise the run configuration alone.
         workspace_dir = self._workspace_dir(session_id)
+        store = ProjectStore(workspace_dir)
+        if store.has_snapshot():
+            restored = SessionState()
+            # A ProjectIntegrityError from a changed raw input propagates: the project is
+            # refused rather than opened with results its inputs no longer support.
+            store.load(restored)
+            restored.session_id = session_id
+            restored.workspace_dir = workspace_dir
+            restored.touch()
+            self._sessions[session_id] = restored
+            return restored
         runconfig_path = workspace_dir / "runconfig.json"
         if runconfig_path.exists():
             restored = SessionState()

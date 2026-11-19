@@ -24,7 +24,6 @@ def test_an_operation_reads_the_same_schema_and_description_as_its_mcp_tool() ->
     """The registry takes the schema from the signature with the MCP tool's own parser, so
     generating the tool from the registry cannot change what a client sees."""
     tools = _mcp_tools()
-    assert len(tools) == 90
     for name, tool in tools.items():
         declared = Operation(name=name, fn=tool.fn, effect="read", stage="statistics")
         assert declared.parameters == tool.parameters, name

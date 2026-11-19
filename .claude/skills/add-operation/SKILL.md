@@ -1,0 +1,70 @@
+---
+name: add-operation
+description: Add a new analysis capability to GoKaatru as a declared operation, which generates its MCP tool, HTTP route, canvas dispatch and assistant tier, with matching tests and README rows. Use when asked to add a new analysis, computation, tool or endpoint to the backend.
+---
+
+# Add an operation
+
+Every capability is declared once in `server/operations.py`'s registry (decisions/0009). One
+`@operation(...)` declaration publishes the MCP tool, the generated route
+`POST /sessions/{id}/operations/{name}` (and `/preview` when there is a dry run), the canvas
+dispatch and the assistant tier. Never call `mcp.tool()` or import `server.main` in a tool
+module; `tests/test_mcp_surface.py` refuses it.
+
+## Order of work
+
+1. **Write the logic first.** Pure math in `server/core/<area>.py` (no session, imports neither
+   FastAPI nor FastMCP), the session-aware part as a private `_name(state, ...)` in
+   `server/tools/<area>.py`. Match a sibling function's style. New physics or statistics needs
+   an oracle-backed test against `tests/oracles.py` (it imports nothing from `server/`).
+
+2. **Decide whether it changes a reported number.** A clamp, threshold, default or fallback
+   needs the `disclosure-check` skill now, because it shapes the response.
+
+3. **Add the public function with its declaration**, in the same module:
+
+   ```python
+   @operation(effect="read", stage="statistics")
+   def compute_new_thing(sensor_name: str, window_days: int = 30) -> dict:
+       """One line: what it returns. This becomes the MCP and HTTP description."""
+       return _compute_new_thing(session, sensor_name, window_days)
+   ```
+
+   - `effect`: `"read"` only if it changes no session state and writes no file. A value written
+     into `state.runconfig` counts as a change (P1-5a, P1-5b were both found this way).
+   - `stage`: one of `STAGES`; it sets the canvas tie-break order.
+   - `network=True` if it calls an external service; the assistant then needs the opt-in.
+   - `canvas=False` if a workflow node must not dispatch it; `assistant=False` if the chat
+     assistant must never be offered it (credential and network tools).
+   - `disclosure=(...)`: every response field that reports a default, clamp or fallback firing.
+     Each needs a row in README's "Disclosure fields" table.
+   - `dry_run=preview_fn` for a change that should be previewable; `preview_fn` takes exactly
+     the same parameters. Run the real function on `_replica(state)` and diff, as
+     `server/tools/cleaning.py` does, so the preview cannot drift from the change.
+   - `standards=(...)`: "Traced to ..." wording only, never "compliant" or "follows".
+
+4. **Make the pinned surfaces say so.** These tests fail until you do, on purpose:
+   - `tests/test_operations.py`: add the name to `PINNED_READ_TIER`, `PINNED_CHANGE_TIER` or
+     `PINNED_UNEXPOSED`, to `PINNED_NOT_ON_CANVAS` if `canvas=False`, and the module to
+     `PINNED_STAGE_BY_MODULE` if it is new.
+   - `python -m tests.mcp_surface --write` to record the new tool, then check the diff shows
+     only it.
+   - `tests/test_phase4.py` and `EXPECTED_MCP_TOOLS` in `.github/workflows/ci.yml`: the count.
+   - A read operation is picked up by `tests/test_operation_routes.py` automatically; give its
+     required parameters a value in `ARGUMENT_VALUES` if their names are new. That test also
+     proves the read changes nothing.
+
+5. **README**: the tool under "Tool inventory", the generated route needs no row, and any
+   disclosure fields their rows. A new module gets a row in CODEDOC's `server/tools/` table.
+
+6. **Run `validate-gokaatru`**, including `python -m tests.published_numbers --check`: a new
+   operation must not move any existing number.
+
+## Mistakes to avoid
+
+- Declaring a write a read to keep it in the assistant's default tier. The read tier's
+  contract is checked by test; a convenient misdeclaration is the defect, not the test.
+- Hand-writing an HTTP route for it. The generated route already exists; a hand-written one
+  is only for a request shape the generator cannot express, and then it calls the same
+  private function.
+- Loosening a pinned list without saying why in the commit message.

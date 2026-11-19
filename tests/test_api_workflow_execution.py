@@ -152,6 +152,15 @@ def test_sensors_endpoint_falls_back_to_timeseries_inference_without_datamodel(
     assert "Dir_180m" in names
 
 
+def test_sensors_on_an_empty_session_is_an_empty_inventory(execution_client: tuple[TestClient, SessionManager]) -> None:
+    """The interface asks for the inventory before any upload; that answered 400 (P1-18)."""
+    client, _manager = execution_client
+    session_id, headers = _create_session(client)
+    response = client.get(f"/api/sessions/{session_id}/sensors", headers=headers)
+    assert response.status_code == 200
+    assert response.json() == {"sensors": []}
+
+
 def test_workflow_execute_and_status(execution_client: tuple[TestClient, SessionManager]) -> None:
     """Execute an in-memory workflow graph and verify status snapshot fields."""
     client, _manager = execution_client

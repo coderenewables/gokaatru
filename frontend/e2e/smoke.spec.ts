@@ -1,21 +1,13 @@
 import { expect, test } from "@playwright/test";
 import type { ConsoleMessage } from "@playwright/test";
 
-// Console errors that are expected with no data loaded. Each entry needs a reason.
-const ALLOWED_CONSOLE_ERRORS: Array<{ pattern: RegExp; reason: string }> = [
-  {
-    // Chromium logs this for any 4xx fetch and does not name the URL, so the test also
-    // pins the exact failing request below (EXPECTED_FAILED_RESPONSES).
-    pattern: /^Failed to load resource: the server responded with a status of 400 \(Bad Request\)$/,
-    reason: "GET /sensors on an empty session is a 400 the store catches and turns into an empty list",
-  },
-];
+// Console errors that are expected with no data loaded. Each entry needs a reason. There
+// are none: GET /sensors on an empty session used to answer 400, and now returns an empty
+// inventory (P1-18).
+const ALLOWED_CONSOLE_ERRORS: Array<{ pattern: RegExp; reason: string }> = [];
 
-// The only HTTP failure an empty session produces: the refresh that runs right after
-// "Start workspace" asks for the sensor inventory before any data exists, and the route
-// answers 400 ("Timeseries data is not loaded" rather than the "Sensor mapping is not
-// loaded" text the route special-cases). useWorkspaceStore swallows it with .catch.
-const EXPECTED_FAILED_RESPONSES = [/^400 GET \/api\/sessions\/[0-9a-f]+\/sensors$/];
+// HTTP failures an empty session is expected to produce. None.
+const EXPECTED_FAILED_RESPONSES: RegExp[] = [];
 
 test("the app loads, navigates between phases and reaches the backend through /api", async ({ page }, testInfo) => {
   const pageErrors: Error[] = [];

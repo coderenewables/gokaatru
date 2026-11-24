@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError, create_model
 import server.main  # noqa: F401 — importing it declares every operation
 from server.api.deps import get_session_state
 from server.operations import REGISTRY, Operation, acting_as
+from server.schemas.results._base import ErrorDetail
 from server.state.session import SessionState, bind_session
 
 router = APIRouter(tags=["operations"])
@@ -70,6 +71,18 @@ def _endpoint(declared: Operation, model: type[BaseModel], function: Any, suffix
     return endpoint
 
 
+def _responses(result: type[BaseModel] | None) -> dict[int | str, dict[str, Any]]:
+    """The documented responses. Documentation only: the route returns what the operation
+    returns, so a result model can never turn a working call into an error."""
+    responses: dict[int | str, dict[str, Any]] = {
+        400: {"model": ErrorDetail, "description": "Refused: the request cannot be answered as asked"},
+        502: {"model": ErrorDetail, "description": "An upstream service failed"},
+    }
+    if result is not None:
+        responses[200] = {"model": result, "description": "The operation's result"}
+    return responses
+
+
 def _add_routes() -> None:
     for declared in REGISTRY:
         model = request_model(declared)
@@ -80,6 +93,7 @@ def _add_routes() -> None:
             methods=["POST"],
             name=f"operation_{declared.name}",
             summary=declared.name,
+            responses=_responses(declared.result),
         )
         if declared.dry_run is not None:
             # The same body as the operation itself: the preview is of exactly that request.
@@ -89,6 +103,7 @@ def _add_routes() -> None:
                 methods=["POST"],
                 name=f"operation_{declared.name}_preview",
                 summary=f"{declared.name} (dry run)",
+                responses=_responses(declared.preview_result),
             )
 
 

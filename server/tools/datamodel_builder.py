@@ -22,6 +22,7 @@ from server.core.datamodel_builder import (
     draft_columns,
 )
 from server.operations import operation
+from server.schemas.results import datamodel_builder as result_models
 from server.state.session import SessionState, session
 
 # data_io is imported inside the functions, not here: declaring an operation imports
@@ -122,13 +123,13 @@ def _build_data_model(state: SessionState, spec: dict) -> dict:
 
 # The draft proposes a reading of the column headers and writes nothing; the build writes a
 # data model into the workspace and replaces the sensor mapping and timezone in one call.
-@operation(effect="read", stage="ingest", canvas=False)
+@operation(effect="read", stage="ingest", canvas=False, result=result_models.DraftDataModelResult)
 def draft_data_model() -> dict:
     """Draft a Task 43 reading of the loaded timeseries columns for review."""
     return _draft_data_model(session)
 
 
-@operation(effect="change", stage="ingest", canvas=False)
+@operation(effect="change", stage="ingest", canvas=False, result=result_models.BuildDataModelResult)
 def build_data_model(spec: dict) -> dict:
     """Build a minimal IEA Task 43 data model from declared columns and load it."""
     return _build_data_model(session, spec)

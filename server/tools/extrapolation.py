@@ -10,6 +10,7 @@ import pandas as pd
 from server.core.formulas import ROUGHNESS_MAX_M, ROUGHNESS_MIN_M
 from server.core.reanalysis import get_reference_source, reference_source_names
 from server.operations import operation
+from server.schemas.results import extrapolation as result_models
 from server.state.session import SessionState, session
 from server.tools.shear import SHEAR_MIN_SPEED_MPS
 
@@ -585,13 +586,14 @@ def _add_shear_to_timeseries(state: SessionState) -> bool:
         "stability_treatment",
         "reference_height_m.record_counts",
     ),
+    result=result_models.ExtrapolateToHubHeightResult,
 )
 def extrapolate_to_hub_height(hub_height_m: float, shear_model: str = "power_law") -> dict:
     """Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B."""
     return _extrapolate_to_hub_height(session, hub_height_m, shear_model)
 
 
-@operation(effect="change", stage="extrapolation")
+@operation(effect="change", stage="extrapolation", result=result_models.ExtrapolateReanalysisToHubResult)
 def extrapolate_reanalysis_to_hub(
     hub_height_m: float, reference_height_m: float | None = None
 ) -> dict:

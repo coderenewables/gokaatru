@@ -9,6 +9,7 @@ import pandas as pd
 
 from server.core.formulas import air_density_iec, moist_air_density, saturation_vapour_pressure_pa
 from server.operations import operation
+from server.schemas.results import air_density as result_models
 from server.state.session import session
 
 # Plausible physical bands, used to detect the unit a column is recorded in rather
@@ -64,7 +65,7 @@ def _source_frame(source: str) -> pd.DataFrame:
     raise ValueError(f"source must be 'era5' or 'measured', got '{source}'")
 
 
-@operation(effect="read", stage="air_density")
+@operation(effect="read", stage="air_density", result=result_models.ComputeAirDensityResult)
 def compute_air_density(pressure_pa: float, temperature_k: float, dewpoint_k: float) -> dict:
     """Compute moist-air density from pressure and dew point traced to IEC 61400-12-1 Section A.5."""
     density, dewpoint_clamped = air_density_iec(pressure_pa, temperature_k, dewpoint_k)
@@ -83,7 +84,7 @@ def compute_air_density(pressure_pa: float, temperature_k: float, dewpoint_k: fl
     return result
 
 
-@operation(effect="read", stage="air_density")
+@operation(effect="read", stage="air_density", result=result_models.ComputeAirDensityTimeseriesResult)
 def compute_air_density_timeseries(
     pressure_col: str,
     temperature_col: str,

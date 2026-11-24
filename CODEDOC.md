@@ -280,6 +280,17 @@ browser session and an MCP client can share the same live session state.
 Shared Pydantic v2 contracts (`common.py`) re-exported from the package root for use by both
 tools and routes.
 
+`results/` holds the result model of every operation, one module per tool module, over the
+shared pieces in `results/_base.py`: `Number` (a float that may be null, because NaN and infinity
+are sent as null), `Result` (extra fields refused), `OpenResult` (the run configuration and a
+selection definition, which keep keys the caller set), `Staleness`, `CleaningLogEntry`,
+`SensorMappingEntry`, `RunConfig`, `PlotResult`, `SelectionUsed`, `ErrorDetail`. Each declaration
+names its model (`@operation(result=..., preview_result=...)`) and the generated route publishes it
+in the OpenAPI schema. Documentation only: the routes do not validate against it.
+`tests/test_operation_results.py` checks each model strictly against every response
+`tests/operation_samples.py` collects (the synthetic pipeline, every read on two campaigns, the
+remaining changes, the dry runs, and the network operations against fakes).
+
 ---
 
 ## 5. The analysis pipeline (data flow)

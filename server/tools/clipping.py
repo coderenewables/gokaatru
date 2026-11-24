@@ -9,6 +9,7 @@ import pandas as pd
 from scipy.stats import norm
 
 from server.operations import operation
+from server.schemas.results import clipping as result_models
 from server.state.session import SessionState, session
 
 # Minimum fraction of a calendar year that must carry data before that year's
@@ -328,7 +329,10 @@ def _run_clipping_analysis(
 
 # A change, not a read: the result is kept on the session, and the uncertainty model takes
 # its measured inter-annual variability from it (``SessionState.get_measured_iav_pct``).
-@operation(effect="change", stage="clipping", disclosure=("years_used", "years_excluded", "excluded_reason",))
+@operation(
+    effect="change", stage="clipping", disclosure=("years_used", "years_excluded", "excluded_reason",),
+    result=result_models.RunClippingAnalysisResult,
+)
 def run_clipping_analysis(
     speed_col: str,
     source: str = "ensemble",

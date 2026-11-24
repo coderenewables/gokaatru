@@ -15,6 +15,7 @@ import pandas as pd
 
 from server.core.validators import SENSOR_FIELDS, detect_timestep_minutes
 from server.operations import ACTOR, note_undo, operation
+from server.schemas.results import cleaning as result_models
 from server.state.session import SessionProxy, SessionState, empty_cleaning_flags, get_active_session, session
 
 # Physical bounds per sensor type for range_check (D16), in the units the
@@ -999,7 +1000,7 @@ def preview_undo_cleaning_rule(entry_index: int) -> dict:
     return _preview_undo_cleaning_rule(session, entry_index)
 
 
-@operation(effect="read", stage="cleaning")
+@operation(effect="read", stage="cleaning", result=result_models.ListCleaningRulesResult)
 def list_cleaning_rules() -> dict:
     """List supported cleaning rules and default parameters for the GoKaatru Phase 2 cleaning workflow."""
     return _list_cleaning_rules(session)
@@ -1013,6 +1014,8 @@ def list_cleaning_rules() -> dict:
         "max_applied",
         "order_dependence",
     ),
+    result=result_models.ApplyCleaningRuleResult,
+    preview_result=result_models.ApplyCleaningRulePreview,
 )
 def apply_cleaning_rule(rule_type: str, sensor: str, params: str, start_date: str = "", end_date: str = "") -> dict:
     """Apply one named cleaning rule to the active timeseries and log the operation for undo."""
@@ -1023,13 +1026,17 @@ def apply_cleaning_rule(rule_type: str, sensor: str, params: str, start_date: st
     return result
 
 
-@operation(effect="read", stage="cleaning")
+@operation(effect="read", stage="cleaning", result=result_models.GetCleaningLogResult)
 def get_cleaning_log() -> dict:
     """Return the recorded cleaning operations applied to the active session timeseries."""
     return _get_cleaning_log(session)
 
 
-@operation(effect="change", stage="cleaning", dry_run=preview_undo_cleaning_rule)
+@operation(
+    effect="change", stage="cleaning", dry_run=preview_undo_cleaning_rule,
+    result=result_models.UndoCleaningRuleResult,
+    preview_result=result_models.UndoCleaningRulePreview,
+)
 def undo_cleaning_rule(entry_index: int) -> dict:
     """Restore raw data and replay all cleaning steps except the selected log entry."""
     return _undo_cleaning_rule(session, entry_index)

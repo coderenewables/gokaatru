@@ -5,6 +5,7 @@ import pandas as pd
 
 from server.core.formulas import moist_air_density, saturation_vapour_pressure_pa
 from server.operations import operation
+from server.schemas.results import atmosphere as result_models
 from server.state.session import SessionState, session
 
 # ISA sea-level density, the reference the density correction factor is quoted against.
@@ -213,7 +214,7 @@ def _compute_atmospheric_conditions(
 
 # A change, not a read: it records the mean measured density in the run configuration, and
 # the energy-sensitivity factor normalises speed with it, so running it moves that number.
-@operation(effect="change", stage="atmosphere")
+@operation(effect="change", stage="atmosphere", result=result_models.ComputeAtmosphericConditionsResult)
 def compute_atmospheric_conditions(
     temperature_sensor: str = "",
     pressure_sensor: str = "",

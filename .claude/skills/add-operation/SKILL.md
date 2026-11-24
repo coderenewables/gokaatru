@@ -42,6 +42,11 @@ module; `tests/test_mcp_surface.py` refuses it.
      the same parameters. Run the real function on `_replica(state)` and diff, as
      `server/tools/cleaning.py` does, so the preview cannot drift from the change.
    - `standards=(...)`: "Traced to ..." wording only, never "compliant" or "follows".
+   - `result=result_models.ComputeNewThingResult`: the Pydantic model of the response, in
+     `server/schemas/results/<module>.py` (imported as `result_models`), over the pieces in
+     `_base.py`. Every field the function can return, conditional ones optional (read the
+     function for each `result["..."] = ` and `**` spread; a sample shows only the branches it
+     took). A float is `Number`. A dry run also needs `preview_result=`.
    - `selectable=True` for a read that computes from the measured records (the working frame,
      raw data, or the shear and roughness timeseries). The wrapper publishes a `selection`
      parameter and runs the function with every record outside it blank; nothing in the
@@ -60,6 +65,10 @@ module; `tests/test_mcp_surface.py` refuses it.
      proves the read changes nothing.
    - Every read goes in `tests/test_selection_operations.py`: `SELECTABLE` (which then checks
      it equals the operation on a pre-filtered session) or `NOT_SELECTABLE` with the reason.
+   - `tests/operation_samples.py` must produce a real response from it: a read is called on
+     its own; a change needs a line in `_changes` (or `_network` against a fake). Then
+     `tests/test_operation_results.py` validates the response against its model, and
+     `tests/test_read_operations.py` checks a read leaves the analysed session unchanged.
 
 5. **README**: the tool under "Tool inventory", the generated route needs no row, and any
    disclosure fields their rows. A new module gets a row in CODEDOC's `server/tools/` table.

@@ -12,6 +12,7 @@ import pandas as pd
 
 from server.core.validators import to_utc_index
 from server.operations import operation
+from server.schemas.results import ensemble as result_models
 from server.state.session import SessionState, session
 
 # Inverse-RMSE weighting needs a floor so a vanishing RMSE cannot take the entire
@@ -298,7 +299,10 @@ def _run_ensemble(state: SessionState, measured_col: str) -> dict:
     return response
 
 
-@operation(effect="change", stage="ensemble", disclosure=("weights", "weight_basis", "component_spread",))
+@operation(
+    effect="change", stage="ensemble", disclosure=("weights", "weight_basis", "component_spread",),
+    result=result_models.RunEnsembleResult,
+)
 def run_ensemble(measured_col: str) -> dict:
     """Blend LTC algorithms using inverse-RMSE weights and overlap-period bias correction per MCP ensemble practice."""
     return _run_ensemble(session, measured_col)

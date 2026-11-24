@@ -18,6 +18,7 @@ from server.core.validators import (
     to_utc_index,
 )
 from server.operations import operation
+from server.schemas.results import ltc as result_models
 from server.state.session import SessionState, session
 
 MEASURED_COLUMN = "__measured__"
@@ -709,6 +710,7 @@ def _run_ltc_variance_ratio(state: SessionState, short_col: str, long_col: str) 
         "estimator",
         "huber_delta",
     ),
+    result=result_models.RunLtcLinearLeastSquaresResult,
 )
 def run_ltc_linear_least_squares(short_col: str, long_col: str) -> dict:
     """Run robust linear MCP using Huber IRLS and apply the fit to the full long-term record."""
@@ -725,6 +727,7 @@ def run_ltc_linear_least_squares(short_col: str, long_col: str) -> dict:
         "reference_temporal_semantics",
         "error_variance_ratio_assumed",
     ),
+    result=result_models.RunLtcTotalLeastSquaresResult,
 )
 def run_ltc_total_least_squares(short_col: str, long_col: str) -> dict:
     """Run orthogonal total least squares MCP and apply the fit to the full long-term record."""
@@ -741,6 +744,7 @@ def run_ltc_total_least_squares(short_col: str, long_col: str) -> dict:
         "reference_temporal_semantics",
         "fit_basis",
     ),
+    result=result_models.RunLtcSpeedsortResult,
 )
 def run_ltc_speedsort(
     short_col: str,
@@ -768,6 +772,7 @@ def run_ltc_speedsort(
         "variance_ratio_to_reference",
         "reference_temporal_semantics",
     ),
+    result=result_models.RunLtcVarianceRatioResult,
 )
 def run_ltc_variance_ratio(short_col: str, long_col: str) -> dict:
     """Run variance-ratio MCP using mean and standard-deviation scaling of the reference series."""

@@ -16,6 +16,7 @@ from server.core.decimation import Window, reduce_window
 from server.core.selection import SelectionError, utc_timestamp
 from server.core.validators import to_utc_index
 from server.operations import operation
+from server.schemas.results import series as result_models
 from server.state.session import SessionState, session
 
 #: Buckets when the caller names none: about the width of a chart in pixels.
@@ -105,7 +106,10 @@ def window_payload(window: Window) -> dict:
     }
 
 
-@operation(effect="read", stage="visualization", disclosure=("decimated", "bucket_ms"), selectable=True)
+@operation(
+    effect="read", stage="visualization", disclosure=("decimated", "bucket_ms"), selectable=True,
+    result=result_models.GetSeriesWindowResult,
+)
 def get_series_window(
     channels: str,
     start: str = "",

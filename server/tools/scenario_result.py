@@ -12,10 +12,11 @@ from __future__ import annotations
 
 from server.core.scenario_result import fixed_prefix_hash
 from server.operations import operation
+from server.schemas.results import scenario_result as result_models
 from server.state.session import session
 
 
-@operation(effect="read", stage="sweep", canvas=False)
+@operation(effect="read", stage="sweep", canvas=False, result=result_models.GetFixedPrefixHashResult)
 def get_fixed_prefix_hash() -> dict:
     """Return the fixed-prefix hash for the current session, stamped before any sweep runs."""
     return {

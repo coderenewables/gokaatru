@@ -28,7 +28,7 @@ from typing import Annotated, Any, Literal, TypeVar, get_type_hints
 
 import numpy as np
 from fastmcp.tools import FunctionTool
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from server.core.scenario_result import ENGINE_VERSION
 from server.state.session import SessionState, bind_session, current_operation, get_active_session
@@ -135,6 +135,10 @@ class Operation:
     secret_parameters: tuple[str, ...] = ()
     #: Takes a ``selection`` naming a stored selection, and then runs on its records only.
     selectable: bool = False
+    #: The Pydantic model of what the operation returns (``server/schemas/results``), and of
+    #: what its dry run returns. Published in the OpenAPI schema; never validated against.
+    result: type[BaseModel] | None = None
+    preview_result: type[BaseModel] | None = None
 
     def __post_init__(self) -> None:
         if not self.name.isidentifier():
@@ -156,6 +160,13 @@ class Operation:
             raise ValueError(
                 f"Operation '{self.name}' changes data, so it cannot run on a selection: the change "
                 "would be made to a copy holding only the selected records"
+            )
+        if self.preview_result is not None and self.dry_run is None:
+            raise ValueError(f"Operation '{self.name}' has no dry run for a preview result to describe")
+        if self.selectable and self.result is not None and SELECTION_PARAMETER not in self.result.model_fields:
+            raise ValueError(
+                f"Operation '{self.name}' is selectable, so its result model must declare the "
+                f"'{SELECTION_PARAMETER}' block the wrapper adds"
             )
         unknown_secrets = set(self.secret_parameters) - set(inspect.signature(self.fn).parameters)
         if unknown_secrets:
@@ -447,6 +458,8 @@ def operation(
     dry_run: Callable[..., Any] | None = None,
     secret_parameters: tuple[str, ...] = (),
     selectable: bool = False,
+    result: type[BaseModel] | None = None,
+    preview_result: type[BaseModel] | None = None,
     name: str | None = None,
     registry: OperationRegistry | None = None,
 ) -> Callable[[F], F]:
@@ -479,6 +492,8 @@ def operation(
                 dry_run=dry_run,
                 secret_parameters=tuple(secret_parameters),
                 selectable=selectable,
+                result=result,
+                preview_result=preview_result,
             )
         )
         if registry is None:

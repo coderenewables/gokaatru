@@ -185,7 +185,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/sessions/{id}/chat` | POST | BYOK LLM chat proxy with server-side tool execution (read-only by default; see [Chat tool authority](#chat-tool-authority)) |
 | `/mcp/catalog` | GET | MCP tool/resource catalog for discovery |
 | `/operations` | GET | Every declared operation: effect, stage, canvas, assistant, network, parameters |
-| `/sessions/{id}/operations/{name}` | POST | Run one operation; JSON body of its parameters (generated, one route per operation) |
+| `/sessions/{id}/operations/{name}` | POST | Run one operation; JSON body of its parameters (generated, one route per operation). The OpenAPI schema types every request and result (`<Name>Parameters`, `<Name>Result`), and 400 and 502 as `ErrorDetail`; a float in a result may be null, which is how NaN and infinity are sent |
 | `/sessions/{id}/series` | GET | A window of measured channels as an Arrow stream (`application/vnd.apache.arrow.stream`): per-bucket `<channel>.min`, `.max` and `.count` beside `time`, the window described in the schema metadata (`gokaatru`). Query: `channels`, `start`, `end` (UTC offset required), `buckets`, `selection`. The same window as `get_series_window` |
 | `/sessions/{id}/operations/{name}/preview` | POST | Dry run with the same body: what the operation would return and change, nothing applied (`apply_cleaning_rule`, `undo_cleaning_rule`) |
 

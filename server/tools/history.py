@@ -16,6 +16,7 @@ from typing import Any
 
 from server.operations import operation
 from server.schemas.common import Coordinate
+from server.schemas.results import history as result_models
 from server.state.session import SessionState, session
 from server.tools.cleaning import _apply_cleaning_rule, _undo_cleaning_rule
 from server.tools.config import SYNCED_FIELDS, _update_run_config, config_snapshot
@@ -178,19 +179,19 @@ def _get_operation_log(state: SessionState, limit: int) -> dict[str, Any]:
     }
 
 
-@operation(effect="change", stage="config", canvas=False)
+@operation(effect="change", stage="config", canvas=False, result=result_models.UndoLastChangeResult)
 def undo_last_change() -> dict:
     """Undo the last cleaning rule or configuration change still in the history."""
     return _undo_last_change(session)
 
 
-@operation(effect="change", stage="config", canvas=False)
+@operation(effect="change", stage="config", canvas=False, result=result_models.RedoLastChangeResult)
 def redo_last_change() -> dict:
     """Redo the change most recently undone, with the parameters it was first called with."""
     return _redo_last_change(session)
 
 
-@operation(effect="read", stage="config", canvas=False)
+@operation(effect="read", stage="config", canvas=False, result=result_models.GetOperationLogResult)
 def get_operation_log(limit: int = 50) -> dict:
     """Return the most recent operation calls: who, what, with which parameters, and the undo state."""
     return _get_operation_log(session, limit)

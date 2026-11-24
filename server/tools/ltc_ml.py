@@ -14,6 +14,7 @@ import pandas as pd
 
 from server.core.validators import to_utc_index
 from server.operations import operation
+from server.schemas.results import ltc_ml as result_models
 from server.state.session import SessionState, session
 from server.tools.ltc import (
     MEASURED_COLUMN,
@@ -420,6 +421,7 @@ def _run_ltc_xgboost(
         "cv_fold_reports",
         "cv_rmse_spread",
     ),
+    result=result_models.RunLtcXgboostResult,
 )
 def run_ltc_xgboost(short_col: str, long_col: str, short_dir_col: str = "", long_dir_col: str = "") -> dict:
     """Run XGBoost MCP with temporal, directional, and meteorological features and early stopping.

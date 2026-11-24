@@ -22,6 +22,7 @@ from server.core.validators import (
 )
 from server.operations import operation
 from server.schemas.common import Coordinate, SensorInfo
+from server.schemas.results import data_io as result_models
 from server.state.session import SessionState, session
 
 logger = logging.getLogger(__name__)
@@ -1100,31 +1101,34 @@ def _get_data_coverage(state: SessionState, sensor_name: str) -> dict:
     }
 
 
-@operation(effect="change", stage="ingest", disclosure=("duplicate_timestamps",))
+@operation(
+    effect="change", stage="ingest", disclosure=("duplicate_timestamps",),
+    result=result_models.ParseTimeseriesResult,
+)
 def parse_timeseries(file_path: str) -> dict:
     """Parse a wind timeseries file into session state following the GoKaatru Phase 1 ingest spec."""
     return _parse_timeseries(session, file_path)
 
 
-@operation(effect="change", stage="ingest")
+@operation(effect="change", stage="ingest", result=result_models.ParseDatamodelResult)
 def parse_datamodel(file_path: str) -> dict:
     """Parse an IEA Task 43 datamodel JSON file into the Phase 1 height-to-sensor mapping."""
     return _parse_datamodel(session, file_path)
 
 
-@operation(effect="read", stage="ingest")
+@operation(effect="read", stage="ingest", result=result_models.ListSensorsResult)
 def list_sensors() -> dict:
     """List mapped sensors with coverage statistics using the GoKaatru Phase 1 inventory contract."""
     return _list_sensors(session)
 
 
-@operation(effect="read", stage="ingest")
+@operation(effect="read", stage="ingest", result=result_models.GetPeriodOfRecordResult)
 def get_period_of_record() -> dict:
     """Summarize period of record and sensor inventory per the Phase 1 measurement inventory spec."""
     return _get_period_of_record(session)
 
 
-@operation(effect="read", stage="ingest")
+@operation(effect="read", stage="ingest", result=result_models.GetDataCoverageResult)
 def get_data_coverage(sensor_name: str) -> dict:
     """Return sensor coverage and gap statistics using the Phase 1 data availability spec."""
     return _get_data_coverage(session, sensor_name)

@@ -14,6 +14,7 @@ import pandas as pd
 
 from server.core.selection import SelectionError, resolve, validate
 from server.operations import ACTOR, operation
+from server.schemas.results import selections as result_models
 from server.state.session import SessionState, session
 
 #: A summary lists at most this many contiguous runs of selected records.
@@ -109,26 +110,26 @@ def _resolve_selection(state: SessionState, name: str) -> dict[str, Any]:
     return _summary(name, state.selections[name]["definition"], _frame(state))
 
 
-@operation(effect="change", stage="selection", canvas=False)
+@operation(effect="change", stage="selection", canvas=False, result=result_models.DefineSelectionResult)
 def define_selection(name: str, definition: dict) -> dict:
     """Define or replace a named selection of records: time ranges, direction sectors, value
     bands or record sets, combined by union and intersection."""
     return _define_selection(session, name, definition)
 
 
-@operation(effect="change", stage="selection", canvas=False)
+@operation(effect="change", stage="selection", canvas=False, result=result_models.DeleteSelectionResult)
 def delete_selection(name: str) -> dict:
     """Delete a named selection."""
     return _delete_selection(session, name)
 
 
-@operation(effect="read", stage="selection", canvas=False)
+@operation(effect="read", stage="selection", canvas=False, result=result_models.ListSelectionsResult)
 def list_selections() -> dict:
     """List the session's named selections with how many records each holds now."""
     return _list_selections(session)
 
 
-@operation(effect="read", stage="selection", canvas=False)
+@operation(effect="read", stage="selection", canvas=False, result=result_models.ResolveSelectionResult)
 def resolve_selection(name: str) -> dict:
     """Resolve a named selection against the working data: how many records, and where."""
     return _resolve_selection(session, name)

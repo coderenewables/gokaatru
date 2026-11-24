@@ -12,6 +12,7 @@ from pathlib import Path
 from server.core.runconfig import strip_mirrors
 from server.operations import note_undo, operation
 from server.schemas.common import Coordinate
+from server.schemas.results import config as result_models
 from server.state.session import SessionState, get_active_session, session
 
 
@@ -203,7 +204,7 @@ def _get_analysis_summary(state: SessionState) -> dict:
     }
 
 
-@operation(effect="read", stage="config")
+@operation(effect="read", stage="config", result=result_models.GetRunConfigResult)
 def get_run_config() -> dict:
     """Return the active run configuration dictionary defined by the GoKaatru Phase 1 config spec."""
     return _get_run_config(session)
@@ -228,7 +229,7 @@ def config_snapshot(state: SessionState) -> dict[str, object]:
     }
 
 
-@operation(effect="change", stage="config")
+@operation(effect="change", stage="config", result=result_models.UpdateRunConfigResult)
 def update_run_config(key: str, value: str) -> dict:
     """Update a dotted runconfig key using JSON parsing rules from the Phase 1 config manager spec."""
     before = config_snapshot(get_active_session())
@@ -237,19 +238,19 @@ def update_run_config(key: str, value: str) -> dict:
     return result
 
 
-@operation(effect="change", stage="config")
+@operation(effect="change", stage="config", result=result_models.SaveRunConfigResult)
 def save_run_config() -> dict:
     """Write the current run configuration to data/runconfig.json per the Phase 1 persistence spec."""
     return _save_run_config(session)
 
 
-@operation(effect="change", stage="config")
+@operation(effect="change", stage="config", result=result_models.LoadRunConfigResult)
 def load_run_config() -> dict:
     """Load data/runconfig.json into session state following the Phase 1 configuration workflow."""
     return _load_run_config(session)
 
 
-@operation(effect="read", stage="config")
+@operation(effect="read", stage="config", result=result_models.GetAnalysisSummaryResult)
 def get_analysis_summary() -> dict:
     """Report Phase 1 analysis readiness flags based on populated session-state fields."""
     return _get_analysis_summary(session)

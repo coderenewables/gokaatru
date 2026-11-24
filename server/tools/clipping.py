@@ -326,7 +326,9 @@ def _run_clipping_analysis(
     return payload
 
 
-@operation(effect="read", stage="clipping", disclosure=("years_used", "years_excluded", "excluded_reason",))
+# A change, not a read: the result is kept on the session, and the uncertainty model takes
+# its measured inter-annual variability from it (``SessionState.get_measured_iav_pct``).
+@operation(effect="change", stage="clipping", disclosure=("years_used", "years_excluded", "excluded_reason",))
 def run_clipping_analysis(
     speed_col: str,
     source: str = "ensemble",

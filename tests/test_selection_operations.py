@@ -92,7 +92,6 @@ NOT_SELECTABLE = {
     "plot_shear_table": "draws the stored shear table, which was built from every record",
     "plot_uncertainty_breakdown": _NUMBERS,
     "resolve_selection": "resolves a selection itself",
-    "run_clipping_analysis": _LONG_TERM,
 }
 
 HEIGHTS = '["Spd_60m", "Spd_80m", "Spd_100m"]'

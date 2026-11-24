@@ -123,7 +123,7 @@ PINNED_READ_TIER = frozenset({
     "get_run_config", "get_site_overview_map", "get_sweep_summary", "list_cleaning_rules", "list_sensors",
     "list_sweeps", "plot_annual_means", "plot_data_coverage", "plot_diurnal", "plot_ltc_comparison",
     "plot_monthly_means", "plot_scatter", "plot_shear_table", "plot_timeseries", "plot_uncertainty_breakdown",
-    "plot_weibull", "plot_windrose", "run_clipping_analysis",
+    "plot_weibull", "plot_windrose",
 })
 # Changes, file writes and network calls: offered only with allow_mutating_tools.
 PINNED_CHANGE_TIER = frozenset({
@@ -136,6 +136,7 @@ PINNED_CHANGE_TIER = frozenset({
     "interpolate_era5_to_site", "load_run_config", "parse_datamodel", "parse_timeseries", "run_ensemble",
     "run_ltc_linear_least_squares", "run_ltc_speedsort", "run_ltc_total_least_squares",
     "run_ltc_variance_ratio", "run_ltc_xgboost", "save_run_config", "undo_cleaning_rule", "update_run_config",
+    "run_clipping_analysis",
 })
 # Never offered: network and credential tools.
 PINNED_UNEXPOSED = frozenset({

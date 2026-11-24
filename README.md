@@ -558,8 +558,8 @@ with `assistant=False` is not exposed at all.
 
 | Tier | Count | Exposed when |
 |---|---|---|
-| Read-only — query, compute, plot, series windows, the operation log, listing and resolving selections | 54 | always |
-| Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty, the atmospheric diagnostic (it records the density the energy sensitivity uses), undo and redo, defining and deleting selections | 32 | only with `allow_mutating_tools: true` |
+| Read-only — query, compute, plot, series windows, the operation log, listing and resolving selections | 53 | always |
+| Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty, the atmospheric diagnostic (it records the density the energy sensitivity uses), the clipping analysis (it records the inter-annual variability the uncertainty model uses), undo and redo, defining and deleting selections | 33 | only with `allow_mutating_tools: true` |
 
 The remaining 12 of the 98 registered tools are declared `assistant=False` and
 therefore unreachable from chat: every BrightHub / EarthDataHub tool — the read-only

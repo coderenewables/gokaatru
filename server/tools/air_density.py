@@ -110,8 +110,9 @@ def compute_air_density_timeseries(
     # Shared with the scalar path so the two cannot drift apart.
     vapour_pressure_pa = saturation_vapour_pressure_pa(dewpoint - 273.15)
     density = moist_air_density(pressure, temperature, vapour_pressure_pa)
-    frame["air_density_kg_m3"] = density
-    valid = frame["air_density_kg_m3"].dropna()
+    # Kept local: the frame is the session's own reference or measured data, and writing the
+    # column into it made this read change the session (found by tests/test_read_operations.py).
+    valid = pd.Series(density, index=frame.index).dropna()
     if valid.empty:
         raise ValueError("No valid air-density values could be computed from the selected columns")
     result: dict = {

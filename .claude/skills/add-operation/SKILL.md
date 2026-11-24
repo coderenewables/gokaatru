@@ -59,6 +59,9 @@ module; `tests/test_mcp_surface.py` refuses it.
      `PINNED_STAGE_BY_MODULE` if it is new.
    - `python -m tests.mcp_surface --write` to record the new tool, then check the diff shows
      only it.
+   - `python -m tests.openapi_schema --write`, then `cd frontend && npm run generate:api`: the
+     committed OpenAPI schema and the TypeScript client generated from it. CI fails on either
+     being stale (`tests/test_openapi_schema.py`, `npm run check:api`).
    - `tests/test_phase4.py` and `EXPECTED_MCP_TOOLS` in `.github/workflows/ci.yml`: the count.
    - A read operation is picked up by `tests/test_operation_routes.py` automatically; give its
      required parameters a value in `ARGUMENT_VALUES` if their names are new. That test also

@@ -413,8 +413,12 @@ frontend/src/
 │                         #   store); `previewSweepScenarios()` peeks a sweep's scenario list
 │                         #   for Canvas's picker without touching manifest/rows/phase, unlike
 │                         #   `openSweep()` which Run/Interrogate read from
+├── api/                  # generated from the server's OpenAPI schema (P1-20); not edited by hand
+│   ├── openapi.json      # committed schema (python -m tests.openapi_schema --write)
+│   ├── schema.d.ts       # npm run generate:api (openapi-typescript 7.13.0); CI: npm run check:api
+│   └── client.ts         # openapi-fetch client; adds X-GoKaatru-Session from the path
 ├── lib/
-│   ├── api.ts            # Axios/fetch HTTP client; auto-injects X-GoKaatru-Session header
+│   ├── api.ts            # hand-written HTTP client the current interface uses, until Phase 2
 │   ├── sweepApi.ts       # HTTP client for the sweep engine, incl. getPrefixHash (2026-09)
 │   ├── prepareStats.ts   # pure helpers for Prepare's stat tiles (meanCoverage) — plain
 │   │                     #   arithmetic over already-disclosed numbers, no disclosure entry
@@ -493,7 +497,7 @@ python -m pytest tests/ -v
 python -c "import asyncio; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())), 'tools')"
 ```
 
-### Frontend (`frontend/src/test/`, vitest — 30 files)
+### Frontend (`frontend/src/test/`, vitest — 32 files)
 
 Covers the stores, the workflow/DAG builder, stage-status logic, the sweep lifecycle and
 analysis, disclosure rendering, and the stage/results views.

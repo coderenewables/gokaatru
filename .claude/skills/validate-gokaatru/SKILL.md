@@ -38,6 +38,7 @@ frontend suites together has caused flaky failures.
    identical to `tests/snapshots/mcp_tools.json` unless you meant to change it.
 5. If `frontend/` changed:
    ```bash
+   cd frontend && npm run check:api  # the generated client matches the committed schema
    cd frontend && npm run test       # vitest
    cd frontend && npm run build      # tsc --noEmit && vite build
    cd frontend && npm run test:e2e   # Playwright; own backend :8011 and Vite :5183

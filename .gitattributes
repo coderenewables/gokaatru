@@ -1,0 +1,4 @@
+# Generated from the server's OpenAPI schema (P1-20). LF in every checkout, so the bytes CI
+# regenerates match the bytes committed on any platform; collapsed in review diffs.
+frontend/src/api/openapi.json text eol=lf linguist-generated=true
+frontend/src/api/schema.d.ts text eol=lf linguist-generated=true

@@ -55,6 +55,10 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install
         run: npm ci
+      # The client is generated from the committed OpenAPI schema, which the backend job's
+      # tests/test_openapi_schema.py holds to the server's; a stale client fails here.
+      - name: Generated API client is current
+        run: npm run check:api
       - name: Type check
         run: npx tsc --noEmit -p .
       - name: Vitest

@@ -299,13 +299,13 @@ def _compute_mcp_readiness(state: SessionState, speed_sensor: str, reference_sen
     }
 
 
-@operation(effect="read", stage="diagnostics")
+@operation(effect="read", stage="diagnostics", selectable=True)
 def compute_sensor_comparison(sensor_a: str = "", sensor_b: str = "") -> dict:
     """Compute correlation, residual, bias, and regression metrics for two measured speed sensors."""
     return _compute_sensor_comparison(session, sensor_a, sensor_b)
 
 
-@operation(effect="read", stage="diagnostics")
+@operation(effect="read", stage="diagnostics", selectable=True)
 def compute_mast_effects(
     sensor_a: str = "",
     sensor_b: str = "",
@@ -331,6 +331,7 @@ def compute_mast_effects(
         "range_max",
         "range_bounds_source",
     ),
+    selectable=True,
 )
 def compute_qc_diagnostics() -> dict:
     """Report non-mutating range, flat-line, and cleaning-removal diagnostics."""

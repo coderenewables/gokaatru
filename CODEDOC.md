@@ -158,7 +158,7 @@ with `canvas`, `assistant` and `network` where they differ from the defaults. Th
 publishes the MCP tool itself (`_publish_to_mcp`, through `mcp.tool()`); no tool module touches
 `mcp` directly, and `tests/test_mcp_surface.py` compares what clients receive with
 `tests/snapshots/mcp_tools.json` (`python -m tests.mcp_surface --write` to refresh). `Operation` also carries disclosure fields, standards references, a code version and
-an optional dry run; `REGISTRY` holds all 90. The parameter schema is read from the signature
+an optional dry run; `REGISTRY` holds all 97. The parameter schema is read from the signature
 by FastMCP's own parser. `STAGES` is the pipeline order used for the canvas tie-break. It lives
 outside `core/` because it imports FastMCP. Each declaration wraps its function (`_logged`,
 `functools.wraps`, so the MCP schema is unchanged): every call appends to
@@ -169,7 +169,7 @@ saves the project. The actor comes from the `ACTOR` context variable that each s
 (executor), `mcp` (the MCP mount and stdio server); otherwise `direct`. Hand-written session
 routes bypass the operations, so a middleware in `server/api/main.py` logs and saves after a
 successful change through one (`record_route_change`, route template only, never the body)
-until Phases 2-3 move the interface onto the generated routes. The chat route's two tiers and callables, the
+until Phases 2-3 move the interface onto the generated routes. A declaration with `selectable=True` (reads only; 23 statistics and charts, pinned in `tests/test_selection_operations.py`) gains a keyword-only `selection` parameter in the published signature (`_selectable_signature`), so MCP, the generated routes, the canvas and chat all offer it; named, the wrapper runs the function on a copy of the session whose working frame and `PER_RECORD_FRAMES` (raw, shear and roughness timeseries) are blank outside the selection (`_selection_replica`) and adds a `selection` block to the result. The chat route's two tiers and callables, the
 executor's canvas dispatch (`_tool_registry`) and its stage tie-break are all read from it;
 `tests/test_operations.py` pins the tiers, the non-canvas set and the stage order by name.
 

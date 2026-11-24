@@ -108,6 +108,7 @@ def list_operations() -> list[dict[str, Any]]:
             "standards": list(declared.standards),
             "code_version": declared.code_version,
             "dry_run": declared.dry_run is not None,
+            "selectable": declared.selectable,
             "parameters": declared.parameters,
         }
         for declared in REGISTRY

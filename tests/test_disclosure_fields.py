@@ -31,6 +31,10 @@ NOT_FROM_AN_OPERATION = {
     "inputs": "names where is_interpolation sits in that row, not a field of its own",
     "extrapolate_reanalysis": "the sweep's extrapolate stage detail, not the tool's response",
     "reanalysis_status": "the sweep's extrapolate stage detail, not the tool's response",
+    "selection": (
+        "added by the operation wrapper when a selectable operation is given a selection; "
+        "checked in tests/test_selection_operations.py"
+    ),
 }
 
 # Declared fields a response carries only in some situations, and why this run does not.

@@ -1168,6 +1168,11 @@
      ],
      "default": null
     },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "speed_sensors": {
      "default": "",
      "type": "string"
@@ -1270,6 +1275,11 @@
     "num_sectors": {
      "default": 12,
      "type": "integer"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
     }
    },
    "required": [
@@ -1924,6 +1934,11 @@
      "default": "wasp_m1_m3",
      "type": "string"
     },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "sensor_name": {
      "type": "string"
     }
@@ -1955,6 +1970,11 @@
    "properties": {
     "direction_sensor": {
      "default": "",
+     "type": "string"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
      "type": "string"
     },
     "speed_sensor": {
@@ -1989,6 +2009,11 @@
     "min_speed_mps": {
      "default": 3.0,
      "type": "number"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
     },
     "speed_sensor": {
      "type": "string"
@@ -2026,6 +2051,11 @@
      "default": 16,
      "type": "integer"
     },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "speed_sensor": {
      "type": "string"
     }
@@ -2056,6 +2086,11 @@
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "sensor_name": {
      "type": "string"
     }
@@ -2085,6 +2120,11 @@
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "sensor_name": {
      "type": "string"
     }
@@ -2121,6 +2161,11 @@
     "sd_sensor": {
      "type": "string"
     },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "speed_sensor": {
      "type": "string"
     }
@@ -2151,6 +2196,11 @@
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "sensor_name": {
      "type": "string"
     }
@@ -2180,6 +2230,11 @@
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "sensor_a": {
      "type": "string"
     },
@@ -2440,6 +2495,11 @@
      "default": "",
      "type": "string"
     },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "speed_sensor": {
      "type": "string"
     }
@@ -2510,6 +2570,11 @@
      "default": 3.0,
      "type": "number"
     },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "speed_sensor": {
      "type": "string"
     }
@@ -2547,6 +2612,11 @@
      "default": 15.0,
      "type": "number"
     },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "speed_sensor": {
      "type": "string"
     }
@@ -2576,6 +2646,11 @@
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "sensor_a": {
      "default": "",
      "type": "string"
@@ -2619,6 +2694,11 @@
      "default": 4.0,
      "type": "number"
     },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "sensor_a": {
      "default": "",
      "type": "string"
@@ -2649,7 +2729,13 @@
   "icons": null,
   "inputSchema": {
    "additionalProperties": false,
-   "properties": {},
+   "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    }
+   },
    "type": "object"
   },
   "meta": {
@@ -2708,6 +2794,11 @@
     "direction_sensor": {
      "type": "string"
     },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "speed_sensor": {
      "type": "string"
     }
@@ -2738,6 +2829,11 @@
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "sensor_name": {
      "type": "string"
     }
@@ -2767,6 +2863,11 @@
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "sensor_names": {
      "type": "string"
     }
@@ -2796,6 +2897,11 @@
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "sensor_a": {
      "type": "string"
     },
@@ -2829,6 +2935,11 @@
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "sensor_names": {
      "type": "string"
     }
@@ -2907,6 +3018,11 @@
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
     "sensor_names": {
      "type": "string"
     }

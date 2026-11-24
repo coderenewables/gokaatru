@@ -92,31 +92,31 @@ from server.tools.visualization._shear import (
 )
 
 
-@operation(effect="read", stage="visualization")
+@operation(effect="read", stage="visualization", selectable=True)
 def plot_windrose(speed_sensor: str, direction_sensor: str) -> dict:
     """Plot a 16-sector wind rose with stacked speed bins using directional frequency percentages."""
     return _plot_windrose(session, speed_sensor, direction_sensor)
 
 
-@operation(effect="read", stage="visualization")
+@operation(effect="read", stage="visualization", selectable=True)
 def plot_weibull(sensor_name: str) -> dict:
     """Plot the measured speed histogram with a fitted Weibull PDF using $f(v;k,A)$ from wind climatology."""
     return _plot_weibull(session, sensor_name)
 
 
-@operation(effect="read", stage="visualization")
+@operation(effect="read", stage="visualization", selectable=True)
 def plot_diurnal(sensor_names: str) -> dict:
     """Plot mean diurnal wind-speed profiles by hour of day for one or more measured sensors."""
     return _plot_diurnal(session, sensor_names)
 
 
-@operation(effect="read", stage="visualization")
+@operation(effect="read", stage="visualization", selectable=True)
 def plot_scatter(sensor_a: str, sensor_b: str) -> dict:
     """Plot a measured scatter comparison with OLS line and regression metrics derived from least squares."""
     return _plot_scatter(session, sensor_a, sensor_b)
 
 
-@operation(effect="read", stage="visualization")
+@operation(effect="read", stage="visualization", selectable=True)
 def plot_timeseries(sensor_names: str) -> dict:
     """Plot one or more measured sensor series, downsampling to daily means for large datasets."""
     return _plot_timeseries(session, sensor_names)
@@ -134,7 +134,7 @@ def plot_shear_table(table_type: str = "shear") -> dict:
     return _plot_shear_table(session, table_type)
 
 
-@operation(effect="read", stage="visualization")
+@operation(effect="read", stage="visualization", selectable=True)
 def plot_monthly_means(sensor_names: str) -> dict:
     """Plot grouped monthly means for one or more measured sensors using calendar-month aggregation."""
     return _plot_monthly_means(session, sensor_names)

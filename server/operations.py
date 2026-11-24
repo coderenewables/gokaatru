@@ -13,6 +13,7 @@ parser that builds the MCP tool, so the two cannot disagree.
 """
 from __future__ import annotations
 
+import copy
 import functools
 import inspect
 import json
@@ -23,12 +24,14 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import cached_property
-from typing import Any, Literal, TypeVar
+from typing import Annotated, Any, Literal, TypeVar, get_type_hints
 
+import numpy as np
 from fastmcp.tools import FunctionTool
+from pydantic import Field
 
 from server.core.scenario_result import ENGINE_VERSION
-from server.state.session import current_operation, get_active_session
+from server.state.session import SessionState, bind_session, current_operation, get_active_session
 
 Effect = Literal["read", "change"]
 EFFECTS: tuple[str, ...] = ("read", "change")
@@ -41,6 +44,18 @@ REDACTED = "[redacted]"
 #: Undo and redo walk the history; every other successful change starts a new branch of it,
 #: so what was undone can no longer be redone.
 HISTORY_OPERATIONS = frozenset({"undo_last_change", "redo_last_change"})
+
+#: The parameter a selectable operation gains (decisions/0011).
+SELECTION_PARAMETER = "selection"
+SELECTION_DESCRIPTION = "Name of a stored selection; when given, only its records are used."
+#: Reported with every result computed on a selection. Records outside it are blanked, not
+#: dropped: the timestamps stay, so a ramp, a calm spell or a flat line is never joined
+#: across records the selection separates, and the measurement interval is still inferred
+#: from the full record.
+SELECTION_BASIS = (
+    "records outside the selection are treated as missing, with their timestamps kept; a "
+    "coverage or availability figure is therefore the share of records both selected and valid"
+)
 
 
 def note_undo(note: dict[str, object]) -> None:
@@ -118,6 +133,8 @@ class Operation:
     dry_run: Callable[..., Any] | None = None
     #: Parameters the operation log records as "[redacted]" (credentials).
     secret_parameters: tuple[str, ...] = ()
+    #: Takes a ``selection`` naming a stored selection, and then runs on its records only.
+    selectable: bool = False
 
     def __post_init__(self) -> None:
         if not self.name.isidentifier():
@@ -134,6 +151,11 @@ class Operation:
             raise ValueError(
                 f"Operation '{self.name}': its dry run must take exactly the operation's parameters, "
                 "so one request previews what it would apply"
+            )
+        if self.selectable and self.effect != "read":
+            raise ValueError(
+                f"Operation '{self.name}' changes data, so it cannot run on a selection: the change "
+                "would be made to a copy holding only the selected records"
             )
         unknown_secrets = set(self.secret_parameters) - set(inspect.signature(self.fn).parameters)
         if unknown_secrets:
@@ -282,23 +304,92 @@ def record_route_change(state: Any, method: str, route: str) -> None:
         ProjectStore(state.workspace_dir).save(state)
 
 
-def _logged(fn: F, name: str, effect: Effect, code_version: str, secrets: tuple[str, ...]) -> F:
+#: Per-record frames held beside the working data, blanked with it on a selection so a read
+#: that takes its records from one of them cannot see what the selection leaves out.
+PER_RECORD_FRAMES: tuple[str, ...] = ("raw_timeseries_df", "shear_timeseries_df", "roughness_timeseries_df")
+
+
+def _selection_replica(state: SessionState, name: str) -> tuple[SessionState, dict[str, object]]:
+    """A copy of the session whose records outside the selection are missing.
+
+    The working frame and every per-record frame beside it are blanked; the copy shares
+    everything else with the session, which is safe because only a read runs on it
+    (``Operation`` refuses a selectable change) and every read is tested to leave the
+    session unchanged.
+    """
+    from server.tools.selections import selection_mask
+
+    mask = selection_mask(state, name)
+    frame = state.timeseries_df
+    replica = copy.copy(state)
+    replica.timeseries_df = frame.where(np.broadcast_to(mask[:, None], frame.shape))
+    selected = frame.index[mask]
+    for attribute in PER_RECORD_FRAMES:
+        other = getattr(state, attribute)
+        if other is not None:
+            kept = other.index.isin(selected)
+            setattr(replica, attribute, other.where(np.broadcast_to(kept[:, None], other.shape)))
+    disclosure: dict[str, object] = {
+        "name": name,
+        "records": int(mask.sum()),
+        "of_records": int(mask.size),
+        "basis": SELECTION_BASIS,
+    }
+    return replica, disclosure
+
+
+def _selectable_signature(fn: Callable[..., Any], name: str) -> tuple[inspect.Signature, dict[str, Any]]:
+    """The function's signature and resolved annotations with the selection parameter added."""
+    signature = inspect.signature(fn)
+    if SELECTION_PARAMETER in signature.parameters:
+        raise ValueError(f"Operation '{name}' already has a parameter named '{SELECTION_PARAMETER}'")
+    hints = get_type_hints(fn, include_extras=True)
+    if hints.get("return") is not dict:
+        raise ValueError(f"Operation '{name}' must return a dict to report the selection it ran on")
+    annotation = Annotated[str, Field(description=SELECTION_DESCRIPTION)]
+    parameters = [
+        parameter.replace(annotation=hints.get(parameter.name, parameter.annotation))
+        for parameter in signature.parameters.values()
+    ]
+    parameters.append(
+        inspect.Parameter(SELECTION_PARAMETER, inspect.Parameter.KEYWORD_ONLY, default="", annotation=annotation)
+    )
+    return (
+        signature.replace(parameters=parameters, return_annotation=dict),
+        {**hints, SELECTION_PARAMETER: annotation},
+    )
+
+
+def _logged(
+    fn: F,
+    name: str,
+    effect: Effect,
+    code_version: str,
+    secrets: tuple[str, ...],
+    selectable: bool = False,
+) -> F:
     """Wrap an operation so every call is logged and every successful change is saved.
 
     ``functools.wraps`` keeps the signature and annotations, so the MCP schema and the
-    generated routes read exactly what they read from the bare function.
+    generated routes read exactly what they read from the bare function. A selectable
+    operation's wrapper publishes one more parameter, ``selection``, and with it names
+    runs the function on a copy of the session holding only the selected records.
     """
     signature = inspect.signature(fn)
 
     @functools.wraps(fn)
     def logged(*args: Any, **kwargs: Any) -> Any:
+        selection = str(kwargs.pop(SELECTION_PARAMETER, "") or "") if selectable else ""
         try:
             bound = signature.bind_partial(*args, **kwargs)
             bound.apply_defaults()
             arguments = dict(bound.arguments)
         except TypeError:
             arguments = {}
-        parameters = _json_safe({key: REDACTED if key in secrets else value for key, value in arguments.items()})
+        logged_arguments = {key: REDACTED if key in secrets else value for key, value in arguments.items()}
+        if selection:
+            logged_arguments[SELECTION_PARAMETER] = selection
+        parameters = _json_safe(logged_arguments)
         state = get_active_session()
         before = state.data_version
         call = {
@@ -309,7 +400,15 @@ def _logged(fn: F, name: str, effect: Effect, code_version: str, secrets: tuple[
         }
         token = current_operation.set(call)
         try:
-            result = fn(*args, **kwargs)
+            if selection:
+                replica, disclosure = _selection_replica(state, selection)
+                with bind_session(replica):
+                    result = fn(*args, **kwargs)
+                if SELECTION_PARAMETER in result:
+                    raise RuntimeError(f"Operation '{name}' already returns a '{SELECTION_PARAMETER}' field")
+                result = {**result, SELECTION_PARAMETER: disclosure}
+            else:
+                result = fn(*args, **kwargs)
         except Exception as exc:
             message = f"{type(exc).__name__}: {exc}"
             for key in secrets:
@@ -327,6 +426,8 @@ def _logged(fn: F, name: str, effect: Effect, code_version: str, secrets: tuple[
             _save_project()
         return result
 
+    if selectable:
+        logged.__signature__, logged.__annotations__ = _selectable_signature(fn, name)  # type: ignore[attr-defined]
     return logged  # type: ignore[return-value]
 
 
@@ -341,6 +442,7 @@ def operation(
     standards: tuple[str, ...] = (),
     dry_run: Callable[..., Any] | None = None,
     secret_parameters: tuple[str, ...] = (),
+    selectable: bool = False,
     name: str | None = None,
     registry: OperationRegistry | None = None,
 ) -> Callable[[F], F]:
@@ -357,7 +459,7 @@ def operation(
         published = (
             fn
             if registry is not None
-            else _logged(fn, operation_name, effect, ENGINE_VERSION, tuple(secret_parameters))
+            else _logged(fn, operation_name, effect, ENGINE_VERSION, tuple(secret_parameters), selectable)
         )
         declared = (REGISTRY if registry is None else registry).register(
             Operation(
@@ -372,6 +474,7 @@ def operation(
                 standards=tuple(standards),
                 dry_run=dry_run,
                 secret_parameters=tuple(secret_parameters),
+                selectable=selectable,
             )
         )
         if registry is None:

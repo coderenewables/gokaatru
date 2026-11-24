@@ -781,7 +781,7 @@ def calculate_roughness_timeseries(height_sensors: str) -> dict:
     return _calculate_roughness_timeseries(session, height_sensors)
 
 
-@operation(effect="read", stage="shear")
+@operation(effect="read", stage="shear", selectable=True)
 def compute_vertical_structure(
     speed_sensors: str = "",
     direction_sensors: str = "",
@@ -821,7 +821,7 @@ def build_roughness_table(aggregation: str = "mean") -> dict:
     return _build_roughness_table(session, aggregation)
 
 
-@operation(effect="read", stage="shear", disclosure=("hour_basis", "site_utc_offset_hours",))
+@operation(effect="read", stage="shear", disclosure=("hour_basis", "site_utc_offset_hours",), selectable=True)
 def build_sector_shear_tables(
     direction_sensor: str,
     num_sectors: int = 12,

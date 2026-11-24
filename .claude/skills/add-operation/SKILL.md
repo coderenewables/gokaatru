@@ -42,6 +42,11 @@ module; `tests/test_mcp_surface.py` refuses it.
      the same parameters. Run the real function on `_replica(state)` and diff, as
      `server/tools/cleaning.py` does, so the preview cannot drift from the change.
    - `standards=(...)`: "Traced to ..." wording only, never "compliant" or "follows".
+   - `selectable=True` for a read that computes from the measured records (the working frame,
+     raw data, or the shear and roughness timeseries). The wrapper publishes a `selection`
+     parameter and runs the function with every record outside it blank; nothing in the
+     function changes. A read of stored results, the long-term series, the reanalysis or the
+     data inventory is not selectable, because a selection would not restrict what it reads.
 
 4. **Make the pinned surfaces say so.** These tests fail until you do, on purpose:
    - `tests/test_operations.py`: add the name to `PINNED_READ_TIER`, `PINNED_CHANGE_TIER` or
@@ -53,6 +58,8 @@ module; `tests/test_mcp_surface.py` refuses it.
    - A read operation is picked up by `tests/test_operation_routes.py` automatically; give its
      required parameters a value in `ARGUMENT_VALUES` if their names are new. That test also
      proves the read changes nothing.
+   - Every read goes in `tests/test_selection_operations.py`: `SELECTABLE` (which then checks
+     it equals the operation on a pre-filtered session) or `NOT_SELECTABLE` with the reason.
 
 5. **README**: the tool under "Tool inventory", the generated route needs no row, and any
    disclosure fields their rows. A new module gets a row in CODEDOC's `server/tools/` table.

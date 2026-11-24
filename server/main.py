@@ -37,6 +37,7 @@ import server.tools.ltc_ml  # noqa: F401,E402
 import server.tools.map  # noqa: F401,E402
 import server.tools.scenario_result  # noqa: F401,E402
 import server.tools.selections  # noqa: F401,E402
+import server.tools.series  # noqa: F401,E402
 import server.tools.shear  # noqa: F401,E402
 import server.tools.statistics  # noqa: F401,E402
 import server.tools.sweep_analysis  # noqa: F401,E402

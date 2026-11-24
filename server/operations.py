@@ -309,7 +309,7 @@ def record_route_change(state: Any, method: str, route: str) -> None:
 PER_RECORD_FRAMES: tuple[str, ...] = ("raw_timeseries_df", "shear_timeseries_df", "roughness_timeseries_df")
 
 
-def _selection_replica(state: SessionState, name: str) -> tuple[SessionState, dict[str, object]]:
+def selection_view(state: SessionState, name: str) -> tuple[SessionState, dict[str, object]]:
     """A copy of the session whose records outside the selection are missing.
 
     The working frame and every per-record frame beside it are blanked; the copy shares
@@ -329,13 +329,17 @@ def _selection_replica(state: SessionState, name: str) -> tuple[SessionState, di
         if other is not None:
             kept = other.index.isin(selected)
             setattr(replica, attribute, other.where(np.broadcast_to(kept[:, None], other.shape)))
-    disclosure: dict[str, object] = {
+    return replica, selection_disclosure(name, mask)
+
+
+def selection_disclosure(name: str, mask: np.ndarray) -> dict[str, object]:
+    """What a result computed on a selection reports about it."""
+    return {
         "name": name,
         "records": int(mask.sum()),
         "of_records": int(mask.size),
         "basis": SELECTION_BASIS,
     }
-    return replica, disclosure
 
 
 def _selectable_signature(fn: Callable[..., Any], name: str) -> tuple[inspect.Signature, dict[str, Any]]:
@@ -401,7 +405,7 @@ def _logged(
         token = current_operation.set(call)
         try:
             if selection:
-                replica, disclosure = _selection_replica(state, selection)
+                replica, disclosure = selection_view(state, selection)
                 with bind_session(replica):
                     result = fn(*args, **kwargs)
                 if SELECTION_PARAMETER in result:

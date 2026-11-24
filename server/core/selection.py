@@ -26,7 +26,8 @@ class SelectionError(ValueError):
     """A selection definition that cannot be resolved as written."""
 
 
-def _timestamp(value: Any, what: str) -> pd.Timestamp:
+def utc_timestamp(value: Any, what: str) -> pd.Timestamp:
+    """A timestamp that names its UTC offset, in UTC; an offset-less one is refused."""
     try:
         stamp = pd.Timestamp(value)
     except (TypeError, ValueError) as exc:
@@ -72,11 +73,11 @@ def validate(definition: Any, columns: Iterable[str]) -> None:
         start, end = definition.get("start"), definition.get("end")
         if start is None and end is None:
             raise SelectionError("A time range needs a start, an end or both")
-        if start is not None and end is not None and _timestamp(start, "start") >= _timestamp(end, "end"):
+        if start is not None and end is not None and utc_timestamp(start, "start") >= utc_timestamp(end, "end"):
             raise SelectionError(f"A time range's start {start!r} must be before its end {end!r}")
         for bound, what in ((start, "start"), (end, "end")):
             if bound is not None:
-                _timestamp(bound, what)
+                utc_timestamp(bound, what)
     elif kind == "sector":
         opening = _number(definition.get("from_deg"), "from_deg")
         closing = _number(definition.get("to_deg"), "to_deg")
@@ -99,7 +100,7 @@ def validate(definition: Any, columns: Iterable[str]) -> None:
         if not isinstance(stamps, list) or not stamps:
             raise SelectionError("A record set needs a non-empty list of timestamps")
         for value in stamps:
-            _timestamp(value, "timestamp")
+            utc_timestamp(value, "timestamp")
 
 
 def resolve(definition: dict[str, Any], frame: pd.DataFrame) -> np.ndarray:
@@ -119,13 +120,13 @@ def _resolve(definition: dict[str, Any], frame: pd.DataFrame) -> np.ndarray:
         stamps = index.tz_convert("UTC") if index.tz is not None else index.tz_localize("UTC")
         mask = np.ones(len(frame), dtype=bool)
         if definition.get("start") is not None:
-            mask &= stamps >= _timestamp(definition["start"], "start")
+            mask &= stamps >= utc_timestamp(definition["start"], "start")
         if definition.get("end") is not None:
-            mask &= stamps < _timestamp(definition["end"], "end")
+            mask &= stamps < utc_timestamp(definition["end"], "end")
         return mask
     if kind == "records":
         stamps = index.tz_convert("UTC") if index.tz is not None else index.tz_localize("UTC")
-        wanted = pd.DatetimeIndex([_timestamp(value, "timestamp") for value in definition["timestamps"]])
+        wanted = pd.DatetimeIndex([utc_timestamp(value, "timestamp") for value in definition["timestamps"]])
         missing = wanted.difference(stamps)
         if len(missing):
             raise SelectionError(

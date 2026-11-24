@@ -4,7 +4,7 @@
 
 GoKaatru ships as two parts that work together:
 
-- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **97 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
+- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **98 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
 - **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison.
 
 State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The frontend's convenience fields are **derived mirrors** of canonical backend keys, not independent state — the mapping is defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
@@ -186,6 +186,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/mcp/catalog` | GET | MCP tool/resource catalog for discovery |
 | `/operations` | GET | Every declared operation: effect, stage, canvas, assistant, network, parameters |
 | `/sessions/{id}/operations/{name}` | POST | Run one operation; JSON body of its parameters (generated, one route per operation) |
+| `/sessions/{id}/series` | GET | A window of measured channels as an Arrow stream (`application/vnd.apache.arrow.stream`): per-bucket `<channel>.min`, `.max` and `.count` beside `time`, the window described in the schema metadata (`gokaatru`). Query: `channels`, `start`, `end` (UTC offset required), `buckets`, `selection`. The same window as `get_series_window` |
 | `/sessions/{id}/operations/{name}/preview` | POST | Dry run with the same body: what the operation would return and change, nothing applied (`apply_cleaning_rule`, `undo_cleaning_rule`) |
 
 ## Tool inventory
@@ -247,6 +248,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 
 ### Visualization
 - `plot_windrose`, `plot_weibull`, `plot_diurnal`, `plot_scatter`, `plot_timeseries`, `plot_data_coverage`, `plot_shear_table`, `plot_monthly_means`, `plot_ltc_comparison`, `plot_annual_means`, `plot_uncertainty_breakdown`
+- `get_series_window` — measured channels over a half-open window, reduced on the server to at most `buckets` equal-width time buckets (default 2000), each with every channel's minimum, maximum and valid count, so the band a chart draws is the data's exact envelope. A window of no more records than buckets is returned record by record; zoom by asking for a narrower window. The interface reads the same window as Arrow from `GET /sessions/{id}/series`.
 
 Additional figures are reachable through `POST /sessions/{id}/plots/{name}` without being MCP tools in their own right — including `shear_profile`, `shear_timeseries`, `era5_scatter`, `mast_shadow`, `qc_flags`, `ltc_scatter`, `ltc_residuals`, `ltc_monthly`, `ltc_convergence`, and `uncertainty_tornado`.
 
@@ -386,6 +388,7 @@ in its operation's response.
 | `is_interpolation` (`inputs`, `provenance.is_interpolation`) | `derive_uncertainty_inputs` | Whether hub height sits inside the profile the scenario extrapolated from: its own reference heights (axis A2) when given, otherwise every mapped height. A scenario restricted to sensors below hub is extrapolating even when another sensor sits above hub, so it takes the extrapolated vertical term rather than the 1% interpolated one. |
 | `extrapolate_reanalysis`, `reanalysis_status` | `extrapolate_to_hub_height` (sweep stage detail) | Sweep leaves pass `extrapolate_reanalysis=False`: the eight reanalysis node frames are not carried to hub height and the stage reports `reanalysis_status: "not_run"`. The reanalysis response reads `{"status": "skipped", "reason": "not_requested", "wrote_hub_column": false}`. The sweep's LTC reads the native `Spd_100m` / `Spd_50m` columns, so no reported number changes (68 rows identical before and after, 2026-11-14). The MCP tool and HTTP route still default to extrapolating. |
 | `selection` | every selectable operation, when a selection is named | Its `name`, how many of the working records it holds (`records` of `of_records`), and the `basis`: records outside it are **blanked, not dropped**. Their timestamps stay, so a ramp, calm spell or flat line never joins records the selection separates and the measurement interval is still inferred from the full record (dropped instead, every other record of a 10-minute series reads as a 20-minute cadence, which the timestep check refuses). A coverage or availability figure in such a result is the share of records both selected and valid. The shear and roughness timeseries and the raw data are blanked with the working data. |
+| `decimated`, `bucket_ms` | `get_series_window`, `GET /sessions/{id}/series` (schema metadata) | Whether the window was reduced to buckets and how wide each is, in whole milliseconds (the width is rounded up, so there are at most `buckets`; `DEFAULT_SERIES_BUCKETS` = 2000). A bucket's bounds are the exact minimum and maximum of its records, not a sample, and `count` says how many valid records it holds: 0 marks a gap, with null bounds. `decimated: false` means every record is its own bucket and `bucket_ms` is null. |
 | `in_progress` | sweep `manifest.json` (`list_sweeps`) | `true` on a checkpoint written while a sweep runs, or left by one that died part-way; absent on a finished sweep. The rows and runconfigs present are the shear-prefix groups completed so far. `finished_at` is the checkpoint time. `get_sweep_summary` and `analyze_sweep_spread` do not flag it yet. |
 
 ### Uncertainty is reported on a wind-speed basis — converting it to energy
@@ -555,10 +558,10 @@ with `assistant=False` is not exposed at all.
 
 | Tier | Count | Exposed when |
 |---|---|---|
-| Read-only — query, compute, plot, the operation log, listing and resolving selections | 53 | always |
+| Read-only — query, compute, plot, series windows, the operation log, listing and resolving selections | 54 | always |
 | Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty, the atmospheric diagnostic (it records the density the energy sensitivity uses), undo and redo, defining and deleting selections | 32 | only with `allow_mutating_tools: true` |
 
-The remaining 12 of the 97 registered tools are declared `assistant=False` and
+The remaining 12 of the 98 registered tools are declared `assistant=False` and
 therefore unreachable from chat: every BrightHub / EarthDataHub tool — the read-only
 tier's contract is "no session mutation, no filesystem, **no network**", and the
 credential tools would additionally hand an injected prompt a view of the session's

@@ -203,6 +203,7 @@ def responses(tmp_path_factory) -> dict[str, Any]:
     for name in ("compute_mcp_readiness", "compute_turbulence_analysis", "compute_extreme_winds"):
         run(name, speed_sensor="Spd_100m")
     run("compute_qc_diagnostics")
+    run("get_series_window", channels="Spd_100m")
 
     state.reanalysis_interpolated = {"era5": state.era5_interpolated_df.copy()}
     spec = SweepSpec(

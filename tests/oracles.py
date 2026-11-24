@@ -437,3 +437,52 @@ def selection_mask_oracle(definition: dict, timestamps: list, channels: dict) ->
         return bearing >= low or bearing < high
 
     return [held(definition, row) for row in range(len(timestamps))]
+
+
+def bucket_min_max_oracle(
+    timestamps_ns: list[int], values: list[list[float]], start_ns: int, end_ns: int, buckets: int
+) -> dict:
+    """Bucket the records of [start, end) one at a time, with no vectorisation and no shared code.
+
+    Buckets are equal in width, a whole number of milliseconds wide, the width rounded up so
+    there are at most ``buckets`` of them. A window of no more records than buckets is
+    returned record by record. A missing value (NaN) is never a bound and is not counted.
+    """
+    import math
+
+    inside = [row for row, stamp in enumerate(timestamps_ns) if start_ns <= stamp < end_ns]
+    channels = len(values[0]) if values else 0
+    if len(inside) <= buckets:
+        return {
+            "decimated": False,
+            "time_ms": [timestamps_ns[row] // 1_000_000 for row in inside],
+            "min": [list(values[row]) for row in inside],
+            "max": [list(values[row]) for row in inside],
+            "count": [[0 if math.isnan(v) else 1 for v in values[row]] for row in inside],
+        }
+    span = end_ns - start_ns
+    width_ms = span // (buckets * 1_000_000) + (1 if span % (buckets * 1_000_000) else 0)
+    width = width_ms * 1_000_000
+    total = span // width + (1 if span % width else 0)
+    low = [[math.nan] * channels for _ in range(total)]
+    high = [[math.nan] * channels for _ in range(total)]
+    count = [[0] * channels for _ in range(total)]
+    for row in inside:
+        bucket = (timestamps_ns[row] - start_ns) // width
+        for channel in range(channels):
+            value = values[row][channel]
+            if math.isnan(value):
+                continue
+            count[bucket][channel] += 1
+            if math.isnan(low[bucket][channel]) or value < low[bucket][channel]:
+                low[bucket][channel] = value
+            if math.isnan(high[bucket][channel]) or value > high[bucket][channel]:
+                high[bucket][channel] = value
+    return {
+        "decimated": True,
+        "bucket_ms": width_ms,
+        "time_ms": [(start_ns + bucket * width) // 1_000_000 for bucket in range(total)],
+        "min": low,
+        "max": high,
+        "count": count,
+    }

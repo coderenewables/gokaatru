@@ -110,7 +110,7 @@ def test_stages_are_unique() -> None:
 
 # No session change, no file written, no network: always offered to the assistant.
 PINNED_READ_TIER = frozenset({
-    "get_operation_log", "list_selections", "resolve_selection",
+    "get_operation_log", "list_selections", "resolve_selection", "get_series_window",
     "analyze_homogeneity", "analyze_sweep_spread", "build_sector_shear_tables", "compute_air_density",
     "compute_air_density_timeseries", "compute_diurnal_profile",
     "compute_energy_metrics", "compute_energy_sensitivity", "compute_extreme_winds", "compute_mast_effects",
@@ -159,6 +159,7 @@ PINNED_STAGE_BY_MODULE = {
     "statistics": "statistics", "visualization": "visualization", "map": "map", "config": "config",
     "advanced_analysis": "analysis", "atmosphere": "atmosphere", "diagnostics": "diagnostics",
     "scenario_result": "sweep", "sweep_analysis": "sweep", "history": "config", "selections": "selection",
+    "series": "visualization",
 }
 PINNED_STAGES = (
     "ingest", "cleaning", "reanalysis_download", "reanalysis", "homogeneity", "shear", "extrapolation",

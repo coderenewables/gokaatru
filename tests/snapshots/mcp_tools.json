@@ -1924,6 +1924,52 @@
  },
  {
   "annotations": null,
+  "description": "Per-bucket minimum, maximum and valid count of measured channels over a half-open window.\n\n``channels`` is comma-separated; ``start`` and ``end`` are timestamps with a UTC offset,\nempty for the whole record. When the window holds more records than ``buckets`` it is cut\ninto equal-width buckets of ``bucket_ms`` and ``decimated`` is true; otherwise every record\nis its own bucket. Zoom by asking again for a narrower window.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "buckets": {
+     "default": 2000,
+     "type": "integer"
+    },
+    "channels": {
+     "type": "string"
+    },
+    "end": {
+     "default": "",
+     "type": "string"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "start": {
+     "default": "",
+     "type": "string"
+    }
+   },
+   "required": [
+    "channels"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_series_window",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
   "description": "Fit Weibull A and k using WAsP m1/m3 moment method (default) or scipy MLE.",
   "execution": null,
   "icons": null,

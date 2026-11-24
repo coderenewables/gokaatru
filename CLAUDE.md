@@ -187,11 +187,12 @@ the synthetic-data tests; `GOKAATRU_TEST_UPLOADS_DIR` points the suite at anothe
 folder, and a missing campaign file skips its test by name (`require_campaign_file` in
 `tests/conftest.py`), never errors.
 
-Current baseline (verified 2026-11-19, branch `p0-14-windkit-narrowed` at P0-14):
-1039 backend tests passing / 0 skipped, 266 frontend tests passing, 1 Playwright smoke test
-passing, frontend typecheck clean, 90 MCP tools registered, and `ruff check server/ tests/`
-clean. Without the campaign files (CI run 44428167646, Ubuntu and Windows): 984 passed / 55
-skipped; all four CI jobs passed. These numbers move as the project
+Current baseline (verified 2026-11-24, branch `phase1-foundations` at the Phase 1 gate):
+1572 backend tests passing / 4 skipped (each skip states its reason), 269 frontend tests
+passing (32 files), 1 Playwright smoke test passing, frontend typecheck and build clean, the
+generated API client current, 98 MCP tools registered and identical to the snapshot, and
+`ruff check server/ tests/` clean. Without the campaign files (CI run 45440289043, Ubuntu and
+Windows): 1510 passed / 66 skipped; all four CI jobs passed. These numbers move as the project
 grows — `validate-gokaatru` always re-derives the live count rather than trusting any written
 baseline, this one included. Backend count assumes the gitignored `data/uploads/` fixtures are
 present (see the `tests/` layout note above); without them the tests that need them skip.
@@ -200,9 +201,11 @@ present (see the `tests/` layout note above); without them the tests that need t
 3 F841, 1 F811) had accumulated because `ruff>=0.1` is unpinned and the check was not being
 run to zero. They are all fixed now; keep it at zero rather than letting a second wall build.
 
-## Current state (last verified 2026-11-19)
+## Current state (last verified 2026-11-24)
 
-**2026-11-19: workbench Phase 1 on branch `phase1-foundations` (not merged).** Task list and status in `Claude outputs/WORKBENCH_PLAN.md` §8c; the gate is every published number identical, all tests passing through the new layer, and a project that reopens intact after a restart.
+**2026-11-19 to 2026-11-24: workbench Phase 1 on branch `phase1-foundations`, gate passed and pushed (not merged).** Task list and status in `Claude outputs/WORKBENCH_PLAN.md` §8c; the gate is every published number identical, all tests passing through the new layer, and a project that reopens intact after a restart.
+
+- **P1-G, the gate (2026-11-24):** all three items hold. Every test passes through the new layer: 1572 passed / 4 skipped locally (three disclosure fields this pipeline never reaches, and the operation log, which each surface logs differently by design), 269 frontend, Playwright, CI run 45440289043 green on all four jobs (Ubuntu and Windows backend 1510 / 66 without the campaign files). Every published number is identical on the three reference campaigns (Boxkite 6,093, Horns Rev 4,367, Launakalana 7,613). A project reopens after the server process is killed with every result, its log and its staleness intact (`tests/test_restart.py`, in the suite and in CI). The MCP surface equals its snapshot and the OpenAPI schema equals the committed one. 30 commits since `origin/master` (PR #7). **Still open for the owner:** the energy sensitivity depends on whether the atmospheric diagnostic ran first (P1-5b); the stray remote `phase0-stabilise` branch (pushed again by mistake after PR #5 merged it); confirmation of how decision 13's sweep exclusion is mentioned. **Carried to Phase 2:** the working frame is still stored with its missing values rather than derived from raw data plus flags; the hand-written routes and their logging middleware stay until the interface moves to the generated routes and client; the GitHub actions used target Node 20, which GitHub now forces onto Node 24 (annotation only).
 
 - **P1-0a `dc895f2`:** `fixed_prefix_hash` hashed each cleaning-log entry whole, including `applied_at`, so the same cleaning applied a minute apart gave a different prefix and a different `config_hash` for every scenario: no two sessions with cleaning were ever comparable. Entries are now hashed without `CLEANING_LOG_UNHASHED_KEYS`; the oracle drops the time independently. No metric moved; prefix and config hashes of sessions with cleaning changed. Found by P1-0, whose two identical Launakalana runs disagreed on the prefix and all 32 config hashes.
 - **P1-0:** `tests/published_numbers.py` runs the pipeline on the three campaigns and records every number each step returns, plus a SHA-256 of every series it reads or writes, into `tests/snapshots/published_numbers.json` (Boxkite 6,093, Horns Rev 4,367, Launakalana 7,609). Launakalana carries the whole chain against the cached ERA5 and MERRA-2 in `data/e2e-real/brighthub_cache` (five correction methods and XGBoost, ensemble, clipping, uncertainty, a 32-row sweep); Boxkite and Horns Rev stop at the hub series because no reanalysis for them is cached locally. Recorded as refused, not run: the icing filter on all three (no temperature sensor at a speed height) and tower shadow on Launakalana (no paired vane). Two fresh runs are identical, about 35 s. `tests/test_published_numbers.py` compares exactly and skips without the campaign files.

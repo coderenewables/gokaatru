@@ -56,6 +56,29 @@ test("the data tree lists every instrument by height, its statistics and the fla
   await expect(page.getByRole("region", { name: "Flags" })).toContainText("Spd_100m 48 records, excluded period (rule 1)");
 });
 
+test("a channel dragged from the data tree onto the timeline joins it", async ({ page }) => {
+  // Plan §3.3 "Any chart": drag a channel from the data tree onto a chart.
+  const opened = await campaignWithData(page, `Drag ${Date.now()}`);
+  await page.goto(workbenchUrl(opened));
+  const legend = page.getByRole("list", { name: "Timeline channels" });
+  await expect(legend.getByRole("listitem")).toHaveCount(3);
+
+  const chip = page.getByRole("region", { name: "100 m" }).getByRole("button", { name: /^Tmp_100m/ });
+  const plot = page.getByRole("img", { name: /^Timeline of/ });
+  const from = await chip.boundingBox();
+  const to = await plot.boundingBox();
+  if (!from || !to) throw new Error("nothing to drag");
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2 + 10, from.y + from.height / 2 + 10, { steps: 5 });
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 20 });
+  await page.mouse.up();
+
+  await expect(legend.getByRole("listitem")).toHaveCount(4);
+  await expect(legend).toContainText("Tmp_100m");
+  await expect(plot).toHaveAttribute("aria-label", /Tmp_100m/);
+});
+
 test("an empty campaign says to load its files", async ({ page }) => {
   const opened = await newCampaign(page, `Empty tree ${Date.now()}`);
   await page.goto(workbenchUrl(opened));

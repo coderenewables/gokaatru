@@ -5,10 +5,10 @@
   font-size: 13px;
 }
 
+/* No text-transform: a height's unit is case-sensitive ("100 m", not "100 M"). */
 .gk-data-group h2 {
   font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-weight: 600;
   color: var(--gk-muted);
   margin: 0 0 6px;
 }

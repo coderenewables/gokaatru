@@ -109,7 +109,8 @@ def _add_routes() -> None:
 
 @router.get("/operations")
 def list_operations() -> list[dict[str, Any]]:
-    """Every declared operation: what it does to data, where it sits, and its parameters."""
+    """Every declared operation: what it does to data, where it sits, what it reads and writes,
+    and its parameters."""
     return [
         {
             "name": declared.name,
@@ -124,6 +125,8 @@ def list_operations() -> list[dict[str, Any]]:
             "code_version": declared.code_version,
             "dry_run": declared.dry_run is not None,
             "selectable": declared.selectable,
+            "reads": list(declared.reads),
+            "writes": list(declared.writes),
             "parameters": declared.parameters,
         }
         for declared in REGISTRY

@@ -31,6 +31,7 @@ from fastmcp.tools import FunctionTool
 from pydantic import BaseModel, Field
 
 from server.core.scenario_result import ENGINE_VERSION
+from server.state.artifacts import ARTIFACTS
 from server.state.session import SessionState, bind_session, current_operation, get_active_session
 
 Effect = Literal["read", "change"]
@@ -143,6 +144,10 @@ class Operation:
     #: what its dry run returns. Published in the OpenAPI schema; never validated against.
     result: type[BaseModel] | None = None
     preview_result: type[BaseModel] | None = None
+    #: The artifacts (``server/state/artifacts.py``) it reads and writes: the canvas's typed
+    #: ports and the dependencies staleness follows (decisions/0015.2).
+    reads: tuple[str, ...] = ()
+    writes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name.isidentifier():
@@ -178,6 +183,11 @@ class Operation:
         for field_name in self.disclosure:
             if not _FIELD_NAME.match(field_name):
                 raise ValueError(f"Operation '{self.name}': disclosure field {field_name!r} is not a field path")
+        unknown_artifacts = set(self.reads + self.writes) - set(ARTIFACTS)
+        if unknown_artifacts:
+            raise ValueError(f"Operation '{self.name}': no artifact named {sorted(unknown_artifacts)}")
+        if self.writes and self.effect == "read":
+            raise ValueError(f"Operation '{self.name}' reads only, so it cannot write {list(self.writes)}")
         for reference in self.standards:
             if _CONFORMANCE_WORDING.search(reference):
                 raise ValueError(
@@ -476,6 +486,8 @@ def operation(
     selectable: bool = False,
     result: type[BaseModel] | None = None,
     preview_result: type[BaseModel] | None = None,
+    reads: tuple[str, ...] = (),
+    writes: tuple[str, ...] = (),
     name: str | None = None,
     registry: OperationRegistry | None = None,
 ) -> Callable[[F], F]:
@@ -510,6 +522,8 @@ def operation(
                 selectable=selectable,
                 result=result,
                 preview_result=preview_result,
+                reads=tuple(reads),
+                writes=tuple(writes),
             )
         )
         if registry is None:

@@ -587,13 +587,22 @@ def _add_shear_to_timeseries(state: SessionState) -> bool:
         "reference_height_m.record_counts",
     ),
     result=result_models.ExtrapolateToHubHeightResult,
+    reads=(
+        "data_model", "measured_data", "reanalysis_nodes", "reference_series", "shear_table", "roughness_table",
+        "settings",
+    ),
+    writes=("hub_height_series", "reanalysis_hub_series", "site"),
 )
 def extrapolate_to_hub_height(hub_height_m: float, shear_model: str = "power_law") -> dict:
     """Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B."""
     return _extrapolate_to_hub_height(session, hub_height_m, shear_model)
 
 
-@operation(effect="change", stage="extrapolation", result=result_models.ExtrapolateReanalysisToHubResult)
+@operation(
+    effect="change", stage="extrapolation", result=result_models.ExtrapolateReanalysisToHubResult,
+    reads=("reference_series", "shear_table", "settings"),
+    writes=("reanalysis_hub_series",),
+)
 def extrapolate_reanalysis_to_hub(
     hub_height_m: float, reference_height_m: float | None = None
 ) -> dict:

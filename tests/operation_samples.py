@@ -112,7 +112,8 @@ def _changes(samples: Samples, state: SessionState, workspace: Path) -> None:
     }
     samples.call(state, "define_selection", name="lasso", definition=lasso)
     samples.call(state, "delete_selection", name="lasso")
-    samples.call(state, "extrapolate_reanalysis_to_hub", hub_height_m=120.0, reference_height_m=100.0)
+    # Another height than the pipeline's 120 m, so the call writes a column of its own.
+    samples.call(state, "extrapolate_reanalysis_to_hub", hub_height_m=110.0, reference_height_m=100.0)
     samples.call(state, "apply_homogeneity_cutoff", cutoff_year=2010)
 
     frame = state.timeseries_df
@@ -259,6 +260,7 @@ def _network(samples: Samples, workspace: Path, monkeypatch: pytest.MonkeyPatch)
     samples.call(brighthub, "brighthub_find_reanalysis_nodes", latitude=SITE[0], longitude=SITE[1])
     samples.call(brighthub, "brighthub_download_reanalysis", dataset="ERA5", nodes_json=json.dumps(era5_nodes))
     samples.call(brighthub, "brighthub_prepare_reanalysis", latitude=SITE[0], longitude=SITE[1])
+    samples.call(brighthub, "brighthub_logout")
 
     lats = [SITE[0] - 0.25, SITE[0], SITE[0] + 0.25]
     lons = [SITE[1] - 0.25, SITE[1], SITE[1] + 0.25]

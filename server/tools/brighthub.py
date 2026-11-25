@@ -54,6 +54,7 @@ def _require_token(state: SessionState) -> str:
     network=True,
     secret_parameters=("client_id", "client_secret"),
     result=result_models.BrighthubLoginResult,
+    writes=("credentials",),
 )
 def brighthub_login(client_id: str, client_secret: str) -> dict:
     """Authenticate with BrightHub using API key credentials and store token in session."""
@@ -66,7 +67,10 @@ def brighthub_login(client_id: str, client_secret: str) -> dict:
     return {"status": "ok", "authenticated": True}
 
 
-@operation(effect="change", stage="reanalysis_download", assistant=False, result=result_models.BrighthubLogoutResult)
+@operation(
+    effect="change", stage="reanalysis_download", assistant=False, result=result_models.BrighthubLogoutResult,
+    writes=("credentials",),
+)
 def brighthub_logout() -> dict:
     """Clear the stored BrightHub authentication token."""
     session.brighthub_token = None
@@ -74,7 +78,10 @@ def brighthub_logout() -> dict:
     return {"status": "ok", "authenticated": False}
 
 
-@operation(effect="read", stage="reanalysis_download", assistant=False, result=result_models.BrighthubStatusResult)
+@operation(
+    effect="read", stage="reanalysis_download", assistant=False, result=result_models.BrighthubStatusResult,
+    reads=("credentials",),
+)
 def brighthub_status() -> dict:
     """Check whether the session holds a valid BrightHub token."""
     has_token = bool(getattr(session, "brighthub_token", None))
@@ -89,6 +96,7 @@ def brighthub_status() -> dict:
 @operation(
     effect="read", stage="reanalysis_download", assistant=False, network=True,
     result=result_models.BrighthubListLocationsResult,
+    reads=("credentials",),
 )
 def brighthub_list_locations() -> dict:
     """List measurement locations available to the authenticated BrightHub user."""
@@ -112,6 +120,7 @@ def brighthub_list_locations() -> dict:
 @operation(
     effect="read", stage="reanalysis_download", assistant=False, network=True,
     result=result_models.BrighthubGetDataModelResult,
+    reads=("credentials",),
 )
 def brighthub_get_data_model(uuid: str) -> dict:
     """Fetch the IEA Task 43 data model for a BrightHub measurement location."""
@@ -134,6 +143,8 @@ def brighthub_get_data_model(uuid: str) -> dict:
         "upstream_processing",
     ),
     result=result_models.BrighthubImportLocationResult,
+    reads=("credentials",),
+    writes=("data_model", "measured_data", "hub_height_series", "label", "site"),
 )
 def brighthub_import_location(
     uuid: str,
@@ -261,6 +272,7 @@ def brighthub_import_location(
 @operation(
     effect="read", stage="reanalysis_download", assistant=False, network=True,
     result=result_models.BrighthubFindReanalysisNodesResult,
+    reads=("credentials",),
 )
 def brighthub_find_reanalysis_nodes(latitude: float, longitude: float) -> dict:
     """Find nearest ERA5 and MERRA-2 reanalysis nodes via BrightHub for a coordinate."""
@@ -280,6 +292,8 @@ def brighthub_find_reanalysis_nodes(latitude: float, longitude: float) -> dict:
 @operation(
     effect="change", stage="reanalysis_download", assistant=False, network=True,
     result=result_models.BrighthubDownloadReanalysisResult,
+    reads=("credentials", "measured_data"),
+    writes=("reanalysis_nodes",),
 )
 def brighthub_download_reanalysis(
     dataset: str,
@@ -596,6 +610,8 @@ def _prepare_brighthub_reanalysis(
 @operation(
     effect="change", stage="reanalysis_download", assistant=False, network=True,
     result=result_models.BrighthubPrepareReanalysisResult,
+    reads=("credentials",),
+    writes=("reanalysis_nodes", "reference_series", "settings", "site"),
 )
 def brighthub_prepare_reanalysis(latitude: float, longitude: float, source: str = "brighthub") -> dict:
     """Load BrightHub ERA5 and MERRA-2, then interpolate ERA5 to the project site."""

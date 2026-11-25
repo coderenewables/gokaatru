@@ -622,6 +622,7 @@ def _interpolate_era5_to_site(state: SessionState, source: str = "era5") -> dict
 @operation(
     effect="change", stage="reanalysis", assistant=False, secret_parameters=("pat",),
     result=result_models.EarthdatahubSetCredentialResult,
+    writes=("credentials",),
 )
 def earthdatahub_set_credential(pat: str) -> dict:
     """Store an EarthDataHub PAT in the session for the direct-ERA5 (non-BrightHub) path.
@@ -633,25 +634,39 @@ def earthdatahub_set_credential(pat: str) -> dict:
     return _set_earthdatahub_credential(session, pat)
 
 
-@operation(effect="change", stage="reanalysis", assistant=False, result=result_models.EarthdatahubClearCredentialResult)
+@operation(
+    effect="change", stage="reanalysis", assistant=False, result=result_models.EarthdatahubClearCredentialResult,
+    writes=("credentials",),
+)
 def earthdatahub_clear_credential() -> dict:
     """Remove the session's stored EarthDataHub PAT."""
     return _clear_earthdatahub_credential(session)
 
 
-@operation(effect="read", stage="reanalysis", assistant=False, result=result_models.EarthdatahubStatusResult)
+@operation(
+    effect="read", stage="reanalysis", assistant=False, result=result_models.EarthdatahubStatusResult,
+    reads=("credentials",),
+)
 def earthdatahub_status() -> dict:
     """Check whether the session has an EarthDataHub PAT configured."""
     return _earthdatahub_status(session)
 
 
-@operation(effect="change", stage="reanalysis", network=True, result=result_models.FindEra5NodesResult)
+@operation(
+    effect="change", stage="reanalysis", network=True, result=result_models.FindEra5NodesResult,
+    reads=("credentials",),
+    writes=("reanalysis_nodes", "site"),
+)
 def find_era5_nodes(latitude: float, longitude: float) -> dict:
     """Find the four surrounding ERA5 grid nodes using 0.25° bounds and haversine distance."""
     return _find_era5_nodes(session, latitude, longitude)
 
 
-@operation(effect="change", stage="reanalysis", network=True, result=result_models.ExtractEra5DataResult)
+@operation(
+    effect="change", stage="reanalysis", network=True, result=result_models.ExtractEra5DataResult,
+    reads=("credentials",),
+    writes=("reanalysis_nodes",),
+)
 def extract_era5_data(
     latitude: float,
     longitude: float,
@@ -662,7 +677,11 @@ def extract_era5_data(
     return _extract_era5_data(session, latitude, longitude, start_date, end_date)
 
 
-@operation(effect="change", stage="reanalysis", result=result_models.ComputeEra5WindSpeedResult)
+@operation(
+    effect="change", stage="reanalysis", result=result_models.ComputeEra5WindSpeedResult,
+    reads=("reanalysis_nodes",),
+    writes=("reanalysis_nodes",),
+)
 def compute_era5_wind_speed(latitude: float, longitude: float) -> dict:
     """Compute 100 m wind speed and meteorological direction from ERA5 u and v components."""
     return _compute_era5_wind_speed(session, latitude, longitude)
@@ -671,6 +690,8 @@ def compute_era5_wind_speed(latitude: float, longitude: float) -> dict:
 @operation(
     effect="change", stage="reanalysis", disclosure=("method_by_variable", "skipped_variables",),
     result=result_models.InterpolateEra5ToSiteResult,
+    reads=("reanalysis_nodes", "site"),
+    writes=("reference_series", "settings"),
 )
 def interpolate_era5_to_site(source: str = "era5") -> dict:
     """Spatially interpolate reanalysis node data to the site with linear interpolation and IDW fallback.

@@ -300,13 +300,19 @@ def _compute_mcp_readiness(state: SessionState, speed_sensor: str, reference_sen
     }
 
 
-@operation(effect="read", stage="diagnostics", selectable=True, result=result_models.ComputeSensorComparisonResult)
+@operation(
+    effect="read", stage="diagnostics", selectable=True, result=result_models.ComputeSensorComparisonResult,
+    reads=("data_model", "measured_data"),
+)
 def compute_sensor_comparison(sensor_a: str = "", sensor_b: str = "") -> dict:
     """Compute correlation, residual, bias, and regression metrics for two measured speed sensors."""
     return _compute_sensor_comparison(session, sensor_a, sensor_b)
 
 
-@operation(effect="read", stage="diagnostics", selectable=True, result=result_models.ComputeMastEffectsResult)
+@operation(
+    effect="read", stage="diagnostics", selectable=True, result=result_models.ComputeMastEffectsResult,
+    reads=("data_model", "measured_data"),
+)
 def compute_mast_effects(
     sensor_a: str = "",
     sensor_b: str = "",
@@ -334,6 +340,7 @@ def compute_mast_effects(
     ),
     selectable=True,
     result=result_models.ComputeQcDiagnosticsResult,
+    reads=("data_model", "measured_data"),
 )
 def compute_qc_diagnostics() -> dict:
     """Report non-mutating range, flat-line, and cleaning-removal diagnostics."""
@@ -349,6 +356,7 @@ def compute_qc_diagnostics() -> dict:
         "min_r_squared",
     ),
     result=result_models.ComputeMcpReadinessResult,
+    reads=("measured_data", "data_model", "reference_series", "hub_height_series", "settings"),
 )
 def compute_mcp_readiness(speed_sensor: str, reference_sensor: str = "") -> dict:
     """Assess ERA5 concurrent-period correlation and long-term adjustment readiness."""

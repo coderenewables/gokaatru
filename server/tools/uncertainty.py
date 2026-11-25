@@ -406,6 +406,11 @@ def _calculate_uncertainty(
         "density_normalisation",
     ),
     result=result_models.CalculateUncertaintyResult,
+    reads=(
+        "ensemble", "ltc:linear_least_squares", "ltc:total_least_squares", "ltc:variance_ratio", "ltc:speedsort",
+        "ltc:xgboost", "hub_height_series", "clipping", "settings",
+    ),
+    writes=("uncertainty",),
 )
 def calculate_uncertainty(
     measurement_uncertainty_pct: float,
@@ -474,6 +479,10 @@ def _compute_energy_sensitivity(state: SessionState, speed_uncertainty_pct: floa
 @operation(
     effect="read", stage="uncertainty", disclosure=("density_normalisation",),
     result=result_models.ComputeEnergySensitivityResult,
+    reads=(
+        "ensemble", "ltc:linear_least_squares", "ltc:total_least_squares", "ltc:variance_ratio", "ltc:speedsort",
+        "ltc:xgboost", "hub_height_series", "settings", "uncertainty",
+    ),
 )
 def compute_energy_sensitivity(speed_uncertainty_pct: float = 0.0) -> dict:
     """Measure S = d(lnAEP)/d(lnU) on the long-term series and explain the energy conversion.

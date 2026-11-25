@@ -214,7 +214,11 @@ def _compute_atmospheric_conditions(
 
 # A change, not a read: it records the mean measured density in the run configuration, and
 # the energy-sensitivity factor normalises speed with it, so running it moves that number.
-@operation(effect="change", stage="atmosphere", result=result_models.ComputeAtmosphericConditionsResult)
+@operation(
+    effect="change", stage="atmosphere", result=result_models.ComputeAtmosphericConditionsResult,
+    reads=("measured_data", "data_model"),
+    writes=("settings",),
+)
 def compute_atmospheric_conditions(
     temperature_sensor: str = "",
     pressure_sensor: str = "",

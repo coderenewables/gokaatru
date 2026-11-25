@@ -107,6 +107,7 @@ def _flag_intervals(state: SessionState, channels: str, start: str = "", end: st
 @operation(
     effect="read", stage="cleaning", canvas=False, disclosure=("truncated",),
     result=result_models.GetFlagIntervalsResult,
+    reads=("measured_data",),
 )
 def get_flag_intervals(channels: str, start: str = "", end: str = "") -> dict:
     """Cleaning flags of measured channels over a half-open window, as intervals of consecutive

@@ -1132,7 +1132,9 @@ def preview_undo_cleaning_rule(entry_index: int) -> dict:
     return _preview_undo_cleaning_rule(session, entry_index)
 
 
-@operation(effect="read", stage="cleaning", result=result_models.ListCleaningRulesResult)
+@operation(
+    effect="read", stage="cleaning", result=result_models.ListCleaningRulesResult,
+)
 def list_cleaning_rules() -> dict:
     """List supported cleaning rules and default parameters for the GoKaatru Phase 2 cleaning workflow."""
     return _list_cleaning_rules(session)
@@ -1148,6 +1150,8 @@ def list_cleaning_rules() -> dict:
     ),
     result=result_models.ApplyCleaningRuleResult,
     preview_result=result_models.ApplyCleaningRulePreview,
+    reads=("data_model", "measured_data"),
+    writes=("measured_data",),
 )
 def apply_cleaning_rule(rule_type: str, sensor: str, params: str, start_date: str = "", end_date: str = "") -> dict:
     """Apply one named cleaning rule to the active timeseries and log the operation for undo."""
@@ -1158,7 +1162,10 @@ def apply_cleaning_rule(rule_type: str, sensor: str, params: str, start_date: st
     return result
 
 
-@operation(effect="read", stage="cleaning", result=result_models.GetCleaningLogResult)
+@operation(
+    effect="read", stage="cleaning", result=result_models.GetCleaningLogResult,
+    reads=("measured_data",),
+)
 def get_cleaning_log() -> dict:
     """Return the recorded cleaning operations applied to the active session timeseries."""
     return _get_cleaning_log(session)
@@ -1168,6 +1175,8 @@ def get_cleaning_log() -> dict:
     effect="change", stage="cleaning", dry_run=preview_undo_cleaning_rule,
     result=result_models.UndoCleaningRuleResult,
     preview_result=result_models.UndoCleaningRulePreview,
+    reads=("measured_data", "hub_height_series"),
+    writes=("measured_data", "hub_height_series"),
 )
 def undo_cleaning_rule(entry_index: int) -> dict:
     """Restore raw data and replay all cleaning steps except the selected log entry."""

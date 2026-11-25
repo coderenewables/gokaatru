@@ -186,6 +186,7 @@ def _summarise_channels(state: SessionState, channels: str) -> dict[str, Any]:
 @operation(
     effect="read", stage="selection", canvas=False, selectable=True,
     result=result_models.SummariseChannelsResult,
+    reads=("measured_data",),
 )
 def summarise_channels(channels: str) -> dict:
     """Valid records, mean, minimum and maximum of measured channels (comma-separated); with a
@@ -193,26 +194,40 @@ def summarise_channels(channels: str) -> dict:
     return _summarise_channels(session, channels)
 
 
-@operation(effect="change", stage="selection", canvas=False, result=result_models.DefineSelectionResult)
+@operation(
+    effect="change", stage="selection", canvas=False, result=result_models.DefineSelectionResult,
+    reads=("measured_data",),
+    writes=("selections",),
+)
 def define_selection(name: str, definition: dict) -> dict:
     """Define or replace a named selection of records: time ranges, direction sectors, value
     bands, polygons over two channels or record sets, combined by union and intersection."""
     return _define_selection(session, name, definition)
 
 
-@operation(effect="change", stage="selection", canvas=False, result=result_models.DeleteSelectionResult)
+@operation(
+    effect="change", stage="selection", canvas=False, result=result_models.DeleteSelectionResult,
+    reads=("selections",),
+    writes=("selections",),
+)
 def delete_selection(name: str) -> dict:
     """Delete a named selection."""
     return _delete_selection(session, name)
 
 
-@operation(effect="read", stage="selection", canvas=False, result=result_models.ListSelectionsResult)
+@operation(
+    effect="read", stage="selection", canvas=False, result=result_models.ListSelectionsResult,
+    reads=("measured_data", "selections"),
+)
 def list_selections() -> dict:
     """List the session's named selections with how many records each holds now."""
     return _list_selections(session)
 
 
-@operation(effect="read", stage="selection", canvas=False, result=result_models.ResolveSelectionResult)
+@operation(
+    effect="read", stage="selection", canvas=False, result=result_models.ResolveSelectionResult,
+    reads=("measured_data", "selections"),
+)
 def resolve_selection(name: str) -> dict:
     """Resolve a named selection against the working data: how many records, and where."""
     return _resolve_selection(session, name)

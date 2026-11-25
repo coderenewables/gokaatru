@@ -281,20 +281,30 @@ def _get_operation_log(state: SessionState, limit: int) -> dict[str, Any]:
     }
 
 
-@operation(effect="change", stage="config", canvas=False, result=result_models.UndoLastChangeResult)
+@operation(
+    effect="change", stage="config", canvas=False, result=result_models.UndoLastChangeResult,
+    reads=("measured_data", "data_model", "site", "label", "settings", "selections", "hub_height_series"),
+    writes=("measured_data", "data_model", "site", "label", "settings", "selections", "hub_height_series"),
+)
 def undo_last_change() -> dict:
     """Undo the last cleaning rule, configuration change, sensor removal, data model build or saved
     selection still in the history."""
     return _undo_last_change(session)
 
 
-@operation(effect="change", stage="config", canvas=False, result=result_models.RedoLastChangeResult)
+@operation(
+    effect="change", stage="config", canvas=False, result=result_models.RedoLastChangeResult,
+    reads=("measured_data", "data_model", "site", "label", "settings", "selections", "hub_height_series"),
+    writes=("measured_data", "data_model", "site", "label", "settings", "selections", "hub_height_series"),
+)
 def redo_last_change() -> dict:
     """Redo the change most recently undone, with the parameters it was first called with."""
     return _redo_last_change(session)
 
 
-@operation(effect="read", stage="config", canvas=False, result=result_models.GetOperationLogResult)
+@operation(
+    effect="read", stage="config", canvas=False, result=result_models.GetOperationLogResult,
+)
 def get_operation_log(limit: int = 50) -> dict:
     """Return the most recent operation calls: who, what, with which parameters, the undo state,
     and which derived results are stale."""

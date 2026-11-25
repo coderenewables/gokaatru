@@ -3,6 +3,7 @@ import type { FunctionComponent } from "react";
 
 import { DataPanel } from "../datatree/DataPanel";
 import { InspectorPanel } from "../inspector/InspectorPanel";
+import { TimelinePanel } from "../timeline/TimelinePanel";
 import { PANELS, type PanelId } from "./layout";
 
 /** What a panel shows before its view is built or before a campaign holds data for it. Not a
@@ -37,6 +38,7 @@ function emptyPanel(id: PanelId): FunctionComponent<IDockviewPanelProps> {
 const BUILT: Partial<Record<PanelId, FunctionComponent<IDockviewPanelProps>>> = {
   data: DataPanel,
   inspector: InspectorPanel,
+  timeline: TimelinePanel,
 };
 
 export function panelComponents(): Record<PanelId, FunctionComponent<IDockviewPanelProps>> {

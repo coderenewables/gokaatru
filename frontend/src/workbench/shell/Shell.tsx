@@ -7,6 +7,7 @@ import { useCharts } from "../charts/store";
 import { type DropHandler, WorkbenchDnd } from "../dnd";
 import { useSelection } from "../selection/store";
 import { useTheme } from "../theme/theme";
+import { CampaignSwitcher } from "./CampaignSwitcher";
 import { Campaign } from "./context";
 import { addDefaultLayout, forgetLayout, saveLayout, storedLayout } from "./layout";
 import { panelComponents } from "./panels";
@@ -83,7 +84,11 @@ export function Shell({ sessionId, projectId }: ShellProps) {
         <nav aria-label="Where you are" className="gk-crumbs">
           <span>{project.data?.name ?? "No project"}</span>
           <span aria-hidden="true">›</span>
-          <span>{campaign?.name ?? summary.data?.project_name ?? "Campaign"}</span>
+          {project.data && projectId ? (
+            <CampaignSwitcher projectId={projectId} sessionId={sessionId} campaigns={project.data.campaigns} />
+          ) : (
+            <span>{campaign?.name ?? summary.data?.project_name ?? "Campaign"}</span>
+          )}
         </nav>
         <nav aria-label="Phases" className="gk-phases">
           <span className="gk-phase" aria-current="page">Prepare</span>

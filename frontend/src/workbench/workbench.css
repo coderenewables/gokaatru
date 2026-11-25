@@ -274,3 +274,77 @@
   text-align: left;
   font-weight: 500;
 }
+
+.gk-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.gk-field {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.gk-field input,
+.gk-field select,
+.gk-switcher {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--gk-border-strong);
+  border-radius: 4px;
+  background: var(--gk-surface);
+  color: var(--gk-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.gk-switcher {
+  max-width: 220px;
+}
+
+.gk-form-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--gk-danger);
+  font-size: 13px;
+}
+
+.gk-new-project {
+  margin-bottom: 16px;
+}
+
+.gk-notice {
+  margin: 8px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--gk-flag);
+  border-left-width: 4px;
+  border-radius: 4px;
+  background: var(--gk-flag-soft);
+  font-size: 13px;
+}
+
+.gk-project ul.gk-campaigns {
+  list-style: none;
+  padding-left: 0;
+}
+
+.gk-campaigns > li {
+  margin-bottom: 8px;
+}
+
+.gk-campaign-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.gk-campaign-site {
+  margin: 2px 0 0;
+  font-size: 12px;
+}

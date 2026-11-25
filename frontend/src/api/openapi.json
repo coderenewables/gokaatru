@@ -298,6 +298,21 @@
       "title": "Metric",
       "type": "string"
      },
+     "not_swept": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Not Swept",
+      "type": "array"
+     },
+     "not_swept_recorded_in_manifest": {
+      "title": "Not Swept Recorded In Manifest",
+      "type": "boolean"
+     },
+     "not_swept_statement": {
+      "title": "Not Swept Statement",
+      "type": "string"
+     },
      "scenarios_analysed": {
       "title": "Scenarios Analysed",
       "type": "integer"
@@ -335,7 +350,10 @@
      "single_level_note",
      "duplicate_note",
      "spread",
-     "uncertainty_substitution"
+     "uncertainty_substitution",
+     "not_swept",
+     "not_swept_statement",
+     "not_swept_recorded_in_manifest"
     ],
     "title": "AnalyzeSweepSpreadResult",
     "type": "object"
@@ -10391,6 +10409,21 @@
       "title": "Gate Failures",
       "type": "object"
      },
+     "not_swept": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Not Swept",
+      "type": "array"
+     },
+     "not_swept_recorded_in_manifest": {
+      "title": "Not Swept Recorded In Manifest",
+      "type": "boolean"
+     },
+     "not_swept_statement": {
+      "title": "Not Swept Statement",
+      "type": "string"
+     },
      "note": {
       "title": "Note",
       "type": "string"
@@ -10418,7 +10451,10 @@
      "axes",
      "gate_failures",
      "note",
-     "duplicate_note"
+     "duplicate_note",
+     "not_swept",
+     "not_swept_statement",
+     "not_swept_recorded_in_manifest"
     ],
     "title": "GetSweepSummaryResult",
     "type": "object"
@@ -21525,7 +21561,7 @@
   },
   "/api/operations": {
    "get": {
-    "description": "Every declared operation: what it does to data, where it sits, and its parameters.",
+    "description": "Every declared operation: what it does to data, where it sits, what it reads and writes,\nand its parameters.",
     "operationId": "list_operations_api_operations_get",
     "responses": {
      "200": {

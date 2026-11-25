@@ -60,7 +60,7 @@ def _list_sweeps(state: SessionState) -> dict:
 
 def _sweep_summary(state: SessionState, sweep_id: str) -> dict:
     """Summarise one sweep: what varied, what the gates rejected, and why."""
-    from server.core.sweep import load_sweep
+    from server.core.sweep import load_sweep, not_swept
 
     payload = load_sweep(state, sweep_id)
     manifest = payload.get("manifest") or {}
@@ -108,6 +108,7 @@ def _sweep_summary(state: SessionState, sweep_id: str) -> dict:
         "gate_failures": dict(failed.most_common()),
         "note": SINGLE_LEVEL_NOTE,
         "duplicate_note": DUPLICATE_LEVEL_NOTE,
+        **not_swept(manifest),
     }
 
 
@@ -118,7 +119,7 @@ def _sweep_spread(
     config_hashes: list[str] | None = None,
 ) -> dict:
     """Decompose a sweep metric's variance across the five axes."""
-    from server.core.sweep import load_sweep
+    from server.core.sweep import load_sweep, not_swept
 
     payload = load_sweep(state, sweep_id)
     rows = admissible_rows(_rows_of(payload))
@@ -149,6 +150,7 @@ def _sweep_spread(
         "duplicate_note": DUPLICATE_LEVEL_NOTE,
         "spread": spread_summary(rows, metric),
         "uncertainty_substitution": uncertainty_substitution(rows),
+        **not_swept(payload.get("manifest") or {}),
     }
 
 
@@ -166,7 +168,8 @@ def list_sweeps() -> dict:
 
 
 @operation(
-    effect="read", stage="sweep", canvas=False, disclosure=("engine_version", "duplicate_levels",),
+    effect="read", stage="sweep", canvas=False,
+    disclosure=("engine_version", "duplicate_levels", "not_swept_recorded_in_manifest"),
     result=result_models.GetSweepSummaryResult,
 )
 def get_sweep_summary(sweep_id: str) -> dict:
@@ -175,7 +178,8 @@ def get_sweep_summary(sweep_id: str) -> dict:
 
 
 @operation(
-    effect="read", stage="sweep", canvas=False, disclosure=("duplicate_levels", "uncertainty_substitution",),
+    effect="read", stage="sweep", canvas=False,
+    disclosure=("duplicate_levels", "uncertainty_substitution", "not_swept_recorded_in_manifest"),
     result=result_models.AnalyzeSweepSpreadResult,
 )
 def analyze_sweep_spread(sweep_id: str, metric: str = "long_term_mean_speed_mps") -> dict:

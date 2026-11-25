@@ -51,6 +51,27 @@ from server.core.scenario_result import (
 )
 from server.core.sensor_selection import resolve_policy
 
+#: What no sweep varies (decisions/0013.6): direction, temperature and air density are
+#: computed once, for the scenario the analyst exports. Written into every manifest and read
+#: back by the summary, the spread and the Interrogate page, worded as decisions/0015.8 says.
+NOT_SWEPT: tuple[str, ...] = ("wind_direction", "temperature", "air_density")
+NOT_SWEPT_STATEMENT = (
+    "Not swept: wind direction, temperature and air density. Every scenario in this sweep uses "
+    "the same ones, so the spread covers the wind-speed chain only: sensor choice, shear, "
+    "reference source and long-term method."
+)
+
+
+def not_swept(manifest: dict[str, Any]) -> dict[str, Any]:
+    """The manifest's statement of what was not swept. A manifest written before the field
+    existed gets the same statement, which holds for every sweep ever run, and says so."""
+    recorded = "not_swept" in manifest
+    return {
+        "not_swept": list(manifest.get("not_swept") or NOT_SWEPT),
+        "not_swept_statement": str(manifest.get("not_swept_statement") or NOT_SWEPT_STATEMENT),
+        "not_swept_recorded_in_manifest": recorded,
+    }
+
 
 @dataclass(frozen=True)
 class SweepSpec:
@@ -435,6 +456,8 @@ def _manifest(
         "stopped_early": stopped,
         "fixed_prefix_hash": prefix,
         "engine_version": ENGINE_VERSION,
+        "not_swept": list(NOT_SWEPT),
+        "not_swept_statement": NOT_SWEPT_STATEMENT,
         "spec": spec.as_runconfig(),
         "thresholds": thresholds.as_runconfig(),
         "counts": {

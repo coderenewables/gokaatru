@@ -50,6 +50,9 @@ class GetSweepSummaryResult(Result):
     gate_failures: dict[str, int]
     note: str
     duplicate_note: str
+    not_swept: list[str]
+    not_swept_statement: str
+    not_swept_recorded_in_manifest: bool
 
 
 class LevelMean(Result):
@@ -143,3 +146,8 @@ class AnalyzeSweepSpreadResult(Result):
     duplicate_note: str
     spread: Spread
     uncertainty_substitution: UncertaintySubstitution
+    #: What no sweep varies (decisions/0013.6), as the manifest states it; a manifest written
+    #: before the field gets the same statement, with ``not_swept_recorded_in_manifest`` false.
+    not_swept: list[str]
+    not_swept_statement: str
+    not_swept_recorded_in_manifest: bool

@@ -141,7 +141,8 @@ export interface paths {
         };
         /**
          * List Operations
-         * @description Every declared operation: what it does to data, where it sits, and its parameters.
+         * @description Every declared operation: what it does to data, where it sits, what it reads and writes,
+         *     and its parameters.
          */
         get: operations["list_operations_api_operations_get"];
         put?: never;
@@ -4501,6 +4502,12 @@ export interface components {
             duplicate_note: string;
             /** Metric */
             metric: string;
+            /** Not Swept */
+            not_swept: string[];
+            /** Not Swept Recorded In Manifest */
+            not_swept_recorded_in_manifest: boolean;
+            /** Not Swept Statement */
+            not_swept_statement: string;
             /** Scenarios Analysed */
             scenarios_analysed: number;
             /** Single Level Axes */
@@ -7586,6 +7593,12 @@ export interface components {
             gate_failures: {
                 [key: string]: number;
             };
+            /** Not Swept */
+            not_swept: string[];
+            /** Not Swept Recorded In Manifest */
+            not_swept_recorded_in_manifest: boolean;
+            /** Not Swept Statement */
+            not_swept_statement: string;
             /** Note */
             note: string;
             /** Scenarios Admissible */

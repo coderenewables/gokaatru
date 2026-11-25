@@ -384,6 +384,20 @@
    "ApplyCleaningRulePreview": {
     "additionalProperties": false,
     "properties": {
+     "affected_by_sensor": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "type": "integer"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Affected By Sensor"
+     },
      "applied": {
       "title": "Applied",
       "type": "boolean"
@@ -470,6 +484,17 @@
        }
       ],
       "title": "Corroborating Sensors"
+     },
+     "description": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Description"
      },
      "direction_basis": {
       "anyOf": [
@@ -572,6 +597,17 @@
      "order_dependence": {
       "$ref": "#/components/schemas/OrderDependence"
      },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
      "records_affected": {
       "title": "Records Affected",
       "type": "integer"
@@ -623,6 +659,17 @@
        }
       ],
       "title": "Sector Width Deg"
+     },
+     "selected_records": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Selected Records"
      },
      "sensor": {
       "title": "Sensor",
@@ -717,6 +764,20 @@
    "ApplyCleaningRuleResult": {
     "additionalProperties": false,
     "properties": {
+     "affected_by_sensor": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "type": "integer"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Affected By Sensor"
+     },
      "boom_orientation_deg": {
       "anyOf": [
        {
@@ -796,6 +857,17 @@
        }
       ],
       "title": "Corroborating Sensors"
+     },
+     "description": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Description"
      },
      "direction_basis": {
       "anyOf": [
@@ -898,6 +970,17 @@
      "order_dependence": {
       "$ref": "#/components/schemas/OrderDependence"
      },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
      "records_affected": {
       "title": "Records Affected",
       "type": "integer"
@@ -949,6 +1032,17 @@
        }
       ],
       "title": "Sector Width Deg"
+     },
+     "selected_records": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Selected Records"
      },
      "sensor": {
       "title": "Sensor",
@@ -3262,6 +3356,20 @@
     "additionalProperties": false,
     "description": "One entry of ``state.cleaning_log``. BrightHub's upstream processing is recorded as a\nnon-undoable entry of its own (``source``, ``upstream``, ``undoable``).",
     "properties": {
+     "affected_by_sensor": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "type": "integer"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Affected By Sensor"
+     },
      "applied_at": {
       "title": "Applied At",
       "type": "string"
@@ -3356,6 +3464,17 @@
        }
       ],
       "title": "Corroborating Sensors"
+     },
+     "description": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Description"
      },
      "direction_basis": {
       "anyOf": [
@@ -3471,6 +3590,17 @@
       "title": "Params",
       "type": "object"
      },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
      "records_affected": {
       "anyOf": [
        {
@@ -3529,6 +3659,17 @@
        }
       ],
       "title": "Sector Width Deg"
+     },
+     "selected_records": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Selected Records"
      },
      "sensor": {
       "title": "Sensor",

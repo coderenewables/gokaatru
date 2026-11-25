@@ -13,6 +13,9 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 
+from server.core.selection import SelectionError
+from server.core.selection import describe as describe_selection
+from server.core.selection import resolve as resolve_selection
 from server.core.validators import SENSOR_FIELDS, detect_timestep_minutes
 from server.operations import ACTOR, note_undo, operation
 from server.schemas.results import cleaning as result_models
@@ -74,7 +77,27 @@ RULES = {
     "timestamp_gap_fill": {},
     "custom_period_exclude": {"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"},
     "expression_filter": {"expression": "Spd_100m < 0 or Spd_100m > 50"},
+    # A flag drawn on a chart (decisions/0014.1): the selection's definition frozen into the
+    # rule, every column it sets missing, and the analyst's reason.
+    "exclude_selection": {
+        "definition": {"kind": "time_range", "start": "YYYY-MM-DDTHH:MM:SSZ", "end": "YYYY-MM-DDTHH:MM:SSZ"},
+        "sensors": [],
+        "reason": "suspect",
+        "note": "",
+    },
 }
+
+#: The reasons an analyst gives for a flag drawn by hand (decisions/0014.3). A note is
+#: optional, and required for "other".
+MANUAL_FLAG_REASONS: tuple[str, ...] = (
+    "icing",
+    "maintenance",
+    "instrument_fault",
+    "mast_or_boom_effect",
+    "logger_or_transfer_fault",
+    "suspect",
+    "other",
+)
 
 
 def _float_param(params: dict[str, object], key: str, default: float) -> float:
@@ -620,6 +643,55 @@ def _apply_expression_filter(
     return int(affected.sum())
 
 
+def _selection_columns(params: dict[str, object], sensor: str) -> list[str]:
+    """The columns an ``exclude_selection`` rule sets missing: the drawn one first, then the
+    rest of the instrument as ticked."""
+    listed = params.get("sensors", [])
+    if not isinstance(listed, list) or not all(isinstance(column, str) for column in listed):
+        raise ValueError("exclude_selection 'sensors' must be a list of column names")
+    columns = [sensor] + [column for column in listed if column != sensor]
+    if len(set(columns)) != len(columns):
+        raise ValueError("exclude_selection 'sensors' names a column twice")
+    return columns
+
+
+def _validate_exclude_selection(params: dict[str, object], start_date: str, end_date: str) -> None:
+    if start_date or end_date:
+        raise ValueError("exclude_selection takes its period from the definition; give no start_date or end_date")
+    if not isinstance(params.get("definition"), dict):
+        raise ValueError("exclude_selection needs the selection's 'definition', frozen as an object")
+    reason = params.get("reason")
+    if reason not in MANUAL_FLAG_REASONS:
+        raise ValueError(f"exclude_selection 'reason' must be one of {', '.join(MANUAL_FLAG_REASONS)}, got {reason!r}")
+    note = params.get("note", "")
+    if not isinstance(note, str):
+        raise ValueError("exclude_selection 'note' must be text")
+    if reason == "other" and not note.strip():
+        raise ValueError("A flag whose reason is 'other' needs a note saying why")
+
+
+def _apply_exclude_selection(
+    df: pd.DataFrame, columns: list[str], params: dict[str, object]
+) -> tuple[int, dict[str, object]]:
+    """Set every listed column missing on the records the frozen definition holds now."""
+    definition = params["definition"]
+    try:
+        selected = resolve_selection(definition, df)
+    except SelectionError as exc:
+        raise ValueError(f"exclude_selection: {exc}") from exc
+    affected_by_sensor: dict[str, int] = {}
+    for column in columns:
+        affected = selected & df[column].notna().to_numpy()
+        df.loc[affected, column] = np.nan
+        affected_by_sensor[column] = int(affected.sum())
+    return sum(affected_by_sensor.values()), {
+        "reason": params["reason"],
+        "description": describe_selection(definition),
+        "selected_records": int(selected.sum()),
+        "affected_by_sensor": affected_by_sensor,
+    }
+
+
 def _apply_rule(
     state: SessionState,
     rule_type: str,
@@ -632,6 +704,12 @@ def _apply_rule(
     df = _require_timeseries(state)
     if rule_type != "timestamp_gap_fill" and sensor not in df.columns:
         raise ValueError(f"Sensor column '{sensor}' not found in loaded timeseries")
+    if rule_type == "exclude_selection":
+        columns = _selection_columns(params, sensor)
+        missing = [column for column in columns if column not in df.columns]
+        if missing:
+            raise ValueError(f"Sensor column '{missing[0]}' not found in loaded timeseries")
+        return _apply_exclude_selection(df, columns, params)
     mask = _date_mask(pd.DatetimeIndex(df.index), start_date, end_date)
     if rule_type == "range_check":
         return _apply_range_check(state, df, sensor, mask, params)
@@ -681,24 +759,33 @@ def _apply_cleaning_rule(
     if rule_type not in RULES:
         raise ValueError(f"Unknown cleaning rule '{rule_type}'")
     parsed = _parse_params(params)
+    if rule_type == "exclude_selection":
+        _validate_exclude_selection(parsed, start_date, end_date)
+    columns = _selection_columns(parsed, sensor) if rule_type == "exclude_selection" else [sensor]
     # Captured before the rule runs, so it names what this rule actually saw (F-70).
     preceding = [
-        {"sequence": index + 1, "rule_type": str(item.get("rule_type")), "sensor": str(item.get("sensor"))}
+        {
+            "sequence": index + 1,
+            "rule_type": str(item.get("rule_type")),
+            "sensor": str(item.get("sensor")),
+            "columns": _logged_columns(item),
+        }
         for index, item in enumerate(state.cleaning_log)
     ]
     frame = state.timeseries_df
     was_missing = (
-        frame[sensor].isna().to_numpy().copy()
-        if rule_type in FLAG_REASONS and frame is not None and sensor in frame.columns
-        else None
+        {column: frame[column].isna().to_numpy().copy() for column in columns if column in frame.columns}
+        if rule_type in FLAGGING_RULES and frame is not None
+        else {}
     )
     records_affected, detail = _apply_rule(state, rule_type, sensor, parsed, start_date, end_date)
     # The working data just changed, so anything already derived from it is stale (F-11).
     state.bump_data_version()
     sequence = len(state.cleaning_log) + 1
-    if was_missing is not None:
-        newly_missing = state.timeseries_df[sensor].isna().to_numpy() & ~was_missing
-        _append_flags(state, state.timeseries_df.index[newly_missing], sensor, sequence, rule_type)
+    reason = str(parsed["reason"]) if rule_type == "exclude_selection" else FLAG_REASONS.get(rule_type, "")
+    for column, missing_before in was_missing.items():
+        newly_missing = state.timeseries_df[column].isna().to_numpy() & ~missing_before
+        _append_flags(state, state.timeseries_df.index[newly_missing], column, sequence, rule_type, reason)
     entry: dict[str, object] = {
         "rule_type": rule_type,
         "sensor": sensor,
@@ -714,7 +801,11 @@ def _apply_cleaning_rule(
     }
     state.cleaning_log.append(entry)
     # Rules on the same sensor are the ones that can have changed what this rule saw.
-    same_sensor = [item for item in preceding if item["sensor"] == sensor]
+    same_sensor = [
+        {key: item[key] for key in ("sequence", "rule_type", "sensor")}
+        for item in preceding
+        if set(item["columns"]) & set(columns)
+    ]
     order_dependence: dict[str, object] = {
         "sequence": sequence,
         "order_is_material": True,
@@ -738,7 +829,8 @@ def _apply_cleaning_rule(
 
 
 #: The reason code a rule's flags carry. Gap fill inserts timestamps rather than removing a
-#: sensor's values, so it sets no flags.
+#: sensor's values, so it sets no flags. A flag drawn by hand carries the analyst's reason,
+#: one of ``MANUAL_FLAG_REASONS``.
 FLAG_REASONS: dict[str, str] = {
     "range_check": "out_of_range",
     "icing_filter": "icing",
@@ -747,9 +839,23 @@ FLAG_REASONS: dict[str, str] = {
     "custom_period_exclude": "excluded_period",
     "expression_filter": "expression_match",
 }
+FLAGGING_RULES: frozenset[str] = frozenset(FLAG_REASONS) | {"exclude_selection"}
 
 
-def _append_flags(state: SessionState, timestamps: pd.Index, sensor: str, sequence: int, rule_type: str) -> None:
+def _logged_columns(entry: dict[str, object]) -> list[str]:
+    """Every column a logged rule set missing: one, or an ``exclude_selection``'s several."""
+    sensor = str(entry.get("sensor"))
+    params = entry.get("params")
+    drawn = entry.get("rule_type") == "exclude_selection" and isinstance(params, dict)
+    listed = params.get("sensors", []) if drawn else []
+    if not isinstance(listed, list):
+        return [sensor]
+    return [sensor] + [str(column) for column in listed if column != sensor]
+
+
+def _append_flags(
+    state: SessionState, timestamps: pd.Index, sensor: str, sequence: int, rule_type: str, reason: str
+) -> None:
     if len(timestamps) == 0:
         return
     rows = pd.DataFrame(
@@ -758,7 +864,7 @@ def _append_flags(state: SessionState, timestamps: pd.Index, sensor: str, sequen
             "sensor": sensor,
             "rule_sequence": np.int64(sequence),
             "rule_type": rule_type,
-            "reason": FLAG_REASONS[rule_type],
+            "reason": reason,
             "actor": ACTOR.get(),
             "flagged_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }

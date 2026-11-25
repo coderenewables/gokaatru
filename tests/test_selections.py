@@ -192,6 +192,34 @@ def test_a_polygon_that_describes_nothing_is_refused(vertices: list, x_channel: 
         resolve(definition, _pairs())
 
 
+def test_a_definition_is_described_in_words() -> None:
+    from server.core.selection import describe
+
+    definition = {
+        "kind": "union",
+        "of": [
+            {"kind": "sector", "channel": "Dir_100m", "from_deg": 300.0, "to_deg": 60.0},
+            {
+                "kind": "intersection",
+                "of": [
+                    {"kind": "time_range", "start": "2023-02-01T00:00Z", "end": "2023-03-01T00:00Z"},
+                    {"kind": "band", "channel": "Spd_100m", "min": 4.0, "max": 12.5},
+                    {"kind": "band", "channel": "Spd_80m", "max": 20},
+                ],
+            },
+            {"kind": "polygon", "x_channel": "Spd_80m", "y_channel": "Spd_100m", "vertices": [[0, 0], [1, 0], [1, 1]]},
+            {"kind": "records", "timestamps": ["2023-03-01T00:00Z", "2023-03-01T00:10Z"]},
+            {"kind": "time_range", "start": "2023-04-01T00:00Z"},
+            {"kind": "band", "channel": "Spd_80m", "min": 3},
+        ],
+    }
+    assert describe(definition) == (
+        "Dir_100m from 300° to before 60° or (from 2023-02-01T00:00Z to before 2023-03-01T00:00Z and "
+        "Spd_100m from 4 to below 12.5 and Spd_80m below 20) or Spd_80m against Spd_100m inside a "
+        "3-vertex polygon or 2 listed records or from 2023-04-01T00:00Z on or Spd_80m at least 3"
+    )
+
+
 def _state() -> SessionState:
     state = SessionState()
     state.reset()

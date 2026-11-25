@@ -80,6 +80,16 @@ def _changes(samples: Samples, state: SessionState, workspace: Path) -> None:
     samples.call(state, "apply_cleaning_rule", rule_type="range_check", sensor="Spd_80m", params="{}")
     samples.preview(state, "undo_cleaning_rule", entry_index=1)
     samples.call(state, "undo_cleaning_rule", entry_index=1)
+    drawn = json.dumps({
+        "definition": {"kind": "time_range", "start": "2021-01-10T00:00:00Z", "end": "2021-01-11T00:00:00Z"},
+        "sensors": ["Spd_100m_sd"],
+        "reason": "icing",
+        "note": "",
+    })
+    samples.preview(state, "apply_cleaning_rule", rule_type="exclude_selection", sensor="Spd_100m", params=drawn)
+    samples.call(state, "apply_cleaning_rule", rule_type="exclude_selection", sensor="Spd_100m", params=drawn)
+    samples.call(state, "get_cleaning_log")
+    samples.call(state, "undo_last_change")
     samples.call(state, "update_run_config", key="project_name", value='"Synthetic"')
     samples.call(state, "undo_last_change")
     samples.call(state, "redo_last_change")

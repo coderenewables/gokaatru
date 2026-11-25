@@ -96,6 +96,14 @@ class CleaningDetail(Result):
     sector_width_deg: Number = None
     exclude_sectors: list[Number] | None = None
     warning: str | None = None
+    # exclude_selection
+    reason: str | None = None
+    #: The frozen definition in words.
+    description: str | None = None
+    #: Records the definition held when the rule ran, before any column's own gaps.
+    selected_records: int | None = None
+    #: Values set missing, by column; ``records_affected`` is their sum.
+    affected_by_sensor: dict[str, int] | None = None
 
 
 class CleaningLogEntry(CleaningDetail):

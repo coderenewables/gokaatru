@@ -192,6 +192,45 @@ def _resolve(definition: dict[str, Any], frame: pd.DataFrame) -> np.ndarray:
     return present & inside
 
 
+def _number_text(value: Any) -> str:
+    return f"{float(value):g}"
+
+
+def describe(definition: dict[str, Any]) -> str:
+    """The definition in words, for a log a reader checks without parsing it."""
+    kind = definition["kind"]
+    if kind in COMBINING_KINDS:
+        joiner = " or " if kind == "union" else " and "
+        return joiner.join(
+            f"({describe(part)})" if part["kind"] in COMBINING_KINDS else describe(part) for part in definition["of"]
+        )
+    if kind == "time_range":
+        start, end = definition.get("start"), definition.get("end")
+        if start is not None and end is not None:
+            return f"from {start} to before {end}"
+        return f"from {start} on" if start is not None else f"before {end}"
+    if kind == "sector":
+        return (
+            f"{definition['channel']} from {_number_text(definition['from_deg'])}° "
+            f"to before {_number_text(definition['to_deg'])}°"
+        )
+    if kind == "band":
+        low, high = definition.get("min"), definition.get("max")
+        if low is not None and high is not None:
+            return f"{definition['channel']} from {_number_text(low)} to below {_number_text(high)}"
+        return (
+            f"{definition['channel']} at least {_number_text(low)}"
+            if low is not None
+            else f"{definition['channel']} below {_number_text(high)}"
+        )
+    if kind == "polygon":
+        return (
+            f"{definition['x_channel']} against {definition['y_channel']} inside a "
+            f"{len(definition['vertices'])}-vertex polygon"
+        )
+    return f"{len(definition['timestamps'])} listed records"
+
+
 def _inside_polygon(definition: dict[str, Any], frame: pd.DataFrame) -> np.ndarray:
     x = pd.to_numeric(frame[definition["x_channel"]], errors="coerce").to_numpy(dtype=float)
     y = pd.to_numeric(frame[definition["y_channel"]], errors="coerce").to_numpy(dtype=float)

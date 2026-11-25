@@ -4283,6 +4283,10 @@ export interface components {
         };
         /** ApplyCleaningRulePreview */
         ApplyCleaningRulePreview: {
+            /** Affected By Sensor */
+            affected_by_sensor?: {
+                [key: string]: number;
+            } | null;
             /** Applied */
             applied: boolean;
             /** Boom Orientation Deg */
@@ -4300,6 +4304,8 @@ export interface components {
             consecutive_count?: number | null;
             /** Corroborating Sensors */
             corroborating_sensors?: string[] | null;
+            /** Description */
+            description?: string | null;
             /** Direction Basis */
             direction_basis?: string | null;
             /** Direction Sensor */
@@ -4317,6 +4323,8 @@ export interface components {
             /** Note */
             note?: string | null;
             order_dependence: components["schemas"]["OrderDependence"];
+            /** Reason */
+            reason?: string | null;
             /** Records Affected */
             records_affected: number;
             /** Retained By Direction Test */
@@ -4329,6 +4337,8 @@ export interface components {
             sector_basis?: string | null;
             /** Sector Width Deg */
             sector_width_deg?: number | null;
+            /** Selected Records */
+            selected_records?: number | null;
             /** Sensor */
             sensor: string;
             /** Sensor Type */
@@ -4369,6 +4379,10 @@ export interface components {
         };
         /** ApplyCleaningRuleResult */
         ApplyCleaningRuleResult: {
+            /** Affected By Sensor */
+            affected_by_sensor?: {
+                [key: string]: number;
+            } | null;
             /** Boom Orientation Deg */
             boom_orientation_deg?: number | null;
             /** Bounds Source */
@@ -4383,6 +4397,8 @@ export interface components {
             consecutive_count?: number | null;
             /** Corroborating Sensors */
             corroborating_sensors?: string[] | null;
+            /** Description */
+            description?: string | null;
             /** Direction Basis */
             direction_basis?: string | null;
             /** Direction Sensor */
@@ -4400,6 +4416,8 @@ export interface components {
             /** Note */
             note?: string | null;
             order_dependence: components["schemas"]["OrderDependence"];
+            /** Reason */
+            reason?: string | null;
             /** Records Affected */
             records_affected: number;
             /** Retained By Direction Test */
@@ -4412,6 +4430,8 @@ export interface components {
             sector_basis?: string | null;
             /** Sector Width Deg */
             sector_width_deg?: number | null;
+            /** Selected Records */
+            selected_records?: number | null;
             /** Sensor */
             sensor: string;
             /** Sensor Type */
@@ -5228,6 +5248,10 @@ export interface components {
          *     non-undoable entry of its own (``source``, ``upstream``, ``undoable``).
          */
         CleaningLogEntry: {
+            /** Affected By Sensor */
+            affected_by_sensor?: {
+                [key: string]: number;
+            } | null;
             /** Applied At */
             applied_at: string;
             /** Boom Orientation Deg */
@@ -5246,6 +5270,8 @@ export interface components {
             consecutive_count?: number | null;
             /** Corroborating Sensors */
             corroborating_sensors?: string[] | null;
+            /** Description */
+            description?: string | null;
             /** Direction Basis */
             direction_basis?: string | null;
             /** Direction Sensor */
@@ -5268,6 +5294,8 @@ export interface components {
             params: {
                 [key: string]: unknown;
             };
+            /** Reason */
+            reason?: string | null;
             /** Records Affected */
             records_affected: number | null;
             /** Retained By Direction Test */
@@ -5280,6 +5308,8 @@ export interface components {
             sector_basis?: string | null;
             /** Sector Width Deg */
             sector_width_deg?: number | null;
+            /** Selected Records */
+            selected_records?: number | null;
             /** Sensor */
             sensor: string;
             /** Sensor Type */

@@ -62,7 +62,8 @@ export function layoutKey(phase: PhaseId): string {
   return phase === "prepare" ? LAYOUT_KEY : `gk-workbench-layout-v1-${phase}`;
 }
 
-type Placement = { id: PanelId; next?: { to: PanelId; direction: "left" | "right" | "below" | "above" | "within" }; inactive?: boolean };
+/** Where a panel goes: beside another (``to``), or, without one, along an edge of the whole grid. */
+type Placement = { id: PanelId; next?: { to?: PanelId; direction: "left" | "right" | "below" | "above" | "within" }; inactive?: boolean };
 
 /** Each phase's arrangement: Prepare's is plan §3.2 (data on the left, the timeline across the
  * top, three charts below, the inspector on the right). */
@@ -96,16 +97,18 @@ const ARRANGEMENT: Record<PhaseId, { panels: Placement[]; sizes: [PanelId, numbe
     sizes: [["monitor", 380]],
     active: "matrix",
   },
+  // The scenario table across the bottom under both charts, the decomposition, the gates and
+  // the pinned pair as tabs of a column down the right.
   interrogate: {
     panels: [
-      { id: "distribution" },
+      { id: "scenarios" },
+      { id: "distribution", next: { to: "scenarios", direction: "above" } },
       { id: "parallel", next: { to: "distribution", direction: "right" } },
-      { id: "scenarios", next: { to: "distribution", direction: "below" } },
-      { id: "sensitivity", next: { to: "scenarios", direction: "right" } },
+      { id: "sensitivity", next: { direction: "right" } },
       { id: "gates", next: { to: "sensitivity", direction: "within" }, inactive: true },
       { id: "pinned", next: { to: "sensitivity", direction: "within" }, inactive: true },
     ],
-    sizes: [],
+    sizes: [["sensitivity", 380]],
     active: "distribution",
   },
 };
@@ -118,7 +121,13 @@ export function addDefaultLayout(api: DockviewApi, phase: PhaseId = "prepare"): 
       id: placement.id,
       component: placement.id,
       title: PANEL_TITLES[placement.id],
-      ...(placement.next ? { position: { referencePanel: placement.next.to, direction: placement.next.direction } } : {}),
+      ...(placement.next
+        ? {
+            position: placement.next.to
+              ? { referencePanel: placement.next.to, direction: placement.next.direction }
+              : { direction: placement.next.direction as "left" | "right" | "below" | "above" },
+          }
+        : {}),
       ...(placement.inactive ? { inactive: true } : {}),
     });
   }

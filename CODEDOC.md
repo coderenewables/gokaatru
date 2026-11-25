@@ -419,7 +419,12 @@ frontend/src/
 │   │                     #   rows, terms per view (histogram ranges, parallel brushes, level
 │   │                     #   filters), pins (two at most), filtered config hashes; the
 │   │                     #   Scenarios, Distribution and Parallel panels; useSweeps.ts reads
-│   │                     #   GET /sweep and /sweep/{id}
+│   │                     #   GET /sweep and /sweep/{id}. SensitivityPanel (the server's
+│   │                     #   decomposition over the filtered hashes, spread, uncertainty
+│   │                     #   substitution, the not-swept sentence), GatesPanel (verdicts in
+│   │                     #   view, axes over the sweep from get_sweep_summary), PinnedPanel
+│   │                     #   (two scenarios and where their runconfigs differ; load into
+│   │                     #   Model) (P3-15)
 │   ├── history/          # undo, redo and the status bar's history (get_operation_log,
 │   │                     #   get_fixed_prefix_hash), shared with the assistant and MCP
 │   ├── model/            # the Model phase (P3-10, decisions/0015.1-0015.5): operations.ts

@@ -7,8 +7,11 @@ import { PalettePanel } from "../model/PalettePanel";
 import { PipelinePanel } from "../model/PipelinePanel";
 import { StepPanel } from "../model/StepPanel";
 import { DistributionPanel } from "../interrogate/DistributionPanel";
+import { GatesPanel } from "../interrogate/GatesPanel";
 import { ParallelPanel } from "../interrogate/ParallelPanel";
+import { PinnedPanel } from "../interrogate/PinnedPanel";
 import { ScenariosPanel } from "../interrogate/ScenariosPanel";
+import { SensitivityPanel } from "../interrogate/SensitivityPanel";
 import { ProfilePanel } from "../profile/ProfilePanel";
 import { OverviewPanel } from "../prepare/OverviewPanel";
 import { RulesPanel } from "../prepare/RulesPanel";
@@ -68,6 +71,9 @@ const BUILT: Partial<Record<PanelId, FunctionComponent<IDockviewPanelProps>>> = 
   scenarios: ScenariosPanel,
   distribution: DistributionPanel,
   parallel: ParallelPanel,
+  sensitivity: SensitivityPanel,
+  gates: GatesPanel,
+  pinned: PinnedPanel,
   inspector: InspectorPanel,
   palette: PalettePanel,
   pipeline: PipelinePanel,

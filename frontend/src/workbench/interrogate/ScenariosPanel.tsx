@@ -215,7 +215,7 @@ export function ScenariosPanel() {
                           aria-label={`${isPinned ? "Unpin" : "Pin"} scenario ${row.config_hash.slice(0, 8)}`}
                           onClick={() => (isPinned ? unpin(row.config_hash) : pin(row.config_hash))}
                         >
-                          {isPinned ? "Pinned" : "Pin"}
+                          {isPinned ? "Unpin" : "Pin"}
                         </button>
                       </td>
                       {AXIS_COLUMNS.map((axis) => (

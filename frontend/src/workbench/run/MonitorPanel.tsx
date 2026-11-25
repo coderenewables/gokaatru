@@ -1,4 +1,6 @@
+import { useInterrogate } from "../interrogate/store";
 import { useCampaign } from "../shell/context";
+import { usePhase } from "../shell/phase";
 import { useLatestSweepId, useRun } from "./store";
 import "./run.css";
 
@@ -46,7 +48,17 @@ export function MonitorPanel() {
           <h3>Outcome</h3>
           <p>
             Sweep <code>{manifest.sweep_id}</code>
-            {manifest.stopped_early ? ", stopped early" : ""}. Open it in Interrogate.
+            {manifest.stopped_early ? ", stopped early" : ""}.{" "}
+            <button
+              type="button"
+              className="gk-button"
+              onClick={() => {
+                useInterrogate.getState().openSweep(manifest.sweep_id);
+                usePhase.getState().goTo("interrogate");
+              }}
+            >
+              Open it in Interrogate
+            </button>
           </p>
           {counts ? (
             <dl className="gk-estimate-counts">

@@ -205,10 +205,12 @@ export function OverviewPanel() {
   const sensors = useSensors(sessionId);
   const speeds = speedChannels(sensors.data ?? []);
   const [top, second] = speeds;
-  const ready = sensors.data !== undefined;
+  // An empty campaign has nothing to diagnose; each operation would only refuse.
+  const ready = (sensors.data?.length ?? 0) > 0;
 
   const qc = useQuery({
     queryKey: ["overview", "qc", sessionId],
+    enabled: ready,
     queryFn: async () => unwrap(await api.POST("/api/sessions/{session_id}/operations/compute_qc_diagnostics", { ...run(sessionId), body: {} })),
     retry: false,
   });
@@ -245,9 +247,18 @@ export function OverviewPanel() {
   });
   const atmosphere = useQuery({
     queryKey: ["overview", "atmosphere", sessionId],
+    enabled: ready,
     queryFn: async () => unwrap(await api.POST("/api/sessions/{session_id}/operations/compute_atmospheric_conditions", { ...run(sessionId), body: {} })),
     retry: false,
   });
+
+  if (sensors.data?.length === 0) {
+    return (
+      <div className="gk-panel gk-panel-empty">
+        <p>No records yet. Load the campaign&apos;s files in the Data panel to see its sensors diagnosed here.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="gk-panel gk-overview" tabIndex={0}>

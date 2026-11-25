@@ -5248,6 +5248,8 @@ export interface components {
          *     non-undoable entry of its own (``source``, ``upstream``, ``undoable``).
          */
         CleaningLogEntry: {
+            /** Actor */
+            actor?: string | null;
             /** Affected By Sensor */
             affected_by_sensor?: {
                 [key: string]: number;

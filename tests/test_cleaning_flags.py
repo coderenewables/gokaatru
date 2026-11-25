@@ -95,6 +95,44 @@ def test_undo_removes_the_rules_flags_and_keeps_who_applied_the_rest() -> None:
     assert _reproduces(state)
 
 
+def test_a_rule_that_only_flags_on_replay_keeps_its_own_actor_and_time() -> None:
+    """A period is excluded, then a filter over the same period finds nothing left to remove.
+    Undoing the exclusion lets the replayed filter flag the period: the flags are the
+    filter's, applied by the assistant, not the undo's."""
+    state = _state()
+    period = ("2023-02-01", "2023-02-03")
+    with acting_as("user"):
+        _apply_cleaning_rule(state, "custom_period_exclude", "Spd_100m", "{}", *period)
+    with acting_as("assistant:openai/gpt-4o"):
+        later = _apply_cleaning_rule(
+            state, "expression_filter", "Spd_100m", json.dumps({"expression": "Spd_100m >= 0"}), *period
+        )
+    applied = state.cleaning_log[1]
+    assert later["records_affected"] == 0 and applied["actor"] == "assistant:openai/gpt-4o"
+
+    with acting_as("user"):
+        _undo_cleaning_rule(state, 0)
+
+    flags = state.cleaning_flags
+    assert len(flags) > 200 and set(flags["rule_type"]) == {"expression_filter"}
+    assert set(flags["actor"]) == {"assistant:openai/gpt-4o"}
+    assert set(flags["flagged_at"]) == {applied["applied_at"]}
+    replayed = state.cleaning_log[0]
+    assert replayed["actor"] == "assistant:openai/gpt-4o" and replayed["applied_at"] == applied["applied_at"]
+
+
+def test_who_applied_a_rule_is_not_part_of_the_prefix() -> None:
+    from server.core.scenario_result import fixed_prefix_hash
+
+    hashes = []
+    for actor in ("user", "assistant:openai/gpt-4o"):
+        state = _state()
+        with acting_as(actor):
+            _apply_cleaning_rule(state, "range_check", "Spd_100m", "{}")
+        hashes.append(fixed_prefix_hash(state))
+    assert hashes[0] == hashes[1]
+
+
 def test_the_log_summarises_the_flags() -> None:
     state = _state()
     _apply_cleaning_rule(state, "range_check", "Spd_100m", "{}")

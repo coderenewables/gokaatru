@@ -3356,6 +3356,17 @@
     "additionalProperties": false,
     "description": "One entry of ``state.cleaning_log``. BrightHub's upstream processing is recorded as a\nnon-undoable entry of its own (``source``, ``upstream``, ``undoable``).",
     "properties": {
+     "actor": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Actor"
+     },
      "affected_by_sensor": {
       "anyOf": [
        {

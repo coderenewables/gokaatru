@@ -792,6 +792,9 @@ def _apply_cleaning_rule(
         "sequence": sequence,
         "records_affected": records_affected,
         "applied_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        # Who applied it: kept through an undo's replay, and the source of the actor of any
+        # flag the rule only sets when replayed.
+        "actor": ACTOR.get(),
         "params": parsed,
         "start_date": start_date,
         "end_date": end_date,
@@ -921,20 +924,40 @@ def _carry_flag_provenance(
     """Give replayed flags the actor and time of the rule application they reproduce.
 
     Undo replays the remaining rules from raw, so they are renumbered and re-derive their
-    flags; who applied each rule, and when, is what the flags must keep.
+    flags; who applied each rule, and when, is what the flags must keep. A rule that flagged
+    nothing before can flag records once an earlier rule is undone (the records it would have
+    removed are no longer already missing); its flags take the actor and time from its log
+    entry, never from whoever ran the undo.
     """
-    if replayed.empty or previous.empty:
+    if replayed.empty:
         return replayed
-    origin = previous.groupby("rule_sequence")[["actor", "flagged_at"]].first()
+    origin = (
+        previous.groupby("rule_sequence")[["actor", "flagged_at"]].first()
+        if not previous.empty
+        else pd.DataFrame(columns=["actor", "flagged_at"])
+    )
     carried = replayed.copy()
     for new_sequence, entry in enumerate(replayable, start=1):
         old_sequence = entry.get("sequence")
-        if old_sequence not in origin.index:
-            continue
         rows = carried["rule_sequence"] == new_sequence
-        carried.loc[rows, "actor"] = origin.at[old_sequence, "actor"]
-        carried.loc[rows, "flagged_at"] = origin.at[old_sequence, "flagged_at"]
+        if old_sequence in origin.index:
+            carried.loc[rows, "actor"] = origin.at[old_sequence, "actor"]
+            carried.loc[rows, "flagged_at"] = origin.at[old_sequence, "flagged_at"]
+        elif "actor" in entry:
+            carried.loc[rows, "actor"] = entry["actor"]
+            carried.loc[rows, "flagged_at"] = entry["applied_at"]
     return carried
+
+
+def _carry_entry_provenance(replayed: list[dict[str, object]], replayable: list[dict[str, object]]) -> None:
+    """Keep each replayed log entry's original application time and actor: the replay
+    re-derives what a rule removes, not when or by whom it was applied."""
+    for entry, original in zip(replayed, replayable):
+        entry["applied_at"] = original["applied_at"]
+        if "actor" in original:
+            entry["actor"] = original["actor"]
+        else:
+            entry.pop("actor", None)
 
 
 def _undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
@@ -985,6 +1008,7 @@ def _undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
         if column not in replay_state.timeseries_df.columns
     ] if state.timeseries_df is not None else []
     state.timeseries_df = replay_state.timeseries_df
+    _carry_entry_provenance(replay_state.cleaning_log, replayable)
     state.cleaning_log = provenance + replay_state.cleaning_log
     state.cleaning_flags = _carry_flag_provenance(state.cleaning_flags, replay_state.cleaning_flags, replayable)
     state.bump_data_version()

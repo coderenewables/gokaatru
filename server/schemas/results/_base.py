@@ -115,6 +115,8 @@ class CleaningLogEntry(CleaningDetail):
     sequence: int | None = None
     records_affected: int | None
     applied_at: str
+    #: Who applied the rule; absent on upstream processing and on entries saved before it.
+    actor: str | None = None
     params: dict[str, Any]
     start_date: str | None
     end_date: str | None

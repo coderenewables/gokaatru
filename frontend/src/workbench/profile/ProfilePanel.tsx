@@ -105,9 +105,9 @@ export function ProfilePanel() {
         <caption className="gk-muted">Over records where every height is valid</caption>
         <thead>
           <tr>
-            <th scope="col">Records used</th>
-            <th scope="col">Power-law α</th>
             <th scope="col">Records</th>
+            <th scope="col">Power-law α</th>
+            <th scope="col">Used</th>
           </tr>
         </thead>
         <tbody>

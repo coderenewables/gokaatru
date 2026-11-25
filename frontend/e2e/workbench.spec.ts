@@ -1,19 +1,12 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+import { campaignWithData, newCampaign, workbenchUrl } from "./fixtures";
+
 // The workbench shell at /workbench/ (P2-9, decisions/0006, 0012, 0014.9): a campaign opens
 // the docked panels, the arrangement persists, both themes render, and axe finds nothing.
 
 const PANELS = ["Data", "Timeline", "Scatter", "Wind rose", "Profile", "Inspector"];
-
-async function newCampaign(page: Page, name: string): Promise<{ projectId: string; sessionId: string }> {
-  const project = await page.request.post("/api/projects", { data: { name, site_name: "Test ridge" } });
-  expect(project.ok()).toBeTruthy();
-  const projectId = (await project.json()).id as string;
-  const campaign = await page.request.post(`/api/projects/${projectId}/campaigns`, { data: { name: "Mast M1", kind: "mast" } });
-  expect(campaign.ok()).toBeTruthy();
-  return { projectId, sessionId: (await campaign.json()).session_id as string };
-}
 
 function tab(page: Page, title: string): Locator {
   return page.locator(".dv-tab", { hasText: title });
@@ -40,10 +33,7 @@ async function dragTo(page: Page, from: Locator, target: Locator) {
   await page.mouse.up();
 }
 
-test.beforeEach(async ({ page }) => {
-  await page.goto("/workbench/");
-  await page.evaluate(() => window.localStorage.clear());
-});
+// Each test runs in a fresh browser context, so it starts with no stored layout or theme.
 
 test("the start screen lists a project's campaigns and opens the shell on one", async ({ page }) => {
   const name = `Start ${Date.now()}`;
@@ -82,6 +72,20 @@ test("the shell docks every Prepare panel, persists the arrangement and passes a
 
   await page.getByRole("button", { name: "Reset layout" }).click();
   for (const title of PANELS) await expect(tab(page, title)).toBeVisible();
+});
+
+test("a campaign with records shows them in the status bar and the inspector", async ({ page }) => {
+  const opened = await campaignWithData(page, `Data ${Date.now()}`);
+  await page.goto(workbenchUrl(opened));
+  const status = page.getByRole("contentinfo", { name: "Status" });
+  await expect(status).toContainText("Records loaded");
+  await expect(status).toContainText("Data model loaded");
+  const means = page.getByRole("table", { name: /Mean, selection against every record/ });
+  for (const channel of ["Spd_100m", "Spd_80m", "Spd_60m"]) {
+    await expect(means.getByRole("rowheader", { name: channel })).toBeVisible();
+  }
+  await expect(means.getByRole("row", { name: /Spd_80m/ }).getByRole("cell").last()).not.toHaveText("—");
+  await expectNoAxeViolations(page);
 });
 
 test("the dark theme applies, persists and passes axe", async ({ page }, testInfo) => {

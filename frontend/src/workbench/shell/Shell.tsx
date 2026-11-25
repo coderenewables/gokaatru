@@ -1,13 +1,24 @@
 import { useQuery } from "@tanstack/react-query";
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent } from "dockview-react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { api, unwrap } from "../api";
+import { useCharts } from "../charts/store";
+import { type DropHandler, WorkbenchDnd } from "../dnd";
+import { useSelection } from "../selection/store";
 import { useTheme } from "../theme/theme";
 import { Campaign } from "./context";
 import { addDefaultLayout, forgetLayout, saveLayout, storedLayout } from "./layout";
 import { panelComponents } from "./panels";
 import { GroupActions, TabTitle } from "./tabs";
+
+/** A channel dropped on a chart goes into that chart's channels. */
+export const dropOnChart: DropHandler = (channel, target) => {
+  const charts = useCharts.getState();
+  if (target.kind === "timeline") charts.addToTimeline(channel, target.shown);
+  else if (target.kind === "scatter") charts.setScatterAxis(target.axis, channel, target.shown);
+  else charts.setRose(channel);
+};
 
 export interface ShellProps {
   sessionId: string;
@@ -34,6 +45,12 @@ export function Shell({ sessionId, projectId }: ShellProps) {
 
   const components = useMemo(panelComponents, []);
   const open = useMemo(() => ({ sessionId, projectId }), [sessionId, projectId]);
+
+  // A selection and the charts' channels belong to one campaign: opening another starts clean.
+  useEffect(() => {
+    useSelection.getState().clearAll();
+    useCharts.getState().reset();
+  }, [sessionId]);
 
   const onReady = useCallback((event: DockviewReadyEvent) => {
     dockview.current = event.api;
@@ -85,13 +102,15 @@ export function Shell({ sessionId, projectId }: ShellProps) {
       </header>
       <main className="gk-main">
         <Campaign.Provider value={open}>
-          <DockviewReact
-            className="dockview-theme-light gk-dockview"
-            components={components}
-            defaultTabComponent={TabTitle}
-            rightHeaderActionsComponent={GroupActions}
-            onReady={onReady}
-          />
+          <WorkbenchDnd onDrop={dropOnChart}>
+            <DockviewReact
+              className="dockview-theme-light gk-dockview"
+              components={components}
+              defaultTabComponent={TabTitle}
+              rightHeaderActionsComponent={GroupActions}
+              onReady={onReady}
+            />
+          </WorkbenchDnd>
         </Campaign.Provider>
       </main>
       <footer className="gk-status" aria-label="Status">

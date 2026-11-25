@@ -23,6 +23,14 @@
   --gk-header-muted: #d5dae1;
   --gk-header-border: #5b6675;
   --gk-danger: #b42318;
+  /* Series colours for charts, in order; distinct from the accent (selection) and the flag
+     colour so neither is ever read as a channel. */
+  --gk-series-1: #151a21;
+  --gk-series-2: #2f7d6d;
+  --gk-series-3: #7a5ab8;
+  --gk-series-4: #8a94a3;
+  --gk-series-5: #b8860b;
+  --gk-series-6: #c2416b;
 }
 
 :root[data-theme="dark"] {
@@ -45,6 +53,12 @@
   --gk-header-muted: #a3acb8;
   --gk-header-border: #3a424e;
   --gk-danger: #f97066;
+  --gk-series-1: #e6e9ed;
+  --gk-series-2: #5cc2ad;
+  --gk-series-3: #b49cf0;
+  --gk-series-4: #8a94a3;
+  --gk-series-5: #e0b84a;
+  --gk-series-6: #f07ba0;
 }
 
 * {

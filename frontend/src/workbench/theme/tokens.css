@@ -1,0 +1,116 @@
+/* Design tokens for the workbench (decisions/0012): light first, dark beside it. Every colour
+   the shell and its panels use comes from here; dockview's own variables are set from them on
+   the .gk-dockview theme class (decisions/0006: they do nothing on an outer element alone). */
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --gk-bg: #f4f5f7;
+  --gk-surface: #ffffff;
+  --gk-surface-2: #eef0f3;
+  --gk-text: #151a21;
+  --gk-muted: #56606e;
+  --gk-border: #d9dde3;
+  --gk-border-strong: #aeb6c1;
+  --gk-accent: #1b5fc1;
+  --gk-accent-text: #ffffff;
+  --gk-accent-soft: #dce8fa;
+  --gk-flag: #b8520a;
+  --gk-flag-soft: rgba(184, 82, 10, 0.18);
+  --gk-select-soft: rgba(27, 95, 193, 0.12);
+  --gk-header-bg: #151a21;
+  --gk-header-text: #f4f5f7;
+  --gk-header-muted: #d5dae1;
+  --gk-header-border: #5b6675;
+  --gk-danger: #b42318;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --gk-bg: #0f1217;
+  --gk-surface: #171b22;
+  --gk-surface-2: #1f242d;
+  --gk-text: #e6e9ed;
+  --gk-muted: #a3acb8;
+  --gk-border: #2c333d;
+  --gk-border-strong: #4a5462;
+  --gk-accent: #7aa7f2;
+  --gk-accent-text: #0f1217;
+  --gk-accent-soft: #1d2a40;
+  --gk-flag: #e8935a;
+  --gk-flag-soft: rgba(232, 147, 90, 0.22);
+  --gk-select-soft: rgba(122, 167, 242, 0.16);
+  --gk-header-bg: #0a0c10;
+  --gk-header-text: #e6e9ed;
+  --gk-header-muted: #a3acb8;
+  --gk-header-border: #3a424e;
+  --gk-danger: #f97066;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--gk-bg);
+  color: var(--gk-text);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+:focus-visible {
+  outline: 2px solid var(--gk-accent);
+  outline-offset: 2px;
+}
+
+a {
+  color: var(--gk-accent);
+}
+
+.gk-dockview {
+  --dv-background-color: var(--gk-bg);
+  --dv-group-view-background-color: var(--gk-surface);
+  --dv-tabs-and-actions-container-background-color: var(--gk-surface-2);
+  --dv-tabs-and-actions-container-height: 34px;
+  --dv-tabs-and-actions-container-font-size: 13px;
+  --dv-activegroup-visiblepanel-tab-background-color: var(--gk-surface);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--gk-surface-2);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--gk-surface);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--gk-surface-2);
+  --dv-activegroup-visiblepanel-tab-color: var(--gk-text);
+  --dv-activegroup-hiddenpanel-tab-color: var(--gk-muted);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--gk-text);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--gk-muted);
+  --dv-tab-divider-color: var(--gk-border);
+  --dv-separator-border: var(--gk-border);
+  --dv-paneview-header-border-color: var(--gk-border);
+  --dv-paneview-active-outline-color: var(--gk-accent);
+  --dv-drag-over-background-color: var(--gk-select-soft);
+  --dv-drag-over-border-color: var(--gk-accent);
+  --dv-edge-dock-indicator-color: var(--gk-accent);
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: var(--gk-accent);
+  --dv-icon-hover-background-color: var(--gk-surface-2);
+  --dv-scrollbar-background-color: var(--gk-border-strong);
+  --dv-floating-box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  --dv-floating-border: 1px solid var(--gk-border);
+}

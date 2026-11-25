@@ -118,6 +118,14 @@ npm install
 npm run dev                          # http://127.0.0.1:5173 (proxies /api → :8000)
 ```
 
+The workbench is served beside the current interface at `/workbench/` (decisions/0014.9): its
+start screen lists the projects, and `/workbench/?project=<id>&campaign=<session id>` opens the
+shell on a campaign. Both talk to the same server, so a change made in one shows in the other;
+the current interface at `/` is retired at the Phase 3 gate.
+
+The server keeps its sessions and projects under `data/`, or under `GOKAATRU_DATA_DIR` when it
+is set (the Playwright backend sets it to `frontend/.e2e-data`).
+
 Production build:
 
 ```bash

@@ -33,6 +33,8 @@ export default defineConfig({
     {
       command: `${PYTHON} -m uvicorn server.api.main:app --host 127.0.0.1 --port ${BACKEND_PORT}`,
       cwd: path.resolve(here, ".."),
+      // Its own sessions and projects, never the developer's data/.
+      env: { GOKAATRU_DATA_DIR: path.resolve(here, ".e2e-data") },
       url: `${BACKEND_URL}/api/health`,
       reuseExistingServer: false,
       // Importing the scientific stack makes a cold start take 20-40 s.

@@ -121,6 +121,15 @@ def test_refusals(client, method: str, path: str, body: dict | None, status: int
     assert message in response.text
 
 
+def test_the_data_folder_can_be_moved_for_a_test_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GOKAATRU_DATA_DIR", str(tmp_path / "e2e"))
+    manager = SessionManager()
+    assert manager.base_dir == tmp_path / "e2e" / "sessions"
+    assert ProjectRegistry(manager).base_dir == tmp_path / "e2e" / "projects"
+    monkeypatch.delenv("GOKAATRU_DATA_DIR")
+    assert SessionManager(base_dir=tmp_path / "s").base_dir == tmp_path / "s"
+
+
 def test_a_project_id_cannot_reach_outside_the_projects_folder(tmp_path: Path) -> None:
     from server.state.projects import ProjectError
 

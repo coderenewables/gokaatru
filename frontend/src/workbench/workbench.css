@@ -1,0 +1,186 @@
+/* The shell's own styles, from the tokens only. Each view keeps its styles beside it. */
+
+.gk-app,
+.gk-start {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+}
+
+.gk-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 8px 16px;
+  background: var(--gk-header-bg);
+  color: var(--gk-header-text);
+}
+
+.gk-brand {
+  color: var(--gk-header-text);
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.gk-crumbs {
+  display: flex;
+  gap: 6px;
+  color: var(--gk-header-muted);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.gk-phases {
+  display: flex;
+  gap: 4px;
+}
+
+.gk-phase {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--gk-header-muted);
+  text-decoration: none;
+}
+
+.gk-phase[aria-current="page"] {
+  background: var(--gk-header-text);
+  color: var(--gk-header-bg);
+  font-weight: 600;
+}
+
+.gk-phase-link:hover {
+  color: var(--gk-header-text);
+}
+
+.gk-header-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.gk-header-button {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 4px;
+  border: 1px solid var(--gk-header-border);
+  background: transparent;
+  color: var(--gk-header-text);
+  font-size: 13px;
+}
+
+.gk-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+
+.gk-main > .dv-dockview,
+.gk-main > div {
+  height: 100%;
+}
+
+.gk-status {
+  display: flex;
+  gap: 16px;
+  padding: 4px 16px;
+  border-top: 1px solid var(--gk-border);
+  background: var(--gk-surface);
+  color: var(--gk-muted);
+  font-size: 12px;
+}
+
+.gk-tab-title {
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.gk-group-actions {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 4px;
+}
+
+.gk-icon-button {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--gk-muted);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.gk-icon-button:hover {
+  background: var(--gk-surface-2);
+  color: var(--gk-text);
+}
+
+.gk-panel {
+  height: 100%;
+  overflow: auto;
+  padding: 12px 14px;
+  background: var(--gk-surface);
+  color: var(--gk-text);
+}
+
+.gk-panel-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gk-muted);
+  text-align: center;
+}
+
+.gk-panel-empty p {
+  max-width: 28em;
+  margin: 0;
+}
+
+.gk-muted {
+  color: var(--gk-muted);
+}
+
+.gk-start-main {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 24px 16px;
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.gk-start-main h1 {
+  font-size: 20px;
+  margin: 0 0 16px;
+}
+
+.gk-project-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.gk-project {
+  background: var(--gk-surface);
+  border: 1px solid var(--gk-border);
+  border-radius: 6px;
+  padding: 12px 16px;
+}
+
+.gk-project h2 {
+  font-size: 15px;
+  margin: 0 0 4px;
+}
+
+.gk-project ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}

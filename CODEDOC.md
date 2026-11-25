@@ -361,6 +361,19 @@ React 19 + Vite + TypeScript. `npm run dev` serves on `:5173` and proxies `/api`
 
 ```
 frontend/src/
+├── workbench/           # the new shell at /workbench/ (decisions/0014.9), entry
+│   │                     #   frontend/workbench/index.html, a second Vite input
+│   ├── main.tsx          # React root, TanStack Query client, theme applied before render
+│   ├── Workbench.tsx     # ?campaign= opens the Shell, otherwise the StartScreen
+│   ├── StartScreen.tsx   # projects and their campaigns (GET /api/projects)
+│   ├── api.ts            # the generated client on this origin; unwrap/refusal helpers
+│   ├── storage.ts        # guarded localStorage for per-viewer conveniences
+│   ├── theme/            # tokens.css (light and dark design tokens, the .gk-dockview
+│   │                     #   theme class over dockview's --dv-* variables), theme.ts
+│   └── shell/            # Shell.tsx (header, DockviewReact, status bar), layout.ts (the
+│                         #   six Prepare panels, default arrangement, stored layout),
+│                         #   tabs.tsx (title-only tab; close in the group actions, outside
+│                         #   role=tab, decisions/0006), panels.tsx
 ├── App.tsx              # thin shell; gates on session existence, switches on activePhase
 ├── main.tsx             # React entry
 ├── components/

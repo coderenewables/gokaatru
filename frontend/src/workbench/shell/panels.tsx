@@ -3,6 +3,9 @@ import type { FunctionComponent } from "react";
 
 import { DataPanel } from "../datatree/DataPanel";
 import { InspectorPanel } from "../inspector/InspectorPanel";
+import { PalettePanel } from "../model/PalettePanel";
+import { PipelinePanel } from "../model/PipelinePanel";
+import { StepPanel } from "../model/StepPanel";
 import { ProfilePanel } from "../profile/ProfilePanel";
 import { ReanalysisPanel } from "../reanalysis/ReanalysisPanel";
 import { RosePanel } from "../rose/RosePanel";
@@ -54,10 +57,13 @@ function emptyPanel(id: PanelId): FunctionComponent<IDockviewPanelProps> {
 const BUILT: Partial<Record<PanelId, FunctionComponent<IDockviewPanelProps>>> = {
   data: DataPanel,
   inspector: InspectorPanel,
+  palette: PalettePanel,
+  pipeline: PipelinePanel,
   profile: ProfilePanel,
   reanalysis: ReanalysisPanel,
   rose: RosePanel,
   scatter: ScatterPanel,
+  step: StepPanel,
   timeline: TimelinePanel,
 };
 

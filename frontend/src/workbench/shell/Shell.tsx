@@ -6,6 +6,7 @@ import { api, unwrap } from "../api";
 import { dropOnChart, useCharts } from "../charts/store";
 import { WindowDrop } from "../datamodel/WindowDrop";
 import { WorkbenchDnd } from "../dnd";
+import { usePipeline } from "../model/store";
 import { useSelection } from "../selection/store";
 import { useTheme } from "../theme/theme";
 import { useHistory } from "../history/useHistory";
@@ -199,7 +200,7 @@ export function Shell({ sessionId, projectId }: ShellProps) {
       </header>
       <main className="gk-main">
         <Campaign.Provider value={open}>
-          <WorkbenchDnd onDrop={dropOnChart}>
+          <WorkbenchDnd onDrop={dropOnChart} onMethodDrop={(operation) => usePipeline.getState().add(operation)}>
             <DockviewReact
               key={phase}
               className="dockview-theme-light gk-dockview"

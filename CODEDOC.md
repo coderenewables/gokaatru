@@ -407,6 +407,15 @@ frontend/src/
 │   │                     #   (who, when, why; remove its rule)
 │   ├── history/          # undo, redo and the status bar's history (get_operation_log,
 │   │                     #   get_fixed_prefix_hash), shared with the assistant and MCP
+│   ├── model/            # the Model phase (P3-10, decisions/0015.1-0015.5): operations.ts
+│   │                     #   (GET /operations, the palette's stages, runOperation through the
+│   │                     #   generated route), store.ts (the campaign's working pipeline,
+│   │                     #   view state in this browser), order.ts (order_pipeline's order
+│   │                     #   and statuses; run steps one at a time, stop at a refusal),
+│   │                     #   graph.ts (layout by dependency depth, ports), PalettePanel,
+│   │                     #   PipelinePanel (React Flow, edges only from the server's order;
+│   │                     #   Run stale; named pipelines), StepPanel (generated form, status,
+│   │                     #   result with its disclosure fields first)
 │   ├── forms/            # schema.ts: an operation's parameter schema (GET /operations) as
 │   │                     #   fields, controls' text as a body and back; OperationForm.tsx
 │   │                     #   renders them, channels and sources offered (P3-9)

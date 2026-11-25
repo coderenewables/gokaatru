@@ -6,6 +6,7 @@ cleaning rather than freezing a list of rows.
 """
 from __future__ import annotations
 
+import copy
 import json
 from datetime import datetime, timezone
 from typing import Any
@@ -14,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from server.core.selection import SelectionError, resolve, validate
-from server.operations import ACTOR, operation
+from server.operations import ACTOR, note_undo, operation
 from server.schemas.results import selections as result_models
 from server.state.session import SessionState, session
 
@@ -101,11 +102,13 @@ def _define_selection(state: SessionState, name: str, definition: dict[str, Any]
     except SelectionError as exc:
         raise ValueError(str(exc)) from exc
     replaced = name in state.selections
+    before = copy.deepcopy(state.selections.get(name))
     state.selections[name] = {
         "definition": definition,
         "actor": ACTOR.get(),
         "defined_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
+    note_undo({"name": name, "before": before, "after": copy.deepcopy(state.selections[name])})
     state.touch()
     return {"status": "ok", "replaced": replaced, **_summary(name, definition, frame)}
 
@@ -113,9 +116,31 @@ def _define_selection(state: SessionState, name: str, definition: dict[str, Any]
 def _delete_selection(state: SessionState, name: str) -> dict[str, Any]:
     if name not in state.selections:
         raise ValueError(f"No selection named '{name}'")
+    note_undo({"name": name, "before": copy.deepcopy(state.selections[name]), "after": None})
     del state.selections[name]
     state.touch()
     return {"status": "ok", "deleted": name}
+
+
+def restore_selection(state: SessionState, note: dict[str, Any], *, undo: bool) -> dict[str, Any]:
+    """Put a saved selection back as one logged define or delete found it (``undo``) or left it.
+
+    The stored entry is restored whole, so a redo keeps the original actor and time rather
+    than taking the redoer's, as a replayed cleaning rule does (P2-4a).
+    """
+    name = note["name"]
+    expected, target = (note["after"], note["before"]) if undo else (note["before"], note["after"])
+    if state.selections.get(name) != expected:
+        raise ValueError(
+            f"Cannot {'undo' if undo else 'redo'} it: the selection '{name}' has changed since, so restoring "
+            "it would overwrite that change."
+        )
+    if target is None:
+        del state.selections[name]
+    else:
+        state.selections[name] = copy.deepcopy(target)
+    state.touch()
+    return {"selection": name, "restored": "absent" if target is None else "defined"}
 
 
 def _list_selections(state: SessionState) -> dict[str, Any]:

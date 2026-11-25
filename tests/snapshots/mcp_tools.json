@@ -1451,6 +1451,154 @@
  },
  {
   "annotations": null,
+  "description": "Valid records, mean, minimum and maximum of measured channels (comma-separated); with a\nselection, of its records only, which is how a selection is compared with every record.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "channels": {
+     "type": "string"
+    },
+    "selection": {
+     "default": "",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "channels"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "summarise_channels",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Define or replace a named selection of records: time ranges, direction sectors, value\nbands, polygons over two channels or record sets, combined by union and intersection.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "definition": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "name": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "name",
+    "definition"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "define_selection",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Delete a named selection.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "name"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "delete_selection",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "List the session's named selections with how many records each holds now.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "list_selections",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Resolve a named selection against the working data: how many records, and where.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "name"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "resolve_selection",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
   "description": "The campaign's instruments by height (highest first), each with its type, boom, mapped\nrole and the statistic columns it logs, and every other channel of the data.",
   "execution": null,
   "icons": null,
@@ -1505,7 +1653,7 @@
  },
  {
   "annotations": null,
-  "description": "Undo the last cleaning rule, configuration change, sensor removal or data model build still in the history.",
+  "description": "Undo the last cleaning rule, configuration change, sensor removal, data model build or saved\nselection still in the history.",
   "execution": null,
   "icons": null,
   "inputSchema": {
@@ -1893,154 +2041,6 @@
    }
   },
   "name": "get_fixed_prefix_hash",
-  "outputSchema": {
-   "additionalProperties": true,
-   "type": "object"
-  },
-  "title": null
- },
- {
-  "annotations": null,
-  "description": "Valid records, mean, minimum and maximum of measured channels (comma-separated); with a\nselection, of its records only, which is how a selection is compared with every record.",
-  "execution": null,
-  "icons": null,
-  "inputSchema": {
-   "additionalProperties": false,
-   "properties": {
-    "channels": {
-     "type": "string"
-    },
-    "selection": {
-     "default": "",
-     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
-     "type": "string"
-    }
-   },
-   "required": [
-    "channels"
-   ],
-   "type": "object"
-  },
-  "meta": {
-   "fastmcp": {
-    "tags": []
-   }
-  },
-  "name": "summarise_channels",
-  "outputSchema": {
-   "additionalProperties": true,
-   "type": "object"
-  },
-  "title": null
- },
- {
-  "annotations": null,
-  "description": "Define or replace a named selection of records: time ranges, direction sectors, value\nbands, polygons over two channels or record sets, combined by union and intersection.",
-  "execution": null,
-  "icons": null,
-  "inputSchema": {
-   "additionalProperties": false,
-   "properties": {
-    "definition": {
-     "additionalProperties": true,
-     "type": "object"
-    },
-    "name": {
-     "type": "string"
-    }
-   },
-   "required": [
-    "name",
-    "definition"
-   ],
-   "type": "object"
-  },
-  "meta": {
-   "fastmcp": {
-    "tags": []
-   }
-  },
-  "name": "define_selection",
-  "outputSchema": {
-   "additionalProperties": true,
-   "type": "object"
-  },
-  "title": null
- },
- {
-  "annotations": null,
-  "description": "Delete a named selection.",
-  "execution": null,
-  "icons": null,
-  "inputSchema": {
-   "additionalProperties": false,
-   "properties": {
-    "name": {
-     "type": "string"
-    }
-   },
-   "required": [
-    "name"
-   ],
-   "type": "object"
-  },
-  "meta": {
-   "fastmcp": {
-    "tags": []
-   }
-  },
-  "name": "delete_selection",
-  "outputSchema": {
-   "additionalProperties": true,
-   "type": "object"
-  },
-  "title": null
- },
- {
-  "annotations": null,
-  "description": "List the session's named selections with how many records each holds now.",
-  "execution": null,
-  "icons": null,
-  "inputSchema": {
-   "additionalProperties": false,
-   "properties": {},
-   "type": "object"
-  },
-  "meta": {
-   "fastmcp": {
-    "tags": []
-   }
-  },
-  "name": "list_selections",
-  "outputSchema": {
-   "additionalProperties": true,
-   "type": "object"
-  },
-  "title": null
- },
- {
-  "annotations": null,
-  "description": "Resolve a named selection against the working data: how many records, and where.",
-  "execution": null,
-  "icons": null,
-  "inputSchema": {
-   "additionalProperties": false,
-   "properties": {
-    "name": {
-     "type": "string"
-    }
-   },
-   "required": [
-    "name"
-   ],
-   "type": "object"
-  },
-  "meta": {
-   "fastmcp": {
-    "tags": []
-   }
-  },
-  "name": "resolve_selection",
   "outputSchema": {
    "additionalProperties": true,
    "type": "object"

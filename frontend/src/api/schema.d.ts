@@ -3353,7 +3353,8 @@ export interface paths {
         put?: never;
         /**
          * undo_last_change
-         * @description Undo the last cleaning rule, configuration change, sensor removal or data model build still in the history.
+         * @description Undo the last cleaning rule, configuration change, sensor removal, data model build or saved
+         *     selection still in the history.
          */
         post: operations["operation_undo_last_change_api_sessions__session_id__operations_undo_last_change_post"];
         delete?: never;

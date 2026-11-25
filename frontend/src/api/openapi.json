@@ -35165,7 +35165,7 @@
   },
   "/api/sessions/{session_id}/operations/undo_last_change": {
    "post": {
-    "description": "Undo the last cleaning rule, configuration change, sensor removal or data model build still in the history.",
+    "description": "Undo the last cleaning rule, configuration change, sensor removal, data model build or saved\nselection still in the history.",
     "operationId": "operation_undo_last_change_api_sessions__session_id__operations_undo_last_change_post",
     "parameters": [
      {

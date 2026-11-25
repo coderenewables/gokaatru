@@ -412,9 +412,11 @@ frontend/src/
 │   │                     #   renders them, channels and sources offered (P3-9)
 │   ├── theme/            # tokens.css (light and dark design tokens, series colours, the
 │   │                     #   .gk-dockview theme class over dockview's --dv-* variables)
-│   └── shell/            # Shell.tsx (header with undo, redo and commands; DockviewReact;
-│                         #   status bar), layout.ts (the seven panels, default arrangement,
-│                         #   stored layout versioned with them), tabs.tsx (title-only tab;
+│   └── shell/            # Shell.tsx (header with the phases, undo, redo and commands;
+│                         #   one DockviewReact per phase, the phase named in the address;
+│                         #   status bar), layout.ts (PHASES, each phase's panels and default
+│                         #   arrangement, one stored layout per phase, versioned with its
+│                         #   panels; Prepare keeps Phase 2's key, P3-10a), tabs.tsx (title-only tab;
 │                         #   close in the group actions, outside role=tab, decisions/0006),
 │                         #   panels.tsx, context.ts, keys.ts (Ctrl+Z, Ctrl+Shift+Z, Ctrl+K),
 │                         #   CommandPalette.tsx, CampaignSwitcher.tsx

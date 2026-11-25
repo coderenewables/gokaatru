@@ -210,7 +210,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 
 ### History
 - `remove_sensors` — take sensors out of the analysis: inventory, height mapping (a speed sensor's standard deviation slot goes with it) and the working and raw data, recorded in the run configuration's `excluded_sensors` so a datamodel re-import keeps them out; a new timeseries brings every sensor back. It marks derived results stale. A dry run shows the columns it would drop; the removed columns are kept aside (`removed_sensors`, saved with the project) so undo puts back every field exactly.
-- `undo_last_change`, `redo_last_change` — undo the last cleaning rule, configuration change or sensor removal still in the history, or redo what was undone. Undo refuses when a later change has moved what it would restore; any other change clears what can be redone.
+- `undo_last_change`, `redo_last_change` — undo the last cleaning rule, configuration change, sensor removal or data model build still in the history, or redo what was undone. Undo refuses when a later change has moved what it would restore; any other change clears what can be redone.
 - `get_operation_log` — the most recent operation calls (actor, operation, parameters with credentials redacted, data versions) and the undo state.
 
 ### Selections
@@ -225,7 +225,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 ### Data I/O
 - `parse_timeseries`, `parse_datamodel`, `list_sensors`, `get_period_of_record`, `get_data_coverage`
 - Data model builder, for a campaign delivered as a bare CSV with no IEA Task 43 JSON:
-  `draft_data_model`, `build_data_model`
+  `draft_data_model`, `build_data_model`. The draft also reports the data model in use (`in_use`: its file, whether the builder wrote it, and the spec it was built from). Building again from an edited spec is how the workbench's mast diagram edits a data model: it marks derived results stale, and `undo_last_change` puts back the mapping, inventory, timezone, document and run-configuration paths. Two builds are refused: any build while the campaign's own uploaded data model is in use (decisions/0014.8: shown, never changed), and undo of the build that first puts the records into UTC, which would move every timestamp. A data model of any origin whose timezone differs from the one the records were put into UTC with is refused; load the timeseries again to apply another. A refused build leaves the document on disk as it was.
 
 ### ERA5 And Reanalysis
 - `find_era5_nodes`, `extract_era5_data`, `compute_era5_wind_speed`, `interpolate_era5_to_site`, `extrapolate_reanalysis_to_hub`, `analyze_homogeneity`, `apply_homogeneity_cutoff`

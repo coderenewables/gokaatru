@@ -1360,6 +1360,9 @@ export interface paths {
         /**
          * build_data_model
          * @description Build a minimal IEA Task 43 data model from declared columns and load it.
+         *
+         *     Refused while the campaign's own uploaded data model is in use. Undoable, except the
+         *     build that first puts the records into UTC.
          */
         post: operations["operation_build_data_model_api_sessions__session_id__operations_build_data_model_post"];
         delete?: never;
@@ -2059,7 +2062,9 @@ export interface paths {
         put?: never;
         /**
          * draft_data_model
-         * @description Draft a Task 43 reading of the loaded timeseries columns for review.
+         * @description Draft a Task 43 reading of the loaded timeseries columns for review, with the data
+         *     model in use: its file, whether it was built here (only then can it be edited) and the
+         *     spec it was built from.
          */
         post: operations["operation_draft_data_model_api_sessions__session_id__operations_draft_data_model_post"];
         delete?: never;
@@ -3217,7 +3222,7 @@ export interface paths {
         put?: never;
         /**
          * undo_last_change
-         * @description Undo the last cleaning rule, configuration change or sensor removal still in the history.
+         * @description Undo the last cleaning rule, configuration change, sensor removal or data model build still in the history.
          */
         post: operations["operation_undo_last_change_api_sessions__session_id__operations_undo_last_change_post"];
         delete?: never;
@@ -6488,6 +6493,17 @@ export interface components {
             /** Start */
             start: string;
         };
+        /** DataModelInUse */
+        DataModelInUse: {
+            /** Built */
+            built: boolean;
+            /** File */
+            file: string;
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            } | null;
+        };
         /** DataModelResponse */
         DataModelResponse: {
             /** Data Model */
@@ -6628,6 +6644,7 @@ export interface components {
             columns_needing_a_height: string[];
             /** Detected Heights M */
             detected_heights_m: (number | null)[];
+            in_use?: components["schemas"]["DataModelInUse"] | null;
             /** Note */
             note: string;
         };
@@ -8528,7 +8545,7 @@ export interface components {
             /** Data Version */
             data_version: number;
             /** Detail */
-            detail: components["schemas"]["ApplyCleaningRuleResult"] | components["schemas"]["RemoveSensorsResult"] | components["schemas"]["RunConfig"];
+            detail: components["schemas"]["ApplyCleaningRuleResult"] | components["schemas"]["RemoveSensorsResult"] | components["schemas"]["BuildDataModelResult"] | components["schemas"]["RunConfig"];
             redone: components["schemas"]["LoggedCall"];
             /** Stale Artifacts */
             stale_artifacts: string[];
@@ -8619,6 +8636,17 @@ export interface components {
             ranges_truncated: boolean;
             /** Records */
             records: number;
+        };
+        /**
+         * RestoredDataModel
+         * @description Undoing a data model build: the earlier mapping, inventory, timezone and document back,
+         *     and the run-configuration paths the build had set.
+         */
+        RestoredDataModel: {
+            /** Data Model */
+            data_model: string;
+            /** Restored Paths */
+            restored_paths: string[];
         };
         /**
          * RestoredPaths
@@ -9764,7 +9792,7 @@ export interface components {
             /** Data Version */
             data_version: number;
             /** Detail */
-            detail: components["schemas"]["UndoCleaningRuleResult"] | components["schemas"]["RestoredPaths"] | components["schemas"]["RestoredSensors"];
+            detail: components["schemas"]["UndoCleaningRuleResult"] | components["schemas"]["RestoredDataModel"] | components["schemas"]["RestoredPaths"] | components["schemas"]["RestoredSensors"];
             /** Stale Artifacts */
             stale_artifacts: string[];
             /** Stale Reasons */

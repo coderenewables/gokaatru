@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from server.core.datamodel_builder import is_built_document
 from server.core.validators import (
     SENSOR_FIELDS,
     TIMESTAMP_LABEL_CONVENTION,
@@ -1026,6 +1027,9 @@ def _parse_datamodel(state: SessionState, file_path: str) -> dict:
     # Extract and apply campaign timezone (D8)
     tz_source, tz_obj = _extract_timezone(payload)
     _refuse_a_different_timezone(state, tz_obj)
+    # Which document the mapping comes from: a built one may be edited, a campaign's own
+    # never is (decisions/0014.8).
+    state.datamodel_origin = {"file": path.name, "built": is_built_document(payload), "spec": None}
     state.timezone = tz_obj
     state.runconfig.setdefault("site", {})["timezone"] = str(tz_obj)
     state.runconfig["site"]["timezone_source"] = tz_source

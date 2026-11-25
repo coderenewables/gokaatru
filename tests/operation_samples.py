@@ -146,6 +146,18 @@ def _changes(samples: Samples, state: SessionState, workspace: Path) -> None:
         },
     )
     samples.call(state, "parse_datamodel", file_path=built["file_path"])
+    edited = {
+        "location": {"name": "Synthetic", "offset_from_utc_hrs": 0},
+        "points": [
+            {"name": "Spd_100m", "measurement_type_id": "wind_speed", "height_m": 100.0},
+            {"name": "Spd_80m", "measurement_type_id": "wind_speed", "height_m": 82.0},
+            {"name": "Dir_100m", "measurement_type_id": "wind_direction", "height_m": 100.0},
+        ],
+    }
+    samples.call(state, "build_data_model", spec=edited)
+    samples.call(state, "draft_data_model")
+    samples.call(state, "undo_last_change")
+    samples.call(state, "redo_last_change")
 
 
 def _payload(latitude: float, longitude: float, dataset: str) -> dict:

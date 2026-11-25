@@ -14,14 +14,16 @@ Paired one-for-one with ``GET/POST /sessions/{id}/datamodel/draft|build`` in
 """
 from __future__ import annotations
 
+import copy
 import json
+from zoneinfo import ZoneInfo
 
 from server.core.datamodel_builder import (
     ROLE_MEASUREMENT,
     build_datamodel,
     draft_columns,
 )
-from server.operations import operation
+from server.operations import note_undo, operation
 from server.schemas.results import datamodel_builder as result_models
 from server.state.session import SessionState, session
 
@@ -101,16 +103,40 @@ def _draft_data_model(state: SessionState) -> dict:
     }
 
 
+def _refuse_an_uploaded_model(state: SessionState) -> None:
+    origin = state.datamodel_origin
+    if origin is not None and not origin.get("built"):
+        raise ValueError(
+            f"The campaign's own data model, {origin.get('file')}, is in use. It is shown and never changed "
+            "(decisions/0014.8); load the timeseries in a new campaign to build one from its headers instead."
+        )
+
+
 def _build_data_model(state: SessionState, spec: dict) -> dict:
-    """Build, persist and parse a minimal Task 43 data model from a declared spec."""
+    """Build, persist and parse a minimal Task 43 data model from a declared spec.
+
+    Rebuilding replaces the mapping every height-indexed result was computed from, so the
+    data version moves and those results read as stale.
+    """
     from server.tools.data_io import _confined_file_path, _parse_datamodel
 
     columns = _require_timeseries(state)
+    _refuse_an_uploaded_model(state)
     payload = build_datamodel(spec, available_columns=columns)
     path = _confined_file_path(state, BUILT_DATAMODEL_FILENAME, subdir="uploads")
+    previous = path.read_text(encoding="utf-8") if path.exists() else None
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
-    result = _parse_datamodel(state, BUILT_DATAMODEL_FILENAME)
+    try:
+        result = _parse_datamodel(state, BUILT_DATAMODEL_FILENAME)
+    except Exception:
+        # A refused build leaves the declaration on disk as it was, matching the session.
+        if previous is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.write_text(previous, encoding="utf-8")
+        raise
+    state.datamodel_origin = {**(state.datamodel_origin or {}), "spec": copy.deepcopy(spec)}
+    state.bump_data_version()
     points = payload["measurement_location"][0]["measurement_point"]
     return {
         **result,
@@ -121,15 +147,83 @@ def _build_data_model(state: SessionState, spec: dict) -> dict:
     }
 
 
+def timezone_spec(tz: object) -> dict[str, object] | None:
+    """A timezone as JSON, for an undo note; ``timezone_from`` reads it back."""
+    if tz is None:
+        return None
+    if isinstance(tz, ZoneInfo):
+        return {"zone": tz.key}
+    offset = tz.utcoffset(None)  # type: ignore[attr-defined]
+    return {"offset_minutes": int(offset.total_seconds() // 60) if offset is not None else 0}
+
+
+def timezone_from(spec: dict[str, object] | None) -> object:
+    from datetime import timedelta, timezone
+
+    if spec is None:
+        return None
+    if "zone" in spec:
+        return ZoneInfo(str(spec["zone"]))
+    return timezone(timedelta(minutes=int(spec["offset_minutes"])))  # type: ignore[arg-type]
+
+
+def datamodel_state(state: SessionState) -> dict[str, object]:
+    """Everything a build changes, as JSON, so its undo can check and restore it."""
+    from server.tools.config import config_snapshot
+    from server.tools.data_io import _confined_file_path
+
+    path = _confined_file_path(state, BUILT_DATAMODEL_FILENAME, subdir="uploads") if state.workspace_dir else None
+    return json.loads(json.dumps({
+        "config": config_snapshot(state),
+        "mapping": {str(height): slots for height, slots in state.sensor_mapping.items()},
+        "inventory": state.sensor_inventory,
+        "timezone": timezone_spec(state.timezone),
+        "origin": state.datamodel_origin,
+        "document": path.read_text(encoding="utf-8") if path is not None and path.exists() else None,
+    }, default=str))
+
+
+def same_declaration(left: str | None, right: str | None) -> bool:
+    """Whether two built documents declare the same thing: equal but for when each was
+    written, so a redo's fresh ``date`` does not read as a later change."""
+    if left is None or right is None:
+        return left is right
+    first, second = json.loads(left), json.loads(right)
+    first.pop("date", None)
+    second.pop("date", None)
+    return first == second
+
+
+def _records_in_local_time(state: SessionState) -> bool:
+    """Whether a build would put the records into UTC, which no undo can take back."""
+    import pandas as pd
+
+    return any(
+        frame is not None and isinstance(frame.index, pd.DatetimeIndex) and frame.index.tz is None
+        for frame in (state.timeseries_df, state.raw_timeseries_df)
+    )
+
+
 # The draft proposes a reading of the column headers and writes nothing; the build writes a
 # data model into the workspace and replaces the sensor mapping and timezone in one call.
 @operation(effect="read", stage="ingest", canvas=False, result=result_models.DraftDataModelResult)
 def draft_data_model() -> dict:
-    """Draft a Task 43 reading of the loaded timeseries columns for review."""
-    return _draft_data_model(session)
+    """Draft a Task 43 reading of the loaded timeseries columns for review, with the data
+    model in use: its file, whether it was built here (only then can it be edited) and the
+    spec it was built from."""
+    return {**_draft_data_model(session), "in_use": copy.deepcopy(session.datamodel_origin)}
 
 
 @operation(effect="change", stage="ingest", canvas=False, result=result_models.BuildDataModelResult)
 def build_data_model(spec: dict) -> dict:
-    """Build a minimal IEA Task 43 data model from declared columns and load it."""
-    return _build_data_model(session, spec)
+    """Build a minimal IEA Task 43 data model from declared columns and load it.
+
+    Refused while the campaign's own uploaded data model is in use. Undoable, except the
+    build that first puts the records into UTC.
+    """
+    before = datamodel_state(session)
+    converted = _records_in_local_time(session)
+    result = _build_data_model(session, spec)
+    note_undo({"kind": "data_model", "converts_records": converted, "before": before,
+               "after": datamodel_state(session)})
+    return result

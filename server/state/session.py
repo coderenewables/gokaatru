@@ -127,6 +127,9 @@ class SessionState:
     # undo can put it back: the inventory entries, the mapping and exclusion list before and
     # after, and the removed columns of the working and raw frames.
     removed_sensors: dict[str, dict[str, object]]
+    # The data model the mapping was parsed from: its file, whether the builder wrote it
+    # (only a built one may be edited, decisions/0014.8) and, for one built here, the spec.
+    datamodel_origin: dict[str, object] | None
 
     def __init__(self) -> None:
         """Initialize the singleton session state per the GoKaatru build spec."""
@@ -193,6 +196,7 @@ class SessionState:
         self.undo_stack = []
         self.selections = {}
         self.removed_sensors = {}
+        self.datamodel_origin = None
         self.session_id = preserved_session_id
         self.workspace_dir = preserved_workspace_dir
         self.created_at = preserved_created_at

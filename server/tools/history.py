@@ -1,14 +1,16 @@
-"""history — undo and redo the last cleaning rule, configuration change or sensor removal
-(P1-13, P2-6, decisions/0010).
+"""history — undo and redo the last cleaning rule, configuration change, sensor removal or data
+model build (P1-13, P2-6, P2-7, decisions/0010).
 
 Undo inverts one logged call. A cleaning rule is removed by the replay-from-raw undo that
 already exists: rules are order-dependent, so only a replay gives back the series as it was.
 A configuration change is inverted by restoring exactly the run-configuration paths and
 synced fields it changed. A sensor removal is inverted from what it kept aside
-(``server/tools/sensors.py``). Each inverse first checks that the session is still as that call
-left it, and refuses rather than guesses when a later change has moved what it would
-restore. Redo calls the undone operation again with its logged parameters. Any other change
-starts a new branch of the history, so what was undone can no longer be redone.
+(``server/tools/sensors.py``), a data model build from the state it recorded before and
+after; the build that first puts the records into UTC cannot be undone. Each inverse first
+checks that the session is still as that call left it, and refuses rather than guesses when
+a later change has moved what it would restore. Redo calls the undone operation again with
+its logged parameters. Any other change starts a new branch of the history, so what was
+undone can no longer be redone.
 """
 from __future__ import annotations
 
@@ -24,7 +26,9 @@ from server.tools.cleaning import _apply_cleaning_rule, _undo_cleaning_rule
 from server.tools.config import SYNCED_FIELDS, _persist_runconfig, _update_run_config, config_snapshot
 from server.tools.sensors import _remove_sensors, _restore_sensors
 
-UNDOABLE_OPERATIONS: tuple[str, ...] = ("apply_cleaning_rule", "update_run_config", "remove_sensors")
+UNDOABLE_OPERATIONS: tuple[str, ...] = (
+    "apply_cleaning_rule", "update_run_config", "remove_sensors", "build_data_model",
+)
 _ABSENT = object()
 
 
@@ -140,12 +144,72 @@ def _redo_removal(state: SessionState, entry: dict[str, Any]) -> dict[str, Any]:
     return detail
 
 
+_DATA_MODEL_PARTS = (
+    ("mapping", "the sensor mapping"),
+    ("inventory", "the sensor inventory"),
+    ("timezone", "the timezone"),
+    ("origin", "the data model in use"),
+    ("document", "the built document"),
+)
+
+
+def _undo_data_model(state: SessionState, entry: dict[str, Any]) -> dict[str, Any]:
+    from server.tools.data_io import _confined_file_path
+    from server.tools.datamodel_builder import (
+        BUILT_DATAMODEL_FILENAME,
+        datamodel_state,
+        same_declaration,
+        timezone_from,
+    )
+
+    note = entry["undo"]
+    if note["converts_records"]:
+        raise ValueError(
+            f"Cannot undo the data model build of log entry {entry['seq']}: it put the records into UTC, and "
+            "undoing it would move every timestamp. Build again with the earlier declaration instead."
+        )
+    before, after = note["before"], note["after"]
+    current = datamodel_state(state)
+    moved = [
+        label
+        for key, label in _DATA_MODEL_PARTS
+        if not (same_declaration(current[key], after[key]) if key == "document" else current[key] == after[key])
+    ]
+    if moved:
+        raise ValueError(
+            f"Cannot undo the data model build of log entry {entry['seq']}: a later change has moved "
+            f"{', '.join(moved)}, so restoring the earlier data model would overwrite it."
+        )
+    # Restores the run-configuration paths and synced fields, refusing first if a later change
+    # moved one of them.
+    detail = _undo_config(state, {"seq": entry["seq"], "undo": {"before": before["config"], "after": after["config"]}})
+    state.sensor_mapping = {float(height): dict(slots) for height, slots in before["mapping"].items()}
+    state.sensor_inventory = copy.deepcopy(before["inventory"])
+    state.timezone = timezone_from(before["timezone"])
+    state.datamodel_origin = copy.deepcopy(before["origin"])
+    path = _confined_file_path(state, BUILT_DATAMODEL_FILENAME, subdir="uploads")
+    if before["document"] is None:
+        path.unlink(missing_ok=True)
+    else:
+        path.write_text(before["document"], encoding="utf-8")
+    state.bump_data_version()
+    return {**detail, "data_model": "restored"}
+
+
+def _redo_data_model(state: SessionState, entry: dict[str, Any]) -> dict[str, Any]:
+    from server.tools.datamodel_builder import _build_data_model
+
+    return _build_data_model(state, entry["parameters"]["spec"])
+
+
 _UNDO = {
     "apply_cleaning_rule": _undo_cleaning,
     "update_run_config": _undo_config,
     "remove_sensors": _undo_removal,
+    "build_data_model": _undo_data_model,
 }
 _REDO = {
+    "build_data_model": _redo_data_model,
     "apply_cleaning_rule": lambda state, entry: _apply_cleaning_rule(state, **entry["parameters"]),
     "update_run_config": lambda state, entry: _update_run_config(
         state, entry["parameters"]["key"], entry["parameters"]["value"]
@@ -161,7 +225,10 @@ def _summary(entry: dict[str, Any]) -> dict[str, Any]:
 def _undo_last_change(state: SessionState) -> dict[str, Any]:
     applied = _applied(state)
     if not applied:
-        raise ValueError("Nothing to undo: no cleaning rule, configuration change or sensor removal is in the history")
+        raise ValueError(
+            "Nothing to undo: no cleaning rule, configuration change, sensor removal or data model build "
+            "is in the history"
+        )
     entry = applied[-1]
     detail = _UNDO[entry["operation"]](state, entry)
     state.undo_stack.append(int(entry["seq"]))
@@ -207,7 +274,7 @@ def _get_operation_log(state: SessionState, limit: int) -> dict[str, Any]:
 
 @operation(effect="change", stage="config", canvas=False, result=result_models.UndoLastChangeResult)
 def undo_last_change() -> dict:
-    """Undo the last cleaning rule, configuration change or sensor removal still in the history."""
+    """Undo the last cleaning rule, configuration change, sensor removal or data model build still in the history."""
     return _undo_last_change(session)
 
 

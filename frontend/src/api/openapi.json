@@ -7273,6 +7273,38 @@
     "title": "CrossValidationFold",
     "type": "object"
    },
+   "DataModelInUse": {
+    "additionalProperties": false,
+    "properties": {
+     "built": {
+      "title": "Built",
+      "type": "boolean"
+     },
+     "file": {
+      "title": "File",
+      "type": "string"
+     },
+     "spec": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Spec"
+     }
+    },
+    "required": [
+     "file",
+     "built",
+     "spec"
+    ],
+    "title": "DataModelInUse",
+    "type": "object"
+   },
    "DataModelResponse": {
     "properties": {
      "data_model": {
@@ -7766,6 +7798,16 @@
       },
       "title": "Detected Heights M",
       "type": "array"
+     },
+     "in_use": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/DataModelInUse"
+       },
+       {
+        "type": "null"
+       }
+      ]
      },
      "note": {
       "title": "Note",
@@ -13902,6 +13944,9 @@
         "$ref": "#/components/schemas/RemoveSensorsResult"
        },
        {
+        "$ref": "#/components/schemas/BuildDataModelResult"
+       },
+       {
         "$ref": "#/components/schemas/RunConfig"
        }
       ],
@@ -14224,6 +14269,29 @@
      "range_limit"
     ],
     "title": "ResolveSelectionResult",
+    "type": "object"
+   },
+   "RestoredDataModel": {
+    "additionalProperties": false,
+    "description": "Undoing a data model build: the earlier mapping, inventory, timezone and document back,\nand the run-configuration paths the build had set.",
+    "properties": {
+     "data_model": {
+      "title": "Data Model",
+      "type": "string"
+     },
+     "restored_paths": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Restored Paths",
+      "type": "array"
+     }
+    },
+    "required": [
+     "restored_paths",
+     "data_model"
+    ],
+    "title": "RestoredDataModel",
     "type": "object"
    },
    "RestoredPaths": {
@@ -18340,6 +18408,9 @@
       "anyOf": [
        {
         "$ref": "#/components/schemas/UndoCleaningRuleResult"
+       },
+       {
+        "$ref": "#/components/schemas/RestoredDataModel"
        },
        {
         "$ref": "#/components/schemas/RestoredPaths"
@@ -25450,7 +25521,7 @@
   },
   "/api/sessions/{session_id}/operations/build_data_model": {
    "post": {
-    "description": "Build a minimal IEA Task 43 data model from declared columns and load it.",
+    "description": "Build a minimal IEA Task 43 data model from declared columns and load it.\n\nRefused while the campaign's own uploaded data model is in use. Undoable, except the\nbuild that first puts the records into UTC.",
     "operationId": "operation_build_data_model_api_sessions__session_id__operations_build_data_model_post",
     "parameters": [
      {
@@ -28554,7 +28625,7 @@
   },
   "/api/sessions/{session_id}/operations/draft_data_model": {
    "post": {
-    "description": "Draft a Task 43 reading of the loaded timeseries columns for review.",
+    "description": "Draft a Task 43 reading of the loaded timeseries columns for review, with the data\nmodel in use: its file, whether it was built here (only then can it be edited) and the\nspec it was built from.",
     "operationId": "operation_draft_data_model_api_sessions__session_id__operations_draft_data_model_post",
     "parameters": [
      {
@@ -33889,7 +33960,7 @@
   },
   "/api/sessions/{session_id}/operations/undo_last_change": {
    "post": {
-    "description": "Undo the last cleaning rule, configuration change or sensor removal still in the history.",
+    "description": "Undo the last cleaning rule, configuration change, sensor removal or data model build still in the history.",
     "operationId": "operation_undo_last_change_api_sessions__session_id__operations_undo_last_change_post",
     "parameters": [
      {

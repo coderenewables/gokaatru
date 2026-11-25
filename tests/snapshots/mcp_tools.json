@@ -997,7 +997,7 @@
  },
  {
   "annotations": null,
-  "description": "Draft a Task 43 reading of the loaded timeseries columns for review.",
+  "description": "Draft a Task 43 reading of the loaded timeseries columns for review, with the data\nmodel in use: its file, whether it was built here (only then can it be edited) and the\nspec it was built from.",
   "execution": null,
   "icons": null,
   "inputSchema": {
@@ -1019,7 +1019,7 @@
  },
  {
   "annotations": null,
-  "description": "Build a minimal IEA Task 43 data model from declared columns and load it.",
+  "description": "Build a minimal IEA Task 43 data model from declared columns and load it.\n\nRefused while the campaign's own uploaded data model is in use. Undoable, except the\nbuild that first puts the records into UTC.",
   "execution": null,
   "icons": null,
   "inputSchema": {
@@ -1483,7 +1483,7 @@
  },
  {
   "annotations": null,
-  "description": "Undo the last cleaning rule, configuration change or sensor removal still in the history.",
+  "description": "Undo the last cleaning rule, configuration change, sensor removal or data model build still in the history.",
   "execution": null,
   "icons": null,
   "inputSchema": {

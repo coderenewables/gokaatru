@@ -1,0 +1,23 @@
+.gk-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gk-form .gk-field input {
+  font: inherit;
+  padding: 3px 6px;
+  border: 1px solid var(--gk-border-strong);
+  border-radius: 4px;
+  background: var(--gk-surface);
+  color: var(--gk-text);
+}
+
+.gk-form .gk-field input[aria-invalid="true"] {
+  border-color: var(--gk-danger);
+}
+
+.gk-field-error {
+  color: var(--gk-danger);
+  font-size: 12px;
+}

@@ -407,6 +407,9 @@ frontend/src/
 │   │                     #   (who, when, why; remove its rule)
 │   ├── history/          # undo, redo and the status bar's history (get_operation_log,
 │   │                     #   get_fixed_prefix_hash), shared with the assistant and MCP
+│   ├── forms/            # schema.ts: an operation's parameter schema (GET /operations) as
+│   │                     #   fields, controls' text as a body and back; OperationForm.tsx
+│   │                     #   renders them, channels and sources offered (P3-9)
 │   ├── theme/            # tokens.css (light and dark design tokens, series colours, the
 │   │                     #   .gk-dockview theme class over dockview's --dv-* variables)
 │   └── shell/            # Shell.tsx (header with undo, redo and commands; DockviewReact;

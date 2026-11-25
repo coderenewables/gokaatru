@@ -1170,7 +1170,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensors": {
@@ -1278,7 +1278,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     }
    },
@@ -1943,7 +1943,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "start": {
@@ -1982,7 +1982,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_name": {
@@ -2020,7 +2020,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2058,7 +2058,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2099,7 +2099,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2134,7 +2134,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_name": {
@@ -2168,7 +2168,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_name": {
@@ -2209,7 +2209,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2244,7 +2244,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_name": {
@@ -2278,7 +2278,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_a": {
@@ -2543,7 +2543,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2618,7 +2618,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2660,7 +2660,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2694,7 +2694,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_a": {
@@ -2742,7 +2742,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_a": {
@@ -2778,7 +2778,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     }
    },
@@ -2842,7 +2842,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2877,7 +2877,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_name": {
@@ -2911,7 +2911,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_names": {
@@ -2945,7 +2945,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_a": {
@@ -2983,7 +2983,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_names": {
@@ -3066,7 +3066,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_names": {

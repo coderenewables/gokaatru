@@ -47,7 +47,11 @@ HISTORY_OPERATIONS = frozenset({"undo_last_change", "redo_last_change"})
 
 #: The parameter a selectable operation gains (decisions/0011).
 SELECTION_PARAMETER = "selection"
-SELECTION_DESCRIPTION = "Name of a stored selection; when given, only its records are used."
+SELECTION_DESCRIPTION = (
+    "A stored selection's name, or a selection definition as a JSON object (the shape "
+    "define_selection takes); when given, only its records are used. A read on an inline "
+    "definition is not written to the operation log."
+)
 #: Reported with every result computed on a selection. Records outside it are blanked, not
 #: dropped: the timestamps stay, so a ramp, a calm spell or a flat line is never joined
 #: across records the selection separates, and the measurement interval is still inferred
@@ -320,7 +324,7 @@ def record_route_change(state: Any, method: str, route: str) -> None:
 PER_RECORD_FRAMES: tuple[str, ...] = ("raw_timeseries_df", "shear_timeseries_df", "roughness_timeseries_df")
 
 
-def selection_view(state: SessionState, name: str) -> tuple[SessionState, dict[str, object]]:
+def selection_view(state: SessionState, selection: str) -> tuple[SessionState, dict[str, object]]:
     """A copy of the session whose records outside the selection are missing.
 
     The working frame and every per-record frame beside it are blanked; the copy shares
@@ -330,7 +334,7 @@ def selection_view(state: SessionState, name: str) -> tuple[SessionState, dict[s
     """
     from server.tools.selections import selection_mask
 
-    mask = selection_mask(state, name)
+    mask = selection_mask(state, selection)
     frame = state.timeseries_df
     replica = copy.copy(state)
     replica.timeseries_df = frame.where(np.broadcast_to(mask[:, None], frame.shape))
@@ -340,13 +344,18 @@ def selection_view(state: SessionState, name: str) -> tuple[SessionState, dict[s
         if other is not None:
             kept = other.index.isin(selected)
             setattr(replica, attribute, other.where(np.broadcast_to(kept[:, None], other.shape)))
-    return replica, selection_disclosure(name, mask)
+    return replica, selection_disclosure(selection, mask)
 
 
-def selection_disclosure(name: str, mask: np.ndarray) -> dict[str, object]:
-    """What a result computed on a selection reports about it."""
+def selection_disclosure(selection: str, mask: np.ndarray) -> dict[str, object]:
+    """What a result computed on a selection reports about it. An inline definition has no
+    name; the caller sent it and holds it."""
+    from server.tools.selections import is_inline
+
+    inline = is_inline(selection)
     return {
-        "name": name,
+        "name": None if inline else selection,
+        "inline": inline,
         "records": int(mask.sum()),
         "of_records": int(mask.size),
         "basis": SELECTION_BASIS,
@@ -395,6 +404,11 @@ def _logged(
     @functools.wraps(fn)
     def logged(*args: Any, **kwargs: Any) -> Any:
         selection = str(kwargs.pop(SELECTION_PARAMETER, "") or "") if selectable else ""
+        # Live brushing is view state (decisions/0014.6): a read on an inline definition
+        # leaves nothing to trace, and logging every redraw would bury the changes.
+        from server.tools.selections import is_inline
+
+        unlogged = bool(selection) and is_inline(selection)
         try:
             bound = signature.bind_partial(*args, **kwargs)
             bound.apply_defaults()
@@ -430,11 +444,13 @@ def _logged(
                 secret = arguments.get(key)
                 if isinstance(secret, str) and secret:
                     message = message.replace(secret, REDACTED)
-            _record(name, effect, code_version, parameters, before, "error", message)
+            if not unlogged:
+                _record(name, effect, code_version, parameters, before, "error", message)
             raise
         finally:
             current_operation.reset(token)
-        _record(name, effect, code_version, parameters, before, "ok", None, call.get("undo"))
+        if not unlogged:
+            _record(name, effect, code_version, parameters, before, "ok", None, call.get("undo"))
         if effect == "change":
             if name not in HISTORY_OPERATIONS:
                 state.undo_stack.clear()

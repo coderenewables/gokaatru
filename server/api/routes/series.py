@@ -6,7 +6,8 @@ under ``gokaatru``. It calls the same ``_series_window`` as the ``get_series_win
 operation and resolves a selection with the same ``selection_mask``, blanking only the
 requested channels in the requested window rather than copying the whole session as a
 selectable operation's wrapper does; ``tests/test_series_window.py`` checks the two agree.
-Hand-written because the generated routes return JSON.
+Hand-written because the generated routes return JSON. The selection is a saved name or an
+inline definition; POST takes the same query as a body, for a lasso too long for a URL.
 """
 from __future__ import annotations
 
@@ -15,10 +16,12 @@ from typing import Annotated, Any
 
 import pyarrow as pa
 from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel, ConfigDict
 
 from server.api.deps import get_session_state
 from server.core.decimation import Window
 from server.operations import selection_disclosure
+from server.schemas.results._base import ErrorDetail
 from server.state.session import SessionState
 from server.tools.selections import selection_mask
 from server.tools.series import DEFAULT_SERIES_BUCKETS, _series_window
@@ -68,7 +71,33 @@ def series_arrow(
     return arrow_stream(window_table(_series_window(state, channels, start, end, buckets, keep), disclosure))
 
 
-@router.get("/sessions/{session_id}/series")
+class SeriesWindowRequest(BaseModel):
+    """The GET route's query as a body, for a selection too long for a URL (a lasso)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    channels: str
+    start: str = ""
+    end: str = ""
+    buckets: int = DEFAULT_SERIES_BUCKETS
+    selection: str = ""
+
+
+_ARROW_RESPONSE: dict[int | str, dict[str, Any]] = {
+    200: {"content": {ARROW_STREAM: {}}, "description": "The window as an Arrow IPC stream"},
+    400: {"model": ErrorDetail},
+}
+
+
+def _respond(state: SessionState, request: SeriesWindowRequest) -> Response:
+    try:
+        content = series_arrow(state, request.channels, request.start, request.end, request.buckets, request.selection)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(content=content, media_type=ARROW_STREAM)
+
+
+@router.get("/sessions/{session_id}/series", response_class=Response, responses=_ARROW_RESPONSE)
 def get_series(
     session_id: str,
     state: Annotated[SessionState, Depends(get_session_state)],
@@ -80,8 +109,16 @@ def get_series(
 ) -> Response:
     """Per-bucket minimum, maximum and valid count of channels over [start, end), as Arrow."""
     del session_id
-    try:
-        content = series_arrow(state, channels, start, end, buckets, selection)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return Response(content=content, media_type=ARROW_STREAM)
+    return _respond(state, SeriesWindowRequest(channels=channels, start=start, end=end, buckets=buckets,
+                                               selection=selection))
+
+
+@router.post("/sessions/{session_id}/series", response_class=Response, responses=_ARROW_RESPONSE)
+def post_series(
+    session_id: str,
+    request: SeriesWindowRequest,
+    state: Annotated[SessionState, Depends(get_session_state)],
+) -> Response:
+    """The same window as the GET route, its query sent as a JSON body."""
+    del session_id
+    return _respond(state, request)

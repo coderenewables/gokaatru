@@ -15095,9 +15095,20 @@
       "title": "Basis",
       "type": "string"
      },
+     "inline": {
+      "title": "Inline",
+      "type": "boolean"
+     },
      "name": {
-      "title": "Name",
-      "type": "string"
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
      },
      "of_records": {
       "title": "Of Records",
@@ -15110,6 +15121,7 @@
     },
     "required": [
      "name",
+     "inline",
      "records",
      "of_records",
      "basis"
@@ -15430,6 +15442,41 @@
      "diurnal_means"
     ],
     "title": "SeriesSummary",
+    "type": "object"
+   },
+   "SeriesWindowRequest": {
+    "additionalProperties": false,
+    "description": "The GET route's query as a body, for a selection too long for a URL (a lasso).",
+    "properties": {
+     "buckets": {
+      "default": 2000,
+      "title": "Buckets",
+      "type": "integer"
+     },
+     "channels": {
+      "title": "Channels",
+      "type": "string"
+     },
+     "end": {
+      "default": "",
+      "title": "End",
+      "type": "string"
+     },
+     "selection": {
+      "default": "",
+      "title": "Selection",
+      "type": "string"
+     },
+     "start": {
+      "default": "",
+      "title": "Start",
+      "type": "string"
+     }
+    },
+    "required": [
+     "channels"
+    ],
+    "title": "SeriesWindowRequest",
     "type": "object"
    },
    "SessionSummaryResponse": {
@@ -34274,11 +34321,19 @@
     "responses": {
      "200": {
       "content": {
+       "application/vnd.apache.arrow.stream": {}
+      },
+      "description": "The window as an Arrow IPC stream"
+     },
+     "400": {
+      "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
        }
       },
-      "description": "Successful Response"
+      "description": "Bad Request"
      },
      "422": {
       "content": {
@@ -34292,6 +34347,79 @@
      }
     },
     "summary": "Get Series",
+    "tags": [
+     "series"
+    ]
+   },
+   "post": {
+    "description": "The same window as the GET route, its query sent as a JSON body.",
+    "operationId": "post_series_api_sessions__session_id__series_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SeriesWindowRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/vnd.apache.arrow.stream": {}
+      },
+      "description": "The window as an Arrow IPC stream"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Post Series",
     "tags": [
      "series"
     ]

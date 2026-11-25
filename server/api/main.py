@@ -34,6 +34,9 @@ from server.operations import record_route_change
 
 _SESSION_PATH = re.compile(r"^/api/sessions/([^/]+)/")
 _CHANGING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+#: Hand-written routes that read although they are POSTed to, because their query does not
+#: fit a URL. They are neither logged as changes nor saved.
+_READING_POST_ROUTES = frozenset({"/api/sessions/{session_id}/series"})
 
 
 def _get_allowed_origins() -> list[str]:
@@ -116,9 +119,11 @@ def create_app() -> FastAPI:
             or path.endswith("/stream")
         ):
             return response
+        route = getattr(request.scope.get("route"), "path", path)
+        if route in _READING_POST_ROUTES:
+            return response
         state = _session_manager_provider().loaded(match.group(1))
         if state is not None:
-            route = getattr(request.scope.get("route"), "path", path)
             await run_in_threadpool(record_route_change, state, request.method, route)
         return response
 

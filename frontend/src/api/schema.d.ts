@@ -3498,7 +3498,11 @@ export interface paths {
          */
         get: operations["get_series_api_sessions__session_id__series_get"];
         put?: never;
-        post?: never;
+        /**
+         * Post Series
+         * @description The same window as the GET route, its query sent as a JSON body.
+         */
+        post: operations["post_series_api_sessions__session_id__series_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8761,8 +8765,10 @@ export interface components {
         SelectionUsed: {
             /** Basis */
             basis: string;
+            /** Inline */
+            inline: boolean;
             /** Name */
-            name: string;
+            name: string | null;
             /** Of Records */
             of_records: number;
             /** Records */
@@ -8852,6 +8858,34 @@ export interface components {
             record_count: number;
             /** Std */
             std: number | null;
+        };
+        /**
+         * SeriesWindowRequest
+         * @description The GET route's query as a body, for a selection too long for a URL (a lasso).
+         */
+        SeriesWindowRequest: {
+            /**
+             * Buckets
+             * @default 2000
+             */
+            buckets?: number;
+            /** Channels */
+            channels: string;
+            /**
+             * End
+             * @default
+             */
+            end?: string;
+            /**
+             * Selection
+             * @default
+             */
+            selection?: string;
+            /**
+             * Start
+             * @default
+             */
+            start?: string;
         };
         /**
          * SessionSummaryResponse
@@ -18159,13 +18193,68 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The window as an Arrow IPC stream */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/vnd.apache.arrow.stream": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_series_api_sessions__session_id__series_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeriesWindowRequest"];
+            };
+        };
+        responses: {
+            /** @description The window as an Arrow IPC stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.apache.arrow.stream": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
                 };
             };
             /** @description Validation Error */

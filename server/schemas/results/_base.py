@@ -37,7 +37,9 @@ class ErrorDetail(Result):
 class SelectionUsed(Result):
     """The selection a result was computed on (``server.operations.SELECTION_BASIS``)."""
 
-    name: str
+    #: The saved selection's name; ``None`` for a definition sent inline.
+    name: str | None
+    inline: bool
     records: int
     of_records: int
     basis: str

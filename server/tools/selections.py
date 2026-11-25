@@ -6,6 +6,7 @@ cleaning rather than freezing a list of rows.
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -54,19 +55,46 @@ def _summary(name: str, definition: dict[str, Any], frame: pd.DataFrame) -> dict
     }
 
 
-def selection_mask(state: SessionState, name: str) -> np.ndarray:
-    """The records the named selection holds in the session's working data."""
-    if name not in state.selections:
-        raise ValueError(f"No selection named '{name}'")
+def is_inline(selection: str) -> bool:
+    """Whether a ``selection`` argument is a definition rather than a saved selection's name.
+
+    A name never starts with ``{`` (``define_selection`` refuses one), so the two cannot be
+    confused.
+    """
+    return selection.lstrip().startswith("{")
+
+
+def inline_definition(selection: str) -> dict[str, Any]:
     try:
-        return resolve(state.selections[name]["definition"], _frame(state))
+        definition = json.loads(selection)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"An inline selection must be a JSON object: {exc.msg} at character {exc.pos}") from exc
+    if not isinstance(definition, dict):
+        raise ValueError("An inline selection must be a JSON object")
+    return definition
+
+
+def selection_mask(state: SessionState, selection: str) -> np.ndarray:
+    """The records a selection holds in the session's working data: a saved selection named,
+    or a definition sent inline as JSON (the browser's live brushing, decisions/0014.6)."""
+    if is_inline(selection):
+        try:
+            return resolve(inline_definition(selection), _frame(state))
+        except SelectionError as exc:
+            raise ValueError(f"Inline selection: {exc}") from exc
+    if selection not in state.selections:
+        raise ValueError(f"No selection named '{selection}'")
+    try:
+        return resolve(state.selections[selection]["definition"], _frame(state))
     except SelectionError as exc:
-        raise ValueError(f"Selection '{name}': {exc}") from exc
+        raise ValueError(f"Selection '{selection}': {exc}") from exc
 
 
 def _define_selection(state: SessionState, name: str, definition: dict[str, Any]) -> dict[str, Any]:
     if not name.strip():
         raise ValueError("A selection needs a name")
+    if is_inline(name):
+        raise ValueError("A selection's name cannot start with '{', which marks an inline definition")
     frame = _frame(state)
     try:
         validate(definition, frame.columns)

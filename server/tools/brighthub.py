@@ -611,7 +611,7 @@ def _prepare_brighthub_reanalysis(
     effect="change", stage="reanalysis_download", assistant=False, network=True,
     result=result_models.BrighthubPrepareReanalysisResult,
     reads=("credentials",),
-    writes=("reanalysis_nodes", "reference_series", "settings", "site"),
+    writes=("reanalysis_nodes", "reference_series", "reference_choice", "site"),
 )
 def brighthub_prepare_reanalysis(latitude: float, longitude: float, source: str = "brighthub") -> dict:
     """Load BrightHub ERA5 and MERRA-2, then interpolate ERA5 to the project site."""

@@ -206,7 +206,10 @@ def _get_analysis_summary(state: SessionState) -> dict:
 
 @operation(
     effect="read", stage="config", result=result_models.GetRunConfigResult,
-    reads=("data_model", "measured_data", "site", "label", "settings", "shear_table", "roughness_table"),
+    reads=(
+        "data_model", "measured_data", "site", "label", "settings", "reference_choice", "shear_settings", "shear_table",
+        "roughness_table",
+    ),
 )
 def get_run_config() -> dict:
     """Return the active run configuration dictionary defined by the GoKaatru Phase 1 config spec."""
@@ -234,8 +237,8 @@ def config_snapshot(state: SessionState) -> dict[str, object]:
 
 @operation(
     effect="change", stage="config", result=result_models.UpdateRunConfigResult,
-    reads=("data_model", "settings", "site"),
-    writes=("label", "settings", "site", "data_model"),
+    reads=("data_model", "settings", "reference_choice", "shear_settings", "site"),
+    writes=("label", "settings", "reference_choice", "shear_settings", "site", "data_model"),
 )
 def update_run_config(key: str, value: str) -> dict:
     """Update a dotted runconfig key using JSON parsing rules from the Phase 1 config manager spec."""
@@ -247,7 +250,7 @@ def update_run_config(key: str, value: str) -> dict:
 
 @operation(
     effect="change", stage="config", result=result_models.SaveRunConfigResult,
-    reads=("label", "settings", "site", "data_model", "measured_data"),
+    reads=("label", "settings", "reference_choice", "shear_settings", "site", "data_model", "measured_data"),
 )
 def save_run_config() -> dict:
     """Write the current run configuration to data/runconfig.json per the Phase 1 persistence spec."""
@@ -256,7 +259,7 @@ def save_run_config() -> dict:
 
 @operation(
     effect="change", stage="config", result=result_models.LoadRunConfigResult,
-    writes=("settings", "site", "label"),
+    writes=("settings", "reference_choice", "shear_settings", "site", "label"),
 )
 def load_run_config() -> dict:
     """Load data/runconfig.json into session state following the Phase 1 configuration workflow."""

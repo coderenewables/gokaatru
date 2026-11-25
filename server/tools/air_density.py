@@ -88,7 +88,7 @@ def compute_air_density(pressure_pa: float, temperature_k: float, dewpoint_k: fl
 
 @operation(
     effect="read", stage="air_density", result=result_models.ComputeAirDensityTimeseriesResult,
-    reads=("reference_series", "measured_data", "data_model", "settings"),
+    reads=("reference_series", "measured_data", "data_model", "reference_choice"),
 )
 def compute_air_density_timeseries(
     pressure_col: str,

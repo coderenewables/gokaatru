@@ -394,6 +394,22 @@ def _selectable_signature(fn: Callable[..., Any], name: str) -> tuple[inspect.Si
     )
 
 
+def _digests(state: SessionState, writes: tuple[str, ...]) -> dict[str, str]:
+    # The measured records carry their own version (``data_version``), moved by the code that
+    # changes them; digesting every record around every cleaning rule would cost more than it.
+    return {name: ARTIFACTS[name].digest(state) for name in writes if name != "measured_data"}
+
+
+def _track(state: SessionState, before: dict[str, str], reads: tuple[str, ...], seq: object) -> None:
+    """Move the version of each written artifact the call changed, then record, for what the
+    call built, the versions of what it read (decisions/0015.3). A rewrite that leaves an
+    artifact as it was moves nothing, so it makes nothing stale."""
+    for name, digest in before.items():
+        if ARTIFACTS[name].digest(state) != digest:
+            state.bump_artifact(name)
+    state.record_inputs(seq, reads)
+
+
 def _logged(
     fn: F,
     name: str,
@@ -401,6 +417,8 @@ def _logged(
     code_version: str,
     secrets: tuple[str, ...],
     selectable: bool = False,
+    reads: tuple[str, ...] = (),
+    writes: tuple[str, ...] = (),
 ) -> F:
     """Wrap an operation so every call is logged and every successful change is saved.
 
@@ -438,6 +456,7 @@ def _logged(
             "code_version": code_version,
         }
         token = current_operation.set(call)
+        written = _digests(state, writes)
         try:
             if selection:
                 replica, disclosure = selection_view(state, selection)
@@ -448,7 +467,10 @@ def _logged(
                 result = {**result, SELECTION_PARAMETER: disclosure}
             else:
                 result = fn(*args, **kwargs)
+            _track(state, written, reads, call["seq"])
         except Exception as exc:
+            # A call that fails part-way may still have changed what it writes.
+            _track(state, written, reads, call["seq"])
             message = f"{type(exc).__name__}: {exc}"
             for key in secrets:
                 secret = arguments.get(key)
@@ -504,7 +526,10 @@ def operation(
         published = (
             fn
             if registry is not None
-            else _logged(fn, operation_name, effect, ENGINE_VERSION, tuple(secret_parameters), selectable)
+            else _logged(
+                fn, operation_name, effect, ENGINE_VERSION, tuple(secret_parameters), selectable,
+                tuple(reads), tuple(writes),
+            )
         )
         declared = (REGISTRY if registry is None else registry).register(
             Operation(

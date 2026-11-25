@@ -356,7 +356,7 @@ def compute_qc_diagnostics() -> dict:
         "min_r_squared",
     ),
     result=result_models.ComputeMcpReadinessResult,
-    reads=("measured_data", "data_model", "reference_series", "hub_height_series", "settings"),
+    reads=("measured_data", "data_model", "reference_series", "hub_height_series", "reference_choice", "settings"),
 )
 def compute_mcp_readiness(speed_sensor: str, reference_sensor: str = "") -> dict:
     """Assess ERA5 concurrent-period correlation and long-term adjustment readiness."""

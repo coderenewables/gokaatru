@@ -422,7 +422,7 @@ def _run_ltc_xgboost(
         "cv_rmse_spread",
     ),
     result=result_models.RunLtcXgboostResult,
-    reads=("hub_height_series", "measured_data", "reference_series", "settings"),
+    reads=("hub_height_series", "measured_data", "reference_series", "reference_choice", "settings"),
     writes=("ltc:xgboost", "ltc_matching"),
 )
 def run_ltc_xgboost(short_col: str, long_col: str, short_dir_col: str = "", long_dir_col: str = "") -> dict:

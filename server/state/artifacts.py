@@ -122,8 +122,12 @@ def _settings(state: SessionState) -> dict[str, Any]:
 
 
 #: ``site`` holds the declared timezone and how the data model resolved it, so it belongs to
-#: the data model; ``excluded_sensors`` to the measured records it was removed from.
-_OWNED_KEYS = frozenset(_SITE_KEYS + _LABEL_KEYS + _MIRRORED_STATE_KEYS + ("excluded_sensors", "site"))
+#: the data model; ``excluded_sensors`` to the measured records it was removed from. The
+#: reference source and the shear fit's settings are artifacts of their own: choosing a
+#: reference must not make a shear table stale, nor a shear gate a long-term correction.
+_OWNED_KEYS = frozenset(
+    _SITE_KEYS + _LABEL_KEYS + _MIRRORED_STATE_KEYS + ("excluded_sensors", "site", "reference_source", "shear")
+)
 
 
 # Each clear removes the artifact and nothing else, so a step that does not read it gives
@@ -164,7 +168,15 @@ def _clear_label(state: SessionState) -> None:
 
 def _clear_settings(state: SessionState) -> None:
     state.runconfig = {key: value for key, value in state.runconfig.items() if key in _OWNED_KEYS}
+
+
+def _clear_reference_choice(state: SessionState) -> None:
+    state.runconfig.pop("reference_source", None)
     state.active_reference_source = DEFAULT_REFERENCE_SOURCE
+
+
+def _clear_shear_settings(state: SessionState) -> None:
+    state.runconfig.pop("shear", None)
 
 
 def _clear_credentials(state: SessionState) -> None:
@@ -257,9 +269,21 @@ _DECLARED: tuple[Artifact, ...] = (
     ),
     Artifact(
         "settings",
-        "The rest of the run configuration: the reference source, method settings, thresholds",
-        lambda s: digest_of(_settings(s), s.active_reference_source),
+        "The rest of the run configuration: the power curve, timestamp labelling, method settings",
+        lambda s: digest_of(_settings(s)),
         _clear_settings,
+    ),
+    Artifact(
+        "reference_choice",
+        "Which reanalysis source the long-term corrections use",
+        lambda s: digest_of(s.runconfig.get("reference_source"), s.active_reference_source),
+        _clear_reference_choice,
+    ),
+    Artifact(
+        "shear_settings",
+        "The shear fit's settings, such as its speed gate",
+        lambda s: digest_of(s.runconfig.get("shear")),
+        _clear_shear_settings,
     ),
     Artifact(
         "credentials",
@@ -366,7 +390,9 @@ ARTIFACT_FIELDS: dict[str, tuple[str, ...]] = {
     "data_model": ("sensor_mapping", "sensor_inventory", "timezone", "datamodel_origin", "runconfig"),
     "site": ("coordinate", "hub_height_m", "measurement_type", "runconfig"),
     "label": ("project_name", "runconfig"),
-    "settings": ("runconfig", "active_reference_source"),
+    "settings": ("runconfig",),
+    "reference_choice": ("runconfig", "active_reference_source"),
+    "shear_settings": ("runconfig",),
     "credentials": ("brighthub_token", "earthdatahub_pat"),
     "selections": ("selections",),
     "reanalysis_nodes": ("era5_nodes", "merra_nodes", "era5_data", "merra_data", "reanalysis_cache_identity"),
@@ -399,6 +425,9 @@ UNTRACKED_FIELDS: dict[str, str] = {
     "data_version": "bookkeeping: the measured records' version",
     "derived_versions": "bookkeeping: the data version each result was built from",
     "derived_provenance": "bookkeeping: the call that built each result",
+    "artifact_clock": "bookkeeping: the clock artifact versions are read from",
+    "artifact_versions": "bookkeeping: each artifact's version",
+    "derived_inputs": "bookkeeping: the versions each result was built from",
     "executed_nodes": "the current interface's Canvas run state",
     "workflow_execution": "the current interface's Canvas run state",
     "workflow_runs": "the current interface's archived Canvas runs",

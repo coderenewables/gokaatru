@@ -283,8 +283,14 @@ def _get_operation_log(state: SessionState, limit: int) -> dict[str, Any]:
 
 @operation(
     effect="change", stage="config", canvas=False, result=result_models.UndoLastChangeResult,
-    reads=("measured_data", "data_model", "site", "label", "settings", "selections", "hub_height_series"),
-    writes=("measured_data", "data_model", "site", "label", "settings", "selections", "hub_height_series"),
+    reads=(
+        "measured_data", "data_model", "site", "label", "settings", "reference_choice", "shear_settings", "selections",
+        "hub_height_series",
+    ),
+    writes=(
+        "measured_data", "data_model", "site", "label", "settings", "reference_choice", "shear_settings", "selections",
+        "hub_height_series",
+    ),
 )
 def undo_last_change() -> dict:
     """Undo the last cleaning rule, configuration change, sensor removal, data model build or saved
@@ -294,8 +300,14 @@ def undo_last_change() -> dict:
 
 @operation(
     effect="change", stage="config", canvas=False, result=result_models.RedoLastChangeResult,
-    reads=("measured_data", "data_model", "site", "label", "settings", "selections", "hub_height_series"),
-    writes=("measured_data", "data_model", "site", "label", "settings", "selections", "hub_height_series"),
+    reads=(
+        "measured_data", "data_model", "site", "label", "settings", "reference_choice", "shear_settings", "selections",
+        "hub_height_series",
+    ),
+    writes=(
+        "measured_data", "data_model", "site", "label", "settings", "reference_choice", "shear_settings", "selections",
+        "hub_height_series",
+    ),
 )
 def redo_last_change() -> dict:
     """Redo the change most recently undone, with the parameters it was first called with."""

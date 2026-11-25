@@ -768,8 +768,8 @@ def _build_aggr_momm_shear_table(
 @operation(
     effect="change", stage="shear", disclosure=("records_clamped", "clamped_fraction",),
     result=result_models.CalculateShearTimeseriesResult,
-    reads=("measured_data", "data_model", "settings"),
-    writes=("shear_timeseries",),
+    reads=("measured_data", "data_model", "shear_settings"),
+    writes=("shear_timeseries", "shear_settings"),
 )
 def calculate_shear_timeseries(height_sensors: str, min_speed_mps: float | None = None) -> dict:
     """Calculate timestamp-wise power-law shear coefficients traced to IEC 61400-12-1 Section B.2.
@@ -783,7 +783,7 @@ def calculate_shear_timeseries(height_sensors: str, min_speed_mps: float | None 
 
 @operation(
     effect="change", stage="shear", result=result_models.CalculateRoughnessTimeseriesResult,
-    reads=("measured_data", "data_model", "settings"),
+    reads=("measured_data", "data_model", "shear_settings"),
     writes=("roughness_timeseries",),
 )
 def calculate_roughness_timeseries(height_sensors: str) -> dict:
@@ -814,7 +814,7 @@ def compute_vertical_structure(
         "site_utc_offset_hours",
     ),
     result=result_models.BuildShearTableResult,
-    reads=("shear_timeseries", "settings"),
+    reads=("shear_timeseries", "shear_settings"),
     writes=("shear_table",),
 )
 def build_shear_table(aggregation: str = "mean") -> dict:
@@ -832,7 +832,7 @@ def build_shear_table(aggregation: str = "mean") -> dict:
         "site_utc_offset_hours",
     ),
     result=result_models.BuildRoughnessTableResult,
-    reads=("roughness_timeseries", "settings"),
+    reads=("roughness_timeseries", "shear_settings"),
     writes=("roughness_table",),
 )
 def build_roughness_table(aggregation: str = "mean") -> dict:
@@ -867,8 +867,8 @@ def build_sector_shear_tables(
         "table_coverage",
     ),
     result=result_models.BuildAggrMommShearTableResult,
-    reads=("measured_data", "data_model", "settings"),
-    writes=("shear_table", "shear_timeseries"),
+    reads=("measured_data", "data_model", "shear_settings"),
+    writes=("shear_table", "shear_timeseries", "shear_settings"),
 )
 def build_aggr_momm_shear_table(height_sensors: str, min_speed_mps: float | None = None) -> dict:
     """Build an aggregate MoMM shear table by deriving alpha from per-height Windographer MoMM wind tables."""

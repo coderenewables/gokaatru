@@ -607,9 +607,16 @@ uploads stay untouched with their SHA-256 recorded, every frame is saved as Parq
 by its content hash, and every other field goes into `catalogue.sqlite`. Each operation call
 is logged with its actor, parameters (credentials redacted), code version and data versions,
 and every successful change saves the project, so a restarted server reopens it as it was.
-Each derived result records the call that built it (`derived_provenance`). A result built
-from older data, or by an earlier engine version, is listed by `staleness_report` with the
-reason (`stale_reasons`) and left as it is: nothing is recomputed silently.
+Each derived result records the call that built it (`derived_provenance`) and the version of
+every artifact that call reads (`derived_inputs`, decisions/0015.3). A result built from older
+data, by an earlier engine version, or from a result that has changed since or is stale
+itself, is listed by `staleness_report` with the reason (`stale_reasons`) and left as it is:
+nothing is recomputed silently. So rebuilding the shear table with another method marks the
+hub series, every long-term correction, the ensemble, the clipping and the uncertainty stale,
+and nothing before the table; a rebuild that gives the same table marks nothing. An
+artifact's version moves only when a call changes it (`artifact_versions`), and only changes
+made through an operation are seen: the hand-written routes the current interface uses still
+change the data version but not the other artifacts' versions.
 A project whose recorded raw input was changed or removed outside GoKaatru is refused (HTTP
 409) rather than shown with results the inputs no longer support. Credentials are never
 written to disk.

@@ -108,6 +108,14 @@ class SessionState:
     # For each derived artifact stamped during an operation call: which call, with what
     # parameters, under which engine version. An artifact from another engine is stale.
     derived_provenance: dict[str, dict[str, object]]
+    # The version of every artifact other than the measured records (whose version is
+    # ``data_version``), from one session-wide clock, moved when an operation's call changes
+    # what it declares it writes (decisions/0015.3).
+    artifact_clock: int
+    artifact_versions: dict[str, int]
+    # For each derived artifact built in an operation call: the version of every artifact
+    # that operation reads, as it stood when the call finished.
+    derived_inputs: dict[str, dict[str, int]]
     latest_uncertainty: dict[str, object] | None
     scenarios: list[dict[str, object]]
     runconfig: dict[str, object]
@@ -182,6 +190,9 @@ class SessionState:
         self.data_version = 0
         self.derived_versions = {}
         self.derived_provenance = {}
+        self.artifact_clock = 0
+        self.artifact_versions = {}
+        self.derived_inputs = {}
         self.latest_uncertainty = None
         self.scenarios = []
         self.runconfig = {}
@@ -362,16 +373,37 @@ class SessionState:
 
     def stamp_derived(self, name: str) -> None:
         """Record which version of the measured data a derived artifact was built from, and,
-        inside an operation call, which logged call built it."""
+        inside an operation call, which logged call built it. The operation's wrapper records
+        the call's inputs once it finishes (``record_inputs``); outside one, only the data
+        version is known."""
         self.derived_versions[name] = self.data_version
         call = current_operation.get()
         if call is None:
             self.derived_provenance.pop(name, None)
+            self.derived_inputs.pop(name, None)
         else:
             self.derived_provenance[name] = {**call, "data_version": self.data_version}
 
-    def stale_reason(self, name: str) -> str | None:
-        """Why a derived artifact no longer matches, or None when it still does."""
+    def artifact_version(self, name: str) -> int:
+        """The version of an artifact: the data version for the measured records, else the
+        clock reading of its last change (0 before any)."""
+        return self.data_version if name == "measured_data" else int(self.artifact_versions.get(name, 0))
+
+    def bump_artifact(self, name: str) -> None:
+        self.artifact_clock += 1
+        self.artifact_versions[name] = self.artifact_clock
+
+    def record_inputs(self, seq: object, reads: tuple[str, ...]) -> None:
+        """Record, for every derived artifact the call ``seq`` built, the version of each
+        artifact the call reads, as they stand now that it has finished."""
+        versions = {name: self.artifact_version(name) for name in reads}
+        for name, provenance in self.derived_provenance.items():
+            if provenance.get("seq") == seq:
+                self.derived_inputs[name] = dict(versions)
+
+    def stale_reason(self, name: str, _seen: frozenset[str] = frozenset()) -> str | None:
+        """Why a derived artifact no longer matches, or None when it still does: the data or
+        the engine moved, or a result it was built from changed since or is stale itself."""
         stamped = self.derived_versions.get(name)
         if stamped is None:
             return None
@@ -380,6 +412,14 @@ class SessionState:
         built_by = self.derived_provenance.get(name, {}).get("code_version")
         if built_by is not None and built_by != ENGINE_VERSION:
             return f"built by engine {built_by}; this is engine {ENGINE_VERSION}"
+        seen = _seen | {name}
+        for source, version in sorted(self.derived_inputs.get(name, {}).items()):
+            if source == "measured_data":
+                continue
+            if self.artifact_version(source) != version:
+                return f"built from {source} as it was then; {source} has changed since"
+            if source not in seen and self.stale_reason(source, seen) is not None:
+                return f"built from {source}, which is stale"
         return None
 
     def derived_is_stale(self, name: str) -> bool:

@@ -711,7 +711,7 @@ def _run_ltc_variance_ratio(state: SessionState, short_col: str, long_col: str) 
         "huber_delta",
     ),
     result=result_models.RunLtcLinearLeastSquaresResult,
-    reads=("hub_height_series", "measured_data", "reference_series", "settings"),
+    reads=("hub_height_series", "measured_data", "reference_series", "reference_choice", "settings"),
     writes=("ltc:linear_least_squares", "ltc_matching"),
 )
 def run_ltc_linear_least_squares(short_col: str, long_col: str) -> dict:
@@ -730,7 +730,7 @@ def run_ltc_linear_least_squares(short_col: str, long_col: str) -> dict:
         "error_variance_ratio_assumed",
     ),
     result=result_models.RunLtcTotalLeastSquaresResult,
-    reads=("hub_height_series", "measured_data", "reference_series", "settings"),
+    reads=("hub_height_series", "measured_data", "reference_series", "reference_choice", "settings"),
     writes=("ltc:total_least_squares", "ltc_matching"),
 )
 def run_ltc_total_least_squares(short_col: str, long_col: str) -> dict:
@@ -749,7 +749,7 @@ def run_ltc_total_least_squares(short_col: str, long_col: str) -> dict:
         "fit_basis",
     ),
     result=result_models.RunLtcSpeedsortResult,
-    reads=("hub_height_series", "measured_data", "reference_series", "settings"),
+    reads=("hub_height_series", "measured_data", "reference_series", "reference_choice", "settings"),
     writes=("ltc:speedsort", "ltc_matching"),
 )
 def run_ltc_speedsort(
@@ -779,7 +779,7 @@ def run_ltc_speedsort(
         "reference_temporal_semantics",
     ),
     result=result_models.RunLtcVarianceRatioResult,
-    reads=("hub_height_series", "measured_data", "reference_series", "settings"),
+    reads=("hub_height_series", "measured_data", "reference_series", "reference_choice", "settings"),
     writes=("ltc:variance_ratio", "ltc_matching"),
 )
 def run_ltc_variance_ratio(short_col: str, long_col: str) -> dict:

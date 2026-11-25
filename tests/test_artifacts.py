@@ -53,11 +53,15 @@ WRITES_NOT_OBSERVED: dict[tuple[str, str], str] = {
     ("build_data_model", "measured_data"): "it converts records to UTC only when they are not yet; the samples' are",
     **{
         ("load_run_config", artifact): "the samples load the configuration they have just saved"
-        for artifact in ("label", "settings", "site")
+        for artifact in ("label", "settings", "reference_choice", "shear_settings", "site")
     },
     **{
         ("update_run_config", artifact): "a dotted key can name any of them; the samples change the project name"
-        for artifact in ("data_model", "settings", "site")
+        for artifact in ("data_model", "settings", "reference_choice", "shear_settings", "site")
+    },
+    **{
+        (operation, "shear_settings"): "a speed gate given explicitly is kept; the samples use the default"
+        for operation in ("calculate_shear_timeseries", "build_aggr_momm_shear_table")
     },
     **{
         (f"run_ltc_{algorithm}", "ltc_matching"): (
@@ -68,7 +72,7 @@ WRITES_NOT_OBSERVED: dict[tuple[str, str], str] = {
     **{
         (operation, artifact): _UNDO
         for operation in ("undo_last_change", "redo_last_change")
-        for artifact in ("hub_height_series", "selections", "settings", "site")
+        for artifact in ("hub_height_series", "selections", "settings", "reference_choice", "shear_settings", "site")
     },
 }
 

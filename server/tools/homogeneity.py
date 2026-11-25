@@ -120,7 +120,7 @@ def _apply_homogeneity_cutoff(state: SessionState, cutoff_year: int) -> dict:
 
 @operation(
     effect="read", stage="homogeneity", result=result_models.AnalyzeHomogeneityResult,
-    reads=("reanalysis_nodes", "settings"),
+    reads=("reanalysis_nodes", "reference_choice"),
 )
 def analyze_homogeneity(method: str = "annual") -> dict:
     """Run Pettitt homogeneity screening on ERA5 node series aggregated annually or monthly."""

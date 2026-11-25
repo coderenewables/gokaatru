@@ -240,6 +240,9 @@ def _extrapolate_to_hub_height(
         column_name = _hub_column_name(hub_height_m)
         state.timeseries_df[column_name] = state.timeseries_df[speed_map[hub_height_m]]
         state.set_hub_height_m(float(hub_height_m))
+        # Measured at hub height, it is still built from the measured records, and goes stale
+        # with them like the extrapolated series below.
+        state.stamp_derived("hub_height_series")
         return {
             "status": "ok",
             "column_name": column_name,
@@ -589,7 +592,7 @@ def _add_shear_to_timeseries(state: SessionState) -> bool:
     result=result_models.ExtrapolateToHubHeightResult,
     reads=(
         "data_model", "measured_data", "reanalysis_nodes", "reference_series", "shear_table", "roughness_table",
-        "settings",
+        "shear_settings",
     ),
     writes=("hub_height_series", "reanalysis_hub_series", "site"),
 )
@@ -600,7 +603,7 @@ def extrapolate_to_hub_height(hub_height_m: float, shear_model: str = "power_law
 
 @operation(
     effect="change", stage="extrapolation", result=result_models.ExtrapolateReanalysisToHubResult,
-    reads=("reference_series", "shear_table", "settings"),
+    reads=("reference_series", "shear_table", "reference_choice"),
     writes=("reanalysis_hub_series",),
 )
 def extrapolate_reanalysis_to_hub(

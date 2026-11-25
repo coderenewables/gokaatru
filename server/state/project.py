@@ -322,6 +322,15 @@ class ProjectStore:
                 stale.unlink()
         return {"frames_written": written, "frames_reused": reused, "raw_files_recorded": recorded}
 
+    def saved_field(self, name: str) -> Any:
+        """One saved field, read without loading the project's frames; None when not saved.
+        For a field holding no frame (the run configuration, say)."""
+        if not self.has_snapshot():
+            return None
+        with _workspace_lock(self.workspace_dir), closing(self._connect()) as connection:
+            row = connection.execute("SELECT value FROM state WHERE field = ?", (name,)).fetchone()
+        return None if row is None else _decode(json.loads(row[0]), {})
+
     def load(self, state: SessionState) -> bool:
         """Restore a saved session into ``state``. Returns False when nothing was saved."""
         with _workspace_lock(self.workspace_dir):

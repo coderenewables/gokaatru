@@ -105,16 +105,28 @@ class ProjectRegistry:
         zones = {campaign["timezone"] for campaign in campaigns if campaign["timezone"] is not None}
         return {**project, "campaigns": campaigns, "timezones_differ": len(zones) > 1}
 
-    def _campaign_site(self, session_id: str) -> dict[str, Any]:
-        """The campaign's coordinate and timezone from its run configuration, read from disk so
-        listing a project never loads a campaign's data."""
+    def _campaign_config(self, session_id: str) -> dict[str, Any]:
+        """The campaign's run configuration without loading its data: the open session's own,
+        else the one its saved project holds (saved after every change), else runconfig.json,
+        which only some routes write through."""
+        loaded = self.sessions.loaded(session_id)
+        if loaded is not None:
+            return loaded.runconfig
+        saved = ProjectStore(self.sessions.base_dir / session_id).saved_field("runconfig")
+        if isinstance(saved, dict):
+            return saved
         path = self.sessions.base_dir / session_id / "runconfig.json"
-        config: dict[str, Any] = {}
         if path.exists():
             try:
                 config = json.loads(path.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
-                config = {}
+                return {}
+            return config if isinstance(config, dict) else {}
+        return {}
+
+    def _campaign_site(self, session_id: str) -> dict[str, Any]:
+        """The campaign's coordinate and timezone as its own configuration declares them."""
+        config = self._campaign_config(session_id)
         location = config.get("location") if isinstance(config.get("location"), dict) else {}
         site = config.get("site") if isinstance(config.get("site"), dict) else {}
         return {

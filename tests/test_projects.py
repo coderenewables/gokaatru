@@ -6,6 +6,7 @@ timezone and says when the timezones differ.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -103,6 +104,33 @@ def test_each_campaign_shows_its_own_site_and_differing_timezones_are_flagged(cl
     state.runconfig["site"]["timezone"] = "UTC+00:00"
     _persist_runconfig(state)
     assert test_client.get(f"/api/projects/{project_id}").json()["timezones_differ"] is True
+
+
+def test_a_campaigns_site_comes_from_its_data_model_with_no_config_file_written(client, tmp_path: Path) -> None:
+    """The generated build_data_model route writes no runconfig.json; the project still shows
+    the campaign's coordinate and timezone, from the open session and, after a restart, from
+    its saved project."""
+    test_client, manager = client
+    project_id, mast, _ = _project_with_two_campaigns(test_client)
+    state = manager.get_session(mast)
+    index = pd.date_range("2023-01-01", periods=50, freq="10min")
+    state.timeseries_df = pd.DataFrame({"Spd_80m": np.full(50, 7.0)}, index=index)
+    state.raw_timeseries_df = state.timeseries_df.copy()
+    spec = {
+        "location": {"name": "M1", "latitude_ddeg": 55.25, "longitude_ddeg": 7.75, "offset_from_utc_hrs": 1},
+        "points": [{"name": "Spd_80m", "measurement_type_id": "wind_speed", "height_m": 80.0}],
+    }
+    built = test_client.post(f"/api/sessions/{mast}/operations/build_data_model", json={"spec": spec},
+                             headers={"X-GoKaatru-Session": mast})
+    assert built.status_code == 200, built.text
+    written = json.loads((tmp_path / "sessions" / mast / "runconfig.json").read_text())
+    assert "location" not in written, "the route under test writes no configuration file"
+    shown = test_client.get(f"/api/projects/{project_id}").json()["campaigns"][0]
+    assert (shown["latitude"], shown["timezone"]) == (55.25, "UTC+01:00")
+
+    restarted = ProjectRegistry(SessionManager(base_dir=tmp_path / "sessions"))
+    after = restarted.get(project_id)["campaigns"][0]
+    assert (after["latitude"], after["longitude"], after["timezone"]) == (55.25, 7.75, "UTC+01:00")
 
 
 @pytest.mark.parametrize(

@@ -76,6 +76,7 @@ NOT_SELECTABLE = {
     "get_data_coverage": _INVENTORY,
     "get_era5_node_markers": _STORED,
     "get_fixed_prefix_hash": _STORED,
+    "get_scatter_pairs": "marks a selection's records with its highlight instead, so the scatter still draws the rest",
     "get_flag_intervals": "draws the flag table, which records what cleaning removed from every record",
     "get_mast_marker": _STORED,
     "get_operation_log": _STORED,

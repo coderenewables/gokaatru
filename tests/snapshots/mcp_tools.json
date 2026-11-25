@@ -2007,6 +2007,51 @@
  },
  {
   "annotations": null,
+  "description": "Every record of a half-open window where both channels are valid, as time, x and y.\n\n``highlight`` is a selection, a saved name or an inline definition, whose records are\nmarked in ``highlighted`` rather than removed. Refused past MAX_JSON_PAIRS pairs: narrow\nthe window, or read the same pairs as Arrow from ``/sessions/{id}/pairs``.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "end": {
+     "default": "",
+     "type": "string"
+    },
+    "highlight": {
+     "default": "",
+     "type": "string"
+    },
+    "start": {
+     "default": "",
+     "type": "string"
+    },
+    "x_channel": {
+     "type": "string"
+    },
+    "y_channel": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "x_channel",
+    "y_channel"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_scatter_pairs",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
   "description": "Fit Weibull A and k using WAsP m1/m3 moment method (default) or scipy MLE.",
   "execution": null,
   "icons": null,

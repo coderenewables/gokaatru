@@ -9778,6 +9778,129 @@
     "title": "GetRunConfigResult",
     "type": "object"
    },
+   "GetScatterPairsParameters": {
+    "additionalProperties": false,
+    "properties": {
+     "end": {
+      "default": "",
+      "title": "End",
+      "type": "string"
+     },
+     "highlight": {
+      "default": "",
+      "title": "Highlight",
+      "type": "string"
+     },
+     "start": {
+      "default": "",
+      "title": "Start",
+      "type": "string"
+     },
+     "x_channel": {
+      "title": "X Channel",
+      "type": "string"
+     },
+     "y_channel": {
+      "title": "Y Channel",
+      "type": "string"
+     }
+    },
+    "required": [
+     "x_channel",
+     "y_channel"
+    ],
+    "title": "GetScatterPairsParameters",
+    "type": "object"
+   },
+   "GetScatterPairsResult": {
+    "additionalProperties": false,
+    "properties": {
+     "end_ms": {
+      "title": "End Ms",
+      "type": "integer"
+     },
+     "highlight": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/SelectionUsed"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "highlighted": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "boolean"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Highlighted"
+     },
+     "records": {
+      "title": "Records",
+      "type": "integer"
+     },
+     "start_ms": {
+      "title": "Start Ms",
+      "type": "integer"
+     },
+     "time_ms": {
+      "items": {
+       "type": "integer"
+      },
+      "title": "Time Ms",
+      "type": "array"
+     },
+     "window_records": {
+      "title": "Window Records",
+      "type": "integer"
+     },
+     "x": {
+      "items": {
+       "type": "number"
+      },
+      "title": "X",
+      "type": "array"
+     },
+     "x_channel": {
+      "title": "X Channel",
+      "type": "string"
+     },
+     "y": {
+      "items": {
+       "type": "number"
+      },
+      "title": "Y",
+      "type": "array"
+     },
+     "y_channel": {
+      "title": "Y Channel",
+      "type": "string"
+     }
+    },
+    "required": [
+     "x_channel",
+     "y_channel",
+     "start_ms",
+     "end_ms",
+     "window_records",
+     "records",
+     "time_ms",
+     "x",
+     "y",
+     "highlighted",
+     "highlight"
+    ],
+    "title": "GetScatterPairsResult",
+    "type": "object"
+   },
    "GetSeriesWindowParameters": {
     "additionalProperties": false,
     "properties": {
@@ -15152,6 +15275,41 @@
      "name"
     ],
     "title": "SaveScenarioRequest",
+    "type": "object"
+   },
+   "ScatterPairsRequest": {
+    "additionalProperties": false,
+    "description": "The pairs route's query as a body, for a highlight too long for a URL.",
+    "properties": {
+     "end": {
+      "default": "",
+      "title": "End",
+      "type": "string"
+     },
+     "highlight": {
+      "default": "",
+      "title": "Highlight",
+      "type": "string"
+     },
+     "start": {
+      "default": "",
+      "title": "Start",
+      "type": "string"
+     },
+     "x_channel": {
+      "title": "X Channel",
+      "type": "string"
+     },
+     "y_channel": {
+      "title": "Y Channel",
+      "type": "string"
+     }
+    },
+    "required": [
+     "x_channel",
+     "y_channel"
+    ],
+    "title": "ScatterPairsRequest",
     "type": "object"
    },
    "SectorModel": {
@@ -29998,6 +30156,103 @@
     ]
    }
   },
+  "/api/sessions/{session_id}/operations/get_scatter_pairs": {
+   "post": {
+    "description": "Every record of a half-open window where both channels are valid, as time, x and y.\n\n``highlight`` is a selection, a saved name or an inline definition, whose records are\nmarked in ``highlighted`` rather than removed. Refused past MAX_JSON_PAIRS pairs: narrow\nthe window, or read the same pairs as Arrow from ``/sessions/{id}/pairs``.",
+    "operationId": "operation_get_scatter_pairs_api_sessions__session_id__operations_get_scatter_pairs_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/GetScatterPairsParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GetScatterPairsResult",
+         "title": "Response Operation Get Scatter Pairs Api Sessions  Session Id  Operations Get Scatter Pairs Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "get_scatter_pairs",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
   "/api/sessions/{session_id}/operations/get_series_window": {
    "post": {
     "description": "Per-bucket minimum, maximum and valid count of measured channels over a half-open window.\n\n``channels`` is comma-separated; ``start`` and ``end`` are timestamps with a UTC offset,\nempty for the whole record. When the window holds more records than ``buckets`` it is cut\ninto equal-width buckets of ``bucket_ms`` and ``decimated`` is true; otherwise every record\nis its own bucket. Zoom by asking again for a narrower window.",
@@ -33568,6 +33823,192 @@
     "summary": "Get Overview Summary",
     "tags": [
      "analysis"
+    ]
+   }
+  },
+  "/api/sessions/{session_id}/pairs": {
+   "get": {
+    "description": "Every record of [start, end) where both channels are valid, as Arrow, for a scatter.",
+    "operationId": "get_pairs_api_sessions__session_id__pairs_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "x_channel",
+      "required": true,
+      "schema": {
+       "title": "X Channel",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "y_channel",
+      "required": true,
+      "schema": {
+       "title": "Y Channel",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "start",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Start",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "end",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "End",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "highlight",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Highlight",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/vnd.apache.arrow.stream": {}
+      },
+      "description": "The window as an Arrow IPC stream"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Pairs",
+    "tags": [
+     "series"
+    ]
+   },
+   "post": {
+    "description": "The same pairs as the GET route, the query sent as a JSON body.",
+    "operationId": "post_pairs_api_sessions__session_id__pairs_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ScatterPairsRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/vnd.apache.arrow.stream": {}
+      },
+      "description": "The window as an Arrow IPC stream"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Post Pairs",
+    "tags": [
+     "series"
     ]
    }
   },

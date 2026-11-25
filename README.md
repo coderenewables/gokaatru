@@ -4,7 +4,7 @@
 
 GoKaatru ships as two parts that work together:
 
-- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **99 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
+- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **100 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
 - **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison.
 
 State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The frontend's convenience fields are **derived mirrors** of canonical backend keys, not independent state — the mapping is defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
@@ -186,6 +186,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/mcp/catalog` | GET | MCP tool/resource catalog for discovery |
 | `/operations` | GET | Every declared operation: effect, stage, canvas, assistant, network, parameters |
 | `/sessions/{id}/operations/{name}` | POST | Run one operation; JSON body of its parameters (generated, one route per operation). The OpenAPI schema types every request and result (`<Name>Parameters`, `<Name>Result`), and 400 and 502 as `ErrorDetail`; a float in a result may be null, which is how NaN and infinity are sent |
+| `/sessions/{id}/pairs` | GET, POST | A scatter's points as an Arrow stream: `time`, `x`, `y` and, with a `highlight` selection, `highlighted`, described in the schema metadata. Query or body: `x_channel`, `y_channel`, `start`, `end`, `highlight`. The same pairs as `get_scatter_pairs`; not logged as a change. Five years of 10-minute records, 262,800 pairs: 6.3 MB in 14 ms, 59 ms with a 199-vertex lasso highlighted (`python -m tests.measure_series_transport`) |
 | `/sessions/{id}/series` | GET, POST | A window of measured channels as an Arrow stream (`application/vnd.apache.arrow.stream`): per-bucket `<channel>.min`, `.max` and `.count` beside `time`, the window described in the schema metadata (`gokaatru`). Query: `channels`, `start`, `end` (UTC offset required), `buckets`, `selection` (a name or an inline definition); POST takes the same fields as a JSON body, for a lasso too long for a URL, and is not logged as a change. The same window as `get_series_window` |
 | `/sessions/{id}/operations/{name}/preview` | POST | Dry run with the same body: what the operation would return and change, nothing applied (`apply_cleaning_rule`, `undo_cleaning_rule`) |
 
@@ -250,6 +251,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 ### Visualization
 - `plot_windrose`, `plot_weibull`, `plot_diurnal`, `plot_scatter`, `plot_timeseries`, `plot_data_coverage`, `plot_shear_table`, `plot_monthly_means`, `plot_ltc_comparison`, `plot_annual_means`, `plot_uncertainty_breakdown`
 - `get_series_window` — measured channels over a half-open window, reduced on the server to at most `buckets` equal-width time buckets (default 2000), each with every channel's minimum, maximum and valid count, so the band a chart draws is the data's exact envelope. A window of no more records than buckets is returned record by record; zoom by asking for a narrower window. The interface reads the same window as Arrow from `GET /sessions/{id}/series`.
+- `get_scatter_pairs` — every record of a half-open window where two channels are both valid, as time, x and y, for a scatter. `highlight` is a selection (a saved name or an inline definition) whose records are marked in `highlighted` rather than removed, so the scatter still draws every point. The JSON form is refused past a leap year of 10-minute records (`MAX_JSON_PAIRS` = 52,704); the interface reads the same pairs as Arrow from `/sessions/{id}/pairs`, which has no limit.
 - `get_flag_intervals` — the cleaning flags of measured channels over a half-open window, as intervals of consecutive working records flagged by one rule application, each with its rule, reason, actor and time and `next`, the record where its band ends. Per channel `flagged_records` counts every flag in the window. Expanding the intervals gives the flag table back exactly.
 
 Additional figures are reachable through `POST /sessions/{id}/plots/{name}` without being MCP tools in their own right — including `shear_profile`, `shear_timeseries`, `era5_scatter`, `mast_shadow`, `qc_flags`, `ltc_scatter`, `ltc_residuals`, `ltc_monthly`, `ltc_convergence`, and `uncertainty_tornado`.
@@ -561,7 +563,7 @@ with `assistant=False` is not exposed at all.
 
 | Tier | Count | Exposed when |
 |---|---|---|
-| Read-only — query, compute, plot, series windows, flag intervals, the operation log, listing and resolving selections | 54 | always |
+| Read-only — query, compute, plot, series windows, scatter pairs, flag intervals, the operation log, listing and resolving selections | 55 | always |
 | Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty, the atmospheric diagnostic (it records the density the energy sensitivity uses), the clipping analysis (it records the inter-annual variability the uncertainty model uses), undo and redo, defining and deleting selections | 33 | only with `allow_mutating_tools: true` |
 
 The remaining 12 of the 98 registered tools are declared `assistant=False` and

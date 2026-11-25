@@ -243,17 +243,22 @@ def _inside_polygon(definition: dict[str, Any], frame: pd.DataFrame) -> np.ndarr
     candidates = np.flatnonzero(np.isfinite(x) & np.isfinite(y) & (y >= min(ys)) & (y < max(ys)))
     if len(candidates) == 0:
         return mask
-    px, py = x[candidates], y[candidates]
-    inside = np.zeros(len(candidates), dtype=bool)
+    # An edge is straddled exactly by the records with min(yi, yj) <= y < max(yi, yj), so with
+    # the records sorted by y each edge tests only its own slice of them, not every record.
+    order = candidates[np.argsort(y[candidates], kind="stable")]
+    px, py = x[order], y[order]
+    inside = np.zeros(len(order), dtype=bool)
     previous = len(vertices) - 1
     for current in range(len(vertices)):
         xi, yi = vertices[current]
         xj, yj = vertices[previous]
-        straddles = (yi > py) != (yj > py)
-        if straddles.any():
-            with np.errstate(divide="ignore", invalid="ignore"):
-                crossing = (xj - xi) * (py - yi) / (yj - yi) + xi
-            inside ^= straddles & (px < crossing)
         previous = current
-    mask[candidates] = inside
+        if yi == yj:
+            continue
+        first, last = np.searchsorted(py, [min(yi, yj), max(yi, yj)], side="left")
+        if first == last:
+            continue
+        crossing = (xj - xi) * (py[first:last] - yi) / (yj - yi) + xi
+        inside[first:last] ^= px[first:last] < crossing
+    mask[order] = inside
     return mask

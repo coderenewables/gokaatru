@@ -2416,6 +2416,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/get_scatter_pairs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * get_scatter_pairs
+         * @description Every record of a half-open window where both channels are valid, as time, x and y.
+         *
+         *     ``highlight`` is a selection, a saved name or an inline definition, whose records are
+         *     marked in ``highlighted`` rather than removed. Refused past MAX_JSON_PAIRS pairs: narrow
+         *     the window, or read the same pairs as Arrow from ``/sessions/{id}/pairs``.
+         */
+        post: operations["operation_get_scatter_pairs_api_sessions__session_id__operations_get_scatter_pairs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/get_series_window": {
         parameters: {
             query?: never;
@@ -3190,6 +3214,30 @@ export interface paths {
         get: operations["get_overview_summary_api_sessions__session_id__overview_summary_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/pairs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Pairs
+         * @description Every record of [start, end) where both channels are valid, as Arrow, for a scatter.
+         */
+        get: operations["get_pairs_api_sessions__session_id__pairs_get"];
+        put?: never;
+        /**
+         * Post Pairs
+         * @description The same pairs as the GET route, the query sent as a JSON body.
+         */
+        post: operations["post_pairs_api_sessions__session_id__pairs_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7150,6 +7198,52 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** GetScatterPairsParameters */
+        GetScatterPairsParameters: {
+            /**
+             * End
+             * @default
+             */
+            end?: string;
+            /**
+             * Highlight
+             * @default
+             */
+            highlight?: string;
+            /**
+             * Start
+             * @default
+             */
+            start?: string;
+            /** X Channel */
+            x_channel: string;
+            /** Y Channel */
+            y_channel: string;
+        };
+        /** GetScatterPairsResult */
+        GetScatterPairsResult: {
+            /** End Ms */
+            end_ms: number;
+            highlight: components["schemas"]["SelectionUsed"] | null;
+            /** Highlighted */
+            highlighted: boolean[] | null;
+            /** Records */
+            records: number;
+            /** Start Ms */
+            start_ms: number;
+            /** Time Ms */
+            time_ms: number[];
+            /** Window Records */
+            window_records: number;
+            /** X */
+            x: number[];
+            /** X Channel */
+            x_channel: string;
+            /** Y */
+            y: number[];
+            /** Y Channel */
+            y_channel: string;
+        };
         /** GetSeriesWindowParameters */
         GetSeriesWindowParameters: {
             /**
@@ -8828,6 +8922,31 @@ export interface components {
         SaveScenarioRequest: {
             /** Name */
             name: string;
+        };
+        /**
+         * ScatterPairsRequest
+         * @description The pairs route's query as a body, for a highlight too long for a URL.
+         */
+        ScatterPairsRequest: {
+            /**
+             * End
+             * @default
+             */
+            end?: string;
+            /**
+             * Highlight
+             * @default
+             */
+            highlight?: string;
+            /**
+             * Start
+             * @default
+             */
+            start?: string;
+            /** X Channel */
+            x_channel: string;
+            /** Y Channel */
+            y_channel: string;
         };
         /** SectorModel */
         SectorModel: {
@@ -15746,6 +15865,61 @@ export interface operations {
             };
         };
     };
+    operation_get_scatter_pairs_api_sessions__session_id__operations_get_scatter_pairs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["GetScatterPairsParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetScatterPairsResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
     operation_get_series_window_api_sessions__session_id__operations_get_series_window_post: {
         parameters: {
             query?: never;
@@ -17751,6 +17925,100 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_pairs_api_sessions__session_id__pairs_get: {
+        parameters: {
+            query: {
+                x_channel: string;
+                y_channel: string;
+                start?: string;
+                end?: string;
+                highlight?: string;
+            };
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The window as an Arrow IPC stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.apache.arrow.stream": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_pairs_api_sessions__session_id__pairs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScatterPairsRequest"];
+            };
+        };
+        responses: {
+            /** @description The window as an Arrow IPC stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.apache.arrow.stream": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
                 };
             };
             /** @description Validation Error */

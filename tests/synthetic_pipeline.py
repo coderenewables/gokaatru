@@ -31,6 +31,8 @@ READ_ARGUMENTS: dict[str, object] = {
     "sd_sensor": "Spd_100m_sd",
     "sensor_names": "Spd_100m,Spd_80m",
     "channels": "Spd_100m,Spd_80m",
+    "x_channel": "Spd_80m",
+    "y_channel": "Spd_100m",
     "sweep_id": "disclosure",
     "name": "north",
     "speed_col": "Ensemble_Speed",

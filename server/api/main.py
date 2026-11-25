@@ -36,7 +36,7 @@ _SESSION_PATH = re.compile(r"^/api/sessions/([^/]+)/")
 _CHANGING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 #: Hand-written routes that read although they are POSTed to, because their query does not
 #: fit a URL. They are neither logged as changes nor saved.
-_READING_POST_ROUTES = frozenset({"/api/sessions/{session_id}/series"})
+_READING_POST_ROUTES = frozenset({"/api/sessions/{session_id}/series", "/api/sessions/{session_id}/pairs"})
 
 
 def _get_allowed_origins() -> list[str]:

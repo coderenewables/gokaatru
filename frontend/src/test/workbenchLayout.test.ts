@@ -43,7 +43,7 @@ describe("the workbench layout in browser storage", () => {
   });
 
   it("names the Prepare panels of plan §3.2 and the reanalysis panel", () => {
-    expect(Object.values(PANELS)).toEqual(["Data", "Reanalysis", "Timeline", "Scatter", "Wind rose", "Profile", "Inspector"]);
+    expect(Object.values(PANELS)).toEqual(["Data", "Reanalysis", "Timeline", "Scatter", "Wind rose", "Profile", "Inspector", "Cleaning rules", "Sensor overview"]);
   });
 
   it("keeps one arrangement per phase, each refusing another phase's panels", () => {

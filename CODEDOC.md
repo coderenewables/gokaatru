@@ -395,6 +395,11 @@ frontend/src/
 │   │                     #   tower-shadow rule
 │   ├── profile/          # SVG mean profile (compute_vertical_structure) for every record
 │   │                     #   and the selection, with each power-law exponent
+│   ├── prepare/          # RulesPanel: the cleaning rules as forms from list_cleaning_rules'
+│   │                     #   default parameters, preview (dry run) then apply; OverviewPanel:
+│   │                     #   QC, sensor comparison, MCP readiness, mast effects, atmosphere,
+│   │                     #   each from its operation, a refusal shown as the server's reason;
+│   │                     #   rules.ts: the request a rule's form makes (decisions/0015.13)
 │   ├── reanalysis/       # BrightHub and EarthDataHub acquisition, one node at a time
 │   ├── charts/, dnd.tsx  # which channels each chart draws; the drop context resolving a
 │   │                     #   channel dropped on a chart

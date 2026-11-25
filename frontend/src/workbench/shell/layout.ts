@@ -20,6 +20,8 @@ export const PANELS = {
   rose: "Wind rose",
   profile: "Profile",
   inspector: "Inspector",
+  rules: "Cleaning rules",
+  overview: "Sensor overview",
 } as const;
 
 /** Every phase's panels; ids are unique across phases, as dockview names components by them. */
@@ -53,8 +55,8 @@ export function phaseFromAddress(search: string): PhaseId {
 }
 
 /** Versioned with the panel set: an arrangement saved before a panel existed would hide it.
- * Prepare's key is the one Phase 2 stored, so a saved arrangement carries over. */
-export const LAYOUT_KEY = "gk-workbench-layout-v2";
+ * v3 adds the cleaning rules and the sensor overview, which a v2 arrangement lacks. */
+export const LAYOUT_KEY = "gk-workbench-layout-v3";
 
 export function layoutKey(phase: PhaseId): string {
   return phase === "prepare" ? LAYOUT_KEY : `gk-workbench-layout-v1-${phase}`;
@@ -71,7 +73,9 @@ const ARRANGEMENT: Record<PhaseId, { panels: Placement[]; sizes: [PanelId, numbe
       { id: "data", next: { to: "timeline", direction: "left" } },
       { id: "reanalysis", next: { to: "data", direction: "within" }, inactive: true },
       { id: "inspector", next: { to: "timeline", direction: "right" } },
+      { id: "rules", next: { to: "inspector", direction: "within" }, inactive: true },
       { id: "scatter", next: { to: "timeline", direction: "below" } },
+      { id: "overview", next: { to: "scatter", direction: "within" }, inactive: true },
       { id: "rose", next: { to: "scatter", direction: "right" } },
       { id: "profile", next: { to: "rose", direction: "right" } },
     ],

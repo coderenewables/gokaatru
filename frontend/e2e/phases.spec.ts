@@ -7,7 +7,7 @@ import { newCampaign, pageErrors } from "./fixtures";
 // the address names the phase, and each phase keeps its own arrangement.
 
 const PHASE_TABS: Record<string, string[]> = {
-  Prepare: ["Data", "Reanalysis", "Timeline", "Scatter", "Wind rose", "Profile", "Inspector"],
+  Prepare: ["Data", "Reanalysis", "Timeline", "Scatter", "Wind rose", "Profile", "Inspector", "Cleaning rules", "Sensor overview"],
   Model: ["Methods", "Pipeline", "Step"],
   Run: ["Sweep design", "Run"],
   Interrogate: ["Scenarios", "Distribution", "Parallel coordinates", "Sensitivity", "Gates", "Side by side"],

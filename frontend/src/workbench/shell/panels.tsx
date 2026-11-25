@@ -7,6 +7,8 @@ import { PalettePanel } from "../model/PalettePanel";
 import { PipelinePanel } from "../model/PipelinePanel";
 import { StepPanel } from "../model/StepPanel";
 import { ProfilePanel } from "../profile/ProfilePanel";
+import { OverviewPanel } from "../prepare/OverviewPanel";
+import { RulesPanel } from "../prepare/RulesPanel";
 import { ReanalysisPanel } from "../reanalysis/ReanalysisPanel";
 import { RosePanel } from "../rose/RosePanel";
 import { ScatterPanel } from "../scatter/ScatterPanel";
@@ -32,6 +34,8 @@ const EMPTY: Record<PanelId, string> = {
   profile: "Mean speed by height for the selection.",
   reanalysis: "Reanalysis nodes around the site, taken one at a time and interpolated to it.",
   inspector: "What is selected, and what can be done with it.",
+  rules: "The cleaning rules, as forms: choose one, preview what it would set missing, apply.",
+  overview: "Quality control, sensor comparison, MCP readiness, mast effects and atmosphere, from the campaign's data.",
   palette: "The methods, by stage. Drag one onto the pipeline.",
   pipeline: "The campaign's chain of methods, in the order their inputs require.",
   step: "The selected step's parameters, status and result.",
@@ -60,8 +64,10 @@ const BUILT: Partial<Record<PanelId, FunctionComponent<IDockviewPanelProps>>> = 
   palette: PalettePanel,
   pipeline: PipelinePanel,
   profile: ProfilePanel,
+  overview: OverviewPanel,
   reanalysis: ReanalysisPanel,
   rose: RosePanel,
+  rules: RulesPanel,
   scatter: ScatterPanel,
   step: StepPanel,
   timeline: TimelinePanel,

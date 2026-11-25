@@ -415,6 +415,11 @@ frontend/src/
 │   │                     #   flagging it (instrument columns, reason, note, preview, apply:
 │   │                     #   one exclude_selection rule), a proposed rule, the focused flag
 │   │                     #   (who, when, why; remove its rule)
+│   ├── interrogate/      # store.ts: Interrogate's crossfilter (decisions/0015.7) over a sweep's
+│   │                     #   rows, terms per view (histogram ranges, parallel brushes, level
+│   │                     #   filters), pins (two at most), filtered config hashes; the
+│   │                     #   Scenarios, Distribution and Parallel panels; useSweeps.ts reads
+│   │                     #   GET /sweep and /sweep/{id}
 │   ├── history/          # undo, redo and the status bar's history (get_operation_log,
 │   │                     #   get_fixed_prefix_hash), shared with the assistant and MCP
 │   ├── model/            # the Model phase (P3-10, decisions/0015.1-0015.5): operations.ts

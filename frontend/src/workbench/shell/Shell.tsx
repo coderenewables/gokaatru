@@ -8,6 +8,7 @@ import { WindowDrop } from "../datamodel/WindowDrop";
 import { WorkbenchDnd } from "../dnd";
 import { usePipeline } from "../model/store";
 import { resetRunPhase } from "../run/store";
+import { useInterrogate } from "../interrogate/store";
 import { useSelection } from "../selection/store";
 import { useTheme } from "../theme/theme";
 import { useHistory } from "../history/useHistory";
@@ -69,6 +70,7 @@ export function Shell({ sessionId, projectId }: ShellProps) {
     useSelection.getState().clearAll();
     useCharts.getState().reset();
     resetRunPhase();
+    useInterrogate.getState().reset();
   }, [sessionId]);
 
   const onReady = useCallback((event: DockviewReadyEvent) => {

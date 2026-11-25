@@ -1,0 +1,155 @@
+.gk-interrogate {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gk-int-controls,
+.gk-int-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+
+.gk-int-levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gk-int-levels-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gk-int-levels-pick button[aria-pressed="true"] {
+  border-color: var(--gk-accent);
+  background: var(--gk-accent);
+  color: var(--gk-accent-text);
+}
+
+.gk-int-table-wrap {
+  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 120px;
+  border: 1px solid var(--gk-border);
+  border-radius: 4px;
+}
+
+.gk-compare.gk-int-table th,
+.gk-compare.gk-int-table td {
+  padding: 3px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.gk-compare.gk-int-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--gk-surface-2);
+  font-weight: 600;
+}
+
+.gk-compare.gk-int-table .gk-num {
+  text-align: right;
+}
+
+.gk-row-pinned {
+  background: var(--gk-accent-soft);
+}
+
+.gk-pin {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.gk-pin[aria-pressed="true"] {
+  border-color: var(--gk-accent);
+  background: var(--gk-accent);
+  color: var(--gk-accent-text);
+}
+
+.gk-sort {
+  border: none;
+  background: none;
+  color: inherit;
+  font-weight: 600;
+  padding: 0;
+}
+
+.gk-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.gk-int-chart {
+  width: 100%;
+}
+
+.gk-int-svg {
+  display: block;
+  touch-action: none;
+  user-select: none;
+  cursor: crosshair;
+}
+
+.gk-int-axis {
+  stroke: var(--gk-border-strong);
+  stroke-width: 1;
+}
+
+.gk-int-tick {
+  fill: var(--gk-muted);
+  font-size: 10px;
+}
+
+.gk-axis-title {
+  fill: var(--gk-text);
+  font-size: 11px;
+}
+
+.gk-hist-context {
+  fill: var(--gk-border-strong);
+}
+
+.gk-hist-kept {
+  fill: var(--gk-accent);
+}
+
+.gk-brush {
+  fill: var(--gk-select-soft);
+  stroke: var(--gk-accent);
+  stroke-width: 1.2;
+  pointer-events: none;
+}
+
+.gk-line {
+  fill: none;
+  stroke-linejoin: round;
+}
+
+.gk-line-faded {
+  stroke: var(--gk-border-strong);
+  stroke-width: 1;
+  opacity: 0.35;
+}
+
+.gk-line-kept {
+  stroke: var(--gk-accent);
+  stroke-width: 1.3;
+  opacity: 0.6;
+}
+
+.gk-line-ghost {
+  stroke: var(--gk-flag);
+  stroke-width: 1.3;
+  stroke-dasharray: 4 3;
+  opacity: 0.7;
+}

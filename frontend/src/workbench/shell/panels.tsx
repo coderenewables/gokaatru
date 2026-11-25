@@ -6,6 +6,9 @@ import { InspectorPanel } from "../inspector/InspectorPanel";
 import { PalettePanel } from "../model/PalettePanel";
 import { PipelinePanel } from "../model/PipelinePanel";
 import { StepPanel } from "../model/StepPanel";
+import { DistributionPanel } from "../interrogate/DistributionPanel";
+import { ParallelPanel } from "../interrogate/ParallelPanel";
+import { ScenariosPanel } from "../interrogate/ScenariosPanel";
 import { ProfilePanel } from "../profile/ProfilePanel";
 import { OverviewPanel } from "../prepare/OverviewPanel";
 import { RulesPanel } from "../prepare/RulesPanel";
@@ -62,6 +65,9 @@ function emptyPanel(id: PanelId): FunctionComponent<IDockviewPanelProps> {
 /** The view each panel id renders; a view not built yet shows what it will hold. */
 const BUILT: Partial<Record<PanelId, FunctionComponent<IDockviewPanelProps>>> = {
   data: DataPanel,
+  scenarios: ScenariosPanel,
+  distribution: DistributionPanel,
+  parallel: ParallelPanel,
   inspector: InspectorPanel,
   palette: PalettePanel,
   pipeline: PipelinePanel,

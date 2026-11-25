@@ -1414,6 +1414,43 @@
  },
  {
   "annotations": null,
+  "description": "Cleaning flags of measured channels over a half-open window, as intervals of consecutive\nrecords flagged by one rule, with the rule, reason, actor and time of each.\n\n``channels`` is comma-separated; ``start`` and ``end`` are timestamps with a UTC offset,\nempty for the whole record. ``next`` is the record after an interval, where its band ends.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "channels": {
+     "type": "string"
+    },
+    "end": {
+     "default": "",
+     "type": "string"
+    },
+    "start": {
+     "default": "",
+     "type": "string"
+    }
+   },
+   "required": [
+    "channels"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_flag_intervals",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
   "description": "Undo the last cleaning rule or configuration change still in the history.",
   "execution": null,
   "icons": null,

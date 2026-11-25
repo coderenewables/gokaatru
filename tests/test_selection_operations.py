@@ -76,6 +76,7 @@ NOT_SELECTABLE = {
     "get_data_coverage": _INVENTORY,
     "get_era5_node_markers": _STORED,
     "get_fixed_prefix_hash": _STORED,
+    "get_flag_intervals": "draws the flag table, which records what cleaning removed from every record",
     "get_mast_marker": _STORED,
     "get_operation_log": _STORED,
     "get_period_of_record": _INVENTORY,

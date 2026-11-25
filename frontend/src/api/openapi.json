@@ -3274,6 +3274,28 @@
     "title": "ChannelBuckets",
     "type": "object"
    },
+   "ChannelFlags": {
+    "additionalProperties": false,
+    "properties": {
+     "flagged_records": {
+      "title": "Flagged Records",
+      "type": "integer"
+     },
+     "intervals": {
+      "items": {
+       "$ref": "#/components/schemas/FlagInterval"
+      },
+      "title": "Intervals",
+      "type": "array"
+     }
+    },
+    "required": [
+     "flagged_records",
+     "intervals"
+    ],
+    "title": "ChannelFlags",
+    "type": "object"
+   },
    "ChatMessage": {
     "properties": {
      "content": {
@@ -8961,6 +8983,68 @@
     "title": "FindEra5NodesResult",
     "type": "object"
    },
+   "FlagInterval": {
+    "additionalProperties": false,
+    "description": "Consecutive working records of one channel flagged by one rule application.",
+    "properties": {
+     "actor": {
+      "title": "Actor",
+      "type": "string"
+     },
+     "first": {
+      "title": "First",
+      "type": "string"
+     },
+     "flagged_at": {
+      "title": "Flagged At",
+      "type": "string"
+     },
+     "last": {
+      "title": "Last",
+      "type": "string"
+     },
+     "next": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Next"
+     },
+     "reason": {
+      "title": "Reason",
+      "type": "string"
+     },
+     "records": {
+      "title": "Records",
+      "type": "integer"
+     },
+     "rule_sequence": {
+      "title": "Rule Sequence",
+      "type": "integer"
+     },
+     "rule_type": {
+      "title": "Rule Type",
+      "type": "string"
+     }
+    },
+    "required": [
+     "first",
+     "last",
+     "next",
+     "records",
+     "rule_sequence",
+     "rule_type",
+     "reason",
+     "actor",
+     "flagged_at"
+    ],
+    "title": "FlagInterval",
+    "type": "object"
+   },
    "FlagSummary": {
     "additionalProperties": false,
     "properties": {
@@ -9357,6 +9441,72 @@
      "cleaning_actions_count"
     ],
     "title": "GetFixedPrefixHashResult",
+    "type": "object"
+   },
+   "GetFlagIntervalsParameters": {
+    "additionalProperties": false,
+    "properties": {
+     "channels": {
+      "title": "Channels",
+      "type": "string"
+     },
+     "end": {
+      "default": "",
+      "title": "End",
+      "type": "string"
+     },
+     "start": {
+      "default": "",
+      "title": "Start",
+      "type": "string"
+     }
+    },
+    "required": [
+     "channels"
+    ],
+    "title": "GetFlagIntervalsParameters",
+    "type": "object"
+   },
+   "GetFlagIntervalsResult": {
+    "additionalProperties": false,
+    "properties": {
+     "channels": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/ChannelFlags"
+      },
+      "title": "Channels",
+      "type": "object"
+     },
+     "interval_count": {
+      "title": "Interval Count",
+      "type": "integer"
+     },
+     "interval_limit": {
+      "title": "Interval Limit",
+      "type": "integer"
+     },
+     "records": {
+      "title": "Records",
+      "type": "integer"
+     },
+     "truncated": {
+      "title": "Truncated",
+      "type": "boolean"
+     },
+     "unplaced_flags": {
+      "title": "Unplaced Flags",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "records",
+     "channels",
+     "interval_count",
+     "truncated",
+     "interval_limit",
+     "unplaced_flags"
+    ],
+    "title": "GetFlagIntervalsResult",
     "type": "object"
    },
    "GetMastMarkerParameters": {
@@ -29358,6 +29508,103 @@
      }
     },
     "summary": "get_fixed_prefix_hash",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
+  "/api/sessions/{session_id}/operations/get_flag_intervals": {
+   "post": {
+    "description": "Cleaning flags of measured channels over a half-open window, as intervals of consecutive\nrecords flagged by one rule, with the rule, reason, actor and time of each.\n\n``channels`` is comma-separated; ``start`` and ``end`` are timestamps with a UTC offset,\nempty for the whole record. ``next`` is the record after an interval, where its band ends.",
+    "operationId": "operation_get_flag_intervals_api_sessions__session_id__operations_get_flag_intervals_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/GetFlagIntervalsParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GetFlagIntervalsResult",
+         "title": "Response Operation Get Flag Intervals Api Sessions  Session Id  Operations Get Flag Intervals Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "get_flag_intervals",
     "tags": [
      "operations"
     ]

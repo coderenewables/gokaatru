@@ -18,7 +18,7 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     env:
       # Adding or removing an MCP tool is a deliberate change: update this with it.
-      EXPECTED_MCP_TOOLS: "98"
+      EXPECTED_MCP_TOOLS: "99"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

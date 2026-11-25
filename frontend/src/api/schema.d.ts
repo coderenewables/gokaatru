@@ -2312,6 +2312,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/get_flag_intervals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * get_flag_intervals
+         * @description Cleaning flags of measured channels over a half-open window, as intervals of consecutive
+         *     records flagged by one rule, with the rule, reason, actor and time of each.
+         *
+         *     ``channels`` is comma-separated; ``start`` and ``end`` are timestamps with a UTC offset,
+         *     empty for the whole record. ``next`` is the record after an interval, where its band ends.
+         */
+        post: operations["operation_get_flag_intervals_api_sessions__session_id__operations_get_flag_intervals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/get_mast_marker": {
         parameters: {
             query?: never;
@@ -5205,6 +5229,13 @@ export interface components {
             /** Min */
             min: (number | null)[];
         };
+        /** ChannelFlags */
+        ChannelFlags: {
+            /** Flagged Records */
+            flagged_records: number;
+            /** Intervals */
+            intervals: components["schemas"]["FlagInterval"][];
+        };
         /** ChatMessage */
         ChatMessage: {
             /** Content */
@@ -6854,6 +6885,30 @@ export interface components {
             /** Nodes */
             nodes: components["schemas"]["Era5Node"][];
         };
+        /**
+         * FlagInterval
+         * @description Consecutive working records of one channel flagged by one rule application.
+         */
+        FlagInterval: {
+            /** Actor */
+            actor: string;
+            /** First */
+            first: string;
+            /** Flagged At */
+            flagged_at: string;
+            /** Last */
+            last: string;
+            /** Next */
+            next: string | null;
+            /** Reason */
+            reason: string;
+            /** Records */
+            records: number;
+            /** Rule Sequence */
+            rule_sequence: number;
+            /** Rule Type */
+            rule_type: string;
+        };
         /** FlagSummary */
         FlagSummary: {
             /** By Rule */
@@ -6985,6 +7040,38 @@ export interface components {
             fixed_prefix_hash: string;
             /** Reanalysis Sources */
             reanalysis_sources: string[];
+        };
+        /** GetFlagIntervalsParameters */
+        GetFlagIntervalsParameters: {
+            /** Channels */
+            channels: string;
+            /**
+             * End
+             * @default
+             */
+            end?: string;
+            /**
+             * Start
+             * @default
+             */
+            start?: string;
+        };
+        /** GetFlagIntervalsResult */
+        GetFlagIntervalsResult: {
+            /** Channels */
+            channels: {
+                [key: string]: components["schemas"]["ChannelFlags"];
+            };
+            /** Interval Count */
+            interval_count: number;
+            /** Interval Limit */
+            interval_limit: number;
+            /** Records */
+            records: number;
+            /** Truncated */
+            truncated: boolean;
+            /** Unplaced Flags */
+            unplaced_flags: number;
         };
         /** GetMastMarkerParameters */
         GetMastMarkerParameters: Record<string, never>;
@@ -15353,6 +15440,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GetFixedPrefixHashResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
+    operation_get_flag_intervals_api_sessions__session_id__operations_get_flag_intervals_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["GetFlagIntervalsParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetFlagIntervalsResult"];
                 };
             };
             /** @description Refused: the request cannot be answered as asked */

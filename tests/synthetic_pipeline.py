@@ -165,6 +165,7 @@ def run_pipeline(workspace: Path) -> tuple[SessionState, list[tuple[str, dict[st
         run(name, speed_sensor="Spd_100m")
     run("compute_qc_diagnostics")
     run("get_series_window", channels="Spd_100m")
+    run("get_flag_intervals", channels="Spd_100m")
 
     state.reanalysis_interpolated = {"era5": state.era5_interpolated_df.copy()}
     spec = SweepSpec(

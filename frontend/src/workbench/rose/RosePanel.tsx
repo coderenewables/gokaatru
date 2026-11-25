@@ -9,7 +9,8 @@ import { instrumentsKey } from "../datatree/DataPanel";
 import type { ChartDrop } from "../dnd";
 import { useSelection, useSharedSelection } from "../selection/store";
 import { useCampaign } from "../shell/context";
-import { LABELS, SECTORS, bearingOf, sectorOf, sectorsOf, termOf, toggled, wedge } from "./geometry";
+import { useRuleDraft } from "../flags/draft";
+import { LABELS, SECTORS, bearingOf, contiguousBounds, sectorOf, sectorsOf, termOf, toggled, wedge } from "./geometry";
 import "./rose.css";
 
 type Instrument = Schemas["Instrument"];
@@ -76,6 +77,8 @@ export function RosePanel() {
 
   const { setNodeRef, isOver } = useDroppable({ id: "rose-drop", data: { kind: "rose" } satisfies ChartDrop });
   const picked = direction ? sectorsOf(term, direction) : [];
+  const shadow = contiguousBounds(picked);
+  const propose = useRuleDraft((state) => state.propose);
   const dragged = useRef<{ start: number; visited: Set<number>; extend: boolean } | null>(null);
 
   const scale = useMemo(() => {
@@ -194,6 +197,23 @@ export function RosePanel() {
           </button>
         ))}
       </div>
+      <button
+        type="button"
+        className="gk-button"
+        disabled={!shadow || !speed}
+        title={shadow ? undefined : "Select one run of adjacent sectors first"}
+        onClick={() => {
+          if (!shadow || !speed) return;
+          propose({
+            rule_type: "tower_shadow",
+            sensor: speed,
+            params: { exclude_sectors: shadow },
+            label: `Tower shadow on ${speed}: directions ${shadow[0]}° to ${shadow[1]}°, read from the vane paired with ${speed} in the data model. Unlike a selected sector, tower_shadow includes ${shadow[1]}° itself.`,
+          });
+        }}
+      >
+        Make a tower-shadow rule
+      </button>
     </div>
   );
 }

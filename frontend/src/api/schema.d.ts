@@ -7919,6 +7919,8 @@ export interface components {
         ListCleaningRulesParameters: Record<string, never>;
         /** ListCleaningRulesResult */
         ListCleaningRulesResult: {
+            /** Manual Flag Reasons */
+            manual_flag_reasons: string[];
             /** Order Is Material */
             order_is_material: boolean;
             /** Order Note */

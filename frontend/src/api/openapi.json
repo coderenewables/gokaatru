@@ -11458,6 +11458,13 @@
    "ListCleaningRulesResult": {
     "additionalProperties": false,
     "properties": {
+     "manual_flag_reasons": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Manual Flag Reasons",
+      "type": "array"
+     },
      "order_is_material": {
       "title": "Order Is Material",
       "type": "boolean"
@@ -11484,6 +11491,7 @@
     },
     "required": [
      "rules",
+     "manual_flag_reasons",
      "order_is_material",
      "order_note",
      "outlier_detection",

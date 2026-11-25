@@ -734,6 +734,8 @@ def _list_cleaning_rules(_state: SessionState) -> dict:
     ]
     return {
         "rules": rules,
+        # The reasons a flag drawn by hand may give, so no interface keeps its own copy.
+        "manual_flag_reasons": list(MANUAL_FLAG_REASONS),
         # F-70: the order these are applied in changes the answer, and nothing said so.
         "order_is_material": True,
         "order_note": RULE_ORDER_NOTE,

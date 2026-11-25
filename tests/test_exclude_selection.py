@@ -191,7 +191,10 @@ def test_the_log_summary_carries_the_reason() -> None:
 
 
 def test_the_rule_and_its_reasons_are_listed() -> None:
+    from server.tools.cleaning import _list_cleaning_rules
+
     assert set(RULES["exclude_selection"]) == {"definition", "sensors", "reason", "note"}
+    assert _list_cleaning_rules(SessionState())["manual_flag_reasons"] == list(MANUAL_FLAG_REASONS)
     assert MANUAL_FLAG_REASONS == (
         "icing", "maintenance", "instrument_fault", "mast_or_boom_effect", "logger_or_transfer_fault", "suspect",
         "other",

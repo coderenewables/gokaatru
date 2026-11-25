@@ -54,6 +54,20 @@ export function termOf(sectors: number[], channel: string): Definition | null {
   return terms.length === 1 ? terms[0] : { kind: "union", of: terms };
 }
 
+/** The bounds, in degrees, of sectors that form one run (wrapping through north), or null
+ * when they do not: a tower-shadow rule takes one sector range. */
+export function contiguousBounds(sectors: number[]): [number, number] | null {
+  if (sectors.length === 0 || sectors.length === SECTORS) return null;
+  const held = new Set(sectors);
+  const first = sectors.find((k) => !held.has((k - 1 + SECTORS) % SECTORS));
+  if (first === undefined) return null;
+  let length = 0;
+  while (held.has((first + length) % SECTORS)) length += 1;
+  if (length !== sectors.length) return null;
+  const last = (first + length - 1) % SECTORS;
+  return [sectorTerm(first, "").from_deg, sectorTerm(last, "").to_deg % 360];
+}
+
 /** An SVG path of a wedge of sector k reaching radius r around (0, 0). */
 export function wedge(k: number, r: number): string {
   if (r <= 0.5) return "";

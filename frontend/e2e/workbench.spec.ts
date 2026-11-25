@@ -6,7 +6,7 @@ import { campaignWithData, newCampaign, pageErrors, workbenchUrl } from "./fixtu
 // The workbench shell at /workbench/ (P2-9, decisions/0006, 0012, 0014.9): a campaign opens
 // the docked panels, the arrangement persists, both themes render, and axe finds nothing.
 
-const PANELS = ["Data", "Timeline", "Scatter", "Wind rose", "Profile", "Inspector"];
+const PANELS = ["Data", "Reanalysis", "Timeline", "Scatter", "Wind rose", "Profile", "Inspector"];
 
 function tab(page: Page, title: string): Locator {
   return page.locator(".dv-tab", { hasText: title });

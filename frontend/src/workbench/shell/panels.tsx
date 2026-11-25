@@ -4,6 +4,7 @@ import type { FunctionComponent } from "react";
 import { DataPanel } from "../datatree/DataPanel";
 import { InspectorPanel } from "../inspector/InspectorPanel";
 import { ProfilePanel } from "../profile/ProfilePanel";
+import { ReanalysisPanel } from "../reanalysis/ReanalysisPanel";
 import { RosePanel } from "../rose/RosePanel";
 import { ScatterPanel } from "../scatter/ScatterPanel";
 import { TimelinePanel } from "../timeline/TimelinePanel";
@@ -26,6 +27,7 @@ const EMPTY: Record<PanelId, string> = {
   scatter: "Two channels against each other. Lasso the points that disagree.",
   rose: "Direction frequency by sector. Click a sector to select it.",
   profile: "Mean speed by height for the selection.",
+  reanalysis: "Reanalysis nodes around the site, taken one at a time and interpolated to it.",
   inspector: "What is selected, and what can be done with it.",
 };
 
@@ -42,6 +44,7 @@ const BUILT: Partial<Record<PanelId, FunctionComponent<IDockviewPanelProps>>> = 
   data: DataPanel,
   inspector: InspectorPanel,
   profile: ProfilePanel,
+  reanalysis: ReanalysisPanel,
   rose: RosePanel,
   scatter: ScatterPanel,
   timeline: TimelinePanel,

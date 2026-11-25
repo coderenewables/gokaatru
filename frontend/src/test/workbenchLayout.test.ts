@@ -33,7 +33,7 @@ describe("the workbench layout in browser storage", () => {
   });
 
   it("names the six Prepare panels of plan §3.2", () => {
-    expect(Object.values(PANELS)).toEqual(["Data", "Timeline", "Scatter", "Wind rose", "Profile", "Inspector"]);
+    expect(Object.values(PANELS)).toEqual(["Data", "Reanalysis", "Timeline", "Scatter", "Wind rose", "Profile", "Inspector"]);
   });
 
   it("falls back quietly when storage refuses", () => {

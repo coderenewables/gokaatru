@@ -1,0 +1,88 @@
+.gk-reanalysis {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 13px;
+}
+
+.gk-re-group {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.gk-re-group h2,
+.gk-re-group legend {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gk-muted);
+  margin: 0 0 6px;
+  padding: 0;
+}
+
+.gk-re-group p {
+  margin: 0 0 4px;
+}
+
+.gk-re-choice {
+  display: block;
+  padding: 2px 0;
+}
+
+.gk-re-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.gk-re-form {
+  display: grid;
+  gap: 8px;
+  max-width: 22em;
+}
+
+.gk-re-form label,
+.gk-re-row label {
+  display: grid;
+  gap: 2px;
+}
+
+.gk-reanalysis input[type="text"],
+.gk-reanalysis input[type="password"],
+.gk-reanalysis input[type="date"],
+.gk-re-form input {
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--gk-border-strong);
+  border-radius: 4px;
+  background: var(--gk-surface);
+  color: var(--gk-text);
+  font: inherit;
+}
+
+.gk-reanalysis button:disabled {
+  opacity: 0.55;
+}
+
+.gk-re-note {
+  font-size: 12px;
+}
+
+.gk-re-progress {
+  display: grid;
+  gap: 8px;
+}
+
+.gk-re-progress p,
+.gk-re-progress ul {
+  margin: 0;
+}
+
+.gk-re-nodes {
+  padding-left: 18px;
+}
+
+.gk-re-failure {
+  color: var(--gk-danger);
+}

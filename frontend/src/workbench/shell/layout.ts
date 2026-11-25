@@ -4,6 +4,7 @@ import { readStored, writeStored } from "../storage";
 /** The panels of Prepare (plan §3.2). Each id is also its dockview component name. */
 export const PANELS = {
   data: "Data",
+  reanalysis: "Reanalysis",
   timeline: "Timeline",
   scatter: "Scatter",
   rose: "Wind rose",
@@ -21,6 +22,7 @@ export function addDefaultLayout(api: DockviewApi): void {
   api.clear();
   api.addPanel({ id: "timeline", component: "timeline", title: PANELS.timeline });
   api.addPanel({ id: "data", component: "data", title: PANELS.data, position: { referencePanel: "timeline", direction: "left" } });
+  api.addPanel({ id: "reanalysis", component: "reanalysis", title: PANELS.reanalysis, position: { referencePanel: "data", direction: "within" }, inactive: true });
   api.addPanel({ id: "inspector", component: "inspector", title: PANELS.inspector, position: { referencePanel: "timeline", direction: "right" } });
   api.addPanel({ id: "scatter", component: "scatter", title: PANELS.scatter, position: { referencePanel: "timeline", direction: "below" } });
   api.addPanel({ id: "rose", component: "rose", title: PANELS.rose, position: { referencePanel: "scatter", direction: "right" } });

@@ -139,4 +139,8 @@ def test_all_tools_registered() -> None:
     # was HTTP-only, so the assistant could not see a sweep and answered about one anyway).
     # 232 - the 142 WindKit pass-through wrappers (2026-11-19, decisions/0009: no stage called
     # them, the assistant could not reach them, and the two LTC wrappers were broken).
-    assert len(tools) == 90
+    # 90 + undo_last_change/redo_last_change/get_operation_log (2026-11-19, P1-13: server-side
+    # undo and redo over the operation log, and the log itself as a read).
+    # 93 + define_selection/delete_selection/list_selections/resolve_selection (2026-11-19,
+    # P1-15: selections are server objects every view resolves the same way).
+    assert len(tools) == 98

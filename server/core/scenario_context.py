@@ -52,6 +52,8 @@ SHARED_FIELDS: tuple[str, ...] = (
     "sensor_mapping",
     "sensor_inventory",
     "cleaning_log",
+    "cleaning_flags",
+    "selections",
     "brighthub_token",
     "earthdatahub_pat",
     "era5_nodes",
@@ -85,8 +87,11 @@ RESET_FIELDS: tuple[str, ...] = (
     "ltc_matching_disclosure",
     "latest_uncertainty",
     "derived_versions",
+    "derived_provenance",
     "executed_nodes",
     "workflow_execution",
+    "operation_log",
+    "undo_stack",
 )
 
 #: Handled explicitly rather than by category.

@@ -4,14 +4,16 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
+import copy
 import json
 import math
 from pathlib import Path
 
 from server.core.runconfig import strip_mirrors
-from server.main import mcp
+from server.operations import note_undo, operation
 from server.schemas.common import Coordinate
-from server.state.session import SessionState, session
+from server.schemas.results import config as result_models
+from server.state.session import SessionState, get_active_session, session
 
 
 def _speed_sensor_columns(state: SessionState) -> list[str]:
@@ -128,10 +130,14 @@ def _runconfig_path(state: SessionState) -> Path:
 
 
 def _get_run_config(state: SessionState) -> dict:
-    """Return the active run configuration dictionary defined by the GoKaatru Phase 1 config spec."""
-    _normalize_runconfig(state.runconfig)
-    state.runconfig = _normalize_runconfig(state.to_runconfig())
-    return dict(state.runconfig)
+    """Return the active run configuration, canonicalised, without changing the session.
+
+    Built from a deep copy. It is declared a read, and normalising in place had rewritten
+    ``state.runconfig`` with the sensor mapping, the cleaning log and the table shapes on
+    every call (found by tests/test_operation_routes.py).
+    """
+    base = _normalize_runconfig(copy.deepcopy(state.runconfig))
+    return dict(_normalize_runconfig(state.to_runconfig(base)))
 
 
 def _update_run_config(state: SessionState, key: str, value: str) -> dict:
@@ -198,31 +204,53 @@ def _get_analysis_summary(state: SessionState) -> dict:
     }
 
 
-@mcp.tool()
+@operation(effect="read", stage="config", result=result_models.GetRunConfigResult)
 def get_run_config() -> dict:
     """Return the active run configuration dictionary defined by the GoKaatru Phase 1 config spec."""
     return _get_run_config(session)
 
 
-@mcp.tool()
+#: The session fields ``_sync_state_from_runconfig`` rewrites; undo restores them with the
+#: configuration.
+SYNCED_FIELDS: tuple[str, ...] = ("project_name", "coordinate", "measurement_type", "hub_height_m")
+
+
+def config_snapshot(state: SessionState) -> dict[str, object]:
+    """The run configuration and the fields synced from it, as undo needs them."""
+    coordinate = state.coordinate
+    return {
+        "runconfig": copy.deepcopy(state.runconfig),
+        "fields": {
+            "project_name": state.project_name,
+            "coordinate": None if coordinate is None else coordinate.model_dump(),
+            "measurement_type": state.measurement_type,
+            "hub_height_m": state.hub_height_m,
+        },
+    }
+
+
+@operation(effect="change", stage="config", result=result_models.UpdateRunConfigResult)
 def update_run_config(key: str, value: str) -> dict:
     """Update a dotted runconfig key using JSON parsing rules from the Phase 1 config manager spec."""
-    return _update_run_config(session, key, value)
+    before = config_snapshot(get_active_session())
+    result = _update_run_config(session, key, value)
+    note_undo({"kind": "config", "before": before, "after": config_snapshot(get_active_session())})
+    return result
 
 
-@mcp.tool()
+@operation(effect="change", stage="config", result=result_models.SaveRunConfigResult)
 def save_run_config() -> dict:
     """Write the current run configuration to data/runconfig.json per the Phase 1 persistence spec."""
     return _save_run_config(session)
 
 
-@mcp.tool()
+@operation(effect="change", stage="config", result=result_models.LoadRunConfigResult)
 def load_run_config() -> dict:
     """Load data/runconfig.json into session state following the Phase 1 configuration workflow."""
     return _load_run_config(session)
 
 
-@mcp.tool()
+@operation(effect="read", stage="config", result=result_models.GetAnalysisSummaryResult)
 def get_analysis_summary() -> dict:
     """Report Phase 1 analysis readiness flags based on populated session-state fields."""
     return _get_analysis_summary(session)

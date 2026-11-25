@@ -1,0 +1,3182 @@
+[
+ {
+  "annotations": null,
+  "description": "Compute moist-air density from pressure and dew point traced to IEC 61400-12-1 Section A.5.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "dewpoint_k": {
+     "type": "number"
+    },
+    "pressure_pa": {
+     "type": "number"
+    },
+    "temperature_k": {
+     "type": "number"
+    }
+   },
+   "required": [
+    "pressure_pa",
+    "temperature_k",
+    "dewpoint_k"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_air_density",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Compute an air-density timeseries from dataframe columns using the IEC moist-air density equation.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "dewpoint_col": {
+     "type": "string"
+    },
+    "pressure_col": {
+     "type": "string"
+    },
+    "source": {
+     "default": "era5",
+     "type": "string"
+    },
+    "temperature_col": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "pressure_col",
+    "temperature_col",
+    "dewpoint_col"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_air_density_timeseries",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Store an EarthDataHub PAT in the session for the direct-ERA5 (non-BrightHub) path.\n\nAccepts either a \"Standard API key\" (current) or a legacy \"Classic API key\" (deprecated\non EarthDataHub's side, but the same credential in usage) - session-scoped only, entered\nonce per browser session on the Data import page, mirroring `brighthub_login`.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "pat": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "pat"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "earthdatahub_set_credential",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Remove the session's stored EarthDataHub PAT.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "earthdatahub_clear_credential",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Check whether the session has an EarthDataHub PAT configured.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "earthdatahub_status",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Find the four surrounding ERA5 grid nodes using 0.25\u00b0 bounds and haversine distance.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "latitude": {
+     "type": "number"
+    },
+    "longitude": {
+     "type": "number"
+    }
+   },
+   "required": [
+    "latitude",
+    "longitude"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "find_era5_nodes",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Extract ERA5 node data from Zarr, cache it as parquet, and store it in session state.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "end_date": {
+     "default": "2025-12-31",
+     "type": "string"
+    },
+    "latitude": {
+     "type": "number"
+    },
+    "longitude": {
+     "type": "number"
+    },
+    "start_date": {
+     "default": "2000-01-01",
+     "type": "string"
+    }
+   },
+   "required": [
+    "latitude",
+    "longitude"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "extract_era5_data",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Compute 100 m wind speed and meteorological direction from ERA5 u and v components.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "latitude": {
+     "type": "number"
+    },
+    "longitude": {
+     "type": "number"
+    }
+   },
+   "required": [
+    "latitude",
+    "longitude"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_era5_wind_speed",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Spatially interpolate reanalysis node data to the site with linear interpolation and IDW fallback.\n\nSpeed is scalar-interpolated; direction is derived from vector-interpolated\nu/v.  The response includes ``speed_interpolation`` indicating the convention\nused.\n\n``source`` is ``\"era5\"`` (default) or ``\"merra2\"`` and selects which downloaded\nreanalysis becomes the long-term reference. Both write the same interpolated series that\nevery LTC algorithm reads, so switching source and re-running the LTC is how a result's\ndependence on the reference is tested.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "source": {
+     "default": "era5",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "interpolate_era5_to_site",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Authenticate with BrightHub using API key credentials and store token in session.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "client_id": {
+     "type": "string"
+    },
+    "client_secret": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "client_id",
+    "client_secret"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "brighthub_login",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Clear the stored BrightHub authentication token.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "brighthub_logout",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Check whether the session holds a valid BrightHub token.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "brighthub_status",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "List measurement locations available to the authenticated BrightHub user.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "brighthub_list_locations",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Fetch the IEA Task 43 data model for a BrightHub measurement location.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "uuid": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "uuid"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "brighthub_get_data_model",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Fetch timeseries and datamodel from BrightHub and load them into the session.\n\nDownloads the assembled CSV via presigned URL and the data model JSON,\nthen parses both into session state (timeseries_df, sensor_mapping, etc.).",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "apply_calibration": {
+     "default": false,
+     "type": "boolean"
+    },
+    "apply_cleaning_log": {
+     "default": true,
+     "type": "boolean"
+    },
+    "apply_cleaning_rules": {
+     "default": false,
+     "type": "boolean"
+    },
+    "apply_deadband_offset": {
+     "default": false,
+     "type": "boolean"
+    },
+    "apply_orientation_offset": {
+     "default": false,
+     "type": "boolean"
+    },
+    "latitude_ddeg": {
+     "default": 0.0,
+     "type": "number"
+    },
+    "longitude_ddeg": {
+     "default": 0.0,
+     "type": "number"
+    },
+    "name": {
+     "default": "",
+     "type": "string"
+    },
+    "uuid": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "uuid"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "brighthub_import_location",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Find nearest ERA5 and MERRA-2 reanalysis nodes via BrightHub for a coordinate.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "latitude": {
+     "type": "number"
+    },
+    "longitude": {
+     "type": "number"
+    }
+   },
+   "required": [
+    "latitude",
+    "longitude"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "brighthub_find_reanalysis_nodes",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Download reanalysis timeseries data for specified nodes.\n\n``dataset`` must be 'ERA5' or 'MERRA-2'.\n``nodes_json`` is a JSON array of objects with ``latitude_ddeg`` and ``longitude_ddeg``.\n``source`` selects 'brighthub' or 'earthdatahub' (ERA5 only; MERRA-2 always uses BrightHub).",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "dataset": {
+     "type": "string"
+    },
+    "nodes_json": {
+     "type": "string"
+    },
+    "source": {
+     "default": "brighthub",
+     "type": "string"
+    }
+   },
+   "required": [
+    "dataset",
+    "nodes_json"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "brighthub_download_reanalysis",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Load BrightHub ERA5 and MERRA-2, then interpolate ERA5 to the project site.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "latitude": {
+     "type": "number"
+    },
+    "longitude": {
+     "type": "number"
+    },
+    "source": {
+     "default": "brighthub",
+     "type": "string"
+    }
+   },
+   "required": [
+    "latitude",
+    "longitude"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "brighthub_prepare_reanalysis",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "List supported cleaning rules and default parameters for the GoKaatru Phase 2 cleaning workflow.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "list_cleaning_rules",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Apply one named cleaning rule to the active timeseries and log the operation for undo.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "end_date": {
+     "default": "",
+     "type": "string"
+    },
+    "params": {
+     "type": "string"
+    },
+    "rule_type": {
+     "type": "string"
+    },
+    "sensor": {
+     "type": "string"
+    },
+    "start_date": {
+     "default": "",
+     "type": "string"
+    }
+   },
+   "required": [
+    "rule_type",
+    "sensor",
+    "params"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "apply_cleaning_rule",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Return the recorded cleaning operations applied to the active session timeseries.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_cleaning_log",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Restore raw data and replay all cleaning steps except the selected log entry.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "entry_index": {
+     "type": "integer"
+    }
+   },
+   "required": [
+    "entry_index"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "undo_cleaning_rule",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Minimize combined historic and climate uncertainty using annual means and the clipping methodology.\n\nCalendar years holding less than ``min_year_completeness`` of their expected\nsamples are excluded and reported, so a partial first or last year cannot\ninflate inter-annual variability.\n\n``min_window_years`` floors the candidate window length (default 10, common practice).\nEvery candidate ends at the final year and therefore contains the five-year reference\nperiod, which hands short windows a climate-term advantage they did not earn from the\ndata; the floor stops that selecting a period too short to call long-term. Set it to 1\nto recover the unconstrained objective \u2014 the response reports what that would have\nchosen either way.\n\n``climate_deviation_exponent`` is the exponent on the normalised deviation in the\nclimate term. It has no published provenance and dominates the objective's shape, so\nevery response carries a sweep over plausible values.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "climate_deviation_exponent": {
+     "default": 5.0,
+     "type": "number"
+    },
+    "min_window_years": {
+     "default": 10,
+     "type": "integer"
+    },
+    "min_year_completeness": {
+     "default": 0.9,
+     "type": "number"
+    },
+    "source": {
+     "default": "ensemble",
+     "type": "string"
+    },
+    "speed_col": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "speed_col"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "run_clipping_analysis",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Return the active run configuration dictionary defined by the GoKaatru Phase 1 config spec.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_run_config",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Update a dotted runconfig key using JSON parsing rules from the Phase 1 config manager spec.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "key": {
+     "type": "string"
+    },
+    "value": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "key",
+    "value"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "update_run_config",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Write the current run configuration to data/runconfig.json per the Phase 1 persistence spec.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "save_run_config",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Load data/runconfig.json into session state following the Phase 1 configuration workflow.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "load_run_config",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Report Phase 1 analysis readiness flags based on populated session-state fields.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_analysis_summary",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Parse a wind timeseries file into session state following the GoKaatru Phase 1 ingest spec.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "file_path": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "file_path"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "parse_timeseries",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Parse an IEA Task 43 datamodel JSON file into the Phase 1 height-to-sensor mapping.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "file_path": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "file_path"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "parse_datamodel",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "List mapped sensors with coverage statistics using the GoKaatru Phase 1 inventory contract.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "list_sensors",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Summarize period of record and sensor inventory per the Phase 1 measurement inventory spec.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_period_of_record",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Return sensor coverage and gap statistics using the Phase 1 data availability spec.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "sensor_name": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "sensor_name"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_data_coverage",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Draft a Task 43 reading of the loaded timeseries columns for review.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "draft_data_model",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Build a minimal IEA Task 43 data model from declared columns and load it.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "spec": {
+     "additionalProperties": true,
+     "type": "object"
+    }
+   },
+   "required": [
+    "spec"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "build_data_model",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Blend LTC algorithms using inverse-RMSE weights and overlap-period bias correction per MCP ensemble practice.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "measured_col": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "measured_col"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "run_ensemble",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Calculate timestamp-wise power-law shear coefficients traced to IEC 61400-12-1 Section B.2.\n\n``min_speed_mps`` gates which records contribute (default 3.0 m/s): below\nthat, ln(v2/v1) is anemometer noise rather than profile. The resolved value\nand the clamping statistics are returned with the result.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "height_sensors": {
+     "type": "string"
+    },
+    "min_speed_mps": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    }
+   },
+   "required": [
+    "height_sensors"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "calculate_shear_timeseries",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Calculate timestamp-wise roughness lengths from U versus ln(z) fits traced to IEC 61400-12-1 Section B.3.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "height_sensors": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "height_sensors"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "calculate_roughness_timeseries",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Summarize multi-height power-law shear, profile fit, roughness, and optional wind veer.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "direction_sensors": {
+     "default": "",
+     "type": "string"
+    },
+    "min_speed_mps": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "speed_sensors": {
+     "default": "",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_vertical_structure",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Build a 12x24 power-law shear lookup table using mean, median, or Windographer MoMM aggregation.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "aggregation": {
+     "default": "mean",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "build_shear_table",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Build a 12x24 roughness lookup table in log-space traced to IEC logarithmic profile practice.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "aggregation": {
+     "default": "mean",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "build_roughness_table",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Build direction-sector-specific 12x24 shear tables using IEC directional binning and chosen aggregation.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "aggregation": {
+     "default": "mean",
+     "type": "string"
+    },
+    "direction_sensor": {
+     "type": "string"
+    },
+    "min_sector_records": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    },
+    "num_sectors": {
+     "default": 12,
+     "type": "integer"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "direction_sensor"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "build_sector_shear_tables",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Build an aggregate MoMM shear table by deriving alpha from per-height Windographer MoMM wind tables.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "height_sensors": {
+     "type": "string"
+    },
+    "min_speed_mps": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    }
+   },
+   "required": [
+    "height_sensors"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "build_aggr_momm_shear_table",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "hub_height_m": {
+     "type": "number"
+    },
+    "shear_model": {
+     "default": "power_law",
+     "type": "string"
+    }
+   },
+   "required": [
+    "hub_height_m"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "extrapolate_to_hub_height",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Extrapolate ERA5 site wind speed to hub height using the session month-hour shear lookup table.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "hub_height_m": {
+     "type": "number"
+    },
+    "reference_height_m": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    }
+   },
+   "required": [
+    "hub_height_m"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "extrapolate_reanalysis_to_hub",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Undo the last cleaning rule or configuration change still in the history.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "undo_last_change",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Redo the change most recently undone, with the parameters it was first called with.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "redo_last_change",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Return the most recent operation calls: who, what, with which parameters, and the undo state.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "limit": {
+     "default": 50,
+     "type": "integer"
+    }
+   },
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_operation_log",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Run Pettitt homogeneity screening on ERA5 node series aggregated annually or monthly.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "method": {
+     "default": "annual",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "analyze_homogeneity",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Trim interpolated ERA5 data to a recommended homogeneous period start year.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "cutoff_year": {
+     "type": "integer"
+    }
+   },
+   "required": [
+    "cutoff_year"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "apply_homogeneity_cutoff",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Run robust linear MCP using Huber IRLS and apply the fit to the full long-term record.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "long_col": {
+     "type": "string"
+    },
+    "short_col": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "short_col",
+    "long_col"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "run_ltc_linear_least_squares",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Run orthogonal total least squares MCP and apply the fit to the full long-term record.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "long_col": {
+     "type": "string"
+    },
+    "short_col": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "short_col",
+    "long_col"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "run_ltc_total_least_squares",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Run directional SpeedSort LTC with per-sector transfer functions and dog-leg low-speed segment.\n\nWhen *long_dir_col* is supplied and present in ERA5, the algorithm bins by\n12 direction sectors (30\u00b0 each) and fits an independent transfer function\nper sector.  Sectors with fewer than 200 concurrent records fall back to\nthe all-sector fit.  Without *long_dir_col* the original non-directional\nbehaviour is preserved.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "long_col": {
+     "type": "string"
+    },
+    "long_dir_col": {
+     "default": "",
+     "type": "string"
+    },
+    "short_col": {
+     "type": "string"
+    },
+    "short_dir_col": {
+     "default": "",
+     "type": "string"
+    }
+   },
+   "required": [
+    "short_col",
+    "long_col"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "run_ltc_speedsort",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Run variance-ratio MCP using mean and standard-deviation scaling of the reference series.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "long_col": {
+     "type": "string"
+    },
+    "short_col": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "short_col",
+    "long_col"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "run_ltc_variance_ratio",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Run XGBoost MCP with temporal, directional, and meteorological features and early stopping.\n\nTree models cannot extrapolate: long-term speeds above the campaign maximum\nare truncated to the model's upper bound, so this algorithm must not be used\nalone for extreme-wind estimation. The extent of the truncation is reported\nin the metrics (D11).",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "long_col": {
+     "type": "string"
+    },
+    "long_dir_col": {
+     "default": "",
+     "type": "string"
+    },
+    "short_col": {
+     "type": "string"
+    },
+    "short_dir_col": {
+     "default": "",
+     "type": "string"
+    }
+   },
+   "required": [
+    "short_col",
+    "long_col"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "run_ltc_xgboost",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Return the site measurement mast as a GeoJSON feature for site overview mapping.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_mast_marker",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Return all surrounding ERA5 nodes as a GeoJSON FeatureCollection with distance and bearing metadata.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_era5_node_markers",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Return a combined GeoJSON FeatureCollection of the mast and ERA5 support nodes.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_site_overview_map",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Return the fixed-prefix hash for the current session, stamped before any sweep runs.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_fixed_prefix_hash",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Define or replace a named selection of records: time ranges, direction sectors, value\nbands or record sets, combined by union and intersection.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "definition": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "name": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "name",
+    "definition"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "define_selection",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Delete a named selection.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "name"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "delete_selection",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "List the session's named selections with how many records each holds now.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "list_selections",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Resolve a named selection against the working data: how many records, and where.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "name"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "resolve_selection",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Per-bucket minimum, maximum and valid count of measured channels over a half-open window.\n\n``channels`` is comma-separated; ``start`` and ``end`` are timestamps with a UTC offset,\nempty for the whole record. When the window holds more records than ``buckets`` it is cut\ninto equal-width buckets of ``bucket_ms`` and ``decimated`` is true; otherwise every record\nis its own bucket. Zoom by asking again for a narrower window.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "buckets": {
+     "default": 2000,
+     "type": "integer"
+    },
+    "channels": {
+     "type": "string"
+    },
+    "end": {
+     "default": "",
+     "type": "string"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "start": {
+     "default": "",
+     "type": "string"
+    }
+   },
+   "required": [
+    "channels"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_series_window",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Fit Weibull A and k using WAsP m1/m3 moment method (default) or scipy MLE.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "method": {
+     "default": "wasp_m1_m3",
+     "type": "string"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "sensor_name": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "sensor_name"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_weibull_params",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Summarize Weibull fit quality, exceedance levels, and optional directional energy contribution.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "direction_sensor": {
+     "default": "",
+     "type": "string"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "speed_sensor": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "speed_sensor"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_wind_climate",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Compute mean, P90, representative, and 15 m/s IEC turbulence intensity metrics.\n\n``iec_ti_at_15ms`` is representative turbulence in the 1 m/s bin containing 15 m/s \u2014 the\nnumber IEC 61400-1 uses to select the turbulence class. The bin actually used and how\nmany records it holds are reported beside it, because a low-wind campaign may never\nreach 15 m/s.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "min_speed_mps": {
+     "default": 3.0,
+     "type": "number"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "speed_sensor": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "speed_sensor"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_turbulence_analysis",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Aggregate windrose sector frequency and mean speed traced to IEC 61400-12-1 directional binning practice.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "direction_sensor": {
+     "type": "string"
+    },
+    "num_sectors": {
+     "default": 16,
+     "type": "integer"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "speed_sensor": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "speed_sensor",
+    "direction_sensor"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_windrose_data",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Compute hour-of-day mean wind speed using the Phase 1 diurnal profile convention.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "sensor_name": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "sensor_name"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_diurnal_profile",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Compute monthly mean, min, max, and coverage using the Phase 1 monthly-summary specification.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "sensor_name": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "sensor_name"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_monthly_stats",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Compute mean and representative TI by 1 m/s bins traced to IEC 61400-1 Ed.4 Section 6.3.\n\n``min_speed_mps`` defaults to the same 3 m/s gate ``compute_turbulence_analysis`` uses.\nBelow cut-in, sigma/U is the ratio of two small numbers; the two tools previously gated\nat 3 m/s and 0 m/s respectively and both published a TI, which differed by 13.8% on the\nsame campaign with nothing naming the difference (F-76). Pass 0 to include every record.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "min_speed_mps": {
+     "default": 3.0,
+     "type": "number"
+    },
+    "sd_sensor": {
+     "type": "string"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "speed_sensor": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "speed_sensor",
+    "sd_sensor"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_turbulence_intensity",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Compute Windographer-style MoMM using completeness and month-length weighting from TR6.\n\nAbsent month-hour cells are filled with the series mean so the 12x24 table always\nresolves, but that fill is not free: a six-month winter campaign had its six unobserved\nsummer months synthesised from winter data and reported a \"MoMM\" indistinguishable from\na full-year one.  The fill count, the observed months and the missing months now travel\nwith the result, and a table missing whole months carries a warning \u2014 MoMM is a\nseasonal-weighting statistic, so a partial year is exactly the case where it misleads.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "sensor_name": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "sensor_name"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_momm",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Compute OLS scatter metrics using standard regression diagnostics from least-squares analysis.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "sensor_a": {
+     "type": "string"
+    },
+    "sensor_b": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "sensor_a",
+    "sensor_b"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_scatter_stats",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "List every scenario sweep persisted in the current session.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "list_sweeps",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Summarise a sweep: which axes varied, which the gates collapsed, and why.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "sweep_id": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "sweep_id"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_sweep_summary",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Decompose a sweep metric's variance across the five scenario axes.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "metric": {
+     "default": "long_term_mean_speed_mps",
+     "type": "string"
+    },
+    "sweep_id": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "sweep_id"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "analyze_sweep_spread",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Calculate total uncertainty by root-sum-square combination of measurement, vertical, MCP, and future terms.\n\n``shear_method`` must be one of \"calculate_shear\", \"simple_power_law\", \"log_law\",\n\"analyst_supplied\" or \"power_law\" (alias for simple_power_law); any other value is refused.\n\n``project_life_years`` sets the horizon over which inter-annual variability averages out\n(``u_future = iav / sqrt(life)``); a 15-year life gives 1.55% where the 20-year default\ngives 1.34%.\n\n``concurrent_months_cap`` bounds the MCP sampling term, which is otherwise\n``3 / sqrt(months)`` without limit. The response reports what the cap withheld.\n\n``component_correlation`` is the correlation assumed between measurement, vertical\nextrapolation and MCP, which all derive from the same measured series. The default of 0\nis pure quadrature; the response always reports the total at 0.5 alongside so the size\nof the independence assumption is visible.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "algorithm": {
+     "default": "speedsort",
+     "type": "string"
+    },
+    "component_correlation": {
+     "default": 0.0,
+     "type": "number"
+    },
+    "concurrent_hours": {
+     "type": "number"
+    },
+    "concurrent_months_cap": {
+     "default": 12.0,
+     "type": "number"
+    },
+    "hub_height_m": {
+     "type": "number"
+    },
+    "iav_pct": {
+     "default": 6.0,
+     "type": "number"
+    },
+    "is_interpolation": {
+     "default": false,
+     "type": "boolean"
+    },
+    "mcp_r_squared": {
+     "type": "number"
+    },
+    "measurement_height_m": {
+     "type": "number"
+    },
+    "measurement_uncertainty_pct": {
+     "type": "number"
+    },
+    "project_life_years": {
+     "default": 20.0,
+     "type": "number"
+    },
+    "shear_method": {
+     "type": "string"
+    },
+    "shear_std": {
+     "default": 0.0,
+     "type": "number"
+    }
+   },
+   "required": [
+    "measurement_uncertainty_pct",
+    "measurement_height_m",
+    "hub_height_m",
+    "shear_method",
+    "mcp_r_squared",
+    "concurrent_hours"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "calculate_uncertainty",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Measure S = d(lnAEP)/d(lnU) on the long-term series and explain the energy conversion.\n\nGoKaatru reports uncertainty on a wind-speed basis. This returns the factor needed to\nexpress it as an energy uncertainty, measured on the session's own long-term\ndistribution against a generic power curve, together with the arithmetic and the\ncaveats. Pass ``speed_uncertainty_pct`` to work the conversion for a specific figure;\nomitted, it uses the session's latest uncertainty result.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "speed_uncertainty_pct": {
+     "default": 0.0,
+     "type": "number"
+    }
+   },
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_energy_sensitivity",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Summarize measured temperature, pressure, humidity, and derived moist-air density.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "humidity_sensor": {
+     "default": "",
+     "type": "string"
+    },
+    "pressure_sensor": {
+     "default": "",
+     "type": "string"
+    },
+    "temperature_sensor": {
+     "default": "",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_atmospheric_conditions",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Compute measured wind-power density, cube-mean speed, and optional sector energy contribution.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "direction_sensor": {
+     "default": "",
+     "type": "string"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "speed_sensor": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "speed_sensor"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_energy_metrics",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Fit annual-maxima Gumbel and GEV models and estimate 50/100-year wind speeds.\n\n``source`` defaults to ``\"auto\"``, which prefers the long-term corrected series over the\nmeasured campaign: a 50-year return period from a two-year campaign extrapolates 25x\nbeyond its data. ``\"measured\"`` forces the campaign, ``\"long_term\"`` requires the\ncorrected series and refuses without one.\n\n``min_year_coverage`` drops calendar years covering too little of the calendar to hold an\nannual maximum. A\npartial year contributes a partial-season maximum, which moved V50 by up to +40% in\ntesting.\n\nThe GEV fit is only offered once enough annual maxima exist to identify its three\nparameters; below that only the two-parameter Gumbel fit is reported, and both carry a\nplausibility verdict.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "min_year_coverage": {
+     "default": 0.9,
+     "type": "number"
+    },
+    "source": {
+     "default": "auto",
+     "type": "string"
+    },
+    "speed_sensor": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "speed_sensor"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_extreme_winds",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Summarize consecutive wind-speed ramp magnitudes and threshold events.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "event_threshold_m_s": {
+     "default": 3.0,
+     "type": "number"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "speed_sensor": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "speed_sensor"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_wind_ramps",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Summarize calm and high-wind duration statistics from consecutive measured records.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "calm_threshold_m_s": {
+     "default": 3.0,
+     "type": "number"
+    },
+    "high_wind_threshold_m_s": {
+     "default": 15.0,
+     "type": "number"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "speed_sensor": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "speed_sensor"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_wind_persistence",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Compute correlation, residual, bias, and regression metrics for two measured speed sensors.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "sensor_a": {
+     "default": "",
+     "type": "string"
+    },
+    "sensor_b": {
+     "default": "",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_sensor_comparison",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Identify potential mast-shadow sectors from directional speed-ratio diagnostics.\n\nReports ``affected_sectors_a`` and ``affected_sectors_b`` separately: which\nsensor is shadowed determines whether the ratio runs high or low.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "direction_sensor": {
+     "default": "",
+     "type": "string"
+    },
+    "min_sector_records": {
+     "default": 50,
+     "type": "integer"
+    },
+    "min_speed_mps": {
+     "default": 4.0,
+     "type": "number"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "sensor_a": {
+     "default": "",
+     "type": "string"
+    },
+    "sensor_b": {
+     "default": "",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_mast_effects",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Report non-mutating range, flat-line, and cleaning-removal diagnostics.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_qc_diagnostics",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Assess ERA5 concurrent-period correlation and long-term adjustment readiness.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "reference_sensor": {
+     "default": "",
+     "type": "string"
+    },
+    "speed_sensor": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "speed_sensor"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "compute_mcp_readiness",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Plot a 16-sector wind rose with stacked speed bins using directional frequency percentages.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "direction_sensor": {
+     "type": "string"
+    },
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "speed_sensor": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "speed_sensor",
+    "direction_sensor"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "plot_windrose",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Plot the measured speed histogram with a fitted Weibull PDF using $f(v;k,A)$ from wind climatology.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "sensor_name": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "sensor_name"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "plot_weibull",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Plot mean diurnal wind-speed profiles by hour of day for one or more measured sensors.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "sensor_names": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "sensor_names"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "plot_diurnal",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Plot a measured scatter comparison with OLS line and regression metrics derived from least squares.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "sensor_a": {
+     "type": "string"
+    },
+    "sensor_b": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "sensor_a",
+    "sensor_b"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "plot_scatter",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Plot one or more measured sensor series, downsampling to daily means for large datasets.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "sensor_names": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "sensor_names"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "plot_timeseries",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Plot sensor availability as a presence-absence heatmap over time for loaded measured data columns.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "plot_data_coverage",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Plot the monthly-hourly shear or roughness lookup table as a heatmap for hub extrapolation review.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "table_type": {
+     "default": "shear",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "plot_shear_table",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Plot grouped monthly means for one or more measured sensors using calendar-month aggregation.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "selection": {
+     "default": "",
+     "description": "Name of a stored selection; when given, only its records are used.",
+     "type": "string"
+    },
+    "sensor_names": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "sensor_names"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "plot_monthly_means",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Plot monthly mean and measured-vs-corrected LTC comparisons across all completed correction algorithms.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "plot_ltc_comparison",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Plot annual mean corrected wind speed for all LTC algorithms and the ensemble over the long-term record.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "plot_annual_means",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Plot stacked uncertainty components contributing to total percent uncertainty by RSS convention.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "future_pct": {
+     "type": "number"
+    },
+    "mcp_pct": {
+     "type": "number"
+    },
+    "measurement_pct": {
+     "type": "number"
+    },
+    "total_pct": {
+     "type": "number"
+    },
+    "vertical_pct": {
+     "type": "number"
+    }
+   },
+   "required": [
+    "total_pct",
+    "measurement_pct",
+    "vertical_pct",
+    "mcp_pct",
+    "future_pct"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "plot_uncertainty_breakdown",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ }
+]

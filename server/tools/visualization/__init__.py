@@ -6,7 +6,8 @@ and re-exports every builder so ``server.tools.visualization._plot_*`` keeps wor
 """
 from __future__ import annotations
 
-from server.main import mcp
+from server.operations import operation
+from server.schemas.results import visualization as result_models
 from server.state.session import session
 from server.tools.visualization._common import (
     COMPASS_16,
@@ -92,67 +93,67 @@ from server.tools.visualization._shear import (
 )
 
 
-@mcp.tool()
+@operation(effect="read", stage="visualization", selectable=True, result=result_models.PlotWindroseResult)
 def plot_windrose(speed_sensor: str, direction_sensor: str) -> dict:
     """Plot a 16-sector wind rose with stacked speed bins using directional frequency percentages."""
     return _plot_windrose(session, speed_sensor, direction_sensor)
 
 
-@mcp.tool()
+@operation(effect="read", stage="visualization", selectable=True, result=result_models.PlotWeibullResult)
 def plot_weibull(sensor_name: str) -> dict:
     """Plot the measured speed histogram with a fitted Weibull PDF using $f(v;k,A)$ from wind climatology."""
     return _plot_weibull(session, sensor_name)
 
 
-@mcp.tool()
+@operation(effect="read", stage="visualization", selectable=True, result=result_models.PlotDiurnalResult)
 def plot_diurnal(sensor_names: str) -> dict:
     """Plot mean diurnal wind-speed profiles by hour of day for one or more measured sensors."""
     return _plot_diurnal(session, sensor_names)
 
 
-@mcp.tool()
+@operation(effect="read", stage="visualization", selectable=True, result=result_models.PlotScatterResult)
 def plot_scatter(sensor_a: str, sensor_b: str) -> dict:
     """Plot a measured scatter comparison with OLS line and regression metrics derived from least squares."""
     return _plot_scatter(session, sensor_a, sensor_b)
 
 
-@mcp.tool()
+@operation(effect="read", stage="visualization", selectable=True, result=result_models.PlotTimeseriesResult)
 def plot_timeseries(sensor_names: str) -> dict:
     """Plot one or more measured sensor series, downsampling to daily means for large datasets."""
     return _plot_timeseries(session, sensor_names)
 
 
-@mcp.tool()
+@operation(effect="read", stage="visualization", result=result_models.PlotDataCoverageResult)
 def plot_data_coverage() -> dict:
     """Plot sensor availability as a presence-absence heatmap over time for loaded measured data columns."""
     return _plot_data_coverage(session)
 
 
-@mcp.tool()
+@operation(effect="read", stage="visualization", result=result_models.PlotShearTableResult)
 def plot_shear_table(table_type: str = "shear") -> dict:
     """Plot the monthly-hourly shear or roughness lookup table as a heatmap for hub extrapolation review."""
     return _plot_shear_table(session, table_type)
 
 
-@mcp.tool()
+@operation(effect="read", stage="visualization", selectable=True, result=result_models.PlotMonthlyMeansResult)
 def plot_monthly_means(sensor_names: str) -> dict:
     """Plot grouped monthly means for one or more measured sensors using calendar-month aggregation."""
     return _plot_monthly_means(session, sensor_names)
 
 
-@mcp.tool()
+@operation(effect="read", stage="visualization", result=result_models.PlotLtcComparisonResult)
 def plot_ltc_comparison() -> dict:
     """Plot monthly mean and measured-vs-corrected LTC comparisons across all completed correction algorithms."""
     return _plot_ltc_comparison(session)
 
 
-@mcp.tool()
+@operation(effect="read", stage="visualization", result=result_models.PlotAnnualMeansResult)
 def plot_annual_means() -> dict:
     """Plot annual mean corrected wind speed for all LTC algorithms and the ensemble over the long-term record."""
     return _plot_annual_means(session)
 
 
-@mcp.tool()
+@operation(effect="read", stage="visualization", result=result_models.PlotUncertaintyBreakdownResult)
 def plot_uncertainty_breakdown(
     total_pct: float,
     measurement_pct: float,

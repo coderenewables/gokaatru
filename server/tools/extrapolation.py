@@ -9,7 +9,8 @@ import pandas as pd
 
 from server.core.formulas import ROUGHNESS_MAX_M, ROUGHNESS_MIN_M
 from server.core.reanalysis import get_reference_source, reference_source_names
-from server.main import mcp
+from server.operations import operation
+from server.schemas.results import extrapolation as result_models
 from server.state.session import SessionState, session
 from server.tools.shear import SHEAR_MIN_SPEED_MPS
 
@@ -223,7 +224,7 @@ def _extrapolate_to_hub_height(
     reference_columns: list[str] | None = None,
     extrapolate_reanalysis: bool = True,
 ) -> dict:
-    """Create a hub-height wind-speed series using power-law or log-law shear per IEC 61400-12-1 Annex B."""
+    """Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B."""
     if shear_model not in {"power_law", "log_law"}:
         raise ValueError(f"shear_model must be 'power_law' or 'log_law', got '{shear_model}'")
     if state.timeseries_df is None:
@@ -574,13 +575,25 @@ def _add_shear_to_timeseries(state: SessionState) -> bool:
     return False
 
 
-@mcp.tool()
+@operation(
+    effect="change", stage="extrapolation",
+    disclosure=(
+        "below_shear_gate",
+        "records_below_extrapolation_gate",
+        "method_models",
+        "method_is_mixed",
+        "alpha_reclamped_records",
+        "stability_treatment",
+        "reference_height_m.record_counts",
+    ),
+    result=result_models.ExtrapolateToHubHeightResult,
+)
 def extrapolate_to_hub_height(hub_height_m: float, shear_model: str = "power_law") -> dict:
-    """Create a hub-height wind-speed series using power-law or log-law shear per IEC 61400-12-1 Annex B."""
+    """Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B."""
     return _extrapolate_to_hub_height(session, hub_height_m, shear_model)
 
 
-@mcp.tool()
+@operation(effect="change", stage="extrapolation", result=result_models.ExtrapolateReanalysisToHubResult)
 def extrapolate_reanalysis_to_hub(
     hub_height_m: float, reference_height_m: float | None = None
 ) -> dict:

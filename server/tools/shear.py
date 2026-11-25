@@ -12,7 +12,8 @@ import pandas as pd
 
 from server.core.formulas import ROUGHNESS_MAX_M, ROUGHNESS_MIN_M
 from server.core.momm import compute_weighted_momm_table
-from server.main import mcp
+from server.operations import operation
+from server.schemas.results import shear as result_models
 from server.state.session import SessionState, session
 
 # Minimum speed for a record to contribute to a shear estimate (D3).  Below a few
@@ -374,7 +375,7 @@ def _calculate_shear_timeseries(
     height_sensors: str,
     min_speed_mps: float | None = None,
 ) -> dict:
-    """Calculate timestamp-wise power-law shear coefficients per IEC 61400-12-1 Section B.2."""
+    """Calculate timestamp-wise power-law shear coefficients traced to IEC 61400-12-1 Section B.2."""
     df = _require_timeseries(state)
     height_map = _parse_height_sensors(height_sensors)
     _require_columns(df, height_map)
@@ -397,7 +398,7 @@ def _calculate_shear_timeseries(
 
 
 def _calculate_roughness_timeseries(state: SessionState, height_sensors: str) -> dict:
-    """Calculate timestamp-wise roughness lengths from U versus ln(z) fits per IEC 61400-12-1 Section B.3."""
+    """Calculate timestamp-wise roughness lengths from U versus ln(z) fits traced to IEC 61400-12-1 Section B.3."""
     df = _require_timeseries(state)
     height_map = _parse_height_sensors(height_sensors)
     _require_columns(df, height_map)
@@ -630,7 +631,7 @@ def _build_shear_table(state: SessionState, aggregation: str = "mean") -> dict:
 
 
 def _build_roughness_table(state: SessionState, aggregation: str = "mean") -> dict:
-    """Build a 12x24 roughness lookup table in log-space per IEC logarithmic profile practice."""
+    """Build a 12x24 roughness lookup table in log-space traced to IEC logarithmic profile practice."""
     if aggregation not in {"mean", "median", "momm"}:
         raise ValueError(f"aggregation must be one of mean, median, momm, got '{aggregation}'")
     if state.roughness_timeseries_df is None:
@@ -764,9 +765,12 @@ def _build_aggr_momm_shear_table(
     return response
 
 
-@mcp.tool()
+@operation(
+    effect="change", stage="shear", disclosure=("records_clamped", "clamped_fraction",),
+    result=result_models.CalculateShearTimeseriesResult,
+)
 def calculate_shear_timeseries(height_sensors: str, min_speed_mps: float | None = None) -> dict:
-    """Calculate timestamp-wise power-law shear coefficients per IEC 61400-12-1 Section B.2.
+    """Calculate timestamp-wise power-law shear coefficients traced to IEC 61400-12-1 Section B.2.
 
     ``min_speed_mps`` gates which records contribute (default 3.0 m/s): below
     that, ln(v2/v1) is anemometer noise rather than profile. The resolved value
@@ -775,13 +779,13 @@ def calculate_shear_timeseries(height_sensors: str, min_speed_mps: float | None 
     return _calculate_shear_timeseries(session, height_sensors, min_speed_mps)
 
 
-@mcp.tool()
+@operation(effect="change", stage="shear", result=result_models.CalculateRoughnessTimeseriesResult)
 def calculate_roughness_timeseries(height_sensors: str) -> dict:
-    """Calculate timestamp-wise roughness lengths from U versus ln(z) fits per IEC 61400-12-1 Section B.3."""
+    """Calculate timestamp-wise roughness lengths from U versus ln(z) fits traced to IEC 61400-12-1 Section B.3."""
     return _calculate_roughness_timeseries(session, height_sensors)
 
 
-@mcp.tool()
+@operation(effect="read", stage="shear", selectable=True, result=result_models.ComputeVerticalStructureResult)
 def compute_vertical_structure(
     speed_sensors: str = "",
     direction_sensors: str = "",
@@ -791,19 +795,42 @@ def compute_vertical_structure(
     return _compute_vertical_structure(session, speed_sensors, direction_sensors, min_speed_mps)
 
 
-@mcp.tool()
+@operation(
+    effect="change", stage="shear",
+    disclosure=(
+        "fallback_alpha",
+        "fallback_source",
+        "table_coverage",
+        "hour_basis",
+        "site_utc_offset_hours",
+    ),
+    result=result_models.BuildShearTableResult,
+)
 def build_shear_table(aggregation: str = "mean") -> dict:
     """Build a 12x24 power-law shear lookup table using mean, median, or Windographer MoMM aggregation."""
     return _build_shear_table(session, aggregation)
 
 
-@mcp.tool()
+@operation(
+    effect="change", stage="shear",
+    disclosure=(
+        "fallback_z0",
+        "fallback_source",
+        "table_coverage",
+        "hour_basis",
+        "site_utc_offset_hours",
+    ),
+    result=result_models.BuildRoughnessTableResult,
+)
 def build_roughness_table(aggregation: str = "mean") -> dict:
-    """Build a 12x24 roughness lookup table in log-space per IEC logarithmic profile practice."""
+    """Build a 12x24 roughness lookup table in log-space traced to IEC logarithmic profile practice."""
     return _build_roughness_table(session, aggregation)
 
 
-@mcp.tool()
+@operation(
+    effect="read", stage="shear", disclosure=("hour_basis", "site_utc_offset_hours",), selectable=True,
+    result=result_models.BuildSectorShearTablesResult,
+)
 def build_sector_shear_tables(
     direction_sensor: str,
     num_sectors: int = 12,
@@ -816,7 +843,17 @@ def build_sector_shear_tables(
     )
 
 
-@mcp.tool()
+@operation(
+    effect="change", stage="shear",
+    disclosure=(
+        "records_clamped",
+        "clamped_fraction",
+        "fallback_alpha",
+        "fallback_source",
+        "table_coverage",
+    ),
+    result=result_models.BuildAggrMommShearTableResult,
+)
 def build_aggr_momm_shear_table(height_sensors: str, min_speed_mps: float | None = None) -> dict:
     """Build an aggregate MoMM shear table by deriving alpha from per-height Windographer MoMM wind tables."""
     return _build_aggr_momm_shear_table(session, height_sensors, min_speed_mps)

@@ -8,9 +8,15 @@ version = "0.1.0"
 description = "Wind Resource Assessment MCP Server"
 requires-python = ">=3.11"
 dependencies = [
-    "fastmcp>=2.0.0",
-    "fastapi>=0.115",
-    "pydantic>=2.0",
+    # Exact: these four render the surfaces the repository pins. The MCP tool list is
+    # snapshotted (tests/snapshots/mcp_tools.json) and the OpenAPI schema is committed for the
+    # generated TypeScript client, and the operation registry builds on FastMCP's FunctionTool;
+    # CI installs whatever a range allows, so a release could change either surface or break the
+    # registry with no change here. Upgrade deliberately: refresh both snapshots and run the suite.
+    "fastmcp==3.2.3",
+    "mcp==1.27.0",
+    "fastapi==0.135.1",
+    "pydantic==2.12.5",
     "numpy>=1.24",
     "scipy>=1.10",
     "pandas>=2.2",

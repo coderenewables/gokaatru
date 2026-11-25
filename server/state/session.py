@@ -14,12 +14,43 @@ import pandas as pd
 
 from server.core.reanalysis import DEFAULT_REFERENCE_SOURCE, get_reference_source
 from server.core.runconfig import strip_mirrors
+from server.core.scenario_result import ENGINE_VERSION
 from server.schemas.common import Coordinate
 
 
 def _utcnow() -> datetime:
     """Return a timezone-aware UTC timestamp for session lifecycle tracking."""
     return datetime.now(timezone.utc)
+
+
+#: The operation call in flight, set by server.operations around each call, so a result
+#: stamped during it records which logged call produced it.
+current_operation: ContextVar[dict[str, object] | None] = ContextVar("gokaatru_current_operation", default=None)
+
+
+CLEANING_FLAG_COLUMNS: tuple[str, ...] = (
+    "timestamp",
+    "sensor",
+    "rule_sequence",
+    "rule_type",
+    "reason",
+    "actor",
+    "flagged_at",
+)
+
+
+def empty_cleaning_flags() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "timestamp": pd.Series(dtype="datetime64[ns, UTC]"),
+            "sensor": pd.Series(dtype="object"),
+            "rule_sequence": pd.Series(dtype="int64"),
+            "rule_type": pd.Series(dtype="object"),
+            "reason": pd.Series(dtype="object"),
+            "actor": pd.Series(dtype="object"),
+            "flagged_at": pd.Series(dtype="object"),
+        }
+    )
 
 
 class SessionState:
@@ -38,6 +69,9 @@ class SessionState:
     sensor_mapping: dict[float, dict[str, str | None]]
     sensor_inventory: dict[str, dict[str, object]]
     cleaning_log: list[dict[str, object]]
+    # One row per record a cleaning rule set missing: when, which sensor, which rule and
+    # why, who and when (decisions/0010). Raw data with these applied is the clean series.
+    cleaning_flags: pd.DataFrame
     shear_timeseries_df: pd.DataFrame | None
     shear_clamp_stats: dict[str, object] | None
     roughness_timeseries_df: pd.DataFrame | None
@@ -71,6 +105,9 @@ class SessionState:
     ltc_matching_disclosure: dict[str, object]
     data_version: int
     derived_versions: dict[str, int]
+    # For each derived artifact stamped during an operation call: which call, with what
+    # parameters, under which engine version. An artifact from another engine is stale.
+    derived_provenance: dict[str, dict[str, object]]
     latest_uncertainty: dict[str, object] | None
     scenarios: list[dict[str, object]]
     runconfig: dict[str, object]
@@ -78,6 +115,14 @@ class SessionState:
     executed_nodes: set[str]
     workflow_execution: dict[str, object]
     workflow_runs: list[dict[str, object]]
+    # Every operation called on this session, in order (decisions/0010): who called it,
+    # with what, and what it did to the data version. Written by server.operations.
+    operation_log: list[dict[str, object]]
+    # Log sequence numbers of the changes undone and not yet redone, most recent last.
+    undo_stack: list[int]
+    # Named record selections (decisions/0011): each a definition from server.core.selection
+    # plus who made it and when. Resolved against the data each time they are used.
+    selections: dict[str, dict[str, object]]
 
     def __init__(self) -> None:
         """Initialize the singleton session state per the GoKaatru build spec."""
@@ -101,6 +146,7 @@ class SessionState:
         self.sensor_mapping = {}
         self.sensor_inventory = {}
         self.cleaning_log = []
+        self.cleaning_flags = empty_cleaning_flags()
         self.shear_timeseries_df = None
         self.shear_clamp_stats = None
         self.roughness_timeseries_df = None
@@ -123,6 +169,7 @@ class SessionState:
         self.ltc_matching_disclosure = {}
         self.data_version = 0
         self.derived_versions = {}
+        self.derived_provenance = {}
         self.latest_uncertainty = None
         self.scenarios = []
         self.runconfig = {}
@@ -138,6 +185,9 @@ class SessionState:
             "events": [],
         }
         self.workflow_runs = []
+        self.operation_log = []
+        self.undo_stack = []
+        self.selections = {}
         self.session_id = preserved_session_id
         self.workspace_dir = preserved_workspace_dir
         self.created_at = preserved_created_at
@@ -296,20 +346,37 @@ class SessionState:
         return self.data_version
 
     def stamp_derived(self, name: str) -> None:
-        """Record which version of the measured data a derived artifact was built from."""
+        """Record which version of the measured data a derived artifact was built from, and,
+        inside an operation call, which logged call built it."""
         self.derived_versions[name] = self.data_version
+        call = current_operation.get()
+        if call is None:
+            self.derived_provenance.pop(name, None)
+        else:
+            self.derived_provenance[name] = {**call, "data_version": self.data_version}
+
+    def stale_reason(self, name: str) -> str | None:
+        """Why a derived artifact no longer matches, or None when it still does."""
+        stamped = self.derived_versions.get(name)
+        if stamped is None:
+            return None
+        if stamped < self.data_version:
+            return f"built from data version {stamped}; the data is now at {self.data_version}"
+        built_by = self.derived_provenance.get(name, {}).get("code_version")
+        if built_by is not None and built_by != ENGINE_VERSION:
+            return f"built by engine {built_by}; this is engine {ENGINE_VERSION}"
+        return None
 
     def derived_is_stale(self, name: str) -> bool:
-        """Return whether a derived artifact predates the current measured data."""
-        stamped = self.derived_versions.get(name)
-        return stamped is not None and stamped < self.data_version
+        """Return whether a derived artifact predates the current data or engine."""
+        return self.stale_reason(name) is not None
 
     def stale_artifacts(self) -> list[str]:
-        """List every derived artifact built from an older version of the measured data."""
+        """List every derived artifact built from older data or by another engine version."""
         return sorted(name for name in self.derived_versions if self.derived_is_stale(name))
 
     def staleness_report(self) -> dict[str, object]:
-        """Summarize derived artifacts that no longer match the measured data.
+        """Summarize derived artifacts that no longer match the measured data or the engine.
 
         Included in the responses of the tools that consume derived artifacts, so a stale
         input is visible at the point it is used rather than inferred later.
@@ -320,10 +387,11 @@ class SessionState:
             "stale_artifacts": stale,
         }
         if stale:
+            report["stale_reasons"] = {name: self.stale_reason(name) for name in stale}
             report["warning"] = (
-                f"{len(stale)} derived artifact(s) were built from an earlier version of the "
-                f"measured data and no longer match it: {', '.join(stale)}. Re-run those stages "
-                "before trusting any number that depends on them."
+                f"{len(stale)} derived artifact(s) no longer match the data or the engine that "
+                f"would build them now: {', '.join(stale)}. Re-run those stages before trusting "
+                "any number that depends on them."
             )
         return report
 
@@ -473,9 +541,14 @@ class SessionState:
         shear["minSpeedMps"] = float(min_speed_mps)
         self.touch()
 
-    def to_runconfig(self) -> dict[str, object]:
-        """Serialize current state into a run configuration dictionary for GoKaatru tools."""
-        config: dict[str, object] = dict(self.runconfig)
+    def to_runconfig(self, base: dict[str, object] | None = None) -> dict[str, object]:
+        """Serialize current state into a run configuration dictionary for GoKaatru tools.
+
+        ``base`` stands in for ``self.runconfig``. The copy taken here is shallow, so a
+        caller that must not change the session passes a deep copy.
+        """
+        source = self.runconfig if base is None else base
+        config: dict[str, object] = dict(source)
         if "project_name" not in config and self.project_name is not None:
             config["project_name"] = self.project_name
         if "location" not in config and self.coordinate is not None:
@@ -490,7 +563,7 @@ class SessionState:
             }
         if self.timezone is not None:
             config.setdefault("site", {})["timezone"] = str(self.timezone)
-        excluded = self.runconfig.get("excluded_sensors")
+        excluded = source.get("excluded_sensors")
         if isinstance(excluded, list) and excluded:
             config["excluded_sensors"] = [str(name) for name in excluded]
         if self.cleaning_log:

@@ -5,7 +5,6 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import asyncio
-import inspect
 import json
 from typing import Annotated, Any
 
@@ -13,7 +12,9 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, JsonValue
 
+import server.main  # noqa: F401 — importing it declares every operation
 from server.api.deps import get_session_state
+from server.operations import REGISTRY, acting_as
 from server.state.session import SessionState, bind_session
 
 router = APIRouter(prefix="/sessions/{session_id}", tags=["chat"])
@@ -47,124 +48,19 @@ _DEFAULT_MODELS: dict[str, str] = {
 # every imported module gave it the whole thing, including session-mutating and
 # filesystem-touching tools.
 #
-# These are explicit name allowlists, not module globs: a tool absent from both
-# sets is not exposed at all, so adding a new tool does not silently widen the
-# model's authority. `_unclassified_tools()` reports anything unlisted.
+# The tiers are generated from the operation declarations (decisions/0009): a tool
+# is offered only if its declaration allows the assistant, and the opt-in tier holds
+# every change and every network call. A tool declared with ``assistant=False`` is not
+# exposed at all, so adding one does not silently widen the model's authority;
+# `_unclassified_tools()` reports them, and tests/test_operations.py pins both tiers.
 # ---------------------------------------------------------------------------
 
-# Query, compute and plot. No session mutation, no filesystem, no network.
-_READ_ONLY_TOOLS: frozenset[str] = frozenset({
-    # air density
-    "compute_air_density",
-    "compute_air_density_timeseries",
-    # inventory and coverage
-    "get_data_coverage",
-    "get_period_of_record",
-    "list_sensors",
-    # config inspection (get_run_config only canonicalizes what is already there)
-    "get_analysis_summary",
-    "get_run_config",
-    # cleaning audit trail (read side only)
-    "get_cleaning_log",
-    "list_cleaning_rules",
-    # statistics
-    "compute_diurnal_profile",
-    "compute_momm",
-    "compute_monthly_stats",
-    "compute_scatter_stats",
-    "compute_turbulence_analysis",
-    "compute_turbulence_intensity",
-    "compute_weibull_params",
-    "compute_wind_climate",
-    "compute_windrose_data",
-    # derived analysis that does not persist
-    "analyze_homogeneity",
-    "build_sector_shear_tables",
-    "compute_vertical_structure",
-    "run_clipping_analysis",
-    # maps
-    "get_era5_node_markers",
-    "get_mast_marker",
-    "get_site_overview_map",
-    # visualization
-    "plot_annual_means",
-    "plot_data_coverage",
-    "plot_diurnal",
-    "plot_ltc_comparison",
-    "plot_monthly_means",
-    "plot_scatter",
-    "plot_shear_table",
-    "plot_timeseries",
-    "plot_uncertainty_breakdown",
-    "plot_weibull",
-    "plot_windrose",
-    # Diagnostic analysis — the tools an analyst's "why is this spread so wide?"
-    # actually needs. All pure reads over the loaded series and derived artefacts.
-    "compute_atmospheric_conditions",
-    "compute_energy_metrics",
-    "compute_energy_sensitivity",
-    "compute_extreme_winds",
-    "compute_mast_effects",
-    "compute_mcp_readiness",
-    "compute_qc_diagnostics",
-    "compute_sensor_comparison",
-    "compute_wind_persistence",
-    "compute_wind_ramps",
-    # The fixed-prefix identity — what makes two sweeps comparable.
-    "get_fixed_prefix_hash",
-    # Reading and explaining a persisted sweep. These read files, which the tier contract
-    # otherwise excludes: they are admitted because the only path they can address is the
-    # session's own sweeps directory, through the confined `_sweep_dir`, and a sweep id is
-    # the sole input. Without them the assistant cannot see a sweep at all, and answers
-    # about one from session state that never held it.
-    "list_sweeps",
-    "get_sweep_summary",
-    "analyze_sweep_spread",
-    # Proposes a reading of the loaded column headers; writes nothing. Its counterpart
-    # build_data_model writes a file and replaces the sensor mapping, so that one is
-    # mutating.
-    "draft_data_model",
-})
+# Query, compute and plot. No session change, no file written, no network.
+_READ_ONLY_TOOLS: frozenset[str] = REGISTRY.assistant_tier("read")
 
-# Mutate session state, write files, or make outbound network calls. Requires an
+# Change session state, write files, or make outbound network calls. Requires an
 # explicit per-request opt-in (`allow_mutating_tools`).
-_MUTATING_TOOLS: frozenset[str] = frozenset({
-    # ingest — reads the filesystem and replaces the loaded dataset
-    "parse_datamodel",
-    "parse_timeseries",
-    # writes a data model into the session workspace, then parses it — so it replaces
-    # the sensor mapping and the campaign timezone in one call
-    "build_data_model",
-    # destructive data edits
-    "apply_cleaning_rule",
-    "undo_cleaning_rule",
-    "apply_homogeneity_cutoff",
-    # config persistence
-    "load_run_config",
-    "save_run_config",
-    "update_run_config",
-    # outbound network / cache writes
-    "compute_era5_wind_speed",
-    "extract_era5_data",
-    "find_era5_nodes",
-    "interpolate_era5_to_site",
-    # derived columns written back into the session
-    "extrapolate_reanalysis_to_hub",
-    "extrapolate_to_hub_height",
-    "build_aggr_momm_shear_table",
-    "build_roughness_table",
-    "build_shear_table",
-    "calculate_roughness_timeseries",
-    "calculate_shear_timeseries",
-    # long-term correction — writes result files and session state
-    "run_ensemble",
-    "run_ltc_linear_least_squares",
-    "run_ltc_speedsort",
-    "run_ltc_total_least_squares",
-    "run_ltc_variance_ratio",
-    "run_ltc_xgboost",
-    "calculate_uncertainty",
-})
+_MUTATING_TOOLS: frozenset[str] = REGISTRY.assistant_tier("change")
 
 
 # ---------------------------------------------------------------------------
@@ -277,39 +173,7 @@ def _build_registries() -> tuple[list[dict[str, Any]], dict[str, Any]]:
     openai_tools: list[dict[str, Any]] = []
     callables: dict[str, Any] = {}
 
-    # Build a name→function map from the tool modules.
-    import server.tools.advanced_analysis as _adv
-    import server.tools.air_density as _ad
-    import server.tools.atmosphere as _atm
-    import server.tools.cleaning as _cl
-    import server.tools.clipping as _clip
-    import server.tools.config as _cfg
-    import server.tools.data_io as _dio
-    import server.tools.datamodel_builder as _dmb
-    import server.tools.diagnostics as _diag
-    import server.tools.ensemble as _ens
-    import server.tools.era5 as _era5
-    import server.tools.extrapolation as _ext
-    import server.tools.homogeneity as _hom
-    import server.tools.ltc as _ltc
-    import server.tools.ltc_ml as _lml
-    import server.tools.map as _mp
-    import server.tools.scenario_result as _scen
-    import server.tools.shear as _sh
-    import server.tools.statistics as _st
-    import server.tools.sweep_analysis as _swa
-    import server.tools.uncertainty as _unc
-    import server.tools.visualization as _viz
-
-    all_modules = [
-        _ad, _adv, _atm, _cl, _clip, _cfg, _diag, _dio, _dmb, _ens, _era5, _ext, _hom,
-        _ltc, _lml, _mp, _scen, _sh, _st, _swa, _unc, _viz,
-    ]
-    module_names: dict[str, Any] = {}
-    for mod in all_modules:
-        for name, obj in inspect.getmembers(mod, inspect.isfunction):
-            if not name.startswith("_"):
-                module_names[name] = obj
+    module_names = {declared.name: declared.fn for declared in REGISTRY}
 
     classified = _READ_ONLY_TOOLS | _MUTATING_TOOLS
     for tool in tools:
@@ -538,7 +402,8 @@ def chat(
                         raise ValueError("tool arguments must decode to a JSON object")
                     # Tool failures raise HTTPException (ValueError→400, RuntimeError→502)
                     # and propagate out of the chat loop, honoring the error contract.
-                    result: Any = _execute_tool(tool_name, arguments, state, allow_mutating)
+                    with acting_as(f"assistant:{provider}/{model}"):
+                        result: Any = _execute_tool(tool_name, arguments, state, allow_mutating)
                 except (json.JSONDecodeError, ValueError, TypeError) as exc:
                     # Argument-shape errors are fed back to the LLM as a tool result.
                     arguments = {}

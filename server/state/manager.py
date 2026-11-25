@@ -9,6 +9,7 @@ import shutil
 from pathlib import Path
 from uuid import uuid4
 
+from server.state.project import ProjectStore
 from server.state.session import SessionState
 
 #: Session identity and bookkeeping that a fork must not inherit. Every other
@@ -70,6 +71,7 @@ class SessionManager:
         target.sensor_mapping = copy.deepcopy(source.sensor_mapping)
         target.sensor_inventory = copy.deepcopy(source.sensor_inventory)
         target.cleaning_log = copy.deepcopy(source.cleaning_log)
+        target.cleaning_flags = source.cleaning_flags.copy(deep=True)
 
         target.shear_timeseries_df = (
             None if source.shear_timeseries_df is None else source.shear_timeseries_df.copy(deep=True)
@@ -112,11 +114,15 @@ class SessionManager:
             "events": [],
         }
         target.workflow_runs = copy.deepcopy(source.workflow_runs)
+        target.operation_log = copy.deepcopy(source.operation_log)
+        target.undo_stack = list(source.undo_stack)
+        target.selections = copy.deepcopy(source.selections)
 
         target.timezone = source.timezone
         target.clipping_result = copy.deepcopy(source.clipping_result)
         target.data_version = copy.deepcopy(source.data_version)
         target.derived_versions = copy.deepcopy(source.derived_versions)
+        target.derived_provenance = copy.deepcopy(source.derived_provenance)
         target.ltc_matching_disclosure = copy.deepcopy(source.ltc_matching_disclosure)
         target.shear_clamp_stats = copy.deepcopy(source.shear_clamp_stats)
         target.roughness_clip_stats = copy.deepcopy(source.roughness_clip_stats)
@@ -135,14 +141,29 @@ class SessionManager:
         self._sessions[session_id] = state
         return state
 
+    def loaded(self, session_id: str) -> SessionState | None:
+        """Return a session already in memory, without restoring one from disk."""
+        return self._sessions.get(session_id)
+
     def get_session(self, session_id: str) -> SessionState:
         """Return an existing managed session or raise when the id is unknown."""
         state = self._sessions.get(session_id)
         if state is not None:
             return state
-        # Restore from the on-disk workspace if it exists (e.g. after a server
-        # restart). runconfig.json is the single source of truth, so reload it.
+        # Restore from the on-disk workspace if it exists (e.g. after a server restart): the
+        # whole saved project when there is one, otherwise the run configuration alone.
         workspace_dir = self._workspace_dir(session_id)
+        store = ProjectStore(workspace_dir)
+        if store.has_snapshot():
+            restored = SessionState()
+            # A ProjectIntegrityError from a changed raw input propagates: the project is
+            # refused rather than opened with results its inputs no longer support.
+            store.load(restored)
+            restored.session_id = session_id
+            restored.workspace_dir = workspace_dir
+            restored.touch()
+            self._sessions[session_id] = restored
+            return restored
         runconfig_path = workspace_dir / "runconfig.json"
         if runconfig_path.exists():
             restored = SessionState()

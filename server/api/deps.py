@@ -10,6 +10,7 @@ from fastapi import Depends, Header, HTTPException, status
 
 from server.state.dataset_pool import DatasetPoolManager, dataset_pool_manager
 from server.state.manager import SessionManager, session_manager
+from server.state.project import ProjectIntegrityError
 from server.state.session import SessionState
 
 SESSION_HEADER_NAME = "X-GoKaatru-Session"
@@ -98,3 +99,5 @@ def get_session_state(
         return manager.get_session(session_id)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ProjectIntegrityError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

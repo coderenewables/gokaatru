@@ -59,7 +59,6 @@ class TestAllowlistIsComplete:
             "compute_qc_diagnostics",
             "compute_sensor_comparison",
             "compute_mast_effects",
-            "compute_atmospheric_conditions",
             "compute_wind_ramps",
             "compute_wind_persistence",
             "compute_energy_sensitivity",
@@ -75,6 +74,13 @@ class TestAllowlistIsComplete:
         assert tool in _READ_ONLY_TOOLS
         assert tool in _allowed_tools(False)
         assert tool in callables
+
+    def test_the_atmospheric_diagnostic_needs_the_opt_in(self) -> None:
+        """It was listed as a pure read, but it records the mean density that the energy
+        sensitivity normalises speed with, so an assistant without the opt-in could move
+        that number by running it (found by tests/test_operation_routes.py, P1-5b)."""
+        assert "compute_atmospheric_conditions" in _MUTATING_TOOLS
+        assert "compute_atmospheric_conditions" not in _allowed_tools(False)
 
     def test_credential_and_network_tools_stay_out_of_the_read_only_tier(self) -> None:
         """The read-only tier's contract is no session mutation, no filesystem, *no network*.

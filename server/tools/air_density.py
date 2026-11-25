@@ -8,7 +8,8 @@ import numpy as np
 import pandas as pd
 
 from server.core.formulas import air_density_iec, moist_air_density, saturation_vapour_pressure_pa
-from server.main import mcp
+from server.operations import operation
+from server.schemas.results import air_density as result_models
 from server.state.session import session
 
 # Plausible physical bands, used to detect the unit a column is recorded in rather
@@ -64,9 +65,9 @@ def _source_frame(source: str) -> pd.DataFrame:
     raise ValueError(f"source must be 'era5' or 'measured', got '{source}'")
 
 
-@mcp.tool()
+@operation(effect="read", stage="air_density", result=result_models.ComputeAirDensityResult)
 def compute_air_density(pressure_pa: float, temperature_k: float, dewpoint_k: float) -> dict:
-    """Compute moist-air density from pressure and dew point per IEC 61400-12-1 Section A.5."""
+    """Compute moist-air density from pressure and dew point traced to IEC 61400-12-1 Section A.5."""
     density, dewpoint_clamped = air_density_iec(pressure_pa, temperature_k, dewpoint_k)
     result = {
         "status": "ok",
@@ -83,7 +84,7 @@ def compute_air_density(pressure_pa: float, temperature_k: float, dewpoint_k: fl
     return result
 
 
-@mcp.tool()
+@operation(effect="read", stage="air_density", result=result_models.ComputeAirDensityTimeseriesResult)
 def compute_air_density_timeseries(
     pressure_col: str,
     temperature_col: str,
@@ -110,8 +111,9 @@ def compute_air_density_timeseries(
     # Shared with the scalar path so the two cannot drift apart.
     vapour_pressure_pa = saturation_vapour_pressure_pa(dewpoint - 273.15)
     density = moist_air_density(pressure, temperature, vapour_pressure_pa)
-    frame["air_density_kg_m3"] = density
-    valid = frame["air_density_kg_m3"].dropna()
+    # Kept local: the frame is the session's own reference or measured data, and writing the
+    # column into it made this read change the session (found by tests/test_read_operations.py).
+    valid = pd.Series(density, index=frame.index).dropna()
     if valid.empty:
         raise ValueError("No valid air-density values could be computed from the selected columns")
     result: dict = {

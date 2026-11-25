@@ -173,6 +173,9 @@ def get_sensors(
 ) -> dict:
     """Return the parsed sensor inventory for the current session."""
     del session_id
+    # A new session has no data and so no sensors; the interface asks before any upload.
+    if state.timeseries_df is None:
+        return {"sensors": []}
     try:
         return _list_sensors(state)
     except ValueError as exc:

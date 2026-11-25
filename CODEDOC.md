@@ -42,7 +42,7 @@ README's "Deployment model" section first.
 |------|--------|
 | Backend Python | ~25.6k LOC across 85 files |
 | Frontend TS/TSX | ~17.6k LOC |
-| MCP tools registered | **90** (the 142 WindKit pass-throughs were removed 2026-11-19, decisions/0009) |
+| MCP tools registered | **98** (the 142 WindKit pass-throughs were removed 2026-11-19, decisions/0009) |
 | FastAPI endpoints | ~100 across 13 route files |
 | Backend tests | 83 pytest files (incl. an independent oracle harness) |
 | Frontend tests | 30 vitest files |
@@ -144,11 +144,35 @@ The interface-free heart. Nothing here imports FastAPI or FastMCP.
 | `sweep.py` | Expands a scenario space, runs each leaf (grouped by prefix to reuse expensive upstream stages), and persists every scenario's record. Checkpoints after every shear-prefix group (`checkpoint`, an `in_progress` manifest via `_persist`); skips a leaf whose computation already ran (`_execution_key`, keyed on resolved columns); replaces every JSON file atomically (`_write_json_atomic`, `_REPLACE_ATTEMPTS` / `_REPLACE_RETRY_DELAY_S`). Manifests carry `engine_version` and `duplicates_skipped`. |
 | `scenario_context.py` | Runs one scenario without disturbing the session it came from (ContextVar-bound isolation). |
 | `scenario_pipeline.py` | One scenario expressed as composable stages, from shear to uncertainty. `resolve_fit` (axis A1) and `resolve_reference` (axis A2) are split so the sweep's shear-prefix step refuses only on the fit policy; `resolve_sensors` calls both. The extrapolate stage carries the measured series only. |
-| `scenario_result.py` | One flat, hashable record per scenario (the sweep table row shape). `ENGINE_VERSION` (`2026.11.2`) is hashed into `fixed_prefix_hash`. `config_hash` leaves policy names out of the spec. `build_result` takes the sweep's prefix rather than recomputing it. |
+| `scenario_result.py` | One flat, hashable record per scenario (the sweep table row shape). `ENGINE_VERSION` (`2026.11.2`) is hashed into `fixed_prefix_hash`; cleaning-log entries are hashed without the time they ran (`CLEANING_LOG_UNHASHED_KEYS`). `config_hash` leaves policy names out of the spec. `build_result` takes the sweep's prefix rather than recomputing it. |
 | `sweep_analysis.py` | Decomposes a sweep metric's variance across the five axes (design doc §7.9). Ported from `frontend/src/lib/sweepAnalysis.ts`, which was deleted — the statistic now has one implementation, reachable from both the Interrogate page and the chat tools. `duplicate_levels(rows, duplicates)` maps each policy level skipped as a duplicate to the level whose rows it shares, so an axis varied between two policies that picked the same sensors does not read as single-level. Also `uncertainty_substitution` (design doc §8.1, F9): folds each axis's level-mean spread of the long-term speed into the MCP and vertical terms by `max()`, adds the reference-source spread, and reports scenario totals with and without it; formerly browser-only. |
 | `sensor_selection.py` | Resolves a sensor-selection *policy* (e.g. `availability_90`, `widest_lever`) to concrete sensors. |
 | `datamodel_builder.py` | Builds a minimal IEA Task 43 data model from CSV column headers alone, for campaigns delivered without one. Header inference (`draft_columns`), spec validation and Task 43 emission (`build_datamodel`); emits a *document*, never session state. |
+| `decimation.py` | A time window of channels reduced to screen buckets (decisions/0005): `reduce_window` cuts [start, end) into equal-width buckets of whole milliseconds and returns each channel's minimum, maximum and valid count per bucket (`np.fmin/fmax/add.reduceat` over the occupied buckets), or the records themselves when there are no more than buckets; tested against `tests/oracles.py`'s per-record bucketing. |
+| `selection.py` | Record selections (decisions/0011): `validate` and `resolve` a tree of time ranges, direction sectors, value bands and record sets combined by union and intersection, to a boolean mask over the working frame. Half-open bounds, sectors wrap through north, a missing value is never selected; tested against `tests/oracles.py`'s per-record evaluator. |
 | `uncertainty_inputs.py` | Derives a scenario's uncertainty inputs from its own results. `is_hub_interpolated` takes the scenario's reference heights; `derive_uncertainty_inputs` selects `analyst_supplied` or `log_law` shear methods where the source is an analyst exponent or a roughness-only profile. |
+
+### 4.2a `server/operations.py` — the operation registry
+
+Every tool is declared once as an operation (decisions/0009): `@operation(effect=..., stage=...)`,
+with `canvas`, `assistant` and `network` where they differ from the defaults. The declaration
+publishes the MCP tool itself (`_publish_to_mcp`, through `mcp.tool()`); no tool module touches
+`mcp` directly, and `tests/test_mcp_surface.py` compares what clients receive with
+`tests/snapshots/mcp_tools.json` (`python -m tests.mcp_surface --write` to refresh). `Operation` also carries disclosure fields, standards references, a code version and
+an optional dry run; `REGISTRY` holds all 98. The parameter schema is read from the signature
+by FastMCP's own parser. `STAGES` is the pipeline order used for the canvas tie-break. It lives
+outside `core/` because it imports FastMCP. Each declaration wraps its function (`_logged`,
+`functools.wraps`, so the MCP schema is unchanged): every call appends to
+`state.operation_log` (actor, operation, effect, parameters with `secret_parameters`
+redacted, code version, data version before and after, status), and a successful change
+saves the project. The actor comes from the `ACTOR` context variable that each surface sets
+(`acting_as`): `user` (generated routes), `assistant:<provider>/<model>` (chat), `canvas`
+(executor), `mcp` (the MCP mount and stdio server); otherwise `direct`. Hand-written session
+routes bypass the operations, so a middleware in `server/api/main.py` logs and saves after a
+successful change through one (`record_route_change`, route template only, never the body)
+until Phases 2-3 move the interface onto the generated routes. A declaration with `selectable=True` (reads only; 23 statistics and charts, pinned in `tests/test_selection_operations.py`) gains a keyword-only `selection` parameter in the published signature (`_selectable_signature`), so MCP, the generated routes, the canvas and chat all offer it; named, the wrapper runs the function on a copy of the session whose working frame and `PER_RECORD_FRAMES` (raw, shear and roughness timeseries) are blank outside the selection (`_selection_replica`) and adds a `selection` block to the result. The chat route's two tiers and callables, the
+executor's canvas dispatch (`_tool_registry`) and its stage tie-break are all read from it;
+`tests/test_operations.py` pins the tiers, the non-canvas set and the stage order by name.
 
 ### 4.3 `server/tools/` — analytics (the MCP tool surface)
 
@@ -160,8 +184,11 @@ private helpers behind them. They total **90**.
 | `data_io.py` | 5 | Phase-1 timeseries + datamodel loading, sensor inventory, coverage. |
 | `datamodel_builder.py` | 2 | Draft a Task 43 reading of the loaded columns, and build/persist/load the declared data model (`server/core/datamodel_builder.py` does the work). |
 | `sweep_analysis.py` | 3 | Read and explain a persisted sweep: `list_sweeps`, `get_sweep_summary` (which axes varied, which the gates collapsed, which levels were duplicates of another), `analyze_sweep_spread`. The rest of the sweep engine is still HTTP-only. |
-| `config.py` | 5 | Run-configuration management (get/update/save/load/summary). |
-| `cleaning.py` | 4 | Rule-based timeseries cleaning (list/apply/log/undo). |
+| `config.py` | 5 | Run-configuration management (get/update/save/load/summary). `update_run_config` attaches before and after snapshots (`config_snapshot`) to its log entry for undo. |
+| `series.py` | 1 | `get_series_window` (selectable), the JSON form of `_series_window`; the Arrow route `api/routes/series.py` calls the same function with a selection's mask (`keep`) instead of a blanked copy of the session. `DEFAULT_SERIES_BUCKETS`, `MAX_SERIES_BUCKETS`. |
+| `selections.py` | 4 | `define_selection`, `delete_selection`, `list_selections`, `resolve_selection`; named selections live on `state.selections` and are resolved against the working data each time (`selection_mask`). |
+| `history.py` | 3 | `undo_last_change`, `redo_last_change`, `get_operation_log`. Undo inverts the last undoable call (`UNDOABLE_OPERATIONS`): a cleaning rule through the replay undo, a configuration change by restoring exactly the paths and synced fields it changed; it refuses when a later change moved them. Redo calls the operation again with its logged parameters. `state.undo_stack` holds what was undone; any other change clears it. |
+| `cleaning.py` | 4 | Rule-based timeseries cleaning (list/apply/log/undo). Every record a rule removes gets a row in `state.cleaning_flags` (timestamp, sensor, rule sequence and type, reason code from `FLAG_REASONS`, actor, time), found by diffing the column before and after the rule; `_clean_series(raw, index, flags)` rebuilds the cleaned series from raw data, bit for bit. Undo replays the remaining rules as before and keeps each one's original actor and time (`_carry_flag_provenance`). `get_cleaning_log` returns a flag summary. Apply and undo have dry runs (`preview_cleaning_rule`, `preview_undo_cleaning_rule`): the real function runs on a replica of the session (`_replica`) and `_change_summary` reports rows inserted, columns dropped, and per column the records set missing, restored or changed with their runs (at most `PREVIEW_RANGE_LIMIT` listed, `ranges_truncated` saying so). |
 | `statistics.py` | 9 | Weibull, wind climate, turbulence, windrose, diurnal/monthly, MoMM, scatter. |
 | `shear.py` | 7 | Shear/roughness time series and 12×24 lookup tables, sector + aggregated-MoMM tables. |
 | `extrapolation.py` | 2 | Hub-height extrapolation of measured masts and reanalysis. Sub-gate records are extrapolated and counted, not dropped (the gate governs the fit only); `extrapolate_reanalysis=False` skips the reanalysis side effect for sweep leaves. |
@@ -233,6 +260,8 @@ logic as the MCP tools, and shape the response with the Pydantic models in `sche
 | `mcp.py` | 1 | MCP catalog endpoint. |
 | `health.py` | 1 | Health check. |
 | `chat.py` | 1 | OpenAI-compatible LLM chat proxy with MCP tool execution (drives the BYOK Copilot). |
+| `series.py` | 1 | `GET /sessions/{id}/series`: a series window as an Arrow IPC stream (`series_arrow`, `window_table`), the window's description in the schema metadata. Hand-written because the generated routes return JSON. |
+| `operations.py` | 101 | Generated from the registry: `POST /sessions/{id}/operations/{name}` for each of the 98 operations, `.../preview` for the two with a dry run, with a body model built from the function signature (`<Name>Parameters`, extra fields refused), and `GET /operations` listing every declaration. Same session binding and error mapping as chat. |
 
 `api/mcp.py` additionally mounts a **session-aware MCP transport** into the FastAPI app, so a
 browser session and an MCP client can share the same live session state.
@@ -244,11 +273,23 @@ browser session and an MCP client can share the same live session state.
 | `session.py` | `SessionState` — the mutating singleton holding all working data for one analysis (loaded frames, derived tables, LTC results, runconfig). Bound per-session through a `ContextVar` (`session`). Carries `data_version` stamps: `stamp_derived()` / `staleness_report()` implement the **no-silent-recomputation** rule (derived artifacts are marked stale, never auto-recomputed). |
 | `manager.py` | `SessionManager` — the registry of browser workspaces (create / get / fork / delete). `_clone_session_state` copies every `SessionState` field; `_CLONE_EXCLUDED` names the identity fields a fork must not inherit. A coverage test enforces that every attribute is cloned or excluded. |
 | `dataset_pool.py` | Shared dataset-pool storage and metadata, so an ingested dataset can be reused across sessions. |
+| `project.py` | `ProjectStore` (decisions/0010): a session's state on disk. Raw inputs stay in `uploads/`, each with its SHA-256 in `catalogue.sqlite`; opening refuses (`ProjectIntegrityError`, HTTP 409) if one was changed or removed. Every DataFrame is written to `working/<content sha256>.parquet`, so an unchanged frame is not rewritten and identical frames are stored once; every other field is JSON in the catalogue. `EXCLUDED_FIELDS` names what is never written and why (identity, credentials, in-flight run status). `SessionManager.get_session` reopens a saved project after a restart, falling back to `runconfig.json` alone for a workspace without one. |
 
 ### 4.7 `server/schemas/`
 
 Shared Pydantic v2 contracts (`common.py`) re-exported from the package root for use by both
 tools and routes.
+
+`results/` holds the result model of every operation, one module per tool module, over the
+shared pieces in `results/_base.py`: `Number` (a float that may be null, because NaN and infinity
+are sent as null), `Result` (extra fields refused), `OpenResult` (the run configuration and a
+selection definition, which keep keys the caller set), `Staleness`, `CleaningLogEntry`,
+`SensorMappingEntry`, `RunConfig`, `PlotResult`, `SelectionUsed`, `ErrorDetail`. Each declaration
+names its model (`@operation(result=..., preview_result=...)`) and the generated route publishes it
+in the OpenAPI schema. Documentation only: the routes do not validate against it.
+`tests/test_operation_results.py` checks each model strictly against every response
+`tests/operation_samples.py` collects (the synthetic pipeline, every read on two campaigns, the
+remaining changes, the dry runs, and the network operations against fakes).
 
 ---
 
@@ -372,8 +413,12 @@ frontend/src/
 │                         #   store); `previewSweepScenarios()` peeks a sweep's scenario list
 │                         #   for Canvas's picker without touching manifest/rows/phase, unlike
 │                         #   `openSweep()` which Run/Interrogate read from
+├── api/                  # generated from the server's OpenAPI schema (P1-20); not edited by hand
+│   ├── openapi.json      # committed schema (python -m tests.openapi_schema --write)
+│   ├── schema.d.ts       # npm run generate:api (openapi-typescript 7.13.0); CI: npm run check:api
+│   └── client.ts         # openapi-fetch client; adds X-GoKaatru-Session from the path
 ├── lib/
-│   ├── api.ts            # Axios/fetch HTTP client; auto-injects X-GoKaatru-Session header
+│   ├── api.ts            # hand-written HTTP client the current interface uses, until Phase 2
 │   ├── sweepApi.ts       # HTTP client for the sweep engine, incl. getPrefixHash (2026-09)
 │   ├── prepareStats.ts   # pure helpers for Prepare's stat tiles (meanCoverage) — plain
 │   │                     #   arithmetic over already-disclosed numbers, no disclosure entry
@@ -452,7 +497,7 @@ python -m pytest tests/ -v
 python -c "import asyncio; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())), 'tools')"
 ```
 
-### Frontend (`frontend/src/test/`, vitest — 30 files)
+### Frontend (`frontend/src/test/`, vitest — 32 files)
 
 Covers the stores, the workflow/DAG builder, stage-status logic, the sweep lifecycle and
 analysis, disclosure rendering, and the stage/results views.

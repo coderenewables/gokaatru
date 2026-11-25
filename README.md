@@ -4,7 +4,7 @@
 
 GoKaatru ships as two parts that work together:
 
-- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **90 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
+- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **98 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
 - **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison.
 
 State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The frontend's convenience fields are **derived mirrors** of canonical backend keys, not independent state — the mapping is defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
@@ -184,6 +184,10 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/sessions/{id}/map/site` | GET | Site-overview GeoJSON (mast + ERA5 nodes) |
 | `/sessions/{id}/chat` | POST | BYOK LLM chat proxy with server-side tool execution (read-only by default; see [Chat tool authority](#chat-tool-authority)) |
 | `/mcp/catalog` | GET | MCP tool/resource catalog for discovery |
+| `/operations` | GET | Every declared operation: effect, stage, canvas, assistant, network, parameters |
+| `/sessions/{id}/operations/{name}` | POST | Run one operation; JSON body of its parameters (generated, one route per operation). The OpenAPI schema types every request and result (`<Name>Parameters`, `<Name>Result`), and 400 and 502 as `ErrorDetail`; a float in a result may be null, which is how NaN and infinity are sent |
+| `/sessions/{id}/series` | GET | A window of measured channels as an Arrow stream (`application/vnd.apache.arrow.stream`): per-bucket `<channel>.min`, `.max` and `.count` beside `time`, the window described in the schema metadata (`gokaatru`). Query: `channels`, `start`, `end` (UTC offset required), `buckets`, `selection`. The same window as `get_series_window` |
+| `/sessions/{id}/operations/{name}/preview` | POST | Dry run with the same body: what the operation would return and change, nothing applied (`apply_cleaning_rule`, `undo_cleaning_rule`) |
 
 ## Tool inventory
 
@@ -201,6 +205,14 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 
 ### Configuration
 - `get_run_config`, `update_run_config`, `save_run_config`, `load_run_config`, `get_analysis_summary`
+
+### History
+- `undo_last_change`, `redo_last_change` — undo the last cleaning rule or configuration change still in the history, or redo what was undone. Undo refuses when a later change has moved what it would restore; any other change clears what can be redone.
+- `get_operation_log` — the most recent operation calls (actor, operation, parameters with credentials redacted, data versions) and the undo state.
+
+### Selections
+- `define_selection`, `delete_selection`, `list_selections`, `resolve_selection` — named record selections: time ranges, direction sectors (wrapping through north), value bands on a channel, or explicit record sets, combined by union and intersection. Bounds are half-open and a missing value is never selected. The server resolves a selection against the working data each time it is used, so every view counts the same records.
+- 23 statistics and charts that read the measured records take a `selection` parameter naming one (`selectable: true` in `GET /operations`): the Weibull, wind-climate, turbulence, windrose, diurnal, monthly, MoMM and scatter statistics, energy metrics, ramps, persistence, sensor comparison, mast effects, QC diagnostics, vertical structure and sector shear tables, and the windrose, Weibull, diurnal, scatter, time-series and monthly-mean charts. The operation then runs with every record outside the selection missing, and its result carries a `selection` block (below). Reads of stored results, the long-term series, the reanalysis or the data inventory take none; `tests/test_selection_operations.py` lists each with the reason.
 
 ### Scenario sweep (Analysis Engine)
 - `get_fixed_prefix_hash`, `list_sweeps`, `get_sweep_summary`, `analyze_sweep_spread`
@@ -236,6 +248,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 
 ### Visualization
 - `plot_windrose`, `plot_weibull`, `plot_diurnal`, `plot_scatter`, `plot_timeseries`, `plot_data_coverage`, `plot_shear_table`, `plot_monthly_means`, `plot_ltc_comparison`, `plot_annual_means`, `plot_uncertainty_breakdown`
+- `get_series_window` — measured channels over a half-open window, reduced on the server to at most `buckets` equal-width time buckets (default 2000), each with every channel's minimum, maximum and valid count, so the band a chart draws is the data's exact envelope. A window of no more records than buckets is returned record by record; zoom by asking for a narrower window. The interface reads the same window as Arrow from `GET /sessions/{id}/series`.
 
 Additional figures are reachable through `POST /sessions/{id}/plots/{name}` without being MCP tools in their own right — including `shear_profile`, `shear_timeseries`, `era5_scatter`, `mast_shadow`, `qc_flags`, `ltc_scatter`, `ltc_residuals`, `ltc_monthly`, `ltc_convergence`, and `uncertainty_tornado`.
 
@@ -328,6 +341,11 @@ invites use:
 
 ### Disclosure fields — read these before trusting a number
 
+Each field below is declared on the operation that returns it (`disclosure` in
+`server/operations.py`). `tests/test_disclosure_fields.py` checks this table against those
+declarations in both directions, and runs a synthetic pipeline to find every declared field
+in its operation's response.
+
 | Field | Appears in | Meaning |
 |---|---|---|
 | `records_clamped`, `clamped_fraction` | every shear response | How often α hit the [−1, 1] backstop. A clamped α = 1.0 turns 8.7 m/s at 150 m into 15.0 m/s. Above 5% the response carries an explicit `warning`. |
@@ -369,6 +387,8 @@ invites use:
 | `uncertainty_substitution` | `analyze_sweep_spread` / `POST .../spread` | Per component: the parametric mean, the sweep's empirical term, the value applied and its `basis` (`empirical`, `parametric`, `added`, `not_resolved`), and which axes were used, under-resolved (two levels) or not varied. Per sweep: the distribution of scenario totals with and without the substitution, how many it raised, and how many lacked a parametric component and were left out. Computed over the caller's row selection. The scenario rows' own `total_uncertainty_pct` is unchanged. |
 | `is_interpolation` (`inputs`, `provenance.is_interpolation`) | `derive_uncertainty_inputs` | Whether hub height sits inside the profile the scenario extrapolated from: its own reference heights (axis A2) when given, otherwise every mapped height. A scenario restricted to sensors below hub is extrapolating even when another sensor sits above hub, so it takes the extrapolated vertical term rather than the 1% interpolated one. |
 | `extrapolate_reanalysis`, `reanalysis_status` | `extrapolate_to_hub_height` (sweep stage detail) | Sweep leaves pass `extrapolate_reanalysis=False`: the eight reanalysis node frames are not carried to hub height and the stage reports `reanalysis_status: "not_run"`. The reanalysis response reads `{"status": "skipped", "reason": "not_requested", "wrote_hub_column": false}`. The sweep's LTC reads the native `Spd_100m` / `Spd_50m` columns, so no reported number changes (68 rows identical before and after, 2026-11-14). The MCP tool and HTTP route still default to extrapolating. |
+| `selection` | every selectable operation, when a selection is named | Its `name`, how many of the working records it holds (`records` of `of_records`), and the `basis`: records outside it are **blanked, not dropped**. Their timestamps stay, so a ramp, calm spell or flat line never joins records the selection separates and the measurement interval is still inferred from the full record (dropped instead, every other record of a 10-minute series reads as a 20-minute cadence, which the timestep check refuses). A coverage or availability figure in such a result is the share of records both selected and valid. The shear and roughness timeseries and the raw data are blanked with the working data. |
+| `decimated`, `bucket_ms` | `get_series_window`, `GET /sessions/{id}/series` (schema metadata) | Whether the window was reduced to buckets and how wide each is, in whole milliseconds (the width is rounded up, so there are at most `buckets`; `DEFAULT_SERIES_BUCKETS` = 2000). A bucket's bounds are the exact minimum and maximum of its records, not a sample, and `count` says how many valid records it holds: 0 marks a gap, with null bounds. `decimated: false` means every record is its own bucket and `bucket_ms` is null. |
 | `in_progress` | sweep `manifest.json` (`list_sweeps`) | `true` on a checkpoint written while a sweep runs, or left by one that died part-way; absent on a finished sweep. The rows and runconfigs present are the shear-prefix groups completed so far. `finished_at` is the checkpoint time. `get_sweep_summary` and `analyze_sweep_spread` do not flag it yet. |
 
 ### Uncertainty is reported on a wind-speed basis — converting it to energy
@@ -530,16 +550,18 @@ These must be addressed first:
 ### Chat tool authority
 
 `POST /sessions/{id}/chat` executes MCP tools on the model's behalf, so the tool
-surface is an explicit **name allowlist**, deny-by-default. A tool in neither
-tier is not exposed at all, so adding a new MCP tool does not silently widen the
-model's authority.
+surface is deny-by-default. Each tool's operation declaration (`server/operations.py`)
+says whether the assistant may be offered it and whether it changes data or calls the
+network; the two tiers are generated from that, and `tests/test_operations.py` pins
+both by name, so moving a tool between tiers is a visible test edit. A tool declared
+with `assistant=False` is not exposed at all.
 
 | Tier | Count | Exposed when |
 |---|---|---|
-| Read-only — query, compute, plot | 51 | always |
-| Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty | 27 | only with `allow_mutating_tools: true` |
+| Read-only — query, compute, plot, series windows, the operation log, listing and resolving selections | 53 | always |
+| Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty, the atmospheric diagnostic (it records the density the energy sensitivity uses), the clipping analysis (it records the inter-annual variability the uncertainty model uses), undo and redo, defining and deleting selections | 33 | only with `allow_mutating_tools: true` |
 
-The remaining 12 of the 90 registered tools are deliberately unclassified and
+The remaining 12 of the 98 registered tools are declared `assistant=False` and
 therefore unreachable from chat: every BrightHub / EarthDataHub tool — the read-only
 tier's contract is "no session mutation, no filesystem, **no network**", and the
 credential tools would additionally hand an injected prompt a view of the session's
@@ -557,6 +579,20 @@ When on, the assistant can change session data without asking for each change;
 per-action approval is not built yet, so it is off until the user opts in. The API
 default is read-only as well.
 
+### Projects survive a restart
+
+A session's workspace is a project (`server/state/project.py`, decisions/0010). Raw
+uploads stay untouched with their SHA-256 recorded, every frame is saved as Parquet named
+by its content hash, and every other field goes into `catalogue.sqlite`. Each operation call
+is logged with its actor, parameters (credentials redacted), code version and data versions,
+and every successful change saves the project, so a restarted server reopens it as it was.
+Each derived result records the call that built it (`derived_provenance`). A result built
+from older data, or by an earlier engine version, is listed by `staleness_report` with the
+reason (`stale_reasons`) and left as it is: nothing is recomputed silently.
+A project whose recorded raw input was changed or removed outside GoKaatru is refused (HTTP
+409) rather than shown with results the inputs no longer support. Credentials are never
+written to disk.
+
 ## Validation
 
 Backend (registered tool count changes as capabilities are added; verify it with the command below):
@@ -570,6 +606,11 @@ python -m pytest tests/test_sensor_selection.py tests/test_uploaded_dataset.py -
 python -c "import asyncio, json; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())), 'tools')"
 ```
 
+`python -m tests.published_numbers --check` reruns the pipeline on the three reference
+campaigns and compares every number it returns, and a SHA-256 of every series, with the
+committed snapshot `tests/snapshots/published_numbers.json`; any difference, down to the
+last bit, fails. `--write` refreshes the snapshot when a number is meant to move.
+
 Tests that read the real reference campaigns (Boxkite, Horns Rev, Launakalana) need files
 under the gitignored `data/uploads/` (set `GOKAATRU_TEST_UPLOADS_DIR` to read them from
 elsewhere). Without them those tests skip with a message naming the missing file; they do
@@ -580,6 +621,7 @@ Frontend (Vitest coverage across types, store, import, stages, Canvas, copilot, 
 ```bash
 cd frontend && npm run test
 cd frontend && npm run build    # tsc --noEmit && vite build
+cd frontend && npm run check:api   # the generated API client matches frontend/src/api/openapi.json
 cd frontend && npx playwright install chromium   # once
 cd frontend && npm run test:e2e # Playwright smoke test; starts its own backend (:8011) and Vite (:5183)
 ```

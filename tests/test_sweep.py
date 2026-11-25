@@ -802,6 +802,24 @@ def test_a_changed_fixed_prefix_changes_every_hash(tmp_path):
     )
 
 
+def test_the_time_a_cleaning_rule_ran_does_not_change_the_prefix(tmp_path):
+    """Two analyses with the same cleaning, run a minute apart, are comparable.
+
+    The prefix hashed each log entry's ``applied_at``, so the same rules applied at a
+    different second gave a different prefix and a different config hash for every
+    scenario; found by the published-numbers harness (P1-0), whose two runs disagreed.
+    """
+    base = _base_state(tmp_path)
+    entry = {"rule_type": "range_check", "sensor": "Spd_100m", "sequence": 1, "records_affected": 7}
+    base.cleaning_log = [entry | {"applied_at": "2026-11-19T01:11:22+00:00"}]
+    first = fixed_prefix_hash(base)
+    base.cleaning_log = [entry | {"applied_at": "2026-11-19T01:12:18+00:00"}]
+    assert fixed_prefix_hash(base) == first
+
+    base.cleaning_log = [entry | {"records_affected": 8, "applied_at": "2026-11-19T01:12:18+00:00"}]
+    assert fixed_prefix_hash(base) != first
+
+
 def test_fixed_prefix_hash_matches_an_independent_recomputation(tmp_path):
     """Oracle check: the hash is exactly sha256(sorted-JSON of its seven inputs)[:16].
 
@@ -810,7 +828,7 @@ def test_fixed_prefix_hash_matches_an_independent_recomputation(tmp_path):
     input changes" tests above.
     """
     base = _base_state(tmp_path)
-    base.cleaning_log = [{"rule": "icing", "removed": 120}]
+    base.cleaning_log = [{"rule": "icing", "removed": 120, "applied_at": "2026-11-19T01:11:22+00:00"}]
 
     expected = oracles.fixed_prefix_hash_oracle(
         cleaning_log=base.cleaning_log,

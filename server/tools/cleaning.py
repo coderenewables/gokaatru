@@ -7,14 +7,16 @@ from __future__ import annotations
 import ast
 import copy
 import json
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
 
 from server.core.validators import SENSOR_FIELDS, detect_timestep_minutes
-from server.main import mcp
-from server.state.session import SessionState, session
+from server.operations import ACTOR, note_undo, operation
+from server.schemas.results import cleaning as result_models
+from server.state.session import SessionProxy, SessionState, empty_cleaning_flags, get_active_session, session
 
 # Physical bounds per sensor type for range_check (D16), in the units the
 # pipeline stores: m/s, degrees, degrees Celsius, Pascals, percent.  An unknown
@@ -684,10 +686,19 @@ def _apply_cleaning_rule(
         {"sequence": index + 1, "rule_type": str(item.get("rule_type")), "sensor": str(item.get("sensor"))}
         for index, item in enumerate(state.cleaning_log)
     ]
+    frame = state.timeseries_df
+    was_missing = (
+        frame[sensor].isna().to_numpy().copy()
+        if rule_type in FLAG_REASONS and frame is not None and sensor in frame.columns
+        else None
+    )
     records_affected, detail = _apply_rule(state, rule_type, sensor, parsed, start_date, end_date)
     # The working data just changed, so anything already derived from it is stale (F-11).
     state.bump_data_version()
     sequence = len(state.cleaning_log) + 1
+    if was_missing is not None:
+        newly_missing = state.timeseries_df[sensor].isna().to_numpy() & ~was_missing
+        _append_flags(state, state.timeseries_df.index[newly_missing], sensor, sequence, rule_type)
     entry: dict[str, object] = {
         "rule_type": rule_type,
         "sensor": sensor,
@@ -726,6 +737,66 @@ def _apply_cleaning_rule(
     }
 
 
+#: The reason code a rule's flags carry. Gap fill inserts timestamps rather than removing a
+#: sensor's values, so it sets no flags.
+FLAG_REASONS: dict[str, str] = {
+    "range_check": "out_of_range",
+    "icing_filter": "icing",
+    "stuck_sensor": "stuck_value",
+    "tower_shadow": "tower_shadow",
+    "custom_period_exclude": "excluded_period",
+    "expression_filter": "expression_match",
+}
+
+
+def _append_flags(state: SessionState, timestamps: pd.Index, sensor: str, sequence: int, rule_type: str) -> None:
+    if len(timestamps) == 0:
+        return
+    rows = pd.DataFrame(
+        {
+            "timestamp": pd.DatetimeIndex(timestamps),
+            "sensor": sensor,
+            "rule_sequence": np.int64(sequence),
+            "rule_type": rule_type,
+            "reason": FLAG_REASONS[rule_type],
+            "actor": ACTOR.get(),
+            "flagged_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+    )
+    existing = state.cleaning_flags
+    state.cleaning_flags = rows if existing.empty else pd.concat([existing, rows], ignore_index=True)
+
+
+def _clean_series(raw: pd.DataFrame, index: pd.Index, flags: pd.DataFrame) -> pd.DataFrame:
+    """The raw data on the working index with every flagged record set missing.
+
+    For every raw column this reproduces the cleaned working series exactly
+    (tests/test_cleaning_flags.py), which is what makes the flags a complete account of
+    why each value is missing.
+    """
+    frame = raw.reindex(index)
+    for sensor, group in flags.groupby("sensor", sort=False):
+        if sensor in frame.columns:
+            frame.loc[pd.DatetimeIndex(group["timestamp"]), sensor] = np.nan
+    return frame
+
+
+def _flag_summary(state: SessionState) -> dict[str, object]:
+    flags = state.cleaning_flags
+    by_rule = (
+        flags.groupby(["rule_sequence", "rule_type", "reason", "sensor"], sort=True).size()
+        if not flags.empty
+        else pd.Series(dtype="int64")
+    )
+    return {
+        "flagged_records": int(len(flags)),
+        "by_rule": [
+            {"rule_sequence": int(seq), "rule_type": rule, "reason": reason, "sensor": sensor, "records": int(count)}
+            for (seq, rule, reason, sensor), count in by_rule.items()
+        ],
+    }
+
+
 def _get_cleaning_log(state: SessionState) -> dict:
     """Return the recorded cleaning operations applied to the active session timeseries."""
     return {
@@ -734,7 +805,30 @@ def _get_cleaning_log(state: SessionState) -> dict:
         # records is part of the method rather than a presentation detail (F-70).
         "order_is_material": True,
         "order_note": RULE_ORDER_NOTE,
+        "flags": _flag_summary(state),
     }
+
+
+def _carry_flag_provenance(
+    previous: pd.DataFrame, replayed: pd.DataFrame, replayable: list[dict[str, object]]
+) -> pd.DataFrame:
+    """Give replayed flags the actor and time of the rule application they reproduce.
+
+    Undo replays the remaining rules from raw, so they are renumbered and re-derive their
+    flags; who applied each rule, and when, is what the flags must keep.
+    """
+    if replayed.empty or previous.empty:
+        return replayed
+    origin = previous.groupby("rule_sequence")[["actor", "flagged_at"]].first()
+    carried = replayed.copy()
+    for new_sequence, entry in enumerate(replayable, start=1):
+        old_sequence = entry.get("sequence")
+        if old_sequence not in origin.index:
+            continue
+        rows = carried["rule_sequence"] == new_sequence
+        carried.loc[rows, "actor"] = origin.at[old_sequence, "actor"]
+        carried.loc[rows, "flagged_at"] = origin.at[old_sequence, "flagged_at"]
+    return carried
 
 
 def _undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
@@ -763,6 +857,7 @@ def _undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
     # must see the same inventory or it would silently become a no-op.
     replay_state.sensor_inventory = copy.deepcopy(state.sensor_inventory)
     replay_state.cleaning_log = []
+    replay_state.cleaning_flags = empty_cleaning_flags()
     for entry in replayable:
         params = json.dumps(entry.get("params", {}))
         _apply_cleaning_rule(
@@ -785,6 +880,7 @@ def _undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
     ] if state.timeseries_df is not None else []
     state.timeseries_df = replay_state.timeseries_df
     state.cleaning_log = provenance + replay_state.cleaning_log
+    state.cleaning_flags = _carry_flag_provenance(state.cleaning_flags, replay_state.cleaning_flags, replayable)
     state.bump_data_version()
     result: dict[str, object] = {
         "status": "ok",
@@ -802,25 +898,145 @@ def _undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
     return result
 
 
-@mcp.tool()
+#: A preview lists at most this many contiguous runs of changed records per column. The
+#: counts beside them are always complete; ``ranges_truncated`` says when runs were cut.
+PREVIEW_RANGE_LIMIT = 50
+
+
+def _replica(state: SessionState) -> SessionState:
+    """An isolated copy of the session for a dry run: the same data, nothing shared that a
+    rule or an undo could change."""
+    if isinstance(state, SessionProxy):
+        # A copy of the proxy would still forward every write to the bound session.
+        state = get_active_session()
+    replica = copy.copy(state)
+    for name in ("timeseries_df", "raw_timeseries_df"):
+        frame = getattr(state, name)
+        setattr(replica, name, None if frame is None else frame.copy(deep=True))
+    for name in ("runconfig", "sensor_mapping", "sensor_inventory", "cleaning_log", "derived_versions"):
+        setattr(replica, name, copy.deepcopy(getattr(state, name)))
+    return replica
+
+
+def _runs(index: pd.Index, flags: np.ndarray) -> list[list[str]]:
+    """Contiguous runs of flagged records, as [first, last] timestamps."""
+    positions = np.flatnonzero(flags)
+    if positions.size == 0:
+        return []
+    breaks = np.flatnonzero(np.diff(positions) > 1)
+    starts = np.concatenate(([positions[0]], positions[breaks + 1]))
+    ends = np.concatenate((positions[breaks], [positions[-1]]))
+    return [[pd.Timestamp(index[s]).isoformat(), pd.Timestamp(index[e]).isoformat()] for s, e in zip(starts, ends)]
+
+
+def _change_summary(before: pd.DataFrame, after: pd.DataFrame) -> dict[str, object]:
+    """What turned ``before`` into ``after``: rows inserted, columns dropped or added, and per
+    column the records set missing, restored or changed, with their runs."""
+    common = after.index.intersection(before.index)
+    columns: dict[str, object] = {}
+    for column in after.columns.intersection(before.columns):
+        old = before[column].reindex(common).to_numpy(dtype=float)
+        new = after[column].reindex(common).to_numpy(dtype=float)
+        same = (old == new) | (np.isnan(old) & np.isnan(new))
+        if same.all():
+            continue
+        set_missing = ~np.isnan(old) & np.isnan(new)
+        restored = np.isnan(old) & ~np.isnan(new)
+        changed = ~same & ~set_missing & ~restored
+        runs = _runs(common, ~same)
+        columns[str(column)] = {
+            "set_missing": int(set_missing.sum()),
+            "restored": int(restored.sum()),
+            "changed": int(changed.sum()),
+            "ranges": runs[:PREVIEW_RANGE_LIMIT],
+            "ranges_truncated": len(runs) > PREVIEW_RANGE_LIMIT,
+        }
+    return {
+        "rows_before": int(len(before)),
+        "rows_after": int(len(after)),
+        "rows_inserted": int(len(after.index.difference(before.index))),
+        "rows_removed": int(len(before.index.difference(after.index))),
+        "columns_dropped": [str(column) for column in before.columns.difference(after.columns)],
+        "columns_added": [str(column) for column in after.columns.difference(before.columns)],
+        "columns": columns,
+        "range_limit": PREVIEW_RANGE_LIMIT,
+    }
+
+
+def _preview(state: SessionState, run: Callable[[SessionState], dict]) -> dict:
+    before = _require_timeseries(state)
+    replica = _replica(state)
+    response = run(replica)
+    changes = _change_summary(before, replica.timeseries_df)
+    return {**response, "status": "preview", "applied": False, "changes": changes}
+
+
+def _preview_cleaning_rule(
+    state: SessionState,
+    rule_type: str,
+    sensor: str,
+    params: str,
+    start_date: str = "",
+    end_date: str = "",
+) -> dict:
+    """What applying the rule would return and change, computed on a replica of the session."""
+    return _preview(
+        state, lambda replica: _apply_cleaning_rule(replica, rule_type, sensor, params, start_date, end_date)
+    )
+
+
+def _preview_undo_cleaning_rule(state: SessionState, entry_index: int) -> dict:
+    """What undoing the log entry would return and change, computed on a replica of the session."""
+    return _preview(state, lambda replica: _undo_cleaning_rule(replica, entry_index))
+
+
+def preview_cleaning_rule(rule_type: str, sensor: str, params: str, start_date: str = "", end_date: str = "") -> dict:
+    """Show what apply_cleaning_rule would remove, without changing the session."""
+    return _preview_cleaning_rule(session, rule_type, sensor, params, start_date, end_date)
+
+
+def preview_undo_cleaning_rule(entry_index: int) -> dict:
+    """Show what undo_cleaning_rule would restore, without changing the session."""
+    return _preview_undo_cleaning_rule(session, entry_index)
+
+
+@operation(effect="read", stage="cleaning", result=result_models.ListCleaningRulesResult)
 def list_cleaning_rules() -> dict:
     """List supported cleaning rules and default parameters for the GoKaatru Phase 2 cleaning workflow."""
     return _list_cleaning_rules(session)
 
 
-@mcp.tool()
+@operation(
+    effect="change", stage="cleaning", dry_run=preview_cleaning_rule,
+    disclosure=(
+        "bounds_source",
+        "min_applied",
+        "max_applied",
+        "order_dependence",
+    ),
+    result=result_models.ApplyCleaningRuleResult,
+    preview_result=result_models.ApplyCleaningRulePreview,
+)
 def apply_cleaning_rule(rule_type: str, sensor: str, params: str, start_date: str = "", end_date: str = "") -> dict:
     """Apply one named cleaning rule to the active timeseries and log the operation for undo."""
-    return _apply_cleaning_rule(session, rule_type, sensor, params, start_date, end_date)
+    result = _apply_cleaning_rule(session, rule_type, sensor, params, start_date, end_date)
+    note_undo(
+        {"kind": "cleaning", "cleaning_sequence": len(session.cleaning_log), "rule_type": rule_type, "sensor": sensor}
+    )
+    return result
 
 
-@mcp.tool()
+@operation(effect="read", stage="cleaning", result=result_models.GetCleaningLogResult)
 def get_cleaning_log() -> dict:
     """Return the recorded cleaning operations applied to the active session timeseries."""
     return _get_cleaning_log(session)
 
 
-@mcp.tool()
+@operation(
+    effect="change", stage="cleaning", dry_run=preview_undo_cleaning_rule,
+    result=result_models.UndoCleaningRuleResult,
+    preview_result=result_models.UndoCleaningRulePreview,
+)
 def undo_cleaning_rule(entry_index: int) -> dict:
     """Restore raw data and replay all cleaning steps except the selected log entry."""
     return _undo_cleaning_rule(session, entry_index)

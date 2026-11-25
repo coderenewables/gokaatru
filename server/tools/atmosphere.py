@@ -4,7 +4,8 @@ from __future__ import annotations
 import pandas as pd
 
 from server.core.formulas import moist_air_density, saturation_vapour_pressure_pa
-from server.main import mcp
+from server.operations import operation
+from server.schemas.results import atmosphere as result_models
 from server.state.session import SessionState, session
 
 # ISA sea-level density, the reference the density correction factor is quoted against.
@@ -174,7 +175,7 @@ def _compute_atmospheric_conditions(
     mean_density = float(density.dropna().mean())
     # F-57: the correction factor used to be computed here, displayed, and applied to
     # nothing. Persisting the mean density is what lets the energy-sensitivity path
-    # normalise speed to the power curve's reference density, per IEC 61400-12-1.
+    # normalise speed to the power curve's reference density, traced to IEC 61400-12-1.
     if mean_density > 0.0:
         state.runconfig["mean_air_density_kgm3"] = mean_density
         state.touch()
@@ -211,7 +212,9 @@ def _compute_atmospheric_conditions(
     return result
 
 
-@mcp.tool()
+# A change, not a read: it records the mean measured density in the run configuration, and
+# the energy-sensitivity factor normalises speed with it, so running it moves that number.
+@operation(effect="change", stage="atmosphere", result=result_models.ComputeAtmosphericConditionsResult)
 def compute_atmospheric_conditions(
     temperature_sensor: str = "",
     pressure_sensor: str = "",

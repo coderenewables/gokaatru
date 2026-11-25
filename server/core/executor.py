@@ -17,69 +17,6 @@ from uuid import uuid4
 
 from server.state.session import SessionState, bind_session
 
-TOOL_MODULE_PATHS = [
-    "server.tools.data_io",
-    "server.tools.cleaning",
-    "server.tools.shear",
-    "server.tools.extrapolation",
-    "server.tools.era5",
-    "server.tools.homogeneity",
-    "server.tools.ltc",
-    "server.tools.ltc_ml",
-    "server.tools.ensemble",
-    "server.tools.clipping",
-    "server.tools.uncertainty",
-    "server.tools.air_density",
-    "server.tools.statistics",
-    "server.tools.visualization",
-    "server.tools.map",
-    "server.tools.config",
-    "server.tools.brighthub",
-    "server.tools.advanced_analysis",
-    "server.tools.atmosphere",
-    "server.tools.diagnostics",
-    "server.tools.overview_summary",
-]
-
-# Canonical pipeline order, used only to tie-break nodes the topological sort cannot order
-# any other way (F-09: canvas edges are advisory, and the real dependency runs through
-# session state, not through declared edges - see docs/audit/01-ledger.md S2's
-# session-state read/write matrix and S3's workflow contract). `TOOL_MODULE_PATHS` above is
-# import order for tool registration and is NOT usable for this: it lists `brighthub` after
-# `era5`, even though `brighthub` writes `era5_data`/`merra_data` and `era5` reads them. This
-# list is deliberately separate and follows the real data-flow chain instead:
-# data_io/cleaning -> brighthub -> era5/homogeneity -> shear -> extrapolation -> air_density
-# -> ltc/ltc_ml -> ensemble -> clipping -> uncertainty, with read-only/diagnostic tool
-# modules after the pipeline they report on. A tie between two nodes that share a stage (e.g. two
-# era5 sub-steps) still falls back to node id, same as before this fix - this only replaces
-# "everything with no edge sorts by id" with "everything with no edge sorts by pipeline stage,
-# then by id within a stage".
-CANONICAL_STAGE_ORDER = [
-    "server.tools.data_io",
-    "server.tools.cleaning",
-    "server.tools.brighthub",
-    "server.tools.era5",
-    "server.tools.homogeneity",
-    "server.tools.shear",
-    "server.tools.extrapolation",
-    "server.tools.air_density",
-    "server.tools.ltc",
-    "server.tools.ltc_ml",
-    "server.tools.ensemble",
-    "server.tools.clipping",
-    "server.tools.uncertainty",
-    "server.tools.statistics",
-    "server.tools.visualization",
-    "server.tools.map",
-    "server.tools.config",
-    "server.tools.advanced_analysis",
-    "server.tools.atmosphere",
-    "server.tools.diagnostics",
-    "server.tools.overview_summary",
-]
-_STAGE_RANK: dict[str, int] = {module_path: index for index, module_path in enumerate(CANONICAL_STAGE_ORDER)}
-_UNKNOWN_STAGE_RANK = len(CANONICAL_STAGE_ORDER)
-
 PARAM_ALIASES: dict[str, tuple[str, ...]] = {
     "file_path": ("path", "timeseries_path", "timeseries_file", "datamodel_path", "datamodel_file"),
     "sensor_name": ("sensor",),
@@ -233,23 +170,23 @@ def _as_event(
 
 
 def _tool_registry() -> dict[str, tuple[ModuleType, Callable[..., Any]]]:
-    """Return a cached mapping of tool function name to (module, callable)."""
+    """Return a cached mapping of canvas operation name to (module, callable).
+
+    The canvas may dispatch exactly the operations declared with ``canvas=True``
+    (decisions/0009). Read lazily: importing ``server.main`` declares every operation.
+    """
     global _TOOL_REGISTRY
     if _TOOL_REGISTRY is not None:
         return _TOOL_REGISTRY
 
-    registry: dict[str, tuple[ModuleType, Callable[..., Any]]] = {}
-    for module_path in TOOL_MODULE_PATHS:
-        module = importlib.import_module(module_path)
-        for name, value in inspect.getmembers(module, inspect.isfunction):
-            if name.startswith("_"):
-                continue
-            if value.__module__ != module.__name__:
-                continue
-            registry.setdefault(name, (module, value))
+    import server.main  # noqa: F401
+    from server.operations import REGISTRY
 
-    _TOOL_REGISTRY = registry
-    return registry
+    _TOOL_REGISTRY = {
+        name: (importlib.import_module(declared.module), declared.fn)
+        for name, declared in REGISTRY.canvas_operations().items()
+    }
+    return _TOOL_REGISTRY
 
 
 class WorkflowExecutor:
@@ -271,7 +208,7 @@ class WorkflowExecutor:
         self._stage_disambiguated_nodes: list[str] = []
 
     def _stage_rank(self, node: WorkflowExecutionNode) -> int:
-        """Resolve a node's position in `CANONICAL_STAGE_ORDER`, for tie-breaking (F-09).
+        """Resolve a node's pipeline stage rank (``server.operations.STAGES``), for tie-breaking (F-09).
 
         A dataset node or the `select-dataset` helper has no backend operation and supplies
         data to everything else, so it ranks before every pipeline stage. An operation whose
@@ -283,10 +220,11 @@ class WorkflowExecutor:
         template_id = (node.template_id or "").strip()
         if not template_id or template_id == "select-dataset":
             return -1
-        entry = _tool_registry().get(template_id)
-        if entry is None:
-            return _UNKNOWN_STAGE_RANK
-        return _STAGE_RANK.get(entry[0].__name__, _UNKNOWN_STAGE_RANK)
+        from server.operations import REGISTRY, STAGES
+
+        if template_id not in _tool_registry() or template_id not in REGISTRY:
+            return len(STAGES)
+        return REGISTRY.get(template_id).stage_rank
 
     def _ordered_nodes(self) -> list[WorkflowExecutionNode]:
         """Return executable nodes in topological order, with deterministic fallback for cycles.
@@ -506,7 +444,9 @@ class WorkflowExecutor:
         # import the SessionProxy, which resolves through the bound session, so this
         # is equivalent for a single run and — unlike a module-level setattr — safe
         # when several executors run concurrently in one process.
-        with bind_session(self.state):
+        from server.operations import acting_as
+
+        with bind_session(self.state), acting_as("canvas"):
             result = function(**kwargs)
 
         if result is None:

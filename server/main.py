@@ -12,7 +12,10 @@ from fastmcp import FastMCP
 mcp = FastMCP(
     name="GoKaatru",
     version="0.1.0",
-    instructions="Wind Resource Assessment MCP Server - IEC-compliant wind data analysis tools",
+    instructions=(
+        "Wind Resource Assessment MCP Server - wind data analysis tools. Methods are traced to "
+        "public IEC 61400 and MEASNET material; no conformance with any standard is claimed."
+    ),
 )
 
 sys.modules.setdefault("server.main", sys.modules[__name__])
@@ -27,11 +30,14 @@ import server.tools.datamodel_builder  # noqa: F401,E402
 import server.tools.ensemble  # noqa: F401,E402
 import server.tools.era5  # noqa: F401,E402
 import server.tools.extrapolation  # noqa: F401,E402
+import server.tools.history  # noqa: F401,E402
 import server.tools.homogeneity  # noqa: F401,E402
 import server.tools.ltc  # noqa: F401,E402
 import server.tools.ltc_ml  # noqa: F401,E402
 import server.tools.map  # noqa: F401,E402
 import server.tools.scenario_result  # noqa: F401,E402
+import server.tools.selections  # noqa: F401,E402
+import server.tools.series  # noqa: F401,E402
 import server.tools.shear  # noqa: F401,E402
 import server.tools.statistics  # noqa: F401,E402
 import server.tools.sweep_analysis  # noqa: F401,E402
@@ -46,6 +52,9 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
+    from server.operations import ACTOR
+
+    ACTOR.set("mcp")
     if args.transport == "sse":
         mcp.run(transport="sse", host=args.host, port=args.port)
         return

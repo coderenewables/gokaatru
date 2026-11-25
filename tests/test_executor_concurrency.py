@@ -48,8 +48,11 @@ def probe_tool(monkeypatch: pytest.MonkeyPatch):
         return {"status": "ok", "message": f"observed={host_module.session.session_id}"}
 
     probe_session_identity.__module__ = host_module.__name__
-    monkeypatch.setattr(host_module, "probe_session_identity", probe_session_identity, raising=False)
-    monkeypatch.setattr(executor_module, "_TOOL_REGISTRY", None, raising=False)
+    # Only declared operations dispatch (decisions/0009), so the probe goes straight into the
+    # executor's dispatch table rather than being declared, which would also publish it to MCP.
+    dispatch = dict(executor_module._tool_registry())
+    dispatch["probe_session_identity"] = (host_module, probe_session_identity)
+    monkeypatch.setattr(executor_module, "_TOOL_REGISTRY", dispatch)
     yield host_module
     monkeypatch.setattr(executor_module, "_TOOL_REGISTRY", None, raising=False)
 

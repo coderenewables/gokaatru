@@ -25,14 +25,14 @@ MEAN_DAYS_IN_MONTH: dict[int, float] = {
 
 
 def power_law_extrapolate(v_ref: float, h_ref: float, h_target: float, alpha: float) -> float:
-    """Compute V(h_target) = V(h_ref) * (h_target / h_ref)^alpha per IEC 61400-12-1 Section B.2."""
+    """Compute V(h_target) = V(h_ref) * (h_target / h_ref)^alpha traced to IEC 61400-12-1 Section B.2."""
     if v_ref < 0 or h_ref <= 0 or h_target <= 0:
         raise ValueError("Power law requires non-negative speed and positive reference and target heights")
     return float(v_ref * (h_target / h_ref) ** alpha)
 
 
 def log_law_extrapolate(v_ref: float, h_ref: float, h_target: float, z0: float) -> float:
-    """Compute V(h_target) from the logarithmic wind profile per IEC 61400-12-1 Section B.3."""
+    """Compute V(h_target) from the logarithmic wind profile traced to IEC 61400-12-1 Section B.3."""
     if v_ref < 0 or h_ref <= 0 or h_target <= 0 or z0 <= 0:
         raise ValueError("Log law requires non-negative speed and positive heights and roughness length")
     if h_ref <= z0 or h_target <= z0:
@@ -41,7 +41,7 @@ def log_law_extrapolate(v_ref: float, h_ref: float, h_target: float, z0: float) 
 
 
 def shear_from_two_heights(v1: float, h1: float, v2: float, h2: float) -> float:
-    """Compute power-law shear alpha = ln(v2/v1) / ln(h2/h1) per IEC 61400-12-1 Section B.2."""
+    """Compute power-law shear alpha = ln(v2/v1) / ln(h2/h1) traced to IEC 61400-12-1 Section B.2."""
     if min(v1, v2) <= 0 or min(h1, h2) <= 0 or h1 == h2:
         return float(np.nan)
     return float(math.log(v2 / v1) / math.log(h2 / h1))
@@ -96,7 +96,7 @@ def saturation_vapour_pressure_pa(temperature_c):
 
 
 def moist_air_density(pressure_pa, temperature_k, vapour_pressure_pa):
-    """Moist-air density by partial pressures, per IEC 61400-12-1 Section A.5. Array-safe."""
+    """Moist-air density by partial pressures, traced to IEC 61400-12-1 Section A.5. Array-safe."""
     dry_air = (pressure_pa - vapour_pressure_pa) / DRY_AIR_GAS_CONSTANT
     water_vapour = vapour_pressure_pa / WATER_VAPOUR_GAS_CONSTANT
     return (dry_air + water_vapour) / temperature_k
@@ -126,7 +126,7 @@ def adjust_density_to_height(density, temperature_k, from_height_m: float, to_he
 def air_density_iec(
     pressure_pa: float, temperature_k: float, dewpoint_k: float
 ) -> tuple[float, bool]:
-    """Compute moist-air density from pressure and dew point per IEC 61400-12-1 Section A.5.
+    """Compute moist-air density from pressure and dew point traced to IEC 61400-12-1 Section A.5.
 
     Returns (density, was_dewpoint_clamped).  When dewpoint exceeds
     temperature (sensor fault or supersaturation), dewpoint is clamped to

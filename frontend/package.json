@@ -10,7 +10,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "typecheck:e2e": "tsc -p tsconfig.e2e.json"
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json",
+    "generate:api": "openapi-typescript src/api/openapi.json -o src/api/schema.d.ts --default-non-nullable false",
+    "check:api": "npm run generate:api && git diff --exit-code -- src/api/schema.d.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
@@ -21,6 +23,7 @@
     "ai": "^4.3.16",
     "clsx": "^2.1.1",
     "leaflet": "^1.9.4",
+    "openapi-fetch": "0.17.0",
     "plotly.js-dist-min": "^2.35.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -39,6 +42,7 @@
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.4.1",
     "jsdom": "^26.0.0",
+    "openapi-typescript": "7.13.0",
     "typescript": "^5.8.3",
     "vite": "^6.0.7",
     "vitest": "^3.0.9"

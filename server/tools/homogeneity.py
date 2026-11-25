@@ -7,7 +7,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from server.main import mcp
+from server.operations import operation
+from server.schemas.results import homogeneity as result_models
 from server.state.session import SessionState, session
 
 
@@ -117,13 +118,13 @@ def _apply_homogeneity_cutoff(state: SessionState, cutoff_year: int) -> dict:
     }
 
 
-@mcp.tool()
+@operation(effect="read", stage="homogeneity", result=result_models.AnalyzeHomogeneityResult)
 def analyze_homogeneity(method: str = "annual") -> dict:
     """Run Pettitt homogeneity screening on ERA5 node series aggregated annually or monthly."""
     return _analyze_homogeneity(session, method)
 
 
-@mcp.tool()
+@operation(effect="change", stage="homogeneity", result=result_models.ApplyHomogeneityCutoffResult)
 def apply_homogeneity_cutoff(cutoff_year: int) -> dict:
     """Trim interpolated ERA5 data to a recommended homogeneous period start year."""
     return _apply_homogeneity_cutoff(session, cutoff_year)

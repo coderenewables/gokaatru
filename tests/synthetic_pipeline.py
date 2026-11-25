@@ -34,6 +34,8 @@ READ_ARGUMENTS: dict[str, object] = {
     "x_channel": "Spd_80m",
     "y_channel": "Spd_100m",
     "sweep_id": "disclosure",
+    # Known only once the sweep has run: read_arguments() fills it in.
+    "config_hash": "",
     "name": "north",
     "speed_col": "Ensemble_Speed",
     "pressure_pa": 101325.0,
@@ -58,6 +60,14 @@ READ_ARGUMENTS: dict[str, object] = {
 #: A selection the reads can name: the northern sector, wrapping through 0.
 NORTH = {"kind": "sector", "channel": "Dir_100m", "from_deg": 300.0, "to_deg": 60.0}
 NODES = [(54.75, 7.75), (54.75, 8.25), (55.25, 7.75), (55.25, 8.25)]
+
+
+def read_arguments(state: SessionState) -> dict[str, object]:
+    """``READ_ARGUMENTS`` with a scenario of the pipeline's own sweep, whose config hash is only
+    known once it has run."""
+    from server.core.sweep import load_sweep
+
+    return {**READ_ARGUMENTS, "config_hash": load_sweep(state, "disclosure")["results"][0]["config_hash"]}
 
 
 def add_met_sensors(state: SessionState) -> None:

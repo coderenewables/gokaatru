@@ -23,7 +23,7 @@ from pydantic import TypeAdapter
 
 from server.operations import REGISTRY
 from server.state.session import SessionState, bind_session
-from tests.synthetic_pipeline import NODES, NORTH, READ_ARGUMENTS, SITE, add_met_sensors, run_pipeline
+from tests.synthetic_pipeline import NODES, NORTH, READ_ARGUMENTS, SITE, add_met_sensors, read_arguments, run_pipeline
 from tests.test_operation_routes import _populate
 
 _WIRE = TypeAdapter(Any)
@@ -55,7 +55,7 @@ class Samples:
 def _reads(samples: Samples, state: SessionState, overrides: dict[str, object] | None = None) -> None:
     """Every read, and every selectable one on a selection too. With ``overrides`` the reads
     run on another campaign, where a refusal is expected and skipped."""
-    values = {**READ_ARGUMENTS, **(overrides or {})}
+    values = {**(READ_ARGUMENTS if overrides else read_arguments(state)), **(overrides or {})}
     samples.call(state, "define_selection", name="north", definition=NORTH)
     for declared in REGISTRY:
         if declared.effect != "read" or declared.network:

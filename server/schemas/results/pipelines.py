@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from server.schemas.results._base import Result
+from server.schemas.results._base import Number, Result
 
 
 class PipelineEdge(Result):
@@ -56,3 +56,45 @@ class DeletePipelineResult(Result):
 
 class ListPipelinesResult(Result):
     pipelines: list[SavedPipeline]
+
+
+class ScenarioAxes(Result):
+    shear_fit_policy: str | None
+    reference_policy: str | None
+    shear_model: str
+    reference_source: str
+    ltc_algorithm: str
+    hub_height_m: Number
+    analyst_shear_alpha: Number
+
+
+class PipelineFromScenarioResult(Result):
+    sweep_id: str
+    config_hash: str
+    scenario: ScenarioAxes
+    steps: list[dict[str, Any]]
+    #: Whether the campaign is as the sweep found it (its fixed-prefix hash); when not, the
+    #: steps run on today's session and will not reproduce the row.
+    prefix_matches: bool
+    prefix_note: str | None = None
+
+
+class SweepSpecLevels(Result):
+    shear_fit_policies: list[str]
+    reference_policies: list[str]
+    shear_models: list[str]
+    reference_sources: list[str]
+    ltc_algorithms: list[str]
+    hub_height_m: Number
+    analyst_shear_alpha: Number
+
+
+class UnmatchedChoice(Result):
+    axis: str
+    why: str
+
+
+class SweepSpecFromPipelineResult(Result):
+    spec: SweepSpecLevels
+    #: Choices no sweep level expresses; each such axis takes the sweep's default.
+    unmatched: list[UnmatchedChoice]

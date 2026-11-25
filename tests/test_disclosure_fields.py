@@ -15,7 +15,7 @@ import pytest
 
 from server.operations import REGISTRY
 from server.state.session import bind_session
-from tests.synthetic_pipeline import run_pipeline
+from tests.synthetic_pipeline import read_arguments, run_pipeline
 
 README = Path(__file__).resolve().parents[1] / "README.md"
 
@@ -105,8 +105,13 @@ AFTER_THE_PIPELINE: dict[str, dict[str, Any]] = {
 def responses(tmp_path_factory) -> dict[str, Any]:
     state, calls = run_pipeline(tmp_path_factory.mktemp("disclosure"))
     found = {name: result for name, _, result in calls}
+    values = read_arguments(state)
+    reads = {
+        "pipeline_from_scenario": {"sweep_id": values["sweep_id"], "config_hash": values["config_hash"]},
+        "sweep_spec_from_pipeline": {"steps": values["steps"]},
+    }
     with bind_session(state):
-        for name, arguments in AFTER_THE_PIPELINE.items():
+        for name, arguments in {**reads, **AFTER_THE_PIPELINE}.items():
             found[name] = REGISTRY.get(name).fn(**arguments)
     return found
 

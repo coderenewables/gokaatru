@@ -2072,6 +2072,72 @@
  },
  {
   "annotations": null,
+  "description": "The pipeline that computes one sweep scenario: its shear steps, the extrapolation from\nits reference sensors, its correction against its reference source and its own\nuncertainty, each the operation the sweep's stage shares. Says when the campaign has\nchanged since the sweep, as the steps then will not reproduce the row.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "config_hash": {
+     "type": "string"
+    },
+    "sweep_id": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "sweep_id",
+    "config_hash"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "pipeline_from_scenario",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "The sweep specification whose levels are a pipeline's own choices (its sensor policies,\nshear model, reference sources, corrections and hub height): the matrix \"Sweep around this\"\nstarts from. A choice no sweep level expresses is listed in unmatched, with why.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "steps": {
+     "items": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "steps"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "sweep_spec_from_pipeline",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
   "description": "Return the fixed-prefix hash for the current session, stamped before any sweep runs.",
   "execution": null,
   "icons": null,

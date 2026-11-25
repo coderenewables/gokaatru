@@ -13274,6 +13274,73 @@
     "title": "PipelineEdge",
     "type": "object"
    },
+   "PipelineFromScenarioParameters": {
+    "additionalProperties": false,
+    "properties": {
+     "config_hash": {
+      "title": "Config Hash",
+      "type": "string"
+     },
+     "sweep_id": {
+      "title": "Sweep Id",
+      "type": "string"
+     }
+    },
+    "required": [
+     "sweep_id",
+     "config_hash"
+    ],
+    "title": "PipelineFromScenarioParameters",
+    "type": "object"
+   },
+   "PipelineFromScenarioResult": {
+    "additionalProperties": false,
+    "properties": {
+     "config_hash": {
+      "title": "Config Hash",
+      "type": "string"
+     },
+     "prefix_matches": {
+      "title": "Prefix Matches",
+      "type": "boolean"
+     },
+     "prefix_note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Prefix Note"
+     },
+     "scenario": {
+      "$ref": "#/components/schemas/ScenarioAxes"
+     },
+     "steps": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Steps",
+      "type": "array"
+     },
+     "sweep_id": {
+      "title": "Sweep Id",
+      "type": "string"
+     }
+    },
+    "required": [
+     "sweep_id",
+     "config_hash",
+     "scenario",
+     "steps",
+     "prefix_matches"
+    ],
+    "title": "PipelineFromScenarioResult",
+    "type": "object"
+   },
    "PlotAnnualMeansParameters": {
     "additionalProperties": false,
     "properties": {},
@@ -16725,6 +16792,78 @@
     "title": "ScatterPairsRequest",
     "type": "object"
    },
+   "ScenarioAxes": {
+    "additionalProperties": false,
+    "properties": {
+     "analyst_shear_alpha": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Analyst Shear Alpha"
+     },
+     "hub_height_m": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Hub Height M"
+     },
+     "ltc_algorithm": {
+      "title": "Ltc Algorithm",
+      "type": "string"
+     },
+     "reference_policy": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reference Policy"
+     },
+     "reference_source": {
+      "title": "Reference Source",
+      "type": "string"
+     },
+     "shear_fit_policy": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Shear Fit Policy"
+     },
+     "shear_model": {
+      "title": "Shear Model",
+      "type": "string"
+     }
+    },
+    "required": [
+     "shear_fit_policy",
+     "reference_policy",
+     "shear_model",
+     "reference_source",
+     "ltc_algorithm",
+     "hub_height_m",
+     "analyst_shear_alpha"
+    ],
+    "title": "ScenarioAxes",
+    "type": "object"
+   },
    "SectorModel": {
     "additionalProperties": false,
     "properties": {
@@ -18663,6 +18802,118 @@
     "title": "SweepRequest",
     "type": "object"
    },
+   "SweepSpecFromPipelineParameters": {
+    "additionalProperties": false,
+    "properties": {
+     "steps": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Steps",
+      "type": "array"
+     }
+    },
+    "required": [
+     "steps"
+    ],
+    "title": "SweepSpecFromPipelineParameters",
+    "type": "object"
+   },
+   "SweepSpecFromPipelineResult": {
+    "additionalProperties": false,
+    "properties": {
+     "spec": {
+      "$ref": "#/components/schemas/SweepSpecLevels"
+     },
+     "unmatched": {
+      "items": {
+       "$ref": "#/components/schemas/UnmatchedChoice"
+      },
+      "title": "Unmatched",
+      "type": "array"
+     }
+    },
+    "required": [
+     "spec",
+     "unmatched"
+    ],
+    "title": "SweepSpecFromPipelineResult",
+    "type": "object"
+   },
+   "SweepSpecLevels": {
+    "additionalProperties": false,
+    "properties": {
+     "analyst_shear_alpha": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Analyst Shear Alpha"
+     },
+     "hub_height_m": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Hub Height M"
+     },
+     "ltc_algorithms": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Ltc Algorithms",
+      "type": "array"
+     },
+     "reference_policies": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Reference Policies",
+      "type": "array"
+     },
+     "reference_sources": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Reference Sources",
+      "type": "array"
+     },
+     "shear_fit_policies": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Shear Fit Policies",
+      "type": "array"
+     },
+     "shear_models": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Shear Models",
+      "type": "array"
+     }
+    },
+    "required": [
+     "shear_fit_policies",
+     "reference_policies",
+     "shear_models",
+     "reference_sources",
+     "ltc_algorithms",
+     "hub_height_m",
+     "analyst_shear_alpha"
+    ],
+    "title": "SweepSpecLevels",
+    "type": "object"
+   },
    "SweepSpreadRequest": {
     "description": "Which metric to decompose, and optionally which rows to decompose it over.\n\n``config_hashes`` carries the caller's own row selection — the Interrogate page\napplies its axis filters client-side, and re-implementing that filtering here would\nbe a second copy of logic that has to agree. Omitted, the whole admissible set is\nused, which is what a tool caller with no UI state wants.",
     "properties": {
@@ -19827,6 +20078,25 @@
      "can_redo"
     ],
     "title": "UndoLastChangeResult",
+    "type": "object"
+   },
+   "UnmatchedChoice": {
+    "additionalProperties": false,
+    "properties": {
+     "axis": {
+      "title": "Axis",
+      "type": "string"
+     },
+     "why": {
+      "title": "Why",
+      "type": "string"
+     }
+    },
+    "required": [
+     "axis",
+     "why"
+    ],
+    "title": "UnmatchedChoice",
     "type": "object"
    },
    "UpdateProject": {
@@ -33864,6 +34134,103 @@
     ]
    }
   },
+  "/api/sessions/{session_id}/operations/pipeline_from_scenario": {
+   "post": {
+    "description": "The pipeline that computes one sweep scenario: its shear steps, the extrapolation from\nits reference sensors, its correction against its reference source and its own\nuncertainty, each the operation the sweep's stage shares. Says when the campaign has\nchanged since the sweep, as the steps then will not reproduce the row.",
+    "operationId": "operation_pipeline_from_scenario_api_sessions__session_id__operations_pipeline_from_scenario_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/PipelineFromScenarioParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PipelineFromScenarioResult",
+         "title": "Response Operation Pipeline From Scenario Api Sessions  Session Id  Operations Pipeline From Scenario Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "pipeline_from_scenario",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
   "/api/sessions/{session_id}/operations/plot_annual_means": {
    "post": {
     "description": "Plot annual mean corrected wind speed for all LTC algorithms and the ensemble over the long-term record.",
@@ -36284,6 +36651,103 @@
      }
     },
     "summary": "summarise_channels",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
+  "/api/sessions/{session_id}/operations/sweep_spec_from_pipeline": {
+   "post": {
+    "description": "The sweep specification whose levels are a pipeline's own choices (its sensor policies,\nshear model, reference sources, corrections and hub height): the matrix \"Sweep around this\"\nstarts from. A choice no sweep level expresses is listed in unmatched, with why.",
+    "operationId": "operation_sweep_spec_from_pipeline_api_sessions__session_id__operations_sweep_spec_from_pipeline_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/SweepSpecFromPipelineParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SweepSpecFromPipelineResult",
+         "title": "Response Operation Sweep Spec From Pipeline Api Sessions  Session Id  Operations Sweep Spec From Pipeline Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "sweep_spec_from_pipeline",
     "tags": [
      "operations"
     ]

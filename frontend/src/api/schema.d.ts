@@ -2900,6 +2900,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/pipeline_from_scenario": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * pipeline_from_scenario
+         * @description The pipeline that computes one sweep scenario: its shear steps, the extrapolation from
+         *     its reference sensors, its correction against its reference source and its own
+         *     uncertainty, each the operation the sweep's stage shares. Says when the campaign has
+         *     changed since the sweep, as the steps then will not reproduce the row.
+         */
+        post: operations["operation_pipeline_from_scenario_api_sessions__session_id__operations_pipeline_from_scenario_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/plot_annual_means": {
         parameters: {
             query?: never;
@@ -3427,6 +3450,28 @@ export interface paths {
          *     selection, of its records only, which is how a selection is compared with every record.
          */
         post: operations["operation_summarise_channels_api_sessions__session_id__operations_summarise_channels_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/operations/sweep_spec_from_pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * sweep_spec_from_pipeline
+         * @description The sweep specification whose levels are a pipeline's own choices (its sensor policies,
+         *     shear model, reference sources, corrections and hub height): the matrix "Sweep around this"
+         *     starts from. A choice no sweep level expresses is listed in unmatched, with why.
+         */
+        post: operations["operation_sweep_spec_from_pipeline_api_sessions__session_id__operations_sweep_spec_from_pipeline_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8570,6 +8615,29 @@ export interface components {
             /** Target */
             target: string;
         };
+        /** PipelineFromScenarioParameters */
+        PipelineFromScenarioParameters: {
+            /** Config Hash */
+            config_hash: string;
+            /** Sweep Id */
+            sweep_id: string;
+        };
+        /** PipelineFromScenarioResult */
+        PipelineFromScenarioResult: {
+            /** Config Hash */
+            config_hash: string;
+            /** Prefix Matches */
+            prefix_matches: boolean;
+            /** Prefix Note */
+            prefix_note?: string | null;
+            scenario: components["schemas"]["ScenarioAxes"];
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+            /** Sweep Id */
+            sweep_id: string;
+        };
         /** PlotAnnualMeansParameters */
         PlotAnnualMeansParameters: Record<string, never>;
         /** PlotAnnualMeansResult */
@@ -9705,6 +9773,23 @@ export interface components {
             /** Y Channel */
             y_channel: string;
         };
+        /** ScenarioAxes */
+        ScenarioAxes: {
+            /** Analyst Shear Alpha */
+            analyst_shear_alpha: number | null;
+            /** Hub Height M */
+            hub_height_m: number | null;
+            /** Ltc Algorithm */
+            ltc_algorithm: string;
+            /** Reference Policy */
+            reference_policy: string | null;
+            /** Reference Source */
+            reference_source: string;
+            /** Shear Fit Policy */
+            shear_fit_policy: string | null;
+            /** Shear Model */
+            shear_model: string;
+        };
         /** SectorModel */
         SectorModel: {
             /** Count */
@@ -10206,6 +10291,36 @@ export interface components {
                 [key: string]: number;
             } | null;
         };
+        /** SweepSpecFromPipelineParameters */
+        SweepSpecFromPipelineParameters: {
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** SweepSpecFromPipelineResult */
+        SweepSpecFromPipelineResult: {
+            spec: components["schemas"]["SweepSpecLevels"];
+            /** Unmatched */
+            unmatched: components["schemas"]["UnmatchedChoice"][];
+        };
+        /** SweepSpecLevels */
+        SweepSpecLevels: {
+            /** Analyst Shear Alpha */
+            analyst_shear_alpha: number | null;
+            /** Hub Height M */
+            hub_height_m: number | null;
+            /** Ltc Algorithms */
+            ltc_algorithms: string[];
+            /** Reference Policies */
+            reference_policies: string[];
+            /** Reference Sources */
+            reference_sources: string[];
+            /** Shear Fit Policies */
+            shear_fit_policies: string[];
+            /** Shear Models */
+            shear_models: string[];
+        };
         /**
          * SweepSpreadRequest
          * @description Which metric to decompose, and optionally which rows to decompose it over.
@@ -10489,6 +10604,13 @@ export interface components {
             undone: components["schemas"]["LoggedCall"];
             /** Warning */
             warning?: string | null;
+        };
+        /** UnmatchedChoice */
+        UnmatchedChoice: {
+            /** Axis */
+            axis: string;
+            /** Why */
+            why: string;
         };
         /** UpdateProject */
         UpdateProject: {
@@ -17942,6 +18064,61 @@ export interface operations {
             };
         };
     };
+    operation_pipeline_from_scenario_api_sessions__session_id__operations_pipeline_from_scenario_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PipelineFromScenarioParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineFromScenarioResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
     operation_plot_annual_means_api_sessions__session_id__operations_plot_annual_means_post: {
         parameters: {
             query?: never;
@@ -19286,6 +19463,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SummariseChannelsResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
+    operation_sweep_spec_from_pipeline_api_sessions__session_id__operations_sweep_spec_from_pipeline_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SweepSpecFromPipelineParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SweepSpecFromPipelineResult"];
                 };
             };
             /** @description Refused: the request cannot be answered as asked */

@@ -68,6 +68,8 @@ NOT_SELECTABLE = {
     "compute_air_density": _NUMBERS,
     "order_pipeline": _STORED,
     "list_pipelines": _STORED,
+    "pipeline_from_scenario": _STORED,
+    "sweep_spec_from_pipeline": "maps a pipeline's steps onto sweep levels, not records",
     "compute_atmospheric_conditions": (
         "its density is the one the energy sensitivity measures over every record (decisions/0015.9); "
         "a selection's would be another number under the same name"

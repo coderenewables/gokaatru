@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from server.operations import REGISTRY
 from server.state.session import SessionState, bind_session
-from tests.synthetic_pipeline import NORTH, READ_ARGUMENTS, add_met_sensors, run_pipeline
+from tests.synthetic_pipeline import NORTH, add_met_sensors, read_arguments, run_pipeline
 
 # Fields a read may change by design.
 MAY_CHANGE = {"operation_log": "every call is logged", "updated_at": "not set by reads; listed for completeness"}
@@ -63,7 +63,7 @@ def analysed(tmp_path_factory) -> SessionState:
 def test_a_read_leaves_the_analysed_session_as_it_found_it(name: str, analysed: SessionState) -> None:
     declared = REGISTRY.get(name)
     arguments = {
-        parameter.name: READ_ARGUMENTS[parameter.name]
+        parameter.name: read_arguments(analysed)[parameter.name]
         for parameter in inspect.signature(declared.fn).parameters.values()
         if parameter.default is inspect.Parameter.empty
     }

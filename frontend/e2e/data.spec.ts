@@ -1,10 +1,20 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-import { campaignWithData, newCampaign, workbenchUrl } from "./fixtures";
+import { campaignWithData, newCampaign, pageErrors, workbenchUrl } from "./fixtures";
 
 // The data tree (P2-12): the campaign's instruments by height with their statistic channels,
 // matching the inventory the server lists, and the flags the cleaning log holds.
+
+
+// A chart that throws inside its library draws nothing and passes every other check.
+let thrown: string[] = [];
+test.beforeEach(({ page }) => {
+  thrown = pageErrors(page);
+});
+test.afterEach(() => {
+  expect(thrown).toEqual([]);
+});
 
 test("the data tree lists every instrument by height, its statistics and the flags", async ({ page }, testInfo) => {
   const opened = await campaignWithData(page, `Tree ${Date.now()}`);

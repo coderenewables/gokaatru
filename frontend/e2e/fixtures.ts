@@ -106,6 +106,14 @@ export async function campaignWithData(page: Page, name: string): Promise<Opened
   return opened;
 }
 
+/** Every uncaught error the page throws; a test asserts the list empty at its end. A chart
+ * that throws inside its library draws nothing and passes every other check. */
+export function pageErrors(page: Page): string[] {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(`${error.message} ${error.stack?.split("\n")[1]?.trim() ?? ""}`));
+  return errors;
+}
+
 export function workbenchUrl({ projectId, sessionId }: Opened): string {
   return `/workbench/?project=${projectId}&campaign=${sessionId}`;
 }

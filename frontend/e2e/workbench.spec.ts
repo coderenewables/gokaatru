@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { campaignWithData, newCampaign, workbenchUrl } from "./fixtures";
+import { campaignWithData, newCampaign, pageErrors, workbenchUrl } from "./fixtures";
 
 // The workbench shell at /workbench/ (P2-9, decisions/0006, 0012, 0014.9): a campaign opens
 // the docked panels, the arrangement persists, both themes render, and axe finds nothing.
@@ -34,6 +34,16 @@ async function dragTo(page: Page, from: Locator, target: Locator) {
 }
 
 // Each test runs in a fresh browser context, so it starts with no stored layout or theme.
+
+
+// A chart that throws inside its library draws nothing and passes every other check.
+let thrown: string[] = [];
+test.beforeEach(({ page }) => {
+  thrown = pageErrors(page);
+});
+test.afterEach(() => {
+  expect(thrown).toEqual([]);
+});
 
 test("the start screen lists a project's campaigns and opens the shell on one", async ({ page }) => {
   const name = `Start ${Date.now()}`;

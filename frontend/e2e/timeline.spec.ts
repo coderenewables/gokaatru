@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { campaignWithData, FROZEN_START, RECORDS, workbenchUrl } from "./fixtures";
+import { campaignWithData, FROZEN_START, pageErrors, RECORDS, workbenchUrl } from "./fixtures";
 
 // The timeline panel (P2-14, plan §3.3 "Timeline" and "Any chart"): envelopes by default,
 // brushing into the crossfilter, flag bands, and the channel picker.
@@ -46,6 +46,16 @@ async function open(page: Page, name: string) {
   await expect(legend(page).getByRole("listitem")).toHaveCount(3);
   return opened;
 }
+
+
+// A chart that throws inside its library draws nothing and passes every other check.
+let thrown: string[] = [];
+test.beforeEach(({ page }) => {
+  thrown = pageErrors(page);
+});
+test.afterEach(() => {
+  expect(thrown).toEqual([]);
+});
 
 test("the timeline shows the three speeds by default and passes axe", async ({ page }, testInfo) => {
   await open(page, "Timeline default");

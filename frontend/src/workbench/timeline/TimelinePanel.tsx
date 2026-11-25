@@ -147,7 +147,7 @@ export function TimelinePanel() {
   // set is a redraw rather than a new chart.
   useEffect(() => {
     live.current = { ...live.current, ranges, bands: flags.data ?? [], extent };
-    chart?.redraw(false);
+    if (chart?.data[0]?.length) chart.redraw(false);
   }, [ranges, flags.data, extent, chart]);
 
   // The chart: rebuilt when its channels or the theme change, resized in place.
@@ -311,15 +311,26 @@ export function TimelinePanel() {
     return () => observer.disconnect();
   }, [shownKey]);
 
+  // uPlot's time axis cannot be drawn before it has data: a resize of the empty chart (a
+  // neighbouring panel settling its height does it) throws inside uPlot and leaves the chart
+  // blank for good. So only a chart holding data is resized, and the data effect sizes it.
   useEffect(() => {
-    if (chart && size.width > 0 && size.height > 0) chart.setSize({ width: size.width, height: size.height });
+    if (chart && chart.data[0]?.length && size.width > 0 && size.height > 0) {
+      chart.setSize({ width: size.width, height: size.height });
+    }
   }, [chart, size]);
 
   useEffect(() => {
-    if (!chart || !data) return;
+    // Cached data for another channel set can arrive while this effect still holds the chart
+    // being replaced; uPlot throws on data whose columns do not match its series.
+    if (!chart || !data || chart.series.length !== 1 + 2 * data.meta.channels.length) return;
     chart.setData(plotData(data) as uPlot.AlignedData, false);
     const [from, to] = view ?? [data.meta.start_ms, data.meta.end_ms];
     chart.setScale("x", { min: from / 1000, max: to / 1000 });
+    const host = plotRef.current;
+    if (host && host.clientWidth > 0 && host.clientHeight > 0) {
+      chart.setSize({ width: host.clientWidth, height: host.clientHeight });
+    }
   }, [chart, data, view]);
 
   const options = (sensors.data ?? []).map((row) => row.name).filter((name) => !shown.includes(name));

@@ -53,6 +53,16 @@ NORTH = {"kind": "sector", "channel": "Dir_100m", "from_deg": 300.0, "to_deg": 6
 NODES = [(54.75, 7.75), (54.75, 8.25), (55.25, 7.75), (55.25, 8.25)]
 
 
+def add_met_sensors(state: SessionState) -> None:
+    """A temperature and a pressure sensor at 2 m, for the reads that need them (the
+    atmospheric diagnostic); added after the pipeline, so its results stay as they were."""
+    frame = state.timeseries_df
+    frame["Tmp_2m"] = 10.0 + 5.0 * np.sin(np.arange(len(frame)) / 144.0)
+    frame["Prs_2m"] = 1010.0
+    state.sensor_inventory["Tmp_2m"] = {"height_m": 2.0, "sensor_type": "temperature"}
+    state.sensor_inventory["Prs_2m"] = {"height_m": 2.0, "sensor_type": "pressure"}
+
+
 def _reference(index: pd.DatetimeIndex, rng: np.random.Generator) -> np.ndarray:
     return np.clip(rng.weibull(2.0, len(index)) * 8.5, 0.2, None)
 

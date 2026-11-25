@@ -65,12 +65,18 @@ class McpSamplingCap(Result):
 class DensityNormalisation(Result):
     applied: bool
     reference_density_kgm3: Number
-    #: When not applied: why (no recorded site density).
+    #: When not applied: why (no temperature or pressure sensor, or no record with both).
     reason: str | None = None
     #: When applied: the IEC 61400-12-1 wind-speed normalisation for a pitch-regulated turbine.
     method: str | None = None
     turbine_regulation: str | None = None
     site_density_kgm3: Number = None
+    #: What the site density was measured from (decisions/0015.9), and at which height.
+    temperature_sensor: str | None = None
+    pressure_sensor: str | None = None
+    humidity_sensor: str | None = None
+    density_records: int | None = None
+    height_basis: str | None = None
     speed_factor: Number = None
     note: str | None = None
 

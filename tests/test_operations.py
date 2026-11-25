@@ -113,6 +113,8 @@ PINNED_READ_TIER = frozenset({
     "get_operation_log", "list_selections", "resolve_selection", "get_series_window", "get_flag_intervals",
     "get_scatter_pairs", "summarise_channels", "list_instruments",
     "analyze_homogeneity", "analyze_sweep_spread", "build_sector_shear_tables", "compute_air_density",
+    # A read again since the energy sensitivity computes the density itself (P3-4).
+    "compute_atmospheric_conditions",
     "compute_air_density_timeseries", "compute_diurnal_profile",
     "compute_energy_metrics", "compute_energy_sensitivity", "compute_extreme_winds", "compute_mast_effects",
     "compute_mcp_readiness", "compute_momm", "compute_monthly_stats", "compute_qc_diagnostics",
@@ -131,7 +133,7 @@ PINNED_CHANGE_TIER = frozenset({
     "undo_last_change", "redo_last_change", "define_selection", "delete_selection", "remove_sensors",
     "apply_cleaning_rule", "apply_homogeneity_cutoff", "build_aggr_momm_shear_table", "build_data_model",
     "build_roughness_table", "build_shear_table", "calculate_roughness_timeseries",
-    "calculate_shear_timeseries", "calculate_uncertainty", "compute_atmospheric_conditions", "compute_era5_wind_speed",
+    "calculate_shear_timeseries", "calculate_uncertainty", "compute_era5_wind_speed",
     "extract_era5_data",
     "extrapolate_reanalysis_to_hub", "extrapolate_to_hub_height", "find_era5_nodes",
     "interpolate_era5_to_site", "load_run_config", "parse_datamodel", "parse_timeseries", "run_ensemble",

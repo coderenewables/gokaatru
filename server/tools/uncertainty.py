@@ -93,20 +93,22 @@ def _density_normalised(
     live the moment an indicative AEP existed, because reading a curve measured at
     1.225 kg/m3 with speeds from a 1.10 kg/m3 site overstates the energy.
 
-    The session's mean measured density is used when a density series exists; otherwise the
-    speeds are read as-is and the response says the normalisation was skipped, rather than
-    silently assuming standard conditions.
+    The site's mean measured density is computed here, from the measured temperature and
+    pressure, every time (decisions/0015.9), so the factor depends only on the data. Without
+    either sensor the speeds are read as-is and the response says the normalisation was
+    skipped and why, rather than silently assuming standard conditions.
     """
-    density = state.runconfig.get("mean_air_density_kgm3")
-    if not isinstance(density, (int, float)) or not density > 0.0:
+    from server.tools.atmosphere import site_mean_density
+
+    density, measured_from = site_mean_density(state)
+    if density is None:
         return speed, {
             "applied": False,
             "reason": (
-                "No site air density is recorded, so the speeds were read against a power "
-                "curve measured at 1.225 kg/m3 without normalisation. IEC 61400-12-1 "
-                "normalises speed to the reference density first; at a 1.10 kg/m3 site that "
-                "is a 3.5% speed correction and the sensitivity factor shifts with it. Run "
-                "compute_atmospheric_conditions to record the measured density."
+                f"{measured_from['reason']} The speeds were read against a power curve measured at "
+                "1.225 kg/m3 without normalisation. IEC 61400-12-1 normalises speed to the "
+                "reference density first; at a 1.10 kg/m3 site that is a 3.5% speed correction "
+                "and the sensitivity factor shifts with it."
             ),
             "reference_density_kgm3": REFERENCE_AIR_DENSITY,
         }
@@ -118,6 +120,7 @@ def _density_normalised(
         "method": "iec_61400_12_1_wind_speed_normalisation",
         "turbine_regulation": "pitch",
         "site_density_kgm3": round(float(density), 4),
+        **measured_from,
         "reference_density_kgm3": REFERENCE_AIR_DENSITY,
         "speed_factor": round(float((density / REFERENCE_AIR_DENSITY) ** (1.0 / 3.0)), 6),
         "note": (
@@ -408,7 +411,7 @@ def _calculate_uncertainty(
     result=result_models.CalculateUncertaintyResult,
     reads=(
         "ensemble", "ltc:linear_least_squares", "ltc:total_least_squares", "ltc:variance_ratio", "ltc:speedsort",
-        "ltc:xgboost", "hub_height_series", "clipping", "settings",
+        "ltc:xgboost", "hub_height_series", "clipping", "settings", "measured_data", "data_model",
     ),
     writes=("uncertainty",),
 )
@@ -481,7 +484,7 @@ def _compute_energy_sensitivity(state: SessionState, speed_uncertainty_pct: floa
     result=result_models.ComputeEnergySensitivityResult,
     reads=(
         "ensemble", "ltc:linear_least_squares", "ltc:total_least_squares", "ltc:variance_ratio", "ltc:speedsort",
-        "ltc:xgboost", "hub_height_series", "settings", "uncertainty",
+        "ltc:xgboost", "hub_height_series", "settings", "uncertainty", "measured_data", "data_model",
     ),
 )
 def compute_energy_sensitivity(speed_uncertainty_pct: float = 0.0) -> dict:

@@ -173,12 +173,6 @@ def _compute_atmospheric_conditions(
         humidity_sensor,
     )
     mean_density = float(density.dropna().mean())
-    # F-57: the correction factor used to be computed here, displayed, and applied to
-    # nothing. Persisting the mean density is what lets the energy-sensitivity path
-    # normalise speed to the power curve's reference density, traced to IEC 61400-12-1.
-    if mean_density > 0.0:
-        state.runconfig["mean_air_density_kgm3"] = mean_density
-        state.touch()
     result: dict[str, object] = {
         "temperature_sensor": temperature_name,
         "pressure_sensor": pressure_name,
@@ -212,12 +206,38 @@ def _compute_atmospheric_conditions(
     return result
 
 
-# A change, not a read: it records the mean measured density in the run configuration, and
-# the energy-sensitivity factor normalises speed with it, so running it moves that number.
+def site_mean_density(state: SessionState) -> tuple[float | None, dict[str, object]]:
+    """The site's mean measured air density and what it was computed from, or None and why.
+
+    The energy sensitivity reads it each time (decisions/0015.9). It used to read a density
+    the atmospheric diagnostic had saved in the run configuration, so the same data gave two
+    answers depending on whether the diagnostic had run first (P1-5b).
+    """
+    try:
+        density, temperature_name, pressure_name, humidity_name = _atmospheric_series(state)
+    except ValueError as exc:
+        return None, {"reason": f"The site's air density cannot be measured: {exc}"}
+    valid = density.dropna()
+    if valid.empty or not float(valid.mean()) > 0.0:
+        return None, {
+            "reason": (
+                f"No record has a valid temperature ({temperature_name}) and pressure ({pressure_name}), "
+                "so the site's air density cannot be measured."
+            )
+        }
+    return float(valid.mean()), {
+        "temperature_sensor": temperature_name,
+        "pressure_sensor": pressure_name,
+        "humidity_sensor": humidity_name,
+        "density_records": int(valid.size),
+        # As in compute_atmospheric_conditions: the density at the pressure sensor's height.
+        "height_basis": "pressure_sensor_height",
+    }
+
+
 @operation(
-    effect="change", stage="atmosphere", result=result_models.ComputeAtmosphericConditionsResult,
+    effect="read", stage="atmosphere", result=result_models.ComputeAtmosphericConditionsResult,
     reads=("measured_data", "data_model"),
-    writes=("settings",),
 )
 def compute_atmospheric_conditions(
     temperature_sensor: str = "",

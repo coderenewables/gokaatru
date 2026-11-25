@@ -66,6 +66,10 @@ NOT_SELECTABLE = {
     "brighthub_list_locations": _STORED,
     "brighthub_status": _STORED,
     "compute_air_density": _NUMBERS,
+    "compute_atmospheric_conditions": (
+        "its density is the one the energy sensitivity measures over every record (decisions/0015.9); "
+        "a selection's would be another number under the same name"
+    ),
     "compute_air_density_timeseries": "its default source is the reanalysis frame, which a selection does not restrict",
     "compute_energy_sensitivity": _LONG_TERM,
     "compute_extreme_winds": "its default source is the long-term corrected series, which no selection restricts",

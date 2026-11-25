@@ -6777,10 +6777,18 @@ export interface components {
         DensityNormalisation: {
             /** Applied */
             applied: boolean;
+            /** Density Records */
+            density_records?: number | null;
+            /** Height Basis */
+            height_basis?: string | null;
+            /** Humidity Sensor */
+            humidity_sensor?: string | null;
             /** Method */
             method?: string | null;
             /** Note */
             note?: string | null;
+            /** Pressure Sensor */
+            pressure_sensor?: string | null;
             /** Reason */
             reason?: string | null;
             /** Reference Density Kgm3 */
@@ -6789,6 +6797,8 @@ export interface components {
             site_density_kgm3?: number | null;
             /** Speed Factor */
             speed_factor?: number | null;
+            /** Temperature Sensor */
+            temperature_sensor?: string | null;
             /** Turbine Regulation */
             turbine_regulation?: string | null;
         };

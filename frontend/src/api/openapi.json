@@ -7713,6 +7713,39 @@
       "title": "Applied",
       "type": "boolean"
      },
+     "density_records": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Density Records"
+     },
+     "height_basis": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Height Basis"
+     },
+     "humidity_sensor": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Humidity Sensor"
+     },
      "method": {
       "anyOf": [
        {
@@ -7734,6 +7767,17 @@
        }
       ],
       "title": "Note"
+     },
+     "pressure_sensor": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pressure Sensor"
      },
      "reason": {
       "anyOf": [
@@ -7778,6 +7822,17 @@
        }
       ],
       "title": "Speed Factor"
+     },
+     "temperature_sensor": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Temperature Sensor"
      },
      "turbine_regulation": {
       "anyOf": [

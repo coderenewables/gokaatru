@@ -10,6 +10,7 @@ arithmetic was the right one for the generic pitch-regulated curves; the labels 
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from server.core.powercurve import REFERENCE_AIR_DENSITY, normalise_speed_to_reference_density
@@ -64,18 +65,35 @@ def test_unknown_regulation_is_refused():
 
 
 def test_session_normalisation_reports_the_pitch_regulated_method():
+    # The density is measured from the session's own temperature and pressure (P3-4): dry air
+    # at 15 C and 950 hPa.
     state = SessionState()
     state.reset()
-    state.runconfig["mean_air_density_kgm3"] = 1.10
+    index = pd.date_range("2024-01-01", periods=144, freq="10min", tz="UTC")
+    state.timeseries_df = pd.DataFrame({"Tmp_2m": 15.0, "Prs_2m": 950.0}, index=index)
+    state.sensor_inventory = {
+        "Tmp_2m": {"height_m": 2.0, "sensor_type": "temperature"},
+        "Prs_2m": {"height_m": 2.0, "sensor_type": "pressure"},
+    }
+    density = oracles.dry_air_density(95_000.0, 288.15)
     speed = np.linspace(3.0, 20.0, 18)
     normalised, basis = _density_normalised(state, speed)
     np.testing.assert_allclose(
         normalised,
-        oracles.equal_kinetic_power_speed(speed, np.full(speed.shape, 1.10)),
-        rtol=1e-12,
+        oracles.equal_kinetic_power_speed(speed, np.full(speed.shape, density)),
+        rtol=1e-4,
     )
     assert basis["applied"] is True
     assert basis["method"] == "iec_61400_12_1_wind_speed_normalisation"
     assert basis["turbine_regulation"] == "pitch"
-    assert basis["speed_factor"] == round((1.10 / 1.225) ** (1.0 / 3.0), 6)
+    assert basis["site_density_kgm3"] == pytest.approx(density, rel=1e-4)
+    assert (basis["temperature_sensor"], basis["pressure_sensor"]) == ("Tmp_2m", "Prs_2m")
     assert "stall" not in basis["method"]
+
+
+def test_a_density_left_in_the_run_configuration_is_not_read():
+    state = SessionState()
+    state.reset()
+    state.runconfig["mean_air_density_kgm3"] = 1.10
+    _, basis = _density_normalised(state, np.linspace(3.0, 20.0, 18))
+    assert basis["applied"] is False

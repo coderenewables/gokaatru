@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from server.operations import REGISTRY
 from server.state.session import SessionState, bind_session
-from tests.synthetic_pipeline import NORTH, READ_ARGUMENTS, run_pipeline
+from tests.synthetic_pipeline import NORTH, READ_ARGUMENTS, add_met_sensors, run_pipeline
 
 # Fields a read may change by design.
 MAY_CHANGE = {"operation_log": "every call is logged", "updated_at": "not set by reads; listed for completeness"}
@@ -53,6 +53,7 @@ def _snapshot(state: SessionState) -> dict[str, Any]:
 @pytest.fixture(scope="module")
 def analysed(tmp_path_factory) -> SessionState:
     state, _ = run_pipeline(tmp_path_factory.mktemp("reads"))
+    add_met_sensors(state)
     with bind_session(state):
         REGISTRY.get("define_selection").fn(name="north", definition=NORTH)
     return state

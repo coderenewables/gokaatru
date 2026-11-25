@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field
 from server.api.deps import get_session_state, to_bad_gateway, to_bad_request
 from server.core.brighthub import (
     authenticate,
-    download_reanalysis_data,
     fetch_reanalysis_nodes,
     fetch_timeseries_csv,
     get_data_model,
@@ -114,6 +113,11 @@ class ReanalysisDataItem(BaseModel):
     latitude: float
     longitude: float
     rows: int | None = None
+    #: ``hit`` when the project's cache already covered the campaign, ``downloaded``, or
+    #: ``empty`` when BrightHub returned no rows.
+    cache: str | None = None
+    #: The last timestamp of the node's series.
+    cached_through: str | None = None
 
     model_config = {"extra": "allow"}
 
@@ -288,37 +292,17 @@ def brighthub_reanalysis_download(
     if use_earthdatahub:
         return _download_era5_earthdatahub(state, body)
 
-    token = _require_token(state)
-    node_dicts = [n.model_dump() for n in body.nodes]
-    try:
-        results = download_reanalysis_data(token, node_dicts, body.dataset)
-    except Exception as exc:
-        raise to_bad_gateway(RuntimeError(f"BrightHub API error: {exc}")) from exc
-    from server.tools.brighthub import (
-        _BRIGHTHUB_ERA5_COLUMNS,
-        _BRIGHTHUB_MERRA_COLUMNS,
-        _era5_key,
-        _persist_reanalysis_frame,
-    )
+    from server.tools.brighthub import BrightHubAuthError, _download_brighthub_nodes
 
-    column_map = _BRIGHTHUB_ERA5_COLUMNS if body.dataset == "ERA5" else _BRIGHTHUB_MERRA_COLUMNS
-    items: list[ReanalysisDataItem] = []
-    for r in results:
-        latitude = float(r["latitude"])
-        longitude = float(r["longitude"])
-        ts = r.get("timeseries_data")
-        if not isinstance(ts, dict) or not ts.get("data"):
-            items.append(ReanalysisDataItem(latitude=latitude, longitude=longitude, rows=None))
-            continue
-        # Persist to the session workspace and store the DataFrame so interpolation works
-        frame = _persist_reanalysis_frame(state, body.dataset, latitude, longitude, r, column_map)
-        if body.dataset == "ERA5":
-            state.era5_data[_era5_key(latitude, longitude)] = frame
-        else:
-            state.merra_data[f"{latitude}_{longitude}"] = frame
-        items.append(ReanalysisDataItem(latitude=latitude, longitude=longitude, rows=int(len(frame))))
-    state.touch()
-    return ReanalysisDownloadResponse(dataset=body.dataset, source="brighthub", items=items)
+    try:
+        items = _download_brighthub_nodes(state, body.dataset, [n.model_dump() for n in body.nodes])
+    except BrightHubAuthError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise to_bad_gateway(exc) from exc
+    return ReanalysisDownloadResponse(
+        dataset=body.dataset, source="brighthub", items=[ReanalysisDataItem(**item) for item in items]
+    )
 
 
 def _download_era5_earthdatahub(

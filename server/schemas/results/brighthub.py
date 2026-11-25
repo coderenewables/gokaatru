@@ -84,6 +84,11 @@ class DownloadedNode(Result):
     longitude: Number
     #: Null when the node returned no data.
     rows: int | None
+    #: BrightHub only: ``hit`` when the cache already reached the campaign's last record,
+    #: ``downloaded``, or ``empty`` when BrightHub returned no rows.
+    cache: str | None = None
+    #: BrightHub only: the last timestamp of the node's series.
+    cached_through: str | None = None
 
 
 class BrighthubDownloadReanalysisResult(Result):

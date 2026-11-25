@@ -6763,6 +6763,10 @@ export interface components {
         };
         /** DownloadedNode */
         DownloadedNode: {
+            /** Cache */
+            cache?: string | null;
+            /** Cached Through */
+            cached_through?: string | null;
             /** Latitude */
             latitude: number | null;
             /** Longitude */
@@ -8617,6 +8621,10 @@ export interface components {
         };
         /** ReanalysisDataItem */
         ReanalysisDataItem: {
+            /** Cache */
+            cache?: string | null;
+            /** Cached Through */
+            cached_through?: string | null;
             /** Latitude */
             latitude: number;
             /** Longitude */

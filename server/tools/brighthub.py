@@ -27,11 +27,15 @@ from server.state.session import SessionState, get_active_session, session
 from server.tools.era5 import _era5_key
 
 
+class BrightHubAuthError(ValueError):
+    """No BrightHub login in this session; the HTTP routes answer it with 401."""
+
+
 def _require_token(state: SessionState) -> str:
-    """Return the stored BrightHub token or raise ValueError."""
+    """Return the stored BrightHub token or raise BrightHubAuthError."""
     token = getattr(state, "brighthub_token", None)
     if not token:
-        raise ValueError("Not authenticated with BrightHub. Run brighthub_login first.")
+        raise BrightHubAuthError("Not authenticated with BrightHub. Run brighthub_login first.")
     return token
 
 
@@ -306,30 +310,77 @@ def brighthub_download_reanalysis(
     if use_earthdatahub:
         return _download_era5_earthdatahub(nodes)
 
-    token = _require_token(session)
-    try:
-        results = download_reanalysis_data(token, nodes, dataset)
-    except Exception as exc:
-        raise RuntimeError(f"BrightHub API error: {exc}") from exc
-
-    column_map = _BRIGHTHUB_ERA5_COLUMNS if dataset == "ERA5" else _BRIGHTHUB_MERRA_COLUMNS
-    items = []
-    for r in results:
-        latitude = float(r["latitude"])
-        longitude = float(r["longitude"])
-        ts = r.get("timeseries_data")
-        if not isinstance(ts, dict) or not ts.get("data"):
-            items.append({"latitude": latitude, "longitude": longitude, "rows": None})
-            continue
-        frame = _persist_reanalysis_frame(session, dataset, latitude, longitude, r, column_map)
-        if dataset == "ERA5":
-            session.era5_data[_era5_key(latitude, longitude)] = frame
-        else:
-            session.merra_data[f"{latitude}_{longitude}"] = frame
-        items.append({"latitude": latitude, "longitude": longitude, "rows": int(len(frame))})
-
-    session.touch()
+    items = _download_brighthub_nodes(session, dataset, nodes)
     return {"dataset": dataset, "source": "brighthub", "items": items, "count": len(items)}
+
+
+def _campaign_end(state: SessionState) -> pd.Timestamp | None:
+    """The last measured record, in UTC without an offset, as the cached frames are kept."""
+    frame = state.timeseries_df
+    if frame is None or frame.empty or not isinstance(frame.index, pd.DatetimeIndex):
+        return None
+    last = pd.Timestamp(frame.index.max())
+    return last.tz_convert("UTC").tz_localize(None) if last.tzinfo is not None else last
+
+
+def _cached_node(state: SessionState, dataset: str, latitude: float, longitude: float) -> pd.DataFrame | None:
+    """A node already downloaded, if its series reaches the campaign's last measured record.
+
+    The long-term correction needs the reference over the concurrent period, so a node
+    cached for an earlier campaign that ends before this one's last record is downloaded
+    again. A cached node is never refreshed otherwise: values that were still preliminary
+    (ERA5T) when it was downloaded are not revised.
+    """
+    path = _brighthub_cache_path(state, dataset, latitude, longitude)
+    end = _campaign_end(state)
+    if end is None or not path.exists():
+        return None
+    frame = pd.read_parquet(path)
+    if frame.empty or not isinstance(frame.index, pd.DatetimeIndex) or frame.index.max() < end:
+        return None
+    return frame
+
+
+def _download_brighthub_nodes(
+    state: SessionState, dataset: str, nodes: list[dict], store: dict[str, pd.DataFrame] | None = None
+) -> list[dict]:
+    """Store each node's series, in the session's own store unless ``store`` is given: from
+    the project's cache when it covers the campaign (``_cached_node``), from BrightHub
+    otherwise. Every item says which."""
+    column_map = _BRIGHTHUB_ERA5_COLUMNS if dataset == "ERA5" else _BRIGHTHUB_MERRA_COLUMNS
+    if store is None:
+        store = state.era5_data if dataset == "ERA5" else state.merra_data
+    items: list[dict] = []
+    missing: list[dict] = []
+    for node in nodes:
+        latitude, longitude = float(node["latitude_ddeg"]), float(node["longitude_ddeg"])
+        cached = _cached_node(state, dataset, latitude, longitude)
+        if cached is None:
+            missing.append(node)
+            continue
+        store[_era5_key(latitude, longitude) if dataset == "ERA5" else f"{latitude}_{longitude}"] = cached
+        items.append({"latitude": latitude, "longitude": longitude, "rows": int(len(cached)), "cache": "hit",
+                      "cached_through": pd.Timestamp(cached.index.max()).isoformat()})
+    if missing:
+        token = _require_token(state)
+        try:
+            results = download_reanalysis_data(token, missing, dataset)
+        except Exception as exc:
+            raise RuntimeError(f"BrightHub API error: {exc}") from exc
+        for r in results:
+            latitude = float(r["latitude"])
+            longitude = float(r["longitude"])
+            ts = r.get("timeseries_data")
+            if not isinstance(ts, dict) or not ts.get("data"):
+                items.append({"latitude": latitude, "longitude": longitude, "rows": None, "cache": "empty",
+                              "cached_through": None})
+                continue
+            frame = _persist_reanalysis_frame(state, dataset, latitude, longitude, r, column_map)
+            store[_era5_key(latitude, longitude) if dataset == "ERA5" else f"{latitude}_{longitude}"] = frame
+            items.append({"latitude": latitude, "longitude": longitude, "rows": int(len(frame)),
+                          "cache": "downloaded", "cached_through": pd.Timestamp(frame.index.max()).isoformat()})
+    state.touch()
+    return items
 
 
 _BRIGHTHUB_ERA5_COLUMNS = {
@@ -492,53 +543,40 @@ def _prepare_brighthub_reanalysis(
     token = _require_token(state)
     try:
         node_sets = fetch_reanalysis_nodes(token, latitude, longitude)
-        era5_nodes = node_sets.get("era5_nodes", [])
-        merra_nodes = node_sets.get("merra2_nodes", [])
-        era5_results = download_reanalysis_data(token, era5_nodes, "ERA5")
-        merra_results = download_reanalysis_data(token, merra_nodes, "MERRA-2")
     except Exception as exc:
         raise RuntimeError(f"BrightHub reanalysis preparation failed: {exc}") from exc
+    # Fresh stores, assigned only once both sources are in: a failed download leaves the
+    # session's reanalysis as it was.
+    era5_data: dict[str, pd.DataFrame] = {}
+    merra_data: dict[str, pd.DataFrame] = {}
+    era5_items = _download_brighthub_nodes(state, "ERA5", node_sets.get("era5_nodes", []), era5_data)
+    merra_items = _download_brighthub_nodes(state, "MERRA-2", node_sets.get("merra2_nodes", []), merra_data)
 
-    if len(era5_results) < 4:
+    if len(era5_items) < 4:
         raise ValueError("BrightHub returned fewer than four ERA5 nodes; site interpolation requires four nodes")
-    if len(merra_results) < 4:
+    if len(merra_items) < 4:
         raise ValueError(
             "BrightHub returned fewer than four MERRA-2 nodes; site interpolation requires four nodes"
         )
 
+    def located(items: list[dict]) -> list[dict]:
+        return [
+            {
+                "latitude": item["latitude"],
+                "longitude": item["longitude"],
+                "distance_km": haversine_km(latitude, longitude, item["latitude"], item["longitude"]),
+                "bearing": bearing_compass(latitude, longitude, item["latitude"], item["longitude"]),
+            }
+            for item in items
+        ]
+
     current_coordinate = state.get_coordinate()
     elevation_m = 0.0 if current_coordinate is None else current_coordinate.elevation_m
     state.set_coordinate(Coordinate(latitude=latitude, longitude=longitude, elevation_m=elevation_m))
-    state.era5_nodes = [
-        {
-            "latitude": float(item["latitude"]),
-            "longitude": float(item["longitude"]),
-            "distance_km": haversine_km(latitude, longitude, float(item["latitude"]), float(item["longitude"])),
-            "bearing": bearing_compass(latitude, longitude, float(item["latitude"]), float(item["longitude"])),
-        }
-        for item in era5_results
-    ]
-    state.merra_nodes = [
-        {
-            "latitude": float(item["latitude"]),
-            "longitude": float(item["longitude"]),
-            "distance_km": haversine_km(latitude, longitude, float(item["latitude"]), float(item["longitude"])),
-            "bearing": bearing_compass(latitude, longitude, float(item["latitude"]), float(item["longitude"])),
-        }
-        for item in merra_results
-    ]
-    state.era5_data = {
-        _era5_key(float(item["latitude"]), float(item["longitude"])): _persist_reanalysis_frame(
-            state, "ERA5", float(item["latitude"]), float(item["longitude"]), item, _BRIGHTHUB_ERA5_COLUMNS
-        )
-        for item in era5_results
-    }
-    state.merra_data = {
-        f"{float(item['latitude'])}_{float(item['longitude'])}": _persist_reanalysis_frame(
-            state, "MERRA-2", float(item["latitude"]), float(item["longitude"]), item, _BRIGHTHUB_MERRA_COLUMNS
-        )
-        for item in merra_results
-    }
+    state.era5_nodes = located(era5_items)
+    state.merra_nodes = located(merra_items)
+    state.era5_data = era5_data
+    state.merra_data = merra_data
     # Interpolate every source, then leave the default active so a caller that prepares
     # and immediately runs an LTC gets ERA5 as before.
     interpolation = {name: _interpolate_era5_to_site(state, name) for name in reference_source_names()}

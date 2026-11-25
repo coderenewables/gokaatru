@@ -208,7 +208,7 @@ private helpers behind them. They total **90**.
 | `overview_summary.py` | — | Consolidated bankable Sensor Overview summary table. |
 | `map.py` | 3 | GeoJSON site + ERA5-node map overlays. |
 | `visualization/` | 11 | Plotly figure tools (see §4.4 — this is a package, not a single file). |
-| `brighthub.py` | 9 | BrightHub auth, dataset browsing, and data import. |
+| `brighthub.py` | 9 | BrightHub auth, dataset browsing, and data import. Node downloads, for the download tool, the canvas preparation and the HTTP route alike, go through `_download_brighthub_nodes`: a node cached by dataset and coordinate is reused when its series reaches the campaign's last record (`_cached_node`), and each item reports `cache` and `cached_through`. A missing login is `BrightHubAuthError`, which the routes answer with 401. |
 
 #### WindKit
 

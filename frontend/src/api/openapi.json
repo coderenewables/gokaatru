@@ -7857,6 +7857,28 @@
    "DownloadedNode": {
     "additionalProperties": false,
     "properties": {
+     "cache": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cache"
+     },
+     "cached_through": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cached Through"
+     },
      "latitude": {
       "anyOf": [
        {
@@ -13851,6 +13873,28 @@
    "ReanalysisDataItem": {
     "additionalProperties": true,
     "properties": {
+     "cache": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cache"
+     },
+     "cached_through": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cached Through"
+     },
      "latitude": {
       "title": "Latitude",
       "type": "number"

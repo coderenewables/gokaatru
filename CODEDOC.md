@@ -261,7 +261,7 @@ logic as the MCP tools, and shape the response with the Pydantic models in `sche
 | `analysis.py` | 37 | Workflow analysis (statistics, shear, extrapolation, ERA5, ensemble, clipping, homogeneity, uncertainty, scenarios). |
 | `workflow_execution.py` | 14 | Phase-3 Canvas DAG execution, snapshots, run comparison, branching. |
 | `brighthub.py` | 8 | BrightHub login/logout/status, location browsing, reanalysis, import. |
-| `sweep.py` | 8 | Scenario-sweep engine surface (axes, estimate, run, **run/stream** SSE, list, get, runconfig, **spread**). |
+| `sweep.py` | 8 | Scenario-sweep engine surface (axes, estimate with the duplicates and refusals the run will make (`core/sweep.py` `estimate_sweep`, P3-8), run, **run/stream** SSE, list, get, runconfig, **spread**). |
 | `datasets.py` | 6 | Shared dataset-pool CRUD + load-into-session. |
 | `uploads.py` | 7 | Timeseries/datamodel upload, the data model builder (draft/build), sensor inventory + coverage, delete. |
 | `results.py` | 5 | LTC/ensemble results, plots, site map, runconfig export. |

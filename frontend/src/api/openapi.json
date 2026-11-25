@@ -39056,7 +39056,7 @@
   },
   "/api/sessions/{session_id}/sweep/estimate": {
    "post": {
-    "description": "Price a specification without running it — the designer's cost counter (§9.1).",
+    "description": "Price a specification without running it — the designer's cost counter (§9.1) — and\nsay which leaves the run will skip as duplicates and which it will refuse, and why.",
     "operationId": "estimate_sweep_api_sessions__session_id__sweep_estimate_post",
     "parameters": [
      {

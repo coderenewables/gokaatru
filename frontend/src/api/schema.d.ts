@@ -4071,7 +4071,8 @@ export interface paths {
         put?: never;
         /**
          * Estimate Sweep
-         * @description Price a specification without running it — the designer's cost counter (§9.1).
+         * @description Price a specification without running it — the designer's cost counter (§9.1) — and
+         *     say which leaves the run will skip as duplicates and which it will refuse, and why.
          */
         post: operations["estimate_sweep_api_sessions__session_id__sweep_estimate_post"];
         delete?: never;

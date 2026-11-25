@@ -141,6 +141,58 @@ def resolve_sensors(state: Any, spec: ScenarioSpec) -> tuple[SensorSelection, Se
     return resolve_fit(state, spec), resolve_reference(state, spec)
 
 
+# The refusals a stage makes before it computes anything, one function each, so the sweep
+# estimate predicts them with the code that makes them (P3-8, decisions/0015.6).
+
+
+def check_shear_model(spec: ScenarioSpec) -> None:
+    """Refuse a shear model the extrapolation cannot consume, or one that does not exist."""
+    if spec.shear_model in UNIMPLEMENTED_SHEAR_MODELS:
+        raise ScenarioError(
+            "build_shear",
+            f"shear model '{spec.shear_model}' is not yet supported: "
+            f"{UNIMPLEMENTED_SHEAR_MODELS[spec.shear_model]}",
+        )
+    if spec.shear_model not in SHEAR_MODELS:
+        raise ScenarioError(
+            "build_shear",
+            f"shear model must be one of {', '.join(SHEAR_MODELS)}, got '{spec.shear_model}'",
+        )
+
+
+def check_hub(state: Any, spec: ScenarioSpec) -> float:
+    """The hub height the scenario extrapolates to, or a refusal when none is set."""
+    hub = spec.hub_height_m if spec.hub_height_m is not None else state.get_hub_height_m()
+    if hub is None:
+        raise ScenarioError("extrapolate", "hub height is not set")
+    return float(hub)
+
+
+def check_ltc(state: Any, spec: ScenarioSpec) -> Any:
+    """The scenario's correction, or a refusal naming an unknown algorithm or a reference
+    source the session has no series for. The missing source used to fail inside the
+    correction and be recorded as an unexpected error."""
+    from server.core.reanalysis import reference_source_names
+    from server.tools.ltc_runs import LTC_ALGORITHMS
+
+    runner = LTC_ALGORITHMS.get(spec.ltc_algorithm)
+    if runner is None:
+        raise ScenarioError(
+            "run_ltc", f"unknown LTC algorithm '{spec.ltc_algorithm}'; expected one of {sorted(LTC_ALGORITHMS)}"
+        )
+    if spec.reference_source not in reference_source_names():
+        raise ScenarioError(
+            "run_ltc",
+            f"unknown reference source '{spec.reference_source}'; expected one of {list(reference_source_names())}",
+        )
+    if not state.has_reference_series(spec.reference_source):
+        raise ScenarioError(
+            "run_ltc",
+            f"no {spec.reference_source} series is interpolated to the site, so it cannot be corrected against",
+        )
+    return runner
+
+
 def build_shear(state: Any, spec: ScenarioSpec, fit: SensorSelection) -> StageResult:
     """Build the scenario's vertical-profile table (axis B).
 
@@ -157,18 +209,7 @@ def build_shear(state: Any, spec: ScenarioSpec, fit: SensorSelection) -> StageRe
         _calculate_shear_timeseries,
     )
 
-    if spec.shear_model in UNIMPLEMENTED_SHEAR_MODELS:
-        raise ScenarioError(
-            "build_shear",
-            f"shear model '{spec.shear_model}' is not yet supported: "
-            f"{UNIMPLEMENTED_SHEAR_MODELS[spec.shear_model]}",
-        )
-    if spec.shear_model not in SHEAR_MODELS:
-        raise ScenarioError(
-            "build_shear",
-            f"shear model must be one of {', '.join(SHEAR_MODELS)}, got '{spec.shear_model}'",
-        )
-
+    check_shear_model(spec)
     height_sensors = _height_sensors_json(fit)
 
     if spec.analyst_shear_alpha is not None:
@@ -241,9 +282,7 @@ def extrapolate(state: Any, spec: ScenarioSpec, reference: SensorSelection) -> S
     """
     from server.tools.extrapolation import _extrapolate_to_hub_height
 
-    hub = spec.hub_height_m if spec.hub_height_m is not None else state.get_hub_height_m()
-    if hub is None:
-        raise ScenarioError("extrapolate", "hub height is not set")
+    hub = check_hub(state, spec)
     shear_model = "log_law" if spec.shear_model.startswith("log_law") else "power_law"
     measured = _extrapolate_to_hub_height(
         state,
@@ -269,15 +308,11 @@ def extrapolate(state: Any, spec: ScenarioSpec, reference: SensorSelection) -> S
 
 def run_ltc(state: Any, spec: ScenarioSpec) -> StageResult:
     """Run the scenario's long-term correction against its chosen reference (axes C, D)."""
-    from server.tools.ltc_runs import LTC_ALGORITHMS, resolve_ltc_columns, run_ltc_algorithm
+    from server.tools.ltc_runs import resolve_ltc_columns, run_ltc_algorithm
 
+    runner = check_ltc(state, spec)
     state.set_active_reference_source(spec.reference_source)
     algorithm = spec.ltc_algorithm
-    runner = LTC_ALGORITHMS.get(algorithm)
-    if runner is None:
-        raise ScenarioError(
-            "run_ltc", f"unknown LTC algorithm '{algorithm}'; expected one of {sorted(LTC_ALGORITHMS)}"
-        )
     short_col, long_col, short_dir_col, long_dir_col = resolve_ltc_columns(state)
     result = run_ltc_algorithm(
         state, algorithm, runner, short_col, long_col, short_dir_col, long_dir_col

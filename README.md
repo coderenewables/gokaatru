@@ -168,6 +168,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/sessions/{id}/config/import` | POST | Import a complete runconfig JSON payload |
 | `/sessions/{id}/summary` | GET | Workflow progress and analysis readiness |
 | `/sessions/{id}/uploads/{timeseries\|datamodel}` | POST | Upload a file (multipart) |
+| `/sessions/{id}/sweep/estimate` | POST | Price a specification without running it: leaf and prefix counts, and which leaves the run will skip as duplicates (`duplicates`, each with the leaf it repeats) and which it will refuse (`unavailable`, each with the stage and reason), predicted with the stages' own checks (`check_shear_model`, `check_hub`, `check_ltc`, the policy resolvers). `duplicates_basis` and `refusals_basis` say what it cannot know: a duplicate assumes the first of its computation completes, and a leaf can still fail while it runs |
 | `/sessions/{id}/sweep/{sweep_id}/spread` | POST | Decompose one sweep metric's variance across the five scenario axes |
 | `/sessions/{id}/datamodel/draft` | GET | Draft a Task 43 reading of the loaded timeseries columns (header inference, for review) |
 | `/sessions/{id}/datamodel/build` | POST | Build a minimal Task 43 data model from declared columns, persist it, and load it |

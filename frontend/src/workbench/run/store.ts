@@ -24,6 +24,8 @@ interface DesignStore {
   dropped: string[];
   /** The design has not yet met the campaign's axes (set by `setDesign`). */
   unchecked: boolean;
+  /** What "Sweep around this" could not express as levels, said beside the matrix. */
+  notes: string[];
   toggle: (axis: AxisKey, level: string) => void;
   applyPreset: (name: string, axes: SweepAxes | null) => void;
   /** Intersect the design with the campaign's axes; called when the axes arrive or `setDesign` ran. */
@@ -31,7 +33,7 @@ interface DesignStore {
   setHubHeight: (value: number | null) => void;
   setAnalystShearAlpha: (value: number | null) => void;
   /** Replace the whole design from a request-shaped spec ("Sweep around this"). */
-  setDesign: (spec: Partial<SweepRequest>) => void;
+  setDesign: (spec: Partial<SweepRequest>, notes?: string[]) => void;
   reset: () => void;
 }
 
@@ -39,6 +41,7 @@ export const useDesign = create<DesignStore>((set) => ({
   design: DEFAULT_DESIGN,
   dropped: [],
   unchecked: true,
+  notes: [],
   toggle: (axis, level) =>
     set((state) => {
       const current = state.design[axis];
@@ -58,8 +61,8 @@ export const useDesign = create<DesignStore>((set) => ({
     }),
   setHubHeight: (value) => set((state) => ({ design: { ...state.design, hub_height_m: value } })),
   setAnalystShearAlpha: (value) => set((state) => ({ design: { ...state.design, analyst_shear_alpha: value } })),
-  setDesign: (spec) => set({ design: designFromSpec(spec), dropped: [], unchecked: true }),
-  reset: () => set({ design: DEFAULT_DESIGN, dropped: [], unchecked: true }),
+  setDesign: (spec, notes = []) => set({ design: designFromSpec(spec), dropped: [], unchecked: true, notes }),
+  reset: () => set({ design: DEFAULT_DESIGN, dropped: [], unchecked: true, notes: [] }),
 }));
 
 interface RunStore {

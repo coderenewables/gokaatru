@@ -22,6 +22,7 @@ import { useAppliedTheme } from "../theme/theme";
 import { STATUS_LABELS, layoutSteps, portsOf } from "./graph";
 import { titleOf } from "./operations";
 import { type StepReport, useOrder, useRunSteps } from "./order";
+import { sweepAround } from "./scenario";
 import { type Step, usePipeline } from "./store";
 import "./model.css";
 
@@ -152,7 +153,8 @@ function NamedPipelines({ sessionId }: { sessionId: string }) {
  * marked with whether its result is current; "Run stale" runs what is not, one step at a time. */
 export function PipelinePanel() {
   const { sessionId } = useCampaign();
-  const { steps, selected, select, move, open } = usePipeline();
+  const { steps, selected, select, move, open, origin } = usePipeline();
+  const [aroundError, setAroundError] = useState("");
   useEffect(() => open(sessionId), [open, sessionId]);
   const order = useOrder(sessionId, steps);
   const { run, running } = useRunSteps(sessionId);
@@ -204,8 +206,30 @@ export function PipelinePanel() {
         >
           {running ? `Running ${running}` : toRun.length ? `Run stale (${toRun.length})` : "Nothing to run"}
         </button>
+        <button
+          type="button"
+          className="gk-button"
+          disabled={steps.length === 0}
+          onClick={() => {
+            setAroundError("");
+            sweepAround(sessionId, steps).catch((error: Error) => setAroundError(error.message));
+          }}
+        >
+          Sweep around this
+        </button>
         <NamedPipelines sessionId={sessionId} />
       </div>
+      {origin && (
+        <p className={origin.prefixMatches ? "gk-muted gk-origin" : "gk-warning gk-origin"} role="status">
+          Loaded from sweep {origin.sweepId}, scenario {origin.configHash.slice(0, 8)}.
+          {origin.prefixMatches ? " Run, it reproduces that scenario's row." : ` ${origin.prefixNote ?? ""}`}
+        </p>
+      )}
+      {aroundError && (
+        <p role="alert" className="gk-warning">
+          {aroundError}
+        </p>
+      )}
       {order.isError && (
         <p role="alert" className="gk-warning">
           {order.error.message}

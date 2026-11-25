@@ -11,6 +11,8 @@ import {
   useInterrogate,
   useTerms,
 } from "./store";
+import { loadScenario } from "../model/scenario";
+import { useCampaign } from "../shell/context";
 import { useOpenSweep, useSweepList } from "./useSweeps";
 import "./interrogate.css";
 
@@ -49,6 +51,8 @@ export function ScenariosPanel() {
   const pin = useInterrogate((state) => state.pin);
   const unpin = useInterrogate((state) => state.unpin);
   const [descending, setDescending] = useState<boolean | null>(null);
+  const { sessionId } = useCampaign();
+  const [loadError, setLoadError] = useState("");
 
   const metrics = useMemo(() => metricsPresent(all), [all]);
   const chips = describeTerms(terms);
@@ -167,6 +171,11 @@ export function ScenariosPanel() {
             {full ? ": unpin one to pin another." : "."}
           </p>
 
+          {loadError && (
+            <p role="alert" className="gk-warning">
+              {loadError}
+            </p>
+          )}
           <div className="gk-int-table-wrap">
             <table className="gk-compare gk-int-table">
               <caption className="gk-sr">Scenarios of the open sweep</caption>
@@ -188,6 +197,7 @@ export function ScenariosPanel() {
                   </th>
                   <th scope="col">Admissible</th>
                   <th scope="col">Status</th>
+                  <th scope="col">Model</th>
                 </tr>
               </thead>
               <tbody>
@@ -214,6 +224,20 @@ export function ScenariosPanel() {
                       <td className="gk-num">{formatMetric(metric, metricValue(row, metric))}</td>
                       <td>{row.admissible ? "yes" : "no"}</td>
                       <td>{row.status}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="gk-button"
+                          disabled={row.status !== "ok" || !sweepId}
+                          aria-label={`Load scenario ${row.config_hash.slice(0, 8)} into Model`}
+                          onClick={() => {
+                            setLoadError("");
+                            if (sweepId) loadScenario(sessionId, sweepId, row.config_hash).catch((error: Error) => setLoadError(error.message));
+                          }}
+                        >
+                          Load
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}

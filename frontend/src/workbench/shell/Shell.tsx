@@ -24,11 +24,11 @@ import {
   type PhaseId,
   addDefaultLayout,
   forgetLayout,
-  phaseFromAddress,
   saveLayout,
   storedLayout,
 } from "./layout";
 import { panelComponents } from "./panels";
+import { usePhase } from "./phase";
 import { GroupActions, TabTitle } from "./tabs";
 
 export interface ShellProps {
@@ -40,14 +40,8 @@ export interface ShellProps {
 export function Shell({ sessionId, projectId }: ShellProps) {
   const [theme, toggleTheme] = useTheme();
   const dockview = useRef<DockviewApi | null>(null);
-  const [phase, setPhase] = useState<PhaseId>(() => phaseFromAddress(window.location.search));
-  const choosePhase = useCallback((next: PhaseId) => {
-    const params = new URLSearchParams(window.location.search);
-    if (next === "prepare") params.delete("phase");
-    else params.set("phase", next);
-    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
-    setPhase(next);
-  }, []);
+  const phase = usePhase((state) => state.phase);
+  const choosePhase = usePhase((state) => state.goTo);
 
   const summary = useQuery({
     queryKey: ["session", sessionId],

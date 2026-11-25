@@ -11,6 +11,15 @@ export interface Step {
   position?: { x: number; y: number };
 }
 
+/** Where the pipeline came from when a sweep scenario was loaded into it (decisions/0015.1),
+ * and whether the campaign is still as that sweep found it. */
+export interface Origin {
+  sweepId: string;
+  configHash: string;
+  prefixMatches: boolean;
+  prefixNote?: string | null;
+}
+
 /** What running a step gave, kept for the Step panel until the step is run again. */
 export interface StepRun {
   result?: unknown;
@@ -23,13 +32,14 @@ interface PipelineState {
   steps: Step[];
   selected: string | null;
   runs: Record<string, StepRun>;
+  origin: Origin | null;
   open: (sessionId: string) => void;
   add: (operation: string, parameters?: Record<string, unknown>) => string;
   remove: (id: string) => void;
   setParameters: (id: string, parameters: Record<string, unknown>) => void;
   move: (id: string, position: { x: number; y: number }) => void;
   select: (id: string | null) => void;
-  replace: (steps: Step[]) => void;
+  replace: (steps: Step[], origin?: Origin) => void;
   recordRun: (id: string, run: StepRun) => void;
 }
 
@@ -69,9 +79,10 @@ export const usePipeline = create<PipelineState>((set, get) => ({
   steps: [],
   selected: null,
   runs: {},
+  origin: null,
   open: (sessionId) => {
     if (get().sessionId === sessionId) return;
-    set({ sessionId, steps: stored(sessionId), selected: null, runs: {} });
+    set({ sessionId, steps: stored(sessionId), selected: null, runs: {}, origin: null });
   },
   add: (operation, parameters = {}) => {
     const steps = get().steps;
@@ -98,9 +109,9 @@ export const usePipeline = create<PipelineState>((set, get) => ({
     set({ steps: next });
   },
   select: (id) => set({ selected: id }),
-  replace: (steps) => {
+  replace: (steps, origin) => {
     keep(get().sessionId, steps);
-    set({ steps, selected: steps[0]?.id ?? null, runs: {} });
+    set({ steps, selected: steps[0]?.id ?? null, runs: {}, origin: origin ?? null });
   },
   recordRun: (id, run) => set({ runs: { ...get().runs, [id]: run } }),
 }));

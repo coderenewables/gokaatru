@@ -139,6 +139,7 @@ export function MatrixPanel() {
   const { sessionId } = useCampaign();
   const design = useDesign((state) => state.design);
   const dropped = useDesign((state) => state.dropped);
+  const notes = useDesign((state) => state.notes);
   const unchecked = useDesign((state) => state.unchecked);
   const { applyPreset, retain, setHubHeight, setAnalystShearAlpha } = useDesign.getState();
   const running = useRun((state) => state.run.phase === "running");
@@ -202,6 +203,16 @@ export function MatrixPanel() {
         <p className="gk-notice" role="status">
           Left out, not available on this campaign: {dropped.join(", ")}.
         </p>
+      ) : null}
+      {notes.length > 0 ? (
+        <div className="gk-notice" role="status">
+          <p>From the pipeline, but no sweep level expresses:</p>
+          <ul>
+            {notes.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        </div>
       ) : null}
 
       {AXES.map((axis) => (

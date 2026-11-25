@@ -3,6 +3,7 @@ import type { FunctionComponent } from "react";
 
 import { DataPanel } from "../datatree/DataPanel";
 import { InspectorPanel } from "../inspector/InspectorPanel";
+import { ProfilePanel } from "../profile/ProfilePanel";
 import { RosePanel } from "../rose/RosePanel";
 import { ScatterPanel } from "../scatter/ScatterPanel";
 import { TimelinePanel } from "../timeline/TimelinePanel";
@@ -40,6 +41,7 @@ function emptyPanel(id: PanelId): FunctionComponent<IDockviewPanelProps> {
 const BUILT: Partial<Record<PanelId, FunctionComponent<IDockviewPanelProps>>> = {
   data: DataPanel,
   inspector: InspectorPanel,
+  profile: ProfilePanel,
   rose: RosePanel,
   scatter: ScatterPanel,
   timeline: TimelinePanel,

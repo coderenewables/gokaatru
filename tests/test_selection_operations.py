@@ -66,6 +66,8 @@ NOT_SELECTABLE = {
     "brighthub_list_locations": _STORED,
     "brighthub_status": _STORED,
     "compute_air_density": _NUMBERS,
+    "order_pipeline": _STORED,
+    "list_pipelines": _STORED,
     "compute_atmospheric_conditions": (
         "its density is the one the energy sensitivity measures over every record (decisions/0015.9); "
         "a selection's would be another number under the same name"

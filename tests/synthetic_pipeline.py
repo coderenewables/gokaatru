@@ -47,6 +47,13 @@ READ_ARGUMENTS: dict[str, object] = {
     "vertical_pct": 3.0,
     "mcp_pct": 4.0,
     "future_pct": 5.0,
+    # A pipeline of the shear steps the synthetic pipeline ran, and a read after them.
+    "steps": [
+        {"id": "series", "operation": "calculate_shear_timeseries",
+         "parameters": {"height_sensors": json.dumps({"80": "Spd_80m", "100": "Spd_100m"})}},
+        {"id": "table", "operation": "build_shear_table", "parameters": {}},
+        {"id": "weibull", "operation": "compute_weibull_params", "parameters": {"sensor_name": "Spd_100m"}},
+    ],
 }
 #: A selection the reads can name: the northern sector, wrapping through 0.
 NORTH = {"kind": "sector", "channel": "Dir_100m", "from_deg": 300.0, "to_deg": 60.0}

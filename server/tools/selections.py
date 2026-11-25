@@ -122,27 +122,6 @@ def _delete_selection(state: SessionState, name: str) -> dict[str, Any]:
     return {"status": "ok", "deleted": name}
 
 
-def restore_selection(state: SessionState, note: dict[str, Any], *, undo: bool) -> dict[str, Any]:
-    """Put a saved selection back as one logged define or delete found it (``undo``) or left it.
-
-    The stored entry is restored whole, so a redo keeps the original actor and time rather
-    than taking the redoer's, as a replayed cleaning rule does (P2-4a).
-    """
-    name = note["name"]
-    expected, target = (note["after"], note["before"]) if undo else (note["before"], note["after"])
-    if state.selections.get(name) != expected:
-        raise ValueError(
-            f"Cannot {'undo' if undo else 'redo'} it: the selection '{name}' has changed since, so restoring "
-            "it would overwrite that change."
-        )
-    if target is None:
-        del state.selections[name]
-    else:
-        state.selections[name] = copy.deepcopy(target)
-    state.touch()
-    return {"selection": name, "restored": "absent" if target is None else "defined"}
-
-
 def _list_selections(state: SessionState) -> dict[str, Any]:
     frame = state.timeseries_df
     listed = []

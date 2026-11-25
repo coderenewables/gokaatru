@@ -10,16 +10,15 @@ as the MCP transport and the chat route bind it, and maps ``ValueError`` to 400 
 # No ``from __future__ import annotations``: FastAPI reads each generated route's body type
 # from its signature, and a postponed annotation would name a model it cannot resolve.
 
-import inspect
-from typing import Annotated, Any, get_type_hints
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, ConfigDict, ValidationError, create_model
+from pydantic import BaseModel, ValidationError
 
 import server.main  # noqa: F401 — importing it declares every operation
 from server.api.deps import get_session_state
-from server.operations import REGISTRY, Operation, acting_as
+from server.operations import REGISTRY, Operation, acting_as, parameters_model
 from server.schemas.results._base import ErrorDetail
 from server.state.session import SessionState, bind_session
 
@@ -28,18 +27,9 @@ router = APIRouter(tags=["operations"])
 OPERATION_PATH = "/sessions/{session_id}/operations/{name}"
 
 
-def _model_name(declared: Operation) -> str:
-    return "".join(part.capitalize() for part in declared.name.split("_")) + "Parameters"
-
-
 def request_model(declared: Operation) -> type[BaseModel]:
-    """The operation's parameters as a Pydantic model, from the function's signature."""
-    hints = get_type_hints(declared.fn)
-    fields: dict[str, Any] = {}
-    for parameter in inspect.signature(declared.fn).parameters.values():
-        default = ... if parameter.default is inspect.Parameter.empty else parameter.default
-        fields[parameter.name] = (hints.get(parameter.name, Any), default)
-    return create_model(_model_name(declared), __config__=ConfigDict(extra="forbid"), **fields)
+    """The operation's parameters as a Pydantic model (``parameters_model``)."""
+    return parameters_model(declared)
 
 
 def run_operation(function: Any, state: SessionState, arguments: dict[str, Any]) -> Any:

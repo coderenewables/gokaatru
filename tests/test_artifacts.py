@@ -42,7 +42,7 @@ WARM_CACHE: dict[str, str] = {
 _SAME_SITE = "the samples give it the coordinate, hub height or name the session already has"
 _UNDO = (
     "undo and redo write what the undone operation wrote; the samples undo cleaning, a removal, "
-    "a project name and a data model build"
+    "a project name, a data model build and a saved pipeline"
 )
 WRITES_NOT_OBSERVED: dict[tuple[str, str], str] = {
     ("brighthub_prepare_reanalysis", "site"): _SAME_SITE,
@@ -72,7 +72,9 @@ WRITES_NOT_OBSERVED: dict[tuple[str, str], str] = {
     **{
         (operation, artifact): _UNDO
         for operation in ("undo_last_change", "redo_last_change")
-        for artifact in ("hub_height_series", "selections", "settings", "reference_choice", "shear_settings", "site")
+        for artifact in (
+            "hub_height_series", "selections", "settings", "reference_choice", "shear_settings", "site",
+        )
     },
 }
 

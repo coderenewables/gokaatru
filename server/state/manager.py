@@ -124,6 +124,7 @@ class SessionManager:
         target.operation_log = copy.deepcopy(source.operation_log)
         target.undo_stack = list(source.undo_stack)
         target.selections = copy.deepcopy(source.selections)
+        target.pipelines = copy.deepcopy(source.pipelines)
         target.removed_sensors = copy.deepcopy(source.removed_sensors)
         target.datamodel_origin = copy.deepcopy(source.datamodel_origin)
         target.project = copy.deepcopy(source.project)

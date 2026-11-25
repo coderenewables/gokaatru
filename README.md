@@ -4,7 +4,7 @@
 
 GoKaatru ships as two parts that work together:
 
-- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **103 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
+- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **107 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
 - **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison.
 
 State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The frontend's convenience fields are **derived mirrors** of canonical backend keys, not independent state — the mapping is defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
@@ -228,6 +228,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 
 ### Selections
 - `define_selection`, `delete_selection`, `list_selections`, `resolve_selection` — named record selections: time ranges, direction sectors (wrapping through north), value bands on a channel, polygons over two channels (a lasso on a scatter: even-odd rule, at most 1,000 vertices, more is refused), or explicit record sets, combined by union and intersection. Bounds are half-open (a point on a polygon's left or lower edge is inside, on its right or upper edge outside) and a missing value is never selected. The server resolves a selection against the working data each time it is used, so every view counts the same records.
+- `order_pipeline`, `save_pipeline`, `delete_pipeline`, `list_pipelines` — the campaign's pipeline (decisions/0015): steps of canvas operations put in the order their declared reads and writes require (`server/core/pipeline.py`; one step per result, a second producer or a cycle refused), each with its status against what built the result in the session (`current`, `changed`, `stale`, `not_run`, `upstream`, `invalid`, `ready`) and the steps a "Run stale" would run. Operations that take credentials cannot be steps, since a saved pipeline is written with the project. Named pipelines are saved in the campaign and undone like saved selections.
 - 25 statistics, charts, the series window and the channel summary, all reading the measured records, take a `selection` parameter (`selectable: true` in `GET /operations`): the Weibull, wind-climate, turbulence, windrose, diurnal, monthly, MoMM and scatter statistics, energy metrics, ramps, persistence, sensor comparison, mast effects, QC diagnostics, vertical structure and sector shear tables, the windrose, Weibull, diurnal, scatter, time-series and monthly-mean charts, `get_series_window`, and `summarise_channels` (the valid records, mean, minimum and maximum of named channels, which is how the workbench's inspector compares a selection with every record). It is a saved selection's name, or a definition sent inline as a JSON object (the browser's live brushing): a read on an inline definition is not written to the operation log, because it is view state with nothing to trace, and a saved selection's name cannot start with `{`. The operation then runs with every record outside the selection missing, and its result carries a `selection` block (below). Reads of stored results, the long-term series, the reanalysis or the data inventory take none; `tests/test_selection_operations.py` lists each with the reason.
 
 ### Scenario sweep (Analysis Engine)
@@ -579,10 +580,10 @@ with `assistant=False` is not exposed at all.
 
 | Tier | Count | Exposed when |
 |---|---|---|
-| Read-only — query, compute, plot, series windows, scatter pairs, flag intervals, channel summaries, the instrument list, the operation log, listing and resolving selections, the atmospheric diagnostic | 58 | always |
-| Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty, the clipping analysis (it records the inter-annual variability the uncertainty model uses), undo and redo, defining and deleting selections, removing sensors | 33 | only with `allow_mutating_tools: true` |
+| Read-only — query, compute, plot, series windows, scatter pairs, flag intervals, channel summaries, the instrument list, the operation log, listing and resolving selections, the atmospheric diagnostic, ordering and listing pipelines | 60 | always |
+| Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty, the clipping analysis (it records the inter-annual variability the uncertainty model uses), undo and redo, defining and deleting selections, saving and deleting pipelines, removing sensors | 35 | only with `allow_mutating_tools: true` |
 
-The remaining 12 of the 103 registered tools are declared `assistant=False` and
+The remaining 12 of the 107 registered tools are declared `assistant=False` and
 therefore unreachable from chat: every BrightHub / EarthDataHub tool — the read-only
 tier's contract is "no session mutation, no filesystem, **no network**", and the
 credential tools would additionally hand an injected prompt a view of the session's

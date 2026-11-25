@@ -7655,6 +7655,39 @@
     "title": "DefineSelectionResult",
     "type": "object"
    },
+   "DeletePipelineParameters": {
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "DeletePipelineParameters",
+    "type": "object"
+   },
+   "DeletePipelineResult": {
+    "additionalProperties": false,
+    "properties": {
+     "deleted": {
+      "title": "Deleted",
+      "type": "string"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "deleted"
+    ],
+    "title": "DeletePipelineResult",
+    "type": "object"
+   },
    "DeleteSelectionParameters": {
     "additionalProperties": false,
     "properties": {
@@ -11682,6 +11715,29 @@
     "title": "ListInstrumentsResult",
     "type": "object"
    },
+   "ListPipelinesParameters": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "ListPipelinesParameters",
+    "type": "object"
+   },
+   "ListPipelinesResult": {
+    "additionalProperties": false,
+    "properties": {
+     "pipelines": {
+      "items": {
+       "$ref": "#/components/schemas/SavedPipeline"
+      },
+      "title": "Pipelines",
+      "type": "array"
+     }
+    },
+    "required": [
+     "pipelines"
+    ],
+    "title": "ListPipelinesResult",
+    "type": "object"
+   },
    "ListSelectionsParameters": {
     "additionalProperties": false,
     "properties": {},
@@ -12439,6 +12495,65 @@
     "title": "OrderDependence",
     "type": "object"
    },
+   "OrderPipelineParameters": {
+    "additionalProperties": false,
+    "properties": {
+     "steps": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Steps",
+      "type": "array"
+     }
+    },
+    "required": [
+     "steps"
+    ],
+    "title": "OrderPipelineParameters",
+    "type": "object"
+   },
+   "OrderPipelineResult": {
+    "additionalProperties": false,
+    "properties": {
+     "edges": {
+      "items": {
+       "$ref": "#/components/schemas/PipelineEdge"
+      },
+      "title": "Edges",
+      "type": "array"
+     },
+     "order": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Order",
+      "type": "array"
+     },
+     "steps": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/StepReport"
+      },
+      "title": "Steps",
+      "type": "object"
+     },
+     "to_run": {
+      "items": {
+       "type": "string"
+      },
+      "title": "To Run",
+      "type": "array"
+     }
+    },
+    "required": [
+     "order",
+     "edges",
+     "steps",
+     "to_run"
+    ],
+    "title": "OrderPipelineResult",
+    "type": "object"
+   },
    "OtherChannel": {
     "additionalProperties": false,
     "description": "A column of the data that belongs to no instrument, with how its header reads.",
@@ -12909,6 +13024,30 @@
      "partial_year_max_speed"
     ],
     "title": "PartialYear",
+    "type": "object"
+   },
+   "PipelineEdge": {
+    "additionalProperties": false,
+    "properties": {
+     "artifact": {
+      "title": "Artifact",
+      "type": "string"
+     },
+     "source": {
+      "title": "Source",
+      "type": "string"
+     },
+     "target": {
+      "title": "Target",
+      "type": "string"
+     }
+    },
+    "required": [
+     "source",
+     "target",
+     "artifact"
+    ],
+    "title": "PipelineEdge",
     "type": "object"
    },
    "PlotAnnualMeansParameters": {
@@ -14584,6 +14723,9 @@
         "$ref": "#/components/schemas/BuildDataModelResult"
        },
        {
+        "$ref": "#/components/schemas/RestoredEntry"
+       },
+       {
         "$ref": "#/components/schemas/RunConfig"
        }
       ],
@@ -14943,6 +15085,43 @@
      "data_model"
     ],
     "title": "RestoredDataModel",
+    "type": "object"
+   },
+   "RestoredEntry": {
+    "additionalProperties": false,
+    "description": "Undoing or redoing a saved selection or pipeline: which one, and whether it is now\ndefined or absent.",
+    "properties": {
+     "pipeline": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pipeline"
+     },
+     "restored": {
+      "title": "Restored",
+      "type": "string"
+     },
+     "selection": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Selection"
+     }
+    },
+    "required": [
+     "restored"
+    ],
+    "title": "RestoredEntry",
     "type": "object"
    },
    "RestoredPaths": {
@@ -16086,6 +16265,86 @@
     "title": "RunScenarioRequest",
     "type": "object"
    },
+   "SavePipelineParameters": {
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "steps": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Steps",
+      "type": "array"
+     }
+    },
+    "required": [
+     "name",
+     "steps"
+    ],
+    "title": "SavePipelineParameters",
+    "type": "object"
+   },
+   "SavePipelineResult": {
+    "additionalProperties": false,
+    "properties": {
+     "actor": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Actor"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "replaced": {
+      "title": "Replaced",
+      "type": "boolean"
+     },
+     "saved_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Saved At"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     },
+     "steps": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Steps",
+      "type": "array"
+     }
+    },
+    "required": [
+     "name",
+     "steps",
+     "actor",
+     "saved_at",
+     "status",
+     "replaced"
+    ],
+    "title": "SavePipelineResult",
+    "type": "object"
+   },
    "SaveRunConfigParameters": {
     "additionalProperties": false,
     "properties": {},
@@ -16133,6 +16392,53 @@
      "name"
     ],
     "title": "SaveScenarioRequest",
+    "type": "object"
+   },
+   "SavedPipeline": {
+    "additionalProperties": false,
+    "properties": {
+     "actor": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Actor"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "saved_at": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Saved At"
+     },
+     "steps": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Steps",
+      "type": "array"
+     }
+    },
+    "required": [
+     "name",
+     "steps",
+     "actor",
+     "saved_at"
+    ],
+    "title": "SavedPipeline",
     "type": "object"
    },
    "ScatterPairsRequest": {
@@ -17618,6 +17924,95 @@
      "count"
     ],
     "title": "Spread",
+    "type": "object"
+   },
+   "StepReport": {
+    "additionalProperties": false,
+    "properties": {
+     "errors": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Errors"
+     },
+     "inputs": {
+      "additionalProperties": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "title": "Inputs",
+      "type": "object"
+     },
+     "operation": {
+      "title": "Operation",
+      "type": "string"
+     },
+     "outputs": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Outputs",
+      "type": "array"
+     },
+     "parameters": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Parameters"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     },
+     "waiting_on": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Waiting On"
+     }
+    },
+    "required": [
+     "operation",
+     "status",
+     "inputs",
+     "outputs"
+    ],
+    "title": "StepReport",
     "type": "object"
    },
    "StoredSelection": {
@@ -19119,6 +19514,9 @@
        },
        {
         "$ref": "#/components/schemas/RestoredSensors"
+       },
+       {
+        "$ref": "#/components/schemas/RestoredEntry"
        }
       ],
       "title": "Detail"
@@ -29628,6 +30026,103 @@
     ]
    }
   },
+  "/api/sessions/{session_id}/operations/delete_pipeline": {
+   "post": {
+    "description": "Delete a named pipeline.",
+    "operationId": "operation_delete_pipeline_api_sessions__session_id__operations_delete_pipeline_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/DeletePipelineParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DeletePipelineResult",
+         "title": "Response Operation Delete Pipeline Api Sessions  Session Id  Operations Delete Pipeline Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "delete_pipeline",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
   "/api/sessions/{session_id}/operations/delete_selection": {
    "post": {
     "description": "Delete a named selection.",
@@ -32150,6 +32645,103 @@
     ]
    }
   },
+  "/api/sessions/{session_id}/operations/list_pipelines": {
+   "post": {
+    "description": "List the campaign's named pipelines with their steps, who saved each and when.",
+    "operationId": "operation_list_pipelines_api_sessions__session_id__operations_list_pipelines_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/ListPipelinesParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ListPipelinesResult",
+         "title": "Response Operation List Pipelines Api Sessions  Session Id  Operations List Pipelines Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "list_pipelines",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
   "/api/sessions/{session_id}/operations/list_selections": {
    "post": {
     "description": "List the session's named selections with how many records each holds now.",
@@ -32533,6 +33125,103 @@
      }
     },
     "summary": "load_run_config",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
+  "/api/sessions/{session_id}/operations/order_pipeline": {
+   "post": {
+    "description": "Order a pipeline's steps by what each reads and writes, and say for each whether the\nsession holds the result it would build: current, changed, stale, not run, waiting on a\nstep upstream, or invalid. Refuses two steps building one result, and a cycle.",
+    "operationId": "operation_order_pipeline_api_sessions__session_id__operations_order_pipeline_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/OrderPipelineParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/OrderPipelineResult",
+         "title": "Response Operation Order Pipeline Api Sessions  Session Id  Operations Order Pipeline Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "order_pipeline",
     "tags": [
      "operations"
     ]
@@ -34866,6 +35555,103 @@
     ]
    }
   },
+  "/api/sessions/{session_id}/operations/save_pipeline": {
+   "post": {
+    "description": "Save or replace a named pipeline in the campaign; refused when its steps cannot be ordered.",
+    "operationId": "operation_save_pipeline_api_sessions__session_id__operations_save_pipeline_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/SavePipelineParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SavePipelineResult",
+         "title": "Response Operation Save Pipeline Api Sessions  Session Id  Operations Save Pipeline Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "save_pipeline",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
   "/api/sessions/{session_id}/operations/save_run_config": {
    "post": {
     "description": "Write the current run configuration to data/runconfig.json per the Phase 1 persistence spec.",
@@ -35256,7 +36042,7 @@
   },
   "/api/sessions/{session_id}/operations/undo_last_change": {
    "post": {
-    "description": "Undo the last cleaning rule, configuration change, sensor removal, data model build or saved\nselection still in the history.",
+    "description": "Undo the last cleaning rule, configuration change, sensor removal, data model build, saved\nselection or saved pipeline still in the history.",
     "operationId": "operation_undo_last_change_api_sessions__session_id__operations_undo_last_change_post",
     "parameters": [
      {

@@ -295,6 +295,9 @@ _DECLARED: tuple[Artifact, ...] = (
         "selections", "The saved selections", lambda s: digest_of(s.selections), _setter("selections", dict),
     ),
     Artifact(
+        "pipelines", "The named pipelines", lambda s: digest_of(s.pipelines), _setter("pipelines", dict),
+    ),
+    Artifact(
         "reanalysis_nodes",
         "The reanalysis grid nodes found and downloaded",
         lambda s: digest_of(
@@ -395,6 +398,7 @@ ARTIFACT_FIELDS: dict[str, tuple[str, ...]] = {
     "shear_settings": ("runconfig",),
     "credentials": ("brighthub_token", "earthdatahub_pat"),
     "selections": ("selections",),
+    "pipelines": ("pipelines",),
     "reanalysis_nodes": ("era5_nodes", "merra_nodes", "era5_data", "merra_data", "reanalysis_cache_identity"),
     "reference_series": ("reanalysis_interpolated",),
     "reanalysis_hub_series": ("era5_data", "merra_data", "reanalysis_interpolated"),

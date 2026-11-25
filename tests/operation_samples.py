@@ -112,6 +112,11 @@ def _changes(samples: Samples, state: SessionState, workspace: Path) -> None:
     }
     samples.call(state, "define_selection", name="lasso", definition=lasso)
     samples.call(state, "delete_selection", name="lasso")
+    samples.call(state, "save_pipeline", name="chosen", steps=READ_ARGUMENTS["steps"])
+    samples.call(state, "list_pipelines")
+    samples.call(state, "undo_last_change")
+    samples.call(state, "redo_last_change")
+    samples.call(state, "delete_pipeline", name="chosen")
     # Another height than the pipeline's 120 m, so the call writes a column of its own.
     samples.call(state, "extrapolate_reanalysis_to_hub", hub_height_m=110.0, reference_height_m=100.0)
     samples.call(state, "apply_homogeneity_cutoff", cutoff_year=2010)

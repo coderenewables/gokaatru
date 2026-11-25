@@ -1,13 +1,13 @@
 """history — undo and redo the last cleaning rule, configuration change, sensor removal, data
-model build or saved selection (P1-13, P2-6, P2-7, P3-1, decisions/0010).
+model build, saved selection or saved pipeline (P1-13, P2-6, P2-7, P3-1, P3-6, decisions/0010).
 
 Undo inverts one logged call. A cleaning rule is removed by the replay-from-raw undo that
 already exists: rules are order-dependent, so only a replay gives back the series as it was.
 A configuration change is inverted by restoring exactly the run-configuration paths and
 synced fields it changed. A sensor removal is inverted from what it kept aside
 (``server/tools/sensors.py``), a data model build from the state it recorded before and
-after; the build that first puts the records into UTC cannot be undone. A saved selection is
-put back as the call found it. Each inverse first
+after; the build that first puts the records into UTC cannot be undone. A saved selection or
+pipeline is put back as the call found it. Each inverse first
 checks that the session is still as that call left it, and refuses rather than guesses when
 a later change has moved what it would restore. Redo calls the undone operation again with
 its logged parameters. Any other change starts a new branch of the history, so what was
@@ -25,12 +25,11 @@ from server.schemas.results import history as result_models
 from server.state.session import SessionState, session
 from server.tools.cleaning import _apply_cleaning_rule, _undo_cleaning_rule
 from server.tools.config import SYNCED_FIELDS, _persist_runconfig, _update_run_config, config_snapshot
-from server.tools.selections import restore_selection
 from server.tools.sensors import _remove_sensors, _restore_sensors
 
 UNDOABLE_OPERATIONS: tuple[str, ...] = (
     "apply_cleaning_rule", "update_run_config", "remove_sensors", "build_data_model",
-    "define_selection", "delete_selection",
+    "define_selection", "delete_selection", "save_pipeline", "delete_pipeline",
 )
 _ABSENT = object()
 
@@ -205,13 +204,38 @@ def _redo_data_model(state: SessionState, entry: dict[str, Any]) -> dict[str, An
     return _build_data_model(state, entry["parameters"]["spec"])
 
 
+def _named(field: str, noun: str, *, undo: bool) -> Any:
+    """Undo or redo of a named entry (a saved selection or pipeline): the stored entry the
+    call found is put back, or the one it left, whole, so a redo keeps the original author
+    and time as a replayed cleaning rule does (P2-4a)."""
+
+    def restore(state: SessionState, entry: dict[str, Any]) -> dict[str, Any]:
+        note = entry["undo"]
+        entries = getattr(state, field)
+        name = note["name"]
+        expected, target = (note["after"], note["before"]) if undo else (note["before"], note["after"])
+        if entries.get(name) != expected:
+            raise ValueError(
+                f"Cannot {'undo' if undo else 'redo'} it: the {noun} '{name}' has changed since, so restoring "
+                "it would overwrite that change."
+            )
+        if target is None:
+            del entries[name]
+        else:
+            entries[name] = copy.deepcopy(target)
+        state.touch()
+        return {noun: name, "restored": "absent" if target is None else "defined"}
+
+    return restore
+
+
 _UNDO = {
     "apply_cleaning_rule": _undo_cleaning,
     "update_run_config": _undo_config,
     "remove_sensors": _undo_removal,
     "build_data_model": _undo_data_model,
-    "define_selection": lambda state, entry: restore_selection(state, entry["undo"], undo=True),
-    "delete_selection": lambda state, entry: restore_selection(state, entry["undo"], undo=True),
+    **{name: _named("selections", "selection", undo=True) for name in ("define_selection", "delete_selection")},
+    **{name: _named("pipelines", "pipeline", undo=True) for name in ("save_pipeline", "delete_pipeline")},
 }
 _REDO = {
     "build_data_model": _redo_data_model,
@@ -220,8 +244,8 @@ _REDO = {
         state, entry["parameters"]["key"], entry["parameters"]["value"]
     ),
     "remove_sensors": _redo_removal,
-    "define_selection": lambda state, entry: restore_selection(state, entry["undo"], undo=False),
-    "delete_selection": lambda state, entry: restore_selection(state, entry["undo"], undo=False),
+    **{name: _named("selections", "selection", undo=False) for name in ("define_selection", "delete_selection")},
+    **{name: _named("pipelines", "pipeline", undo=False) for name in ("save_pipeline", "delete_pipeline")},
 }
 
 
@@ -233,8 +257,8 @@ def _undo_last_change(state: SessionState) -> dict[str, Any]:
     applied = _applied(state)
     if not applied:
         raise ValueError(
-            "Nothing to undo: no cleaning rule, configuration change, sensor removal, data model build "
-            "or saved selection is in the history"
+            "Nothing to undo: no cleaning rule, configuration change, sensor removal, data model build, "
+            "saved selection or saved pipeline is in the history"
         )
     entry = applied[-1]
     detail = _UNDO[entry["operation"]](state, entry)
@@ -285,16 +309,16 @@ def _get_operation_log(state: SessionState, limit: int) -> dict[str, Any]:
     effect="change", stage="config", canvas=False, result=result_models.UndoLastChangeResult,
     reads=(
         "measured_data", "data_model", "site", "label", "settings", "reference_choice", "shear_settings", "selections",
-        "hub_height_series",
+        "hub_height_series", "pipelines",
     ),
     writes=(
         "measured_data", "data_model", "site", "label", "settings", "reference_choice", "shear_settings", "selections",
-        "hub_height_series",
+        "hub_height_series", "pipelines",
     ),
 )
 def undo_last_change() -> dict:
-    """Undo the last cleaning rule, configuration change, sensor removal, data model build or saved
-    selection still in the history."""
+    """Undo the last cleaning rule, configuration change, sensor removal, data model build, saved
+    selection or saved pipeline still in the history."""
     return _undo_last_change(session)
 
 
@@ -302,11 +326,11 @@ def undo_last_change() -> dict:
     effect="change", stage="config", canvas=False, result=result_models.RedoLastChangeResult,
     reads=(
         "measured_data", "data_model", "site", "label", "settings", "reference_choice", "shear_settings", "selections",
-        "hub_height_series",
+        "hub_height_series", "pipelines",
     ),
     writes=(
         "measured_data", "data_model", "site", "label", "settings", "reference_choice", "shear_settings", "selections",
-        "hub_height_series",
+        "hub_height_series", "pipelines",
     ),
 )
 def redo_last_change() -> dict:

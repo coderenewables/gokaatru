@@ -62,6 +62,7 @@ ARGUMENT_VALUES: dict[str, object] = {
     "vertical_pct": 3.0,
     "mcp_pct": 4.0,
     "future_pct": 5.0,
+    "steps": [{"id": "weibull", "operation": "compute_weibull_params", "parameters": {"sensor_name": "Spd_100m"}}],
 }
 
 

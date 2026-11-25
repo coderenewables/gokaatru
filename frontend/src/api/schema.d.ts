@@ -2120,6 +2120,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/delete_pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * delete_pipeline
+         * @description Delete a named pipeline.
+         */
+        post: operations["operation_delete_pipeline_api_sessions__session_id__operations_delete_pipeline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/delete_selection": {
         parameters: {
             query?: never;
@@ -2670,6 +2690,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/list_pipelines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * list_pipelines
+         * @description List the campaign's named pipelines with their steps, who saved each and when.
+         */
+        post: operations["operation_list_pipelines_api_sessions__session_id__operations_list_pipelines_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/list_selections": {
         parameters: {
             query?: never;
@@ -2744,6 +2784,28 @@ export interface paths {
          * @description Load data/runconfig.json into session state following the Phase 1 configuration workflow.
          */
         post: operations["operation_load_run_config_api_sessions__session_id__operations_load_run_config_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/operations/order_pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * order_pipeline
+         * @description Order a pipeline's steps by what each reads and writes, and say for each whether the
+         *     session holds the result it would build: current, changed, stale, not run, waiting on a
+         *     step upstream, or invalid. Refuses two steps building one result, and a cycle.
+         */
+        post: operations["operation_order_pipeline_api_sessions__session_id__operations_order_pipeline_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3262,6 +3324,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/save_pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * save_pipeline
+         * @description Save or replace a named pipeline in the campaign; refused when its steps cannot be ordered.
+         */
+        post: operations["operation_save_pipeline_api_sessions__session_id__operations_save_pipeline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/save_run_config": {
         parameters: {
             query?: never;
@@ -3354,8 +3436,8 @@ export interface paths {
         put?: never;
         /**
          * undo_last_change
-         * @description Undo the last cleaning rule, configuration change, sensor removal, data model build or saved
-         *     selection still in the history.
+         * @description Undo the last cleaning rule, configuration change, sensor removal, data model build, saved
+         *     selection or saved pipeline still in the history.
          */
         post: operations["operation_undo_last_change_api_sessions__session_id__operations_undo_last_change_post"];
         delete?: never;
@@ -6753,6 +6835,18 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** DeletePipelineParameters */
+        DeletePipelineParameters: {
+            /** Name */
+            name: string;
+        };
+        /** DeletePipelineResult */
+        DeletePipelineResult: {
+            /** Deleted */
+            deleted: string;
+            /** Status */
+            status: string;
+        };
         /** DeleteSelectionParameters */
         DeleteSelectionParameters: {
             /** Name */
@@ -7978,6 +8072,13 @@ export interface components {
             /** Other Channels */
             other_channels: components["schemas"]["OtherChannel"][];
         };
+        /** ListPipelinesParameters */
+        ListPipelinesParameters: Record<string, never>;
+        /** ListPipelinesResult */
+        ListPipelinesResult: {
+            /** Pipelines */
+            pipelines: components["schemas"]["SavedPipeline"][];
+        };
         /** ListSelectionsParameters */
         ListSelectionsParameters: Record<string, never>;
         /** ListSelectionsResult */
@@ -8195,6 +8296,26 @@ export interface components {
             /** Warning */
             warning?: string | null;
         };
+        /** OrderPipelineParameters */
+        OrderPipelineParameters: {
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** OrderPipelineResult */
+        OrderPipelineResult: {
+            /** Edges */
+            edges: components["schemas"]["PipelineEdge"][];
+            /** Order */
+            order: string[];
+            /** Steps */
+            steps: {
+                [key: string]: components["schemas"]["StepReport"];
+            };
+            /** To Run */
+            to_run: string[];
+        };
         /**
          * OtherChannel
          * @description A column of the data that belongs to no instrument, with how its header reads.
@@ -8322,6 +8443,15 @@ export interface components {
             records: number;
             /** Year */
             year: number;
+        };
+        /** PipelineEdge */
+        PipelineEdge: {
+            /** Artifact */
+            artifact: string;
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
         };
         /** PlotAnnualMeansParameters */
         PlotAnnualMeansParameters: Record<string, never>;
@@ -8858,7 +8988,7 @@ export interface components {
             /** Data Version */
             data_version: number;
             /** Detail */
-            detail: components["schemas"]["ApplyCleaningRuleResult"] | components["schemas"]["RemoveSensorsResult"] | components["schemas"]["BuildDataModelResult"] | components["schemas"]["RunConfig"];
+            detail: components["schemas"]["ApplyCleaningRuleResult"] | components["schemas"]["RemoveSensorsResult"] | components["schemas"]["BuildDataModelResult"] | components["schemas"]["RestoredEntry"] | components["schemas"]["RunConfig"];
             redone: components["schemas"]["LoggedCall"];
             /** Stale Artifacts */
             stale_artifacts: string[];
@@ -8965,6 +9095,19 @@ export interface components {
             data_model: string;
             /** Restored Paths */
             restored_paths: string[];
+        };
+        /**
+         * RestoredEntry
+         * @description Undoing or redoing a saved selection or pipeline: which one, and whether it is now
+         *     defined or absent.
+         */
+        RestoredEntry: {
+            /** Pipeline */
+            pipeline?: string | null;
+            /** Restored */
+            restored: string;
+            /** Selection */
+            selection?: string | null;
         };
         /**
          * RestoredPaths
@@ -9337,6 +9480,32 @@ export interface components {
             };
             uncertainty?: components["schemas"]["CalculateUncertaintyRequest"] | null;
         };
+        /** SavePipelineParameters */
+        SavePipelineParameters: {
+            /** Name */
+            name: string;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** SavePipelineResult */
+        SavePipelineResult: {
+            /** Actor */
+            actor: string | null;
+            /** Name */
+            name: string;
+            /** Replaced */
+            replaced: boolean;
+            /** Saved At */
+            saved_at: string | null;
+            /** Status */
+            status: string;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+        };
         /** SaveRunConfigParameters */
         SaveRunConfigParameters: Record<string, never>;
         /** SaveRunConfigResult */
@@ -9355,6 +9524,19 @@ export interface components {
         SaveScenarioRequest: {
             /** Name */
             name: string;
+        };
+        /** SavedPipeline */
+        SavedPipeline: {
+            /** Actor */
+            actor: string | null;
+            /** Name */
+            name: string;
+            /** Saved At */
+            saved_at: string | null;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
         };
         /**
          * ScatterPairsRequest
@@ -9745,6 +9927,29 @@ export interface components {
             /** Std */
             std?: number | null;
         };
+        /** StepReport */
+        StepReport: {
+            /** Errors */
+            errors?: string[] | null;
+            /** Inputs */
+            inputs: {
+                [key: string]: string[];
+            };
+            /** Operation */
+            operation: string;
+            /** Outputs */
+            outputs: string[];
+            /** Parameters */
+            parameters?: {
+                [key: string]: unknown;
+            } | null;
+            /** Reason */
+            reason?: string | null;
+            /** Status */
+            status: string;
+            /** Waiting On */
+            waiting_on?: string[] | null;
+        };
         /** StoredSelection */
         StoredSelection: {
             /** Actor */
@@ -10130,7 +10335,7 @@ export interface components {
             /** Data Version */
             data_version: number;
             /** Detail */
-            detail: components["schemas"]["UndoCleaningRuleResult"] | components["schemas"]["RestoredDataModel"] | components["schemas"]["RestoredPaths"] | components["schemas"]["RestoredSensors"];
+            detail: components["schemas"]["UndoCleaningRuleResult"] | components["schemas"]["RestoredDataModel"] | components["schemas"]["RestoredPaths"] | components["schemas"]["RestoredSensors"] | components["schemas"]["RestoredEntry"];
             /** Stale Artifacts */
             stale_artifacts: string[];
             /** Stale Reasons */
@@ -15560,6 +15765,61 @@ export interface operations {
             };
         };
     };
+    operation_delete_pipeline_api_sessions__session_id__operations_delete_pipeline_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeletePipelineParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletePipelineResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
     operation_delete_selection_api_sessions__session_id__operations_delete_selection_post: {
         parameters: {
             query?: never;
@@ -16990,6 +17250,61 @@ export interface operations {
             };
         };
     };
+    operation_list_pipelines_api_sessions__session_id__operations_list_pipelines_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ListPipelinesParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPipelinesResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
     operation_list_selections_api_sessions__session_id__operations_list_selections_post: {
         parameters: {
             query?: never;
@@ -17179,6 +17494,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LoadRunConfigResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
+    operation_order_pipeline_api_sessions__session_id__operations_order_pipeline_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OrderPipelineParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderPipelineResult"];
                 };
             };
             /** @description Refused: the request cannot be answered as asked */
@@ -18499,6 +18869,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunLtcXgboostResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
+    operation_save_pipeline_api_sessions__session_id__operations_save_pipeline_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SavePipelineParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavePipelineResult"];
                 };
             };
             /** @description Refused: the request cannot be answered as asked */

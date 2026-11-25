@@ -54,6 +54,7 @@ SHARED_FIELDS: tuple[str, ...] = (
     "cleaning_log",
     "cleaning_flags",
     "selections",
+    "pipelines",
     # What sensor removals kept aside, which data model is in use, and the campaign's project:
     # read by undo and by the reanalysis cache, never written by a scenario.
     "removed_sensors",

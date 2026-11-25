@@ -28,7 +28,7 @@ from typing import Annotated, Any, Literal, TypeVar, get_type_hints
 
 import numpy as np
 from fastmcp.tools import FunctionTool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from server.core.scenario_result import ENGINE_VERSION
 from server.state.artifacts import ARTIFACTS
@@ -105,6 +105,7 @@ STAGES: tuple[str, ...] = (
     "diagnostics",
     "sweep",
     "selection",
+    "pipeline",
 )
 
 # Standards references may only say what a method is traced to (decisions/0004).
@@ -394,6 +395,34 @@ def _selectable_signature(fn: Callable[..., Any], name: str) -> tuple[inspect.Si
     )
 
 
+def _logged_parameters(arguments: dict[str, Any]) -> dict[str, Any]:
+    return _json_safe(arguments)
+
+
+def parameters_model(declared: Operation) -> type[BaseModel]:
+    """The operation's parameters as a Pydantic model, from the function's signature, extra
+    fields refused: what the generated route validates a body with."""
+    hints = get_type_hints(declared.fn)
+    fields: dict[str, Any] = {}
+    for parameter in inspect.signature(declared.fn).parameters.values():
+        default = ... if parameter.default is inspect.Parameter.empty else parameter.default
+        fields[parameter.name] = (hints.get(parameter.name, Any), default)
+    name = "".join(part.capitalize() for part in declared.name.split("_")) + "Parameters"
+    return create_model(name, __config__=ConfigDict(extra="forbid"), **fields)
+
+
+def call_parameters(declared: Operation, arguments: dict[str, Any]) -> dict[str, Any]:
+    """The parameters a call with ``arguments`` would be logged and stamped with, defaults
+    filled in, so a pipeline step can be compared with what built a result."""
+    bound = inspect.signature(declared.fn).bind_partial(**arguments)
+    bound.apply_defaults()
+    logged = {key: REDACTED if key in declared.secret_parameters else value for key, value in bound.arguments.items()}
+    # The wrapper logs a selection only when one is given.
+    if not logged.get(SELECTION_PARAMETER):
+        logged.pop(SELECTION_PARAMETER, None)
+    return _logged_parameters(logged)
+
+
 def _digests(state: SessionState, writes: tuple[str, ...]) -> dict[str, str]:
     # The measured records carry their own version (``data_version``), moved by the code that
     # changes them; digesting every record around every cleaning rule would cost more than it.
@@ -446,7 +475,7 @@ def _logged(
         logged_arguments = {key: REDACTED if key in secrets else value for key, value in arguments.items()}
         if selection:
             logged_arguments[SELECTION_PARAMETER] = selection
-        parameters = _json_safe(logged_arguments)
+        parameters = _logged_parameters(logged_arguments)
         state = get_active_session()
         before = state.data_version
         call = {

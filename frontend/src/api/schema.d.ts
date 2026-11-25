@@ -2647,6 +2647,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/list_instruments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * list_instruments
+         * @description The campaign's instruments by height (highest first), each with its type, boom, mapped
+         *     role and the statistic columns it logs, and every other channel of the data.
+         */
+        post: operations["operation_list_instruments_api_sessions__session_id__operations_list_instruments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/list_selections": {
         parameters: {
             query?: never;
@@ -7729,6 +7750,23 @@ export interface components {
             /** Year */
             year: number;
         };
+        /** Instrument */
+        Instrument: {
+            /** Boom Orientation Deg */
+            boom_orientation_deg?: number | null;
+            /** Height M */
+            height_m: number | null;
+            /** In Data */
+            in_data: boolean;
+            /** Mapped As */
+            mapped_as: string | null;
+            /** Name */
+            name: string;
+            /** Sensor Type */
+            sensor_type: string | null;
+            /** Statistics */
+            statistics: string[];
+        };
         /**
          * InterpolateEra5Request
          * @description Select which downloaded reanalysis becomes the interpolated long-term reference.
@@ -7891,6 +7929,17 @@ export interface components {
             outlier_note: string;
             /** Rules */
             rules: components["schemas"]["CleaningRule"][];
+        };
+        /** ListInstrumentsParameters */
+        ListInstrumentsParameters: Record<string, never>;
+        /** ListInstrumentsResult */
+        ListInstrumentsResult: {
+            /** Heights */
+            heights: (number | null)[];
+            /** Instruments */
+            instruments: components["schemas"]["Instrument"][];
+            /** Other Channels */
+            other_channels: components["schemas"]["OtherChannel"][];
         };
         /** ListSelectionsParameters */
         ListSelectionsParameters: Record<string, never>;
@@ -8108,6 +8157,18 @@ export interface components {
             sequence: number;
             /** Warning */
             warning?: string | null;
+        };
+        /**
+         * OtherChannel
+         * @description A column of the data that belongs to no instrument, with how its header reads.
+         */
+        OtherChannel: {
+            /** Name */
+            name: string;
+            /** Reason */
+            reason: string | null;
+            /** Role */
+            role: string;
         };
         /** OverlapMetrics */
         OverlapMetrics: {
@@ -16806,6 +16867,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ListCleaningRulesResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
+    operation_list_instruments_api_sessions__session_id__operations_list_instruments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ListInstrumentsParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListInstrumentsResult"];
                 };
             };
             /** @description Refused: the request cannot be answered as asked */

@@ -87,6 +87,7 @@ NOT_SELECTABLE = {
     "get_sweep_summary": _STORED,
     "list_cleaning_rules": _STORED,
     "list_selections": _STORED,
+    "list_instruments": _INVENTORY,
     "list_sensors": _INVENTORY,
     "list_sweeps": _STORED,
     "plot_annual_means": _LONG_TERM,

@@ -1451,6 +1451,28 @@
  },
  {
   "annotations": null,
+  "description": "The campaign's instruments by height (highest first), each with its type, boom, mapped\nrole and the statistic columns it logs, and every other channel of the data.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "list_instruments",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
   "description": "Remove sensors from the analysis: inventory, height mapping, working and raw data.\n\nThe removal is recorded in the run configuration's excluded_sensors, so a datamodel\nre-import keeps them out; loading a new timeseries brings every sensor back. Undoable.",
   "execution": null,
   "icons": null,

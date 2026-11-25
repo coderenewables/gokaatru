@@ -111,7 +111,7 @@ def test_stages_are_unique() -> None:
 # No session change, no file written, no network: always offered to the assistant.
 PINNED_READ_TIER = frozenset({
     "get_operation_log", "list_selections", "resolve_selection", "get_series_window", "get_flag_intervals",
-    "get_scatter_pairs", "summarise_channels",
+    "get_scatter_pairs", "summarise_channels", "list_instruments",
     "analyze_homogeneity", "analyze_sweep_spread", "build_sector_shear_tables", "compute_air_density",
     "compute_air_density_timeseries", "compute_diurnal_profile",
     "compute_energy_metrics", "compute_energy_sensitivity", "compute_extreme_winds", "compute_mast_effects",
@@ -151,7 +151,7 @@ PINNED_NOT_ON_CANVAS = frozenset({
     "define_selection", "delete_selection", "list_selections", "resolve_selection",
     "analyze_sweep_spread", "build_data_model", "draft_data_model", "get_fixed_prefix_hash",
     "get_sweep_summary", "list_sweeps", "get_flag_intervals", "get_scatter_pairs",
-    "remove_sensors", "summarise_channels",
+    "remove_sensors", "summarise_channels", "list_instruments",
 })
 # Module to stage, in the executor's pipeline order before P1-4 (F-09).
 PINNED_STAGE_BY_MODULE = {

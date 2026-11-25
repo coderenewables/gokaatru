@@ -1,0 +1,65 @@
+.gk-data {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 13px;
+}
+
+.gk-data-group h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gk-muted);
+  margin: 0 0 6px;
+}
+
+.gk-data-group p {
+  margin: 0;
+}
+
+.gk-instruments,
+.gk-statistics {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.gk-statistics {
+  margin: 4px 0 0 14px;
+}
+
+.gk-channel {
+  display: inline-block;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid var(--gk-border);
+  border-radius: 12px;
+  background: var(--gk-surface);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  overflow-wrap: anywhere;
+}
+
+.gk-channel:hover {
+  border-color: var(--gk-accent);
+}
+
+.gk-channel-dragging {
+  position: relative;
+  z-index: 10;
+  cursor: grabbing;
+  border-color: var(--gk-accent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.gk-channel-absent {
+  cursor: default;
+  border-style: dashed;
+}
+
+.gk-channel-name {
+  font-weight: 500;
+}

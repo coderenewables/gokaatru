@@ -10824,6 +10824,80 @@
     "title": "IncompleteYear",
     "type": "object"
    },
+   "Instrument": {
+    "additionalProperties": false,
+    "properties": {
+     "boom_orientation_deg": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Boom Orientation Deg"
+     },
+     "height_m": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Height M"
+     },
+     "in_data": {
+      "title": "In Data",
+      "type": "boolean"
+     },
+     "mapped_as": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mapped As"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "sensor_type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sensor Type"
+     },
+     "statistics": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Statistics",
+      "type": "array"
+     }
+    },
+    "required": [
+     "name",
+     "height_m",
+     "sensor_type",
+     "in_data",
+     "mapped_as",
+     "statistics"
+    ],
+    "title": "Instrument",
+    "type": "object"
+   },
    "InterpolateEra5Request": {
     "description": "Select which downloaded reanalysis becomes the interpolated long-term reference.\n\nPreviously ``source`` was a bare ``str = \"era5\"`` function parameter with no ``Body()``\nannotation, so FastAPI bound it as a *query* parameter - every caller (including this\nproject's own frontend) sent it in the JSON body instead, which FastAPI silently ignored,\nalways falling back to the ``\"era5\"`` default. The MERRA-2 interpolation call added to fix\nF-58/the \"MERRA-2 stays unavailable\" report therefore never actually interpolated MERRA-2\nat all; it silently re-interpolated ERA5 a second time. A request body model is the fix.",
     "properties": {
@@ -11416,6 +11490,52 @@
      "outlier_note"
     ],
     "title": "ListCleaningRulesResult",
+    "type": "object"
+   },
+   "ListInstrumentsParameters": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "ListInstrumentsParameters",
+    "type": "object"
+   },
+   "ListInstrumentsResult": {
+    "additionalProperties": false,
+    "properties": {
+     "heights": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "title": "Heights",
+      "type": "array"
+     },
+     "instruments": {
+      "items": {
+       "$ref": "#/components/schemas/Instrument"
+      },
+      "title": "Instruments",
+      "type": "array"
+     },
+     "other_channels": {
+      "items": {
+       "$ref": "#/components/schemas/OtherChannel"
+      },
+      "title": "Other Channels",
+      "type": "array"
+     }
+    },
+    "required": [
+     "heights",
+     "instruments",
+     "other_channels"
+    ],
+    "title": "ListInstrumentsResult",
     "type": "object"
    },
    "ListSelectionsParameters": {
@@ -12173,6 +12293,38 @@
      "applied_before_on_this_sensor"
     ],
     "title": "OrderDependence",
+    "type": "object"
+   },
+   "OtherChannel": {
+    "additionalProperties": false,
+    "description": "A column of the data that belongs to no instrument, with how its header reads.",
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
+     "role": {
+      "title": "Role",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "role",
+     "reason"
+    ],
+    "title": "OtherChannel",
     "type": "object"
    },
    "OverlapMetrics": {
@@ -31752,6 +31904,103 @@
      }
     },
     "summary": "list_cleaning_rules",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
+  "/api/sessions/{session_id}/operations/list_instruments": {
+   "post": {
+    "description": "The campaign's instruments by height (highest first), each with its type, boom, mapped\nrole and the statistic columns it logs, and every other channel of the data.",
+    "operationId": "operation_list_instruments_api_sessions__session_id__operations_list_instruments_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/ListInstrumentsParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ListInstrumentsResult",
+         "title": "Response Operation List Instruments Api Sessions  Session Id  Operations List Instruments Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "list_instruments",
     "tags": [
      "operations"
     ]

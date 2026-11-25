@@ -163,6 +163,65 @@ def _restore_sensors(state: SessionState, stash_key: str) -> dict[str, Any]:
     return {"restored": names}
 
 
+def _list_instruments(state: SessionState) -> dict[str, Any]:
+    """The campaign's instruments by height, each with the statistic columns it logs.
+
+    An instrument is a sensor of the inventory. Its statistic columns (standard deviation,
+    minimum, maximum) are the ones the data model builder's header inference pairs with it
+    (``draft_columns``: same stem, a statistic suffix), plus the mapping's ``sd_col``, so a
+    flag can cover the whole instrument (decisions/0014.2) and the data tree can show it.
+    """
+    from server.core.datamodel_builder import ROLE_STATISTIC, draft_columns
+
+    frame = state.timeseries_df
+    columns = [str(column) for column in frame.columns] if frame is not None else []
+    drafts = draft_columns(columns)
+    statistics: dict[str, list[str]] = {}
+    for draft in drafts:
+        if draft.role == ROLE_STATISTIC and draft.parent:
+            statistics.setdefault(draft.parent, []).append(draft.name)
+    roles: dict[str, str] = {}
+    for slots in state.sensor_mapping.values():
+        for slot, column in slots.items():
+            if isinstance(column, str) and slot != "sd_col":
+                roles.setdefault(column, slot)
+            if slot == "sd_col" and isinstance(column, str) and isinstance(slots.get("speed_col"), str):
+                speed = str(slots["speed_col"])
+                if column not in statistics.get(speed, []) and column in columns:
+                    statistics.setdefault(speed, []).append(column)
+    instruments = []
+    for name, meta in state.sensor_inventory.items():
+        entry: dict[str, Any] = {
+            "name": name,
+            "height_m": meta.get("height_m"),
+            "sensor_type": meta.get("sensor_type"),
+            "in_data": name in columns,
+            "mapped_as": roles.get(name),
+            "statistics": sorted(statistics.get(name, [])),
+        }
+        if meta.get("boom_orientation_deg") is not None:
+            entry["boom_orientation_deg"] = meta["boom_orientation_deg"]
+        instruments.append(entry)
+    instruments.sort(key=lambda entry: (-(entry["height_m"] or 0.0), str(entry["sensor_type"]), entry["name"]))
+    belonging = {entry["name"] for entry in instruments} | {
+        column for entry in instruments for column in entry["statistics"]
+    }
+    other = [
+        {"name": draft.name, "role": draft.role, "reason": draft.reason}
+        for draft in drafts
+        if draft.name not in belonging
+    ]
+    heights = sorted({entry["height_m"] for entry in instruments if entry["height_m"] is not None}, reverse=True)
+    return {"heights": heights, "instruments": instruments, "other_channels": other}
+
+
+@operation(effect="read", stage="ingest", canvas=False, result=result_models.ListInstrumentsResult)
+def list_instruments() -> dict:
+    """The campaign's instruments by height (highest first), each with its type, boom, mapped
+    role and the statistic columns it logs, and every other channel of the data."""
+    return _list_instruments(session)
+
+
 def _preview_remove_sensors(state: SessionState, sensor_names: list[str]) -> dict[str, Any]:
     from server.tools.cleaning import _preview
 

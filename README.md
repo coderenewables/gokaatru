@@ -4,7 +4,7 @@
 
 GoKaatru ships as two parts that work together:
 
-- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **102 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
+- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **103 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
 - **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison.
 
 State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The frontend's convenience fields are **derived mirrors** of canonical backend keys, not independent state — the mapping is defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
@@ -221,6 +221,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 - `get_run_config`, `update_run_config`, `save_run_config`, `load_run_config`, `get_analysis_summary`
 
 ### History
+- `list_instruments` — the campaign's instruments by height (highest first), each with its type, boom orientation, the mapping slot it fills, whether the data holds it, and the statistic columns it logs (standard deviation, minimum, maximum: the columns the data model builder's header inference pairs with it, plus the mapping's `sd_col`), and every other channel with how its header reads. The workbench's data tree draws it, and a flag covers a whole instrument by default (decisions/0014.2).
 - `remove_sensors` — take sensors out of the analysis: inventory, height mapping (a speed sensor's standard deviation slot goes with it) and the working and raw data, recorded in the run configuration's `excluded_sensors` so a datamodel re-import keeps them out; a new timeseries brings every sensor back. It marks derived results stale. A dry run shows the columns it would drop; the removed columns are kept aside (`removed_sensors`, saved with the project) so undo puts back every field exactly.
 - `undo_last_change`, `redo_last_change` — undo the last cleaning rule, configuration change, sensor removal or data model build still in the history, or redo what was undone. Undo refuses when a later change has moved what it would restore; any other change clears what can be redone.
 - `get_operation_log` — the most recent operation calls (actor, operation, parameters with credentials redacted, data versions) and the undo state.
@@ -577,7 +578,7 @@ with `assistant=False` is not exposed at all.
 
 | Tier | Count | Exposed when |
 |---|---|---|
-| Read-only — query, compute, plot, series windows, scatter pairs, flag intervals, channel summaries, the operation log, listing and resolving selections | 56 | always |
+| Read-only — query, compute, plot, series windows, scatter pairs, flag intervals, channel summaries, the instrument list, the operation log, listing and resolving selections | 57 | always |
 | Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty, the atmospheric diagnostic (it records the density the energy sensitivity uses), the clipping analysis (it records the inter-annual variability the uncertainty model uses), undo and redo, defining and deleting selections, removing sensors | 34 | only with `allow_mutating_tools: true` |
 
 The remaining 12 of the 98 registered tools are declared `assistant=False` and

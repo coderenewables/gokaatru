@@ -1,6 +1,7 @@
 import type { IDockviewPanelProps } from "dockview-react";
 import type { FunctionComponent } from "react";
 
+import { DataPanel } from "../datatree/DataPanel";
 import { InspectorPanel } from "../inspector/InspectorPanel";
 import { PANELS, type PanelId } from "./layout";
 
@@ -34,6 +35,7 @@ function emptyPanel(id: PanelId): FunctionComponent<IDockviewPanelProps> {
 
 /** The view each panel id renders; a view not built yet shows what it will hold. */
 const BUILT: Partial<Record<PanelId, FunctionComponent<IDockviewPanelProps>>> = {
+  data: DataPanel,
   inspector: InspectorPanel,
 };
 

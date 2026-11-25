@@ -12,6 +12,8 @@ export const RECORDS = 30 * 144;
 export const FROZEN_START = 2000;
 export const FROZEN_RECORDS = 48;
 export const CHANNELS = ["Spd_100m", "Spd_80m", "Spd_60m", "Dir_100m", "Tmp_100m"] as const;
+/** Statistic columns: the 100 m cup's standard deviation, part of its instrument. */
+export const STATISTICS = ["Spd_100m_sd"] as const;
 
 function random(seed: number): () => number {
   let state = seed;
@@ -30,7 +32,7 @@ function stamp(index: number): string {
 export function fixtureCsv(): string {
   const next = random(20261125);
   const gauss = () => (next() + next() + next() + next() + next() + next() - 3) / Math.sqrt(0.5);
-  const rows = ["Timestamp," + CHANNELS.join(",")];
+  const rows = ["Timestamp," + [...CHANNELS, ...STATISTICS].join(",")];
   let gust = 0;
   let direction = 235;
   for (let i = 0; i < RECORDS; i += 1) {
@@ -46,7 +48,7 @@ export function fixtureCsv(): string {
     const at100 = frozen ? 0.35 + 0.08 * Math.abs(gauss()) : speed;
     const temperature = 6 + 4 * Math.sin(((i % 144) / 144) * 2 * Math.PI) + 0.5 * gauss();
     rows.push(
-      [stamp(i), at100, at80, at60, ((direction % 360) + 360) % 360, temperature]
+      [stamp(i), at100, at80, at60, ((direction % 360) + 360) % 360, temperature, 0.1 * at100 + 0.05 * Math.abs(gauss())]
         .map((value) => (typeof value === "number" ? value.toFixed(3) : value))
         .join(","),
     );
@@ -57,7 +59,12 @@ export function fixtureCsv(): string {
 const SPEC = {
   location: { name: "Test ridge mast", latitude_ddeg: 55.25, longitude_ddeg: 7.75, offset_from_utc_hrs: 0 },
   points: [
-    { name: "Spd_100m", measurement_type_id: "wind_speed", height_m: 100 },
+    {
+      name: "Spd_100m",
+      measurement_type_id: "wind_speed",
+      height_m: 100,
+      statistics: [{ column_name: "Spd_100m_sd", statistic_type_id: "sd" }],
+    },
     { name: "Spd_80m", measurement_type_id: "wind_speed", height_m: 80 },
     { name: "Spd_60m", measurement_type_id: "wind_speed", height_m: 60 },
     { name: "Dir_100m", measurement_type_id: "wind_direction", height_m: 100 },

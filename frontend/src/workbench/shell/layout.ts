@@ -14,7 +14,8 @@ export const PANELS = {
 
 export type PanelId = keyof typeof PANELS;
 
-export const LAYOUT_KEY = "gk-workbench-layout-v1";
+/** Versioned with the panel set: an arrangement saved before a panel existed would hide it. */
+export const LAYOUT_KEY = "gk-workbench-layout-v2";
 
 /** The arrangement of plan §3.2: data on the left, the timeline across the top, three charts
  * below it, the inspector on the right. */

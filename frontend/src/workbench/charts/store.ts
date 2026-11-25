@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import type { DropHandler } from "../dnd";
+
 // Which channels each chart draws. A chart starts from its default (the timeline: the wind
 // speeds; the scatter: the two highest speeds; the rose: the vane nearest the top) and the
 // analyst changes it by dropping a channel from the data tree onto it (plan §3.3 "Any
@@ -22,6 +24,14 @@ interface ChartStore extends ChartChannels {
 }
 
 const DEFAULTS: ChartChannels = { timeline: null, scatter: null, rose: null };
+
+/** A channel dropped on a chart (``dnd.tsx``) goes into that chart's channels. */
+export const dropOnChart: DropHandler = (channel, target) => {
+  const charts = useCharts.getState();
+  if (target.kind === "timeline") charts.addToTimeline(channel, target.shown);
+  else if (target.kind === "scatter") charts.setScatterAxis(target.axis, channel, target.shown);
+  else charts.setRose(channel);
+};
 
 export const useCharts = create<ChartStore>((set) => ({
   ...DEFAULTS,

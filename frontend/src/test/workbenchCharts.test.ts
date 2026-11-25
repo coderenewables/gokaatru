@@ -1,9 +1,8 @@
 import type { DragEndEvent } from "@dnd-kit/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { useCharts } from "../workbench/charts/store";
+import { dropOnChart, useCharts } from "../workbench/charts/store";
 import { type ChartDrop, resolveDrop } from "../workbench/dnd";
-import { dropOnChart } from "../workbench/shell/Shell";
 
 function drag(source: unknown, target: unknown): DragEndEvent {
   return {

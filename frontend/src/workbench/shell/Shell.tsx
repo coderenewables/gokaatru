@@ -3,8 +3,8 @@ import { DockviewReact, type DockviewApi, type DockviewReadyEvent } from "dockvi
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { api, unwrap } from "../api";
-import { useCharts } from "../charts/store";
-import { type DropHandler, WorkbenchDnd } from "../dnd";
+import { dropOnChart, useCharts } from "../charts/store";
+import { WorkbenchDnd } from "../dnd";
 import { useSelection } from "../selection/store";
 import { useTheme } from "../theme/theme";
 import { CampaignSwitcher } from "./CampaignSwitcher";
@@ -12,14 +12,6 @@ import { Campaign } from "./context";
 import { addDefaultLayout, forgetLayout, saveLayout, storedLayout } from "./layout";
 import { panelComponents } from "./panels";
 import { GroupActions, TabTitle } from "./tabs";
-
-/** A channel dropped on a chart goes into that chart's channels. */
-export const dropOnChart: DropHandler = (channel, target) => {
-  const charts = useCharts.getState();
-  if (target.kind === "timeline") charts.addToTimeline(channel, target.shown);
-  else if (target.kind === "scatter") charts.setScatterAxis(target.axis, channel, target.shown);
-  else charts.setRose(channel);
-};
 
 export interface ShellProps {
   sessionId: string;

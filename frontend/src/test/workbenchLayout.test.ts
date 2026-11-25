@@ -32,7 +32,7 @@ describe("the workbench layout in browser storage", () => {
     expect(window.localStorage.getItem(LAYOUT_KEY)).toBeNull();
   });
 
-  it("names the six Prepare panels of plan §3.2", () => {
+  it("names the Prepare panels of plan §3.2 and the reanalysis panel", () => {
     expect(Object.values(PANELS)).toEqual(["Data", "Reanalysis", "Timeline", "Scatter", "Wind rose", "Profile", "Inspector"]);
   });
 

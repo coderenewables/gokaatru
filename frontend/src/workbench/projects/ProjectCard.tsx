@@ -158,7 +158,7 @@ export function ProjectCard({ project }: { project: Summary }) {
         {campaigns.map((campaign) => (
           <li key={campaign.session_id}>
             <div className="gk-campaign-line">
-              <a href={`/workbench/?project=${project.id}&campaign=${campaign.session_id}`}>{campaign.name}</a>
+              <a href={`/?project=${project.id}&campaign=${campaign.session_id}`}>{campaign.name}</a>
               <span className="gk-muted">{kindLabel(campaign.kind)}</span>
               <InlineEdit
                 action={`Rename ${campaign.name}`}

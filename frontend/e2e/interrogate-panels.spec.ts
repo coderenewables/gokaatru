@@ -67,7 +67,7 @@ async function open(page: Page) {
     return json(route, { hub_height_m: 120, scenario: { config_hash: hash, shear_model: row?.shear_model, ltc_algorithm: row?.ltc_algorithm } });
   });
   const campaign = await newCampaign(page, `Panels ${Date.now()}`);
-  await page.goto(`/workbench/?project=${campaign.projectId}&campaign=${campaign.sessionId}&phase=interrogate`);
+  await page.goto(`/?project=${campaign.projectId}&campaign=${campaign.sessionId}&phase=interrogate`);
   const scenarios = page.locator(".gk-interrogate", { has: page.getByLabel("Sweep", { exact: true }) });
   await scenarios.getByLabel("Sweep", { exact: true }).selectOption(stub.newer);
   return { rows, spreadRequests, scenarios };

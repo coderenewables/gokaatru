@@ -2,12 +2,13 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 import { newCampaign, pageErrors } from "./fixtures";
+import OLD_DESIGNER_RUNS from "./oldDesignerRuns.json" with { type: "json" };
 
 // The Run phase (P3-13, decisions/0015.6): the matrix sweep designer and the run monitor. No
 // reanalysis can be seeded without the network, so the sweep endpoints are faked in the
 // browser as reanalysis.spec.ts fakes BrightHub: /axes, /estimate and /run/stream. The server's
 // own behaviour is covered by pytest; what is held here is the interface and, in the gate
-// test, that it asks for exactly what the old interface asks for.
+// test, that it asks for exactly what the old interface asked for.
 
 const level = (name: string, available = true, extra: object = {}) => ({ name, available, ...extra });
 
@@ -143,7 +144,7 @@ async function expectNoAxeViolations(page: Page) {
 
 async function openRun(page: Page, name: string) {
   const { projectId, sessionId } = await newCampaign(page, `${name} ${Date.now()}`);
-  await page.goto(`/workbench/?project=${projectId}&campaign=${sessionId}&phase=run`);
+  await page.goto(`/?project=${projectId}&campaign=${sessionId}&phase=run`);
   await expect(page.getByRole("group", { name: "Presets" })).toBeVisible();
 }
 
@@ -284,32 +285,24 @@ test("a sweep that ends in an error says so, and the design can be run again", a
 
 // THE GATE CHECK (P3-13): "a sweep designed in the new interface matches the old one row for
 // row". The server is deterministic (pytest), so the same request is the same rows: for each
-// preset, on the same /axes, the request each interface posts to /sweep/run/stream is equal.
+// preset, on the same /axes, the request the new designer posts to /sweep/run/stream equals the
+// old interface's. Until P3-16 retired it, this test drove the old interface live; its last run
+// passed for all three presets and recorded what the old designer posted, which is held here.
 for (const preset of PRESET_NAMES) {
   test(`gate: the new designer's ${preset} sweep posts the same request as the old interface's`, async ({ page }) => {
     const seen = await fakeSweep(page);
 
     const { projectId, sessionId } = await newCampaign(page, `Gate ${preset} ${Date.now()}`);
-    await page.goto(`/workbench/?project=${projectId}&campaign=${sessionId}&phase=run`);
+    await page.goto(`/?project=${projectId}&campaign=${sessionId}&phase=run`);
     await page.getByRole("button", { name: preset }).click();
     await expect(page.getByLabel("What the design would run")).toBeVisible();
     await page.getByRole("button", { name: "Run sweep" }).click();
     await expect(page.getByLabel("Outcome")).toBeVisible();
     expect(seen.runs).toHaveLength(1);
 
-    await page.goto("/");
-    await page.getByRole("button", { name: "Start workspace" }).click();
-    await page.getByRole("navigation", { name: "Primary view" }).getByRole("button", { name: "Run" }).click();
-    // The old designer applies its default through the same axes before a preset replaces it.
-    await expect(page.getByRole("button", { name: preset, exact: true })).toBeVisible();
-    await page.getByRole("button", { name: preset, exact: true }).click();
-    await expect(page.getByRole("button", { name: "Run sweep" })).toBeEnabled();
-    await page.getByRole("button", { name: "Run sweep" }).click();
-    await expect.poll(() => seen.runs.length).toBe(2);
-
-    const [fresh, old] = seen.runs;
-    expect(fresh).toEqual(old);
-    // Not vacuous: the request names levels, and Exhaustive's dropped ones are absent from both.
+    const [fresh] = seen.runs;
+    expect(fresh).toEqual(OLD_DESIGNER_RUNS[preset]);
+    // Not vacuous: the request names levels, and Exhaustive's dropped ones are absent from it.
     expect((fresh.ltc_algorithms as string[]).length).toBeGreaterThan(0);
     expect(JSON.stringify(fresh)).not.toContain("redundant_boom");
   });

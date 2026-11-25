@@ -5,84 +5,82 @@
 GoKaatru ships as two parts that work together:
 
 - **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **111 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
-- **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison.
+- **[`frontend/`](./frontend)** — the **workbench** (React + Vite + TypeScript): projects of campaigns, worked in four phases, Prepare, Model, Run and Interrogate (decisions/0014, 0015).
 
 State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The frontend's convenience fields are **derived mirrors** of canonical backend keys, not independent state — the mapping is defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
 
 ## Application workflow
 
-The default application flow is:
+The start screen lists the projects. A project holds the campaigns measured at one site (a
+mast, a lidar or a floating lidar), each with its own coordinate and timezone, and one
+reanalysis node cache they share. Opening a campaign opens the shell on it at
+`/?project=<id>&campaign=<session id>`.
+
+The shell's header names the four phases; each docks its own panels, keeps its own
+arrangement and is named in the address. Undo and redo (Ctrl+Z, Ctrl+Shift+Z) go through the
+server's history, so they undo a change made from any surface. Ctrl+K opens the command
+palette. The status bar shows the actions taken, the data version, the fixed-prefix hash and
+any stale results.
 
 ```
-Data import + hub height + reanalysis provider
-    │
-    ├──► BrightHub sign-in when required
-    │
-    └──► Save config and setup
-           │
-           ├──► ERA5 / MERRA-2 download + interpolation
-           │
-           ▼
-    Data cleaning (fully optional, skippable)
-           │
-           ▼
-       Analysis Engine (scenario sweep)
-           │
-           ▼
-    Editable Canvas default plan — prepared, run on demand
-           │
-           ▼
-       Post-import Stepper and specialist tools
+Prepare ──► Model ──► Run ──► Interrogate
+ data,       one       the     the sweep's
+ cleaning    chosen    sweep   spread, and
+             chain     around  why
+                       it
 ```
 
-### Data import and default Canvas plan
+### Prepare
 
-1. Import measured time-series and an IEA Task 43 data model, import a BrightHub location, or load a shared dataset.
-   - **No Task 43 JSON?** The fourth import path, **Build data model**, reads the loaded CSV's column headers and drafts a sensor per column — measurement type, height, and the turbulence column paired with each anemometer. The draft is a proposal: correct or exclude any row, declare the logger's UTC offset (or an IANA zone), optionally add boom orientation and a primary-sensor flag, then build. The result is a real Task 43 document written into the session workspace and parsed by the same code path as an uploaded one, so it is downloadable and re-usable rather than an inference living in server memory. Columns it could not read — quality flags, logger diagnostics, statistic channels — are listed with the reason rather than hidden.
-2. (Optional) In the **Analysis sensor selection** table, untick sensors to exclude them. Applying the selection removes them from the working data and records them in `excluded_sensors`; reloading the data file or re-importing from BrightHub restores the full set.
-3. Enter the site metadata and **hub height**. Hub height has no default and is required before a model can run.
-4. In **Long-term reference**, choose the reanalysis provider — BrightHub (ERA5 + MERRA-2) or EarthDataHub (direct ERA5 only) — and the date window. The choice persists to `runconfig` as `reanalysis.acquisitionSource` (default `brighthub`), so which reanalysis a result was built on is recorded with the analysis rather than being a per-session UI setting. It is a frontend-owned key, not a mirror: nothing on the backend derives it, and `tests/test_runconfig_contract.py` asserts it survives normalization. Choosing EarthDataHub reveals a credential field for a PAT (a "Standard API key" or a legacy "Classic" key from [earthdatahub.destine.eu](https://earthdatahub.destine.eu)'s Quota & API keys page — both work identically here) — entered once per browser session and stored server-side in memory only, exactly like the BrightHub client credentials on the same page; there is no server config file to edit.
-5. Click **Save config and setup**. When the provider is BrightHub and credentials are not available, the app opens the BrightHub sign-in view instead of downloading.
-6. The app persists the runconfig, downloads and interpolates the reanalysis, prepares the default Canvas graph, and opens the optional cleaning step. **The Canvas is not executed automatically** — the prepared graph stays editable and runs only when the analyst starts it from the Canvas.
+- **Data**: the data tree (instruments by height, statistics, other channels, reanalysis,
+  saved selections, flags), loading by drop or chooser, and the mast diagram. A data model
+  drafted from the CSV headers is edited by dragging a sensor to its height; an uploaded Task
+  43 model is shown read-only. Columns the draft could not read are listed with the reason.
+- **Reanalysis**: BrightHub (ERA5 and MERRA-2) or EarthDataHub (ERA5), one node at a time
+  with its progress.
+- **Timeline, Scatter, Wind rose, Profile**: linked charts. A brush on the timeline, a lasso
+  on the scatter and sectors on the rose are terms of one selection, intersected on the
+  server; every chart shows it. Flags are drawn on the charts as bands.
+- **Inspector**: the selection's terms, record count and channel means; flagging it (the
+  instrument's columns, a reason and a note, previewed, then one `exclude_selection` rule);
+  a rule a chart proposes; the focused flag with who, when and why, and its removal.
+- **Cleaning rules**: every rule as a form from its defaults, previewed as a dry run, then
+  applied.
+- **Sensor overview**: quality control, sensor comparison, MCP readiness, mast effects and
+  atmospheric conditions, each from its operation; a refusal shows the server's reason.
 
-### Running a model on Canvas
+### Model
 
-`Run auto` sends the Canvas graph to the session workflow executor. The backend executes executable nodes in dependency order and streams lifecycle events back to the browser as each node starts, finishes, fails, or is cancelled.
+One chosen chain of operations (decisions/0015.1). **Methods** lists the operations by stage;
+**Pipeline** draws the chosen steps, ordered by what each reads and writes (the server's
+`order_pipeline`), with each step's status: current, changed, stale, not run. Run stale
+steps, one at a time, stopping at a refusal. **Step** holds the selected step's form and its
+result, disclosure fields first. A pipeline is saved by name with the project. A scenario
+from a sweep loads here as its pipeline.
 
-While a run is active, the Canvas shows:
+### Run
 
-- a node state of `pending`, `running`, `done`, or `error` for every executable operation;
-- elapsed time for the active node and completed duration for finished nodes;
-- completed-node count and total elapsed run time;
-- an estimated remaining time once at least one node has finished. The estimate uses the average duration of completed nodes, so it improves as the run advances;
-- a rolling event log with the server message for each operation.
+**Sweep design** is the matrix of the five axes (shear-fit sensors A1, extrapolation reference
+A2, vertical profile B, long-term reference C, LTC method D). A level the campaign cannot run
+is disabled with its reason; a preset (Quick look, Standard EYA, Exhaustive) is intersected
+with what the campaign can run and the levels it drops are named. The live estimate counts
+the planned scenarios and shear tables and lists the duplicates and the refusals, found with
+the code the run uses. A pipeline in Model can be swept around: its choices become the
+matrix's starting levels. **Run** shows each event as it arrives and the outcome: counts,
+gate failures and the sentence saying what is not swept.
 
-Use **Stop** to request cancellation. The graph stays on the Canvas with its final statuses and event history so the analyst can inspect or edit the failing branch before another run.
+### Interrogate
 
-The default graph makes conservative, editable choices:
+A sweep's scenarios under one crossfilter: **Scenarios** (filters per axis level, pins, load
+into Model), **Distribution** (a metric's histogram, brushed), **Parallel coordinates** (every
+axis and metric, brushed), **Sensitivity** (the server's decomposition over the scenarios the
+filters keep, the uncertainty substitution and what is not swept), **Gates** (verdicts in view
+and what the gates left varied) and **Side by side** (two pinned scenarios and where their
+configurations differ).
 
-- uses the two measured wind-speed heights nearest to the requested hub height for power-law shear;
-- loads BrightHub ERA5 and MERRA-2, then interpolates ERA5 to the site;
-- runs `linear_least_squares` and `variance_ratio` LTC branches;
-- produces an inverse-RMSE ensemble, ensemble-based clipping, and uncertainty;
-- leaves cleaning as a manual review node, so importing data never silently removes measurements.
-
-### Post-import Stepper
-
-The Stepper remains available after data import for guided review and manual operation of the analysis stages:
-
-| Stage | What happens |
-|---|---|
-| **1. Data cleaning** | Review the imported measurement inventory, choose which sensors stay in the analysis (excluded sensors are removed from the working data and recorded in `excluded_sensors`), and apply explicit cleaning filters when appropriate. Fully optional — it has its own top-level tab, and nothing downstream requires it. |
-| **2. Reanalysis acquisition** | Review the ERA5 + MERRA-2 nodes and site interpolation already downloaded by **Save config and setup**, and re-run acquisition if needed. The provider (BrightHub, or direct EarthDataHub ERA5) and date window are chosen on the Data import page. |
-| **3. Measured-data exploration** | Recovery/availability, wind rose, Weibull, diurnal/annual profiles, shear profile, turbulence intensity — to refine shear sensors and LTC strategy. |
-| **4. Shear → hub (measured)** | Power-law (α) or log-law (z₀) shear + 12×24 lookup, extrapolate measured sensors to hub height. Only records above `min_speed_mps` (default **3.0 m/s**) contribute — below that, `ln(v₂/v₁)` is anemometer noise rather than profile. α is still bounded to [−1, 1] as a backstop, and every response reports how often that clamp fired. |
-| **5. Reanalysis → hub** | Confirm long-term reference series are available at hub height using the chosen shear method. |
-| **6. Long-Term Correction** | MCP between measured (short) and reanalysis (long) across 5 algorithms (`speedsort` — directionally binned, `linear_least_squares`, `total_least_squares`, `variance_ratio`, `xgboost`); scatter/residual/convergence diagnostics. Requires **at least six months** of valid concurrent records; below that it raises rather than returning a number. |
-| **7. Clipping** | Pick the representative historical window that minimizes combined historic + climate uncertainty. Calendar years below **90%** completeness are excluded and reported, so a partial first or last year cannot inflate inter-annual variability. |
-| **8. Ensemble & uncertainty** | Inverse-RMSE ensemble blend, RSS total uncertainty + P50/75/90/99, and named scenarios for comparison. |
-
-Tabs are ordered **Data import → Data cleaning → Analysis Engine → Canvas → Stepper → Results → Copilot → Sensor Overview → Compare → How To**, so the scenario sweep is reached before committing to a single pipeline. The **Canvas** tab renders the full pipeline as an editable React-Flow DAG (run auto/step, snapshots, fork branches) — it is prepared by *Save config and setup* but never executed automatically; the **Results** tab is a read-only aggregate report of everything the session has produced (run overview, measured data, shear, reanalysis, LTC, ensemble & uncertainty, clipping/scenarios — it never triggers computation), the **Sensor Overview** tab is a measured-data validation dashboard, the **Copilot** tab is a BYOK chat that drives backend tools via natural language (the *Allow the assistant to modify this session* setting controls whether it may write as well as read — see [Chat tool authority](#chat-tool-authority)), and the **Compare** tab diffs saved scenarios.
+The Copilot and the Results report of the interface this replaced return in Phases 4 and 7
+(decisions/0015). Sessions made before projects existed are kept on disk but are not reached
+from the screens.
 
 ## Quick start
 
@@ -118,10 +116,8 @@ npm install
 npm run dev                          # http://127.0.0.1:5173 (proxies /api → :8000)
 ```
 
-The workbench is served beside the current interface at `/workbench/` (decisions/0014.9): its
-start screen lists the projects, and `/workbench/?project=<id>&campaign=<session id>` opens the
-shell on a campaign. Both talk to the same server, so a change made in one shows in the other;
-the current interface at `/` is retired at the Phase 3 gate.
+The workbench is served at `/`: its start screen lists the projects, and
+`/?project=<id>&campaign=<session id>` opens the shell on a campaign.
 
 The server keeps its sessions and projects under `data/`, or under `GOKAATRU_DATA_DIR` when it
 is set (the Playwright backend sets it to `frontend/.e2e-data`).
@@ -143,13 +139,15 @@ server/                 # Python MCP server + FastAPI web API
 ├── state/              # session + dataset pool managers
 └── schemas/            # Pydantic models (Coordinate, SensorInfo, PlotResult, …)
 
-frontend/               # React + Vite + TypeScript web app
+frontend/               # React + Vite + TypeScript workbench
+├── index.html          # the one entry point, loading src/workbench/main.tsx
 ├── src/
-│   ├── components/     # AppHeader, PhaseTabs, Stepper, stages/, results/, WorkflowView, CopilotView, …
-│   ├── store/          # useWorkspaceStore (Zustand)
-│   ├── lib/            # api, configSync, stages, workflow, copilotAgent, …
-│   └── types/          # analysis.ts (config schema + response interfaces)
-└── tests/              # backend pytest suite
+│   ├── workbench/      # shell, phases and panels (see CODEDOC.md §7)
+│   ├── api/            # client generated from the server's OpenAPI schema
+│   ├── types/sweep.ts  # sweep result-row columns and labels
+│   └── test/           # vitest
+└── e2e/                # Playwright specs against a real backend
+tests/                  # backend pytest suite
 ```
 
 ## Web API (consumed by the frontend)
@@ -604,11 +602,10 @@ offered. Tool results are wrapped in `<untrusted-tool-output>` tags and the
 system prompt instructs the model not to follow instructions found inside them —
 that mitigates prompt injection; the allowlist is the actual control.
 
-The Copilot UI sends `allow_mutating_tools: false` by default, and its BYOK
-settings carry an opt-in checkbox ("Allow the assistant to change session data").
-When on, the assistant can change session data without asking for each change;
-per-action approval is not built yet, so it is off until the user opts in. The API
-default is read-only as well.
+The chat route's default is read-only: `allow_mutating_tools` is false unless a request
+sets it, and then the assistant can change session data without asking for each change.
+Per-action approval is not built yet. The interface's Copilot returns in Phase 4
+(decisions/0015).
 
 ### Projects survive a restart
 
@@ -654,14 +651,14 @@ under the gitignored `data/uploads/` (set `GOKAATRU_TEST_UPLOADS_DIR` to read th
 elsewhere). Without them those tests skip with a message naming the missing file; they do
 not error.
 
-Frontend (Vitest coverage across types, store, import, stages, Canvas, copilot, and compare):
+Frontend (Vitest for the workbench's pure pieces; Playwright drives every panel against a real backend):
 
 ```bash
 cd frontend && npm run test
 cd frontend && npm run build    # tsc --noEmit && vite build
 cd frontend && npm run check:api   # the generated API client matches frontend/src/api/openapi.json
 cd frontend && npx playwright install chromium   # once
-cd frontend && npm run test:e2e # Playwright smoke test; starts its own backend (:8011) and Vite (:5183)
+cd frontend && npm run test:e2e # Playwright; starts its own backend (:8011) and Vite (:5183)
 ```
 
 Smoke checks:
@@ -673,9 +670,9 @@ python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000
 
 ## Documentation
 
-The canonical behavior contract is the code itself: the central config schema and response interfaces live in [`frontend/src/types/analysis.ts`](./frontend/src/types/analysis.ts), the web-API surface in [`server/api/routes/`](./server/api/routes), and the stage metadata in [`frontend/src/lib/stages.ts`](./frontend/src/lib/stages.ts). This README tracks the current workflow, endpoints, and tool inventory.
+The canonical behavior contract is the code itself: every operation's parameters and result in the committed OpenAPI schema [`frontend/src/api/openapi.json`](./frontend/src/api/openapi.json) (the interface's client is generated from it), and the web-API surface in [`server/api/routes/`](./server/api/routes). This README tracks the current workflow, endpoints, and tool inventory.
 
 ## Tech stack
 
 **Backend:** Python 3.11+, FastAPI, FastMCP, pandas, xarray, scikit-learn / XGBoost (`[ml]` extra), Plotly + Kaleido, pytest, ruff.
-**Frontend:** React 19, Vite 6, TypeScript (strict), Zustand, @xyflow/react (React Flow), Plotly.js, Zod, Vercel `ai` SDK + `@modelcontextprotocol/sdk` (BYOK copilot), vitest.
+**Frontend:** React 19, Vite 6, TypeScript (strict), Dockview, TanStack Query, Zustand, uPlot, regl-scatterplot, Apache Arrow, @xyflow/react (React Flow), dnd-kit, openapi-fetch, vitest, Playwright with axe.

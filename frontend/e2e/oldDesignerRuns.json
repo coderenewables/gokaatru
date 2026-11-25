@@ -1,0 +1,75 @@
+{
+  "Quick look": {
+    "shear_fit_policies": [
+      "nearest_2"
+    ],
+    "reference_policies": [
+      "nearest_2"
+    ],
+    "shear_models": [
+      "power_law_mean"
+    ],
+    "reference_sources": [
+      "era5"
+    ],
+    "ltc_algorithms": [
+      "variance_ratio"
+    ],
+    "analyst_shear_alpha": null,
+    "thresholds": null
+  },
+  "Standard EYA": {
+    "shear_fit_policies": [
+      "nearest_2",
+      "widest_lever"
+    ],
+    "reference_policies": [
+      "nearest_2",
+      "widest_lever"
+    ],
+    "shear_models": [
+      "power_law_mean",
+      "power_law_momm"
+    ],
+    "reference_sources": [
+      "era5"
+    ],
+    "ltc_algorithms": [
+      "variance_ratio",
+      "linear_least_squares",
+      "total_least_squares"
+    ],
+    "analyst_shear_alpha": null,
+    "thresholds": null
+  },
+  "Exhaustive": {
+    "shear_fit_policies": [
+      "nearest_2",
+      "availability_90",
+      "widest_lever"
+    ],
+    "reference_policies": [
+      "nearest_2",
+      "availability_90",
+      "widest_lever"
+    ],
+    "shear_models": [
+      "power_law_mean",
+      "power_law_median",
+      "power_law_momm",
+      "power_law_constant"
+    ],
+    "reference_sources": [
+      "era5"
+    ],
+    "ltc_algorithms": [
+      "variance_ratio",
+      "linear_least_squares",
+      "total_least_squares",
+      "speedsort",
+      "xgboost"
+    ],
+    "analyst_shear_alpha": null,
+    "thresholds": null
+  }
+}

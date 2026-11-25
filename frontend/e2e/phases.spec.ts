@@ -36,7 +36,7 @@ test.afterEach(() => {
 
 test("each phase docks its own panels, named in the address, and passes axe", async ({ page }, testInfo) => {
   const { projectId, sessionId } = await newCampaign(page, `Phases ${Date.now()}`);
-  await page.goto(`/workbench/?project=${projectId}&campaign=${sessionId}`);
+  await page.goto(`/?project=${projectId}&campaign=${sessionId}`);
   await expect(phase(page, "Prepare")).toHaveAttribute("aria-current", "page");
 
   for (const [name, tabs] of Object.entries(PHASE_TABS)) {
@@ -58,7 +58,7 @@ test("each phase docks its own panels, named in the address, and passes axe", as
 
 test("each phase keeps its own arrangement", async ({ page }) => {
   const { projectId, sessionId } = await newCampaign(page, `Arrangement ${Date.now()}`);
-  await page.goto(`/workbench/?project=${projectId}&campaign=${sessionId}&phase=run`);
+  await page.goto(`/?project=${projectId}&campaign=${sessionId}&phase=run`);
   await expect(tab(page, "Sweep design")).toBeVisible();
   await page.getByRole("button", { name: "Close Run" }).click();
   await expect(tab(page, "Run")).toHaveCount(0);
@@ -76,7 +76,7 @@ test("each phase keeps its own arrangement", async ({ page }) => {
 
 test("the command palette goes to another phase", async ({ page }) => {
   const { projectId, sessionId } = await newCampaign(page, `Palette ${Date.now()}`);
-  await page.goto(`/workbench/?project=${projectId}&campaign=${sessionId}`);
+  await page.goto(`/?project=${projectId}&campaign=${sessionId}`);
   await expect(tab(page, "Timeline")).toBeVisible();
   await page.keyboard.press("Control+k");
   await expect(page.getByRole("dialog", { name: "Commands" })).toBeVisible();

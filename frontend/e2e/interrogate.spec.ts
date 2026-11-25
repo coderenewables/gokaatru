@@ -28,7 +28,7 @@ const terms = (page: Page) => page.getByRole("list", { name: "Scenario terms" })
 async function open(page: Page): Promise<{ rows: FakeRow[]; newer: string }> {
   const stub = await stubSweeps(page);
   const campaign = await newCampaign(page, `Interrogate ${Date.now()}`);
-  await page.goto(`/workbench/?project=${campaign.projectId}&campaign=${campaign.sessionId}&phase=interrogate`);
+  await page.goto(`/?project=${campaign.projectId}&campaign=${campaign.sessionId}&phase=interrogate`);
   await expect(scenarios(page).getByLabel("Sweep", { exact: true })).toBeVisible();
   return stub;
 }

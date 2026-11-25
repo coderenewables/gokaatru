@@ -1,6 +1,6 @@
 ---
 name: sweep-axis
-description: Add or modify a scenario axis, admissibility gate, or pipeline stage in GoKaatru's Analysis Engine (the scenario sweep feature). Use when working on server/core/sweep.py, admissibility.py, scenario_*.py, sensor_selection.py, or the frontend components/sweep/ views.
+description: Add or modify a scenario axis, admissibility gate, or pipeline stage in GoKaatru's Analysis Engine (the scenario sweep feature). Use when working on server/core/sweep.py, admissibility.py, scenario_*.py, sensor_selection.py, or the workbench's Run and Interrogate panels (frontend/src/workbench/run/, interrogate/).
 ---
 
 # Analysis Engine (sweep) work

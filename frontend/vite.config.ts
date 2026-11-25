@@ -14,16 +14,6 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
-  build: {
-    rollupOptions: {
-      // The current interface at / and the workbench at /workbench/ (decisions/0014.9), one
-      // build until the Phase 3 gate retires the first.
-      input: {
-        main: fileURLToPath(new URL("./index.html", import.meta.url)),
-        workbench: fileURLToPath(new URL("./workbench/index.html", import.meta.url)),
-      },
-    },
-  },
   server: {
     port: 5173,
     proxy: {

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { SWEEP_PRESETS, toRequestBody, retainAvailableSelection, type SweepSelection } from "../store/useSweepStore";
+// What the retired interface's designer produced for the same campaign, frozen before it was
+// deleted (P3-16): its presets, its intersection with the campaign and its request bodies.
+import OLD from "./fixtures/oldSweepDesigner.json";
 import {
   DEFAULT_DESIGN,
   PRESETS,
@@ -10,7 +12,6 @@ import {
   requiresAnalystShear,
   retainAvailable,
   type SweepAxes,
-  type SweepDesign,
 } from "../workbench/run/design";
 import { IDLE_RUN, LOG_LIMIT, STARTED_RUN, parseFrames, reduceRun, type ProgressEvent } from "../workbench/run/progress";
 import { useDesign } from "../workbench/run/store";
@@ -29,23 +30,18 @@ const AXES: SweepAxes = {
   reference_sources: [level("era5"), level("merra2", false, { reason: "No MERRA-2 series interpolated." })],
 };
 
-const asSelection = (design: SweepDesign): SweepSelection => ({
-  shearFitPolicies: design.shear_fit_policies,
-  referencePolicies: design.reference_policies,
-  shearModels: design.shear_models,
-  referenceSources: design.reference_sources,
-  ltcAlgorithms: design.ltc_algorithms,
-  analystShearAlpha: design.analyst_shear_alpha,
-  thresholds: {},
-});
+type OldPreset = { shearFitPolicies: string[]; referencePolicies: string[]; shearModels: string[]; referenceSources: string[]; ltcAlgorithms: string[] };
+const OLD_PRESETS = OLD.presets as Record<string, OldPreset>;
+const OLD_RETAINED = OLD.retained as Record<string, { dropped: string[]; selection: OldPreset }>;
+const OLD_BODIES = OLD.bodies as Record<string, unknown>;
 
 describe("the presets and what the campaign can run", () => {
   afterEach(() => useDesign.getState().reset());
 
   it("carries the old interface's three presets, level for level", () => {
-    expect(Object.keys(PRESETS)).toEqual(Object.keys(SWEEP_PRESETS));
+    expect(Object.keys(PRESETS)).toEqual(Object.keys(OLD_PRESETS));
     for (const name of Object.keys(PRESETS)) {
-      const old = SWEEP_PRESETS[name];
+      const old = OLD_PRESETS[name];
       const next = PRESETS[name];
       expect(next.shear_fit_policies).toEqual(old.shearFitPolicies);
       expect(next.reference_policies).toEqual(old.referencePolicies);
@@ -69,7 +65,7 @@ describe("the presets and what the campaign can run", () => {
   it("intersects exactly as the old store does", () => {
     for (const name of Object.keys(PRESETS)) {
       const ours = retainAvailable({ ...DEFAULT_DESIGN, ...PRESETS[name] }, AXES);
-      const theirs = retainAvailableSelection({ ...asSelection(DEFAULT_DESIGN), ...SWEEP_PRESETS[name] }, AXES as never);
+      const theirs = OLD_RETAINED[name];
       expect(ours.dropped).toEqual(theirs.dropped);
       expect(ours.design.shear_fit_policies).toEqual(theirs.selection.shearFitPolicies);
       expect(ours.design.reference_sources).toEqual(theirs.selection.referenceSources);
@@ -100,10 +96,9 @@ describe("the request the new designer sends", () => {
   it("equals the old interface's request for the same selection, for every preset", () => {
     for (const name of Object.keys(PRESETS)) {
       const { design } = retainAvailable({ ...DEFAULT_DESIGN, ...PRESETS[name] }, AXES);
-      expect(requestBody(design)).toEqual(toRequestBody(asSelection(design)));
+      expect(requestBody(design)).toEqual(OLD_BODIES[name]);
     }
-    const withAlpha = { ...DEFAULT_DESIGN, analyst_shear_alpha: 0.2 };
-    expect(requestBody(withAlpha)).toEqual(toRequestBody(asSelection(withAlpha)));
+    expect(requestBody({ ...DEFAULT_DESIGN, analyst_shear_alpha: 0.2 })).toEqual(OLD.withAlpha);
   });
 
   it("sends a hub height only when one was entered", () => {

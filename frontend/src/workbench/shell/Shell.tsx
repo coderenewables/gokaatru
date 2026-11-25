@@ -135,7 +135,7 @@ export function Shell({ sessionId, projectId }: ShellProps) {
   return (
     <div className="gk-app">
       <header className="gk-header">
-        <a className="gk-brand" href="/workbench/">GoKaatru Workbench</a>
+        <a className="gk-brand" href="/">GoKaatru</a>
         <nav aria-label="Where you are" className="gk-crumbs">
           <span>{project.data?.name ?? "No project"}</span>
           <span aria-hidden="true">›</span>

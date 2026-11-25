@@ -1,0 +1,262 @@
+{
+  "presets": {
+    "Quick look": {
+      "shearFitPolicies": [
+        "nearest_2"
+      ],
+      "referencePolicies": [
+        "nearest_2"
+      ],
+      "shearModels": [
+        "power_law_mean"
+      ],
+      "referenceSources": [
+        "era5"
+      ],
+      "ltcAlgorithms": [
+        "variance_ratio"
+      ]
+    },
+    "Standard EYA": {
+      "shearFitPolicies": [
+        "nearest_2",
+        "widest_lever"
+      ],
+      "referencePolicies": [
+        "nearest_2",
+        "widest_lever"
+      ],
+      "shearModels": [
+        "power_law_mean",
+        "power_law_momm"
+      ],
+      "referenceSources": [
+        "era5",
+        "merra2"
+      ],
+      "ltcAlgorithms": [
+        "variance_ratio",
+        "linear_least_squares",
+        "total_least_squares"
+      ]
+    },
+    "Exhaustive": {
+      "shearFitPolicies": [
+        "nearest_2",
+        "availability_90",
+        "redundant_boom",
+        "widest_lever"
+      ],
+      "referencePolicies": [
+        "nearest_2",
+        "availability_90",
+        "redundant_boom",
+        "widest_lever"
+      ],
+      "shearModels": [
+        "power_law_mean",
+        "power_law_median",
+        "power_law_momm",
+        "power_law_constant",
+        "log_law_mean"
+      ],
+      "referenceSources": [
+        "era5",
+        "merra2"
+      ],
+      "ltcAlgorithms": [
+        "variance_ratio",
+        "linear_least_squares",
+        "total_least_squares",
+        "speedsort",
+        "xgboost"
+      ]
+    }
+  },
+  "retained": {
+    "Quick look": {
+      "dropped": [],
+      "selection": {
+        "shearFitPolicies": [
+          "nearest_2"
+        ],
+        "referencePolicies": [
+          "nearest_2"
+        ],
+        "shearModels": [
+          "power_law_mean"
+        ],
+        "referenceSources": [
+          "era5"
+        ],
+        "ltcAlgorithms": [
+          "variance_ratio"
+        ],
+        "analystShearAlpha": null,
+        "thresholds": {}
+      }
+    },
+    "Standard EYA": {
+      "dropped": [
+        "merra2"
+      ],
+      "selection": {
+        "shearFitPolicies": [
+          "nearest_2",
+          "widest_lever"
+        ],
+        "referencePolicies": [
+          "nearest_2",
+          "widest_lever"
+        ],
+        "shearModels": [
+          "power_law_mean",
+          "power_law_momm"
+        ],
+        "referenceSources": [
+          "era5"
+        ],
+        "ltcAlgorithms": [
+          "variance_ratio",
+          "linear_least_squares",
+          "total_least_squares"
+        ],
+        "analystShearAlpha": null,
+        "thresholds": {}
+      }
+    },
+    "Exhaustive": {
+      "dropped": [
+        "redundant_boom",
+        "log_law_mean",
+        "merra2"
+      ],
+      "selection": {
+        "shearFitPolicies": [
+          "nearest_2",
+          "availability_90",
+          "widest_lever"
+        ],
+        "referencePolicies": [
+          "nearest_2",
+          "availability_90",
+          "widest_lever"
+        ],
+        "shearModels": [
+          "power_law_mean",
+          "power_law_median",
+          "power_law_momm",
+          "power_law_constant"
+        ],
+        "referenceSources": [
+          "era5"
+        ],
+        "ltcAlgorithms": [
+          "variance_ratio",
+          "linear_least_squares",
+          "total_least_squares",
+          "speedsort",
+          "xgboost"
+        ],
+        "analystShearAlpha": null,
+        "thresholds": {}
+      }
+    }
+  },
+  "bodies": {
+    "Quick look": {
+      "shear_fit_policies": [
+        "nearest_2"
+      ],
+      "reference_policies": [
+        "nearest_2"
+      ],
+      "shear_models": [
+        "power_law_mean"
+      ],
+      "reference_sources": [
+        "era5"
+      ],
+      "ltc_algorithms": [
+        "variance_ratio"
+      ],
+      "analyst_shear_alpha": null,
+      "thresholds": null
+    },
+    "Standard EYA": {
+      "shear_fit_policies": [
+        "nearest_2",
+        "widest_lever"
+      ],
+      "reference_policies": [
+        "nearest_2",
+        "widest_lever"
+      ],
+      "shear_models": [
+        "power_law_mean",
+        "power_law_momm"
+      ],
+      "reference_sources": [
+        "era5"
+      ],
+      "ltc_algorithms": [
+        "variance_ratio",
+        "linear_least_squares",
+        "total_least_squares"
+      ],
+      "analyst_shear_alpha": null,
+      "thresholds": null
+    },
+    "Exhaustive": {
+      "shear_fit_policies": [
+        "nearest_2",
+        "availability_90",
+        "widest_lever"
+      ],
+      "reference_policies": [
+        "nearest_2",
+        "availability_90",
+        "widest_lever"
+      ],
+      "shear_models": [
+        "power_law_mean",
+        "power_law_median",
+        "power_law_momm",
+        "power_law_constant"
+      ],
+      "reference_sources": [
+        "era5"
+      ],
+      "ltc_algorithms": [
+        "variance_ratio",
+        "linear_least_squares",
+        "total_least_squares",
+        "speedsort",
+        "xgboost"
+      ],
+      "analyst_shear_alpha": null,
+      "thresholds": null
+    }
+  },
+  "withAlpha": {
+    "shear_fit_policies": [
+      "nearest_2"
+    ],
+    "reference_policies": [
+      "nearest_2"
+    ],
+    "shear_models": [
+      "power_law_mean"
+    ],
+    "reference_sources": [
+      "era5",
+      "merra2"
+    ],
+    "ltc_algorithms": [
+      "variance_ratio",
+      "linear_least_squares"
+    ],
+    "analyst_shear_alpha": 0.2,
+    "thresholds": null
+  }
+}

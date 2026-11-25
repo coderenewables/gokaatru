@@ -40,7 +40,7 @@ test("a project is made, renamed and given a mast and a lidar, and the switcher 
 }, testInfo) => {
   const stamp = Date.now();
   const name = `Ridge ${stamp}`;
-  await page.goto("/workbench/");
+  await page.goto("/");
   await expectNoAxeViolations(page);
 
   // A blank name is the server's refusal, shown where the form is.
@@ -134,7 +134,7 @@ test("campaigns that declare different timezones are shown with the notice", asy
     expect(saved.ok(), await saved.text()).toBeTruthy();
   }
 
-  await page.goto("/workbench/");
+  await page.goto("/");
   const card = projectCard(page, name);
   await expect(card.getByRole("status")).toContainText("The campaigns declare different timezones:");
   await expect(card.getByRole("status")).toContainText("Mast Z0");

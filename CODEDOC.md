@@ -28,9 +28,12 @@ It ships as two cooperating parts over one logic core:
 
 - **`server/`** — a Python backend that exposes the same analysis logic through **two
   interfaces**: a **FastMCP** server (MCP tools, stdio) and a **FastAPI** web API (HTTP).
-- **`frontend/`** — a **React 19 + Vite + TypeScript** app: data import, an editable
-  React-Flow Canvas, a guided Stepper, a read-only Results report, a Sensor Overview
-  dashboard, a BYOK AI Copilot, scenario Compare, and the Analysis Engine (scenario sweep).
+- **`frontend/`** — a **React 19 + Vite + TypeScript** workbench in four phases over projects
+  of campaigns: Prepare (data, reanalysis, linked charts, cleaning rules, sensor overview),
+  Model (one chosen pipeline of operations), Run (the sweep designer and monitor) and
+  Interrogate (the sweep's scenarios, sensitivity, gates, two side by side). The interface it
+  replaced was retired at P3-16; its Copilot and Results report return in Phases 4 and 7
+  (decisions/0015).
 
 **Deployment model:** single trusted user, local deployment. There is no auth layer; the
 session id is the only credential. Do not discuss multi-user hosting without reading the
@@ -41,11 +44,11 @@ README's "Deployment model" section first.
 | Area | Figure |
 |------|--------|
 | Backend Python | ~25.6k LOC across 85 files |
-| Frontend TS/TSX | ~17.6k LOC |
+| Frontend TS/TSX | ~10.9k LOC (without the generated `schema.d.ts`) |
 | MCP tools registered | **111** (the 142 WindKit pass-throughs were removed 2026-11-19, decisions/0009) |
 | FastAPI endpoints | ~100 across 13 route files |
 | Backend tests | 83 pytest files (incl. an independent oracle harness) |
-| Frontend tests | 30 vitest files |
+| Frontend tests | 20 vitest files, 19 Playwright specs |
 
 ---
 
@@ -359,9 +362,9 @@ defensible choices.
 - **`api/routes/sweep.py`** serves it, including `POST /run/stream`, a Server-Sent-Events
   endpoint that emits one event per scenario as it finishes (its own asyncio-queue +
   `asyncio.to_thread(run_sweep, on_progress=…)` implementation).
-- Frontend: `components/sweep/` (Sweep Designer → Run Monitor → Spread Explorer →
-  Sensitivity → Spread Summary) over `store/useSweepStore.ts` and `lib/sweepApi.ts` /
-  `lib/sweepAnalysis.ts`.
+- Frontend: the Run phase (`workbench/run/`: designer, live estimate, monitor) and the
+  Interrogate phase (`workbench/interrogate/`: scenarios, distribution, parallel coordinates,
+  the server's sensitivity decomposition, gates, two scenarios side by side).
 
 ---
 
@@ -371,8 +374,8 @@ React 19 + Vite + TypeScript. `npm run dev` serves on `:5173` and proxies `/api`
 
 ```
 frontend/src/
-├── workbench/           # the new shell at /workbench/ (decisions/0014.9), entry
-│   │                     #   frontend/workbench/index.html, a second Vite input
+├── workbench/           # the application, served at / (frontend/index.html; it was at
+│   │                     #   /workbench/ beside the old interface until P3-16 retired that)
 │   ├── main.tsx          # React root, TanStack Query client, theme applied before render
 │   ├── Workbench.tsx     # ?campaign= opens the Shell, otherwise the StartScreen
 │   ├── StartScreen.tsx, projects/  # projects of campaigns: new, rename, add a campaign,
@@ -449,93 +452,17 @@ frontend/src/
 │                         #   close in the group actions, outside role=tab, decisions/0006),
 │                         #   panels.tsx, context.ts, keys.ts (Ctrl+Z, Ctrl+Shift+Z, Ctrl+K),
 │                         #   CommandPalette.tsx, CampaignSwitcher.tsx
-├── App.tsx              # thin shell; gates on session existence, switches on activePhase
-├── main.tsx             # React entry
-├── components/
-│   ├── PhaseRail.tsx     # primary nav (2026-09 redesign): Prepare / Run / Interrogate /
-│   │                     #   Canvas / Copilot — replaced the old 10-tab PhaseTabs.tsx
-│   ├── CommandPalette.tsx  # ⌘K "Ask or jump" — searches real phases/stages/presets/
-│   │                     #   metrics/gates; free text falls through to Ask Copilot
-│   ├── PrepareView.tsx   # Prepare phase: merges Data import/Cleaning/Reanalysis/Sensor
-│   │                     #   Overview/Stepper/Results into one screen with an internal
-│   │                     #   Data loading|Pipeline|Sensor Overview|Results section switcher,
-│   │                     #   real prefix-stat tiles + stamp banner (server/tools/scenario_result.py)
-│   ├── RunView.tsx       # Run phase: SweepDesigner + SweepMonitor on one screen
-│   ├── InterrogateView.tsx  # Interrogate phase: SpreadSummaryView + SpreadExplorer +
-│   │                     #   SensitivityView + GateReportView stacked under one metric switch
-│   ├── AppHeader.tsx, HomeView.tsx, HowToView.tsx, AssetsDrawer.tsx
-│   │                     #   HowToView is now a header-triggered overlay (howToOpen), not a tab
-│   ├── WorkflowView.tsx  # Canvas: the editable React-Flow DAG. Populated *only* by
-│   │                     #   "Load from sweep" (picks a sweep + scenario, loads that
-│   │                     #   scenario's exact runconfig via loadScenarioIntoCanvas), "Upload
-│   │                     #   config" (reads a local .json file via FileReader into the same
-│   │                     #   Edit config textarea, 2026-09-08), or manual Edit config/
-│   │                     #   Rebuild from config — no auto-built default pipeline
-│   │                     #   (2026-09-07; see CLAUDE.md). Also hosts a "Compare runs" toggle
-│   │                     #   that swaps in CompareView unchanged (Compare's tab was retired —
-│   │                     #   it compares workflow-run executions, not sweep scenarios, so it
-│   │                     #   relocated here rather than into Interrogate)
-│   ├── Stepper.tsx       # guided linear per-stage review — now reached via Prepare's
-│   │                     #   "Pipeline" section (StageShell), not a standalone tab
-│   ├── SensorReviewView.tsx  # Sensor Overview validation dashboard — reached via Prepare's
-│   │                     #   "Sensor Overview" section
-│   ├── CopilotView.tsx   # BYOK AI Copilot (kept as its own PhaseRail entry, alongside ⌘K)
-│   ├── CompareView.tsx   # manual 2–4 workflow-run comparison; mounted inside WorkflowView now
-│   ├── common/           # shared widgets: PlotFrame, MetricsCard, NodeTable, SensorPicker,
-│   │                     #   Disclosure, MiniMap, RunButton, StageHeader
-│   ├── stages/           # one view per pipeline stage (DataLoad, DataModelBuilder,
-│   │                     #   Cleaning, Shear/Extrap, Reanalysis, LTC, Ensemble,
-│   │                     #   Clipping, Explore) — composed by StageShell inside
-│   │                     #   PrepareView; DataModelBuilder is a DataLoad sub-path
-│   ├── results/          # read-only Results report — reached via Prepare's "Results" section
-│   └── sweep/            # the individual sweep views RunView/InterrogateView compose
-│                         #   (Designer, Monitor, Spread/Sensitivity/Summary/GateReport);
-│                         #   AnalysisEngineView.tsx (the old 6-sub-tab shell) was deleted
-├── store/
-│   ├── useWorkspaceStore.ts  # single Zustand store = entire app state (~2,300 LOC).
-│   │                     #   Nav field is `activePhase: PhaseId` (5 values), not the old
-│   │                     #   `activeTab: TabId` (10 values); `prepareSection` picks Prepare's
-│   │                     #   internal section; `prefixHash`/`reanalysisSourcesForPrefix`/
-│   │                     #   `cleaningActionsCount`/`loadPrefixHash()` back Prepare's tiles;
-│   │                     #   `howToOpen`/`paletteOpen` are the two overlay flags;
-│   │                     #   `loadScenarioIntoCanvas(sweepId, configHash)` is Canvas's sole
-│   │                     #   population path (2026-09-07) — sequences the pre-existing
-│   │                     #   `replaceWorkflowRunConfig`+`rebuildWorkflowGraph` pair
-│   └── useSweepStore.ts      # separate sweep store (kept apart from the large workspace
-│                         #   store); `previewSweepScenarios()` peeks a sweep's scenario list
-│                         #   for Canvas's picker without touching manifest/rows/phase, unlike
-│                         #   `openSweep()` which Run/Interrogate read from
 ├── api/                  # generated from the server's OpenAPI schema (P1-20); not edited by hand
 │   ├── openapi.json      # committed schema (python -m tests.openapi_schema --write)
 │   ├── schema.d.ts       # npm run generate:api (openapi-typescript 7.13.0); CI: npm run check:api
 │   └── client.ts         # openapi-fetch client; adds X-GoKaatru-Session from the path
-├── lib/
-│   ├── api.ts            # hand-written HTTP client the current interface uses, until Phase 2
-│   ├── sweepApi.ts       # HTTP client for the sweep engine, incl. getPrefixHash (2026-09)
-│   ├── prepareStats.ts   # pure helpers for Prepare's stat tiles (meanCoverage) — plain
-│   │                     #   arithmetic over already-disclosed numbers, no disclosure entry
-│   ├── workflow.ts       # React-Flow DAG builder for the 8-stage workflow
-│   ├── defaultWorkflowPlan.ts, defaultConfig.ts  # default DAG + config
-│   ├── stages.ts         # maps backend completed_steps → 8-stage status
-│   ├── configSync.ts     # bidirectional sync: typed WindAnalysisConfig ⇄ flat backend runconfig
-│   ├── normalization.ts  # reshape backend responses into uniform NormalizedAsset for the drawer
-│   ├── scenarioCompare.ts, sweepAnalysis.ts       # client-side comparison/analysis helpers
-│   └── copilotAgent.ts   # BYOK copilot agent over the OpenAI-compatible /chat endpoint
 └── types/
-    ├── analysis.ts       # canonical config schema + backend response interfaces
-    └── sweep.ts          # sweep result-row schema, mirroring the backend; PrefixHash added
+    └── sweep.ts          # sweep result-row columns, axis and metric labels, mirroring the backend
 ```
 
-Two design points worth knowing:
-
-- The **Canvas** (React-Flow DAG, editable, live execution) and the **Stepper** (guided
-  linear review) are **not competing models** — Canvas = run the pipeline as a graph,
-  Stepper = inspect one stage in depth. Since the 2026-09 redesign they are reached
-  differently (Canvas is its own `PhaseRail` entry; the Stepper lives inside Prepare's
-  "Pipeline" section) but the underlying distinction is unchanged.
-- `configSync.ts` is the load-bearing bridge: the backend's single source of truth is the
-  flat `runconfig` dict (mirrored from `core/runconfig.py`); the typed `WindAnalysisConfig`
-  the UI edits is kept in sync with it in both directions.
+Each phase docks its own panels and keeps its own arrangement; every panel reads the server
+through the generated client, and a change goes through the generated operation routes, so
+the interface holds no analysis logic of its own (decisions/0015).
 
 ---
 
@@ -589,10 +516,14 @@ python -m pytest tests/ -v
 python -c "import asyncio; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())), 'tools')"
 ```
 
-### Frontend (`frontend/src/test/`, vitest — 45 files)
+### Frontend (`frontend/src/test/`, vitest — 20 files; `frontend/e2e/`, Playwright — 19 specs)
 
-Covers the stores, the workflow/DAG builder, stage-status logic, the sweep lifecycle and
-analysis, disclosure rendering, and the stage/results views.
+Vitest covers the workbench's pure pieces: forms from operation schemas, the crossfilter
+stores, chart geometry, the pipeline graph, the sweep designer (held against the retired
+designer's frozen presets and request bodies, `src/test/fixtures/oldSweepDesigner.json`) and
+the Interrogate tallies. Playwright drives every panel against a real backend, fails on any
+error the page throws and runs axe; `e2e/oldDesignerRuns.json` holds what the old designer
+posted for each preset, recorded by the last live comparison before P3-16.
 
 Run:
 ```bash
@@ -681,6 +612,15 @@ See the README's "Known limitations" section for the full list and rationale.
 - WindKit pinned `>=2.0,<2.1` → `==2.2.0`. `tests/test_windkit_adopted.py` replaces the
   removed smoke test's purpose (catch upstream drift) for the functions actually used.
 
+**2026-11-26 — the old interface retired (P3-16, decisions/0015)**
+
+- The workbench moved from `/workbench/` to `/`. Deleted the interface it replaced:
+  `App.tsx`, the old `main.tsx` and `styles.css`, `components/`, `lib/`, `store/`,
+  `types/analysis.ts`, their 30 vitest files and the second Vite input. Removed the twelve
+  packages only it imported (the AI SDKs, the MCP SDK, Leaflet, Plotly, zod, clsx); no
+  remaining package changed version. The Copilot and the Results report return in Phases 4
+  and 7; sessions made before projects are not reachable from the screens (decisions/0015).
+
 **Candidates for a future pass** (larger modules with a plausible seam, left intact here
 because the risk/benefit did not clearly favor churn):
 
@@ -689,9 +629,6 @@ because the risk/benefit did not clearly favor churn):
   `_list_sensors`, `_get_data_coverage`); a package split is feasible with the same
   re-export approach but needs care.
 - `server/api/routes/analysis.py` (37 endpoints).
-- `frontend/src/store/useWorkspaceStore.ts` (~2k LOC) — the single largest frontend file;
-  the sweep state was already peeled off into `useSweepStore.ts`, and further slicing by
-  concern is possible.
 
 When picking any of these up, keep the public import/HTTP surface identical, and validate
 against the full backend and frontend suites (plus the tool count — 226 as of 2026-09-06)

@@ -1810,7 +1810,7 @@
  },
  {
   "annotations": null,
-  "description": "Define or replace a named selection of records: time ranges, direction sectors, value\nbands or record sets, combined by union and intersection.",
+  "description": "Define or replace a named selection of records: time ranges, direction sectors, value\nbands, polygons over two channels or record sets, combined by union and intersection.",
   "execution": null,
   "icons": null,
   "inputSchema": {

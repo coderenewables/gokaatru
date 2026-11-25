@@ -17,6 +17,9 @@ class SelectionDefinition(OpenResult):
     start: str | None = None
     end: str | None = None
     timestamps: list[str] | None = None
+    x_channel: str | None = None
+    y_channel: str | None = None
+    vertices: list[list[Number]] | None = None
     of: list[SelectionDefinition] | None = None
 
 

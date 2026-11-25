@@ -1,13 +1,18 @@
 """selection — a set of records described by what the analyst drew (decisions/0011).
 
 A selection is a small tree. Its leaves are a time range, a direction sector, a value band
-on a named channel, or an explicit set of records; ``union`` and ``intersection`` combine
-them. The browser sends the bounds; the server resolves them to records here, so every view
-and every statistic uses exactly the same ones, rather than each chart library's own count.
+on a named channel, a polygon over two channels (a lasso on a scatter), or an explicit set
+of records; ``union`` and ``intersection`` combine them. The browser sends the bounds; the
+server resolves them to records here, so every view and every statistic uses exactly the
+same ones, rather than each chart library's own count.
 
 Bounds are half-open: a record at a range's end, a band's maximum or a sector's closing
-edge is outside it, so two adjacent selections never share a record. A missing value is
-never selected. A sector whose opening edge is past its closing edge wraps through north.
+edge is outside it, so two adjacent selections never share a record. A polygon follows the
+same rule through the even-odd crossing test: a point on a left or lower edge is inside, one
+on a right or upper edge is outside, so an axis-aligned rectangle holds exactly what the two
+half-open bands it spans hold, and a lasso that crosses itself holds what is enclosed an odd
+number of times. A missing value is never selected. A sector whose opening edge is past its
+closing edge wraps through north.
 """
 from __future__ import annotations
 
@@ -17,9 +22,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-LEAF_KINDS: tuple[str, ...] = ("time_range", "sector", "band", "records")
+LEAF_KINDS: tuple[str, ...] = ("time_range", "sector", "band", "polygon", "records")
 COMBINING_KINDS: tuple[str, ...] = ("union", "intersection")
 KINDS: tuple[str, ...] = LEAF_KINDS + COMBINING_KINDS
+
+#: A lasso is simplified in the browser before it is sent; a polygon with more vertices than
+#: this is refused rather than resolved slowly (each vertex is one pass over the records).
+MAX_POLYGON_VERTICES = 1000
 
 
 class SelectionError(ValueError):
@@ -69,6 +78,9 @@ def validate(definition: Any, columns: Iterable[str]) -> None:
         channel = definition.get("channel")
         if channel not in available:
             raise SelectionError(f"Channel {channel!r} is not in the loaded data")
+    if kind == "polygon":
+        _validate_polygon(definition, available)
+        return
     if kind == "time_range":
         start, end = definition.get("start"), definition.get("end")
         if start is None and end is None:
@@ -103,6 +115,32 @@ def validate(definition: Any, columns: Iterable[str]) -> None:
             utc_timestamp(value, "timestamp")
 
 
+def _validate_polygon(definition: dict[str, Any], available: set[str]) -> None:
+    for axis in ("x_channel", "y_channel"):
+        channel = definition.get(axis)
+        if channel not in available:
+            raise SelectionError(f"{axis} {channel!r} is not in the loaded data")
+    if definition["x_channel"] == definition["y_channel"]:
+        raise SelectionError("A polygon needs two different channels; one channel against itself is a band")
+    vertices = definition.get("vertices")
+    if not isinstance(vertices, list) or len(vertices) < 3:
+        raise SelectionError("A polygon needs a list of at least three vertices, each [x, y]")
+    if len(vertices) > MAX_POLYGON_VERTICES:
+        raise SelectionError(
+            f"A polygon may have at most {MAX_POLYGON_VERTICES} vertices, got {len(vertices)}; simplify the lasso"
+        )
+    for position, vertex in enumerate(vertices):
+        if not isinstance(vertex, (list, tuple)) or len(vertex) != 2:
+            raise SelectionError(f"Vertex {position} must be a pair [x, y], got {vertex!r}")
+        _number(vertex[0], f"vertex {position} x")
+        _number(vertex[1], f"vertex {position} y")
+    xs = np.array([float(vertex[0]) for vertex in vertices])
+    ys = np.array([float(vertex[1]) for vertex in vertices])
+    twice_area = np.dot(xs, np.roll(ys, -1)) - np.dot(ys, np.roll(xs, -1))
+    if twice_area == 0.0:
+        raise SelectionError("A polygon with no area holds nothing; its vertices lie on one line")
+
+
 def resolve(definition: dict[str, Any], frame: pd.DataFrame) -> np.ndarray:
     """The records of ``frame`` the selection holds, as a boolean mask over its index."""
     validate(definition, frame.columns)
@@ -133,6 +171,8 @@ def _resolve(definition: dict[str, Any], frame: pd.DataFrame) -> np.ndarray:
                 f"{len(missing)} of the selection's records are not in the loaded data, first {missing[0].isoformat()}"
             )
         return np.asarray(stamps.isin(wanted))
+    if kind == "polygon":
+        return _inside_polygon(definition, frame)
     values = pd.to_numeric(frame[definition["channel"]], errors="coerce").to_numpy(dtype=float)
     present = np.isfinite(values)
     if kind == "band":
@@ -150,3 +190,31 @@ def _resolve(definition: dict[str, Any], frame: pd.DataFrame) -> np.ndarray:
         direction < closing
     )
     return present & inside
+
+
+def _inside_polygon(definition: dict[str, Any], frame: pd.DataFrame) -> np.ndarray:
+    x = pd.to_numeric(frame[definition["x_channel"]], errors="coerce").to_numpy(dtype=float)
+    y = pd.to_numeric(frame[definition["y_channel"]], errors="coerce").to_numpy(dtype=float)
+    vertices = [(float(vx), float(vy)) for vx, vy in definition["vertices"]]
+    mask = np.zeros(len(frame), dtype=bool)
+    ys = [vy for _, vy in vertices]
+    # A record below the lowest vertex or at or above the highest straddles no edge, so it
+    # is never tested. Only the y extent is used: the test on y is comparisons alone, while
+    # a cut on x could disagree with the crossing arithmetic in the last bit.
+    candidates = np.flatnonzero(np.isfinite(x) & np.isfinite(y) & (y >= min(ys)) & (y < max(ys)))
+    if len(candidates) == 0:
+        return mask
+    px, py = x[candidates], y[candidates]
+    inside = np.zeros(len(candidates), dtype=bool)
+    previous = len(vertices) - 1
+    for current in range(len(vertices)):
+        xi, yi = vertices[current]
+        xj, yj = vertices[previous]
+        straddles = (yi > py) != (yj > py)
+        if straddles.any():
+            with np.errstate(divide="ignore", invalid="ignore"):
+                crossing = (xj - xi) * (py - yi) / (yj - yi) + xi
+            inside ^= straddles & (px < crossing)
+        previous = current
+    mask[candidates] = inside
+    return mask

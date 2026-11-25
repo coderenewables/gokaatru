@@ -89,6 +89,14 @@ def _changes(samples: Samples, state: SessionState, workspace: Path) -> None:
     band = {"kind": "band", "channel": "Spd_100m", "min": 5.0}
     samples.call(state, "define_selection", name="scratch", definition=band)
     samples.call(state, "delete_selection", name="scratch")
+    lasso = {
+        "kind": "polygon",
+        "x_channel": "Spd_60m",
+        "y_channel": "Spd_100m",
+        "vertices": [[2.0, 2.0], [12.0, 3.0], [10.0, 14.0]],
+    }
+    samples.call(state, "define_selection", name="lasso", definition=lasso)
+    samples.call(state, "delete_selection", name="lasso")
     samples.call(state, "extrapolate_reanalysis_to_hub", hub_height_m=120.0, reference_height_m=100.0)
     samples.call(state, "apply_homogeneity_cutoff", cutoff_year=2010)
 

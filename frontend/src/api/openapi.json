@@ -15033,6 +15033,52 @@
        }
       ],
       "title": "To Deg"
+     },
+     "vertices": {
+      "anyOf": [
+       {
+        "items": {
+         "items": {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "type": "array"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Vertices"
+     },
+     "x_channel": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "X Channel"
+     },
+     "y_channel": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Y Channel"
      }
     },
     "required": [
@@ -27665,7 +27711,7 @@
   },
   "/api/sessions/{session_id}/operations/define_selection": {
    "post": {
-    "description": "Define or replace a named selection of records: time ranges, direction sectors, value\nbands or record sets, combined by union and intersection.",
+    "description": "Define or replace a named selection of records: time ranges, direction sectors, value\nbands, polygons over two channels or record sets, combined by union and intersection.",
     "operationId": "operation_define_selection_api_sessions__session_id__operations_define_selection_post",
     "parameters": [
      {

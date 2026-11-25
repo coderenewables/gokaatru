@@ -2019,7 +2019,7 @@ export interface paths {
         /**
          * define_selection
          * @description Define or replace a named selection of records: time ranges, direction sectors, value
-         *     bands or record sets, combined by union and intersection.
+         *     bands, polygons over two channels or record sets, combined by union and intersection.
          */
         post: operations["operation_define_selection_api_sessions__session_id__operations_define_selection_post"];
         delete?: never;
@@ -8745,6 +8745,12 @@ export interface components {
             timestamps?: string[] | null;
             /** To Deg */
             to_deg?: number | null;
+            /** Vertices */
+            vertices?: (number | null)[][] | null;
+            /** X Channel */
+            x_channel?: string | null;
+            /** Y Channel */
+            y_channel?: string | null;
         } & {
             [key: string]: unknown;
         };

@@ -113,7 +113,7 @@ def _resolve_selection(state: SessionState, name: str) -> dict[str, Any]:
 @operation(effect="change", stage="selection", canvas=False, result=result_models.DefineSelectionResult)
 def define_selection(name: str, definition: dict) -> dict:
     """Define or replace a named selection of records: time ranges, direction sectors, value
-    bands or record sets, combined by union and intersection."""
+    bands, polygons over two channels or record sets, combined by union and intersection."""
     return _define_selection(session, name, definition)
 
 

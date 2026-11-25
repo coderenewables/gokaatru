@@ -17,6 +17,8 @@ from server.core.runconfig import strip_mirrors
 from server.core.scenario_result import ENGINE_VERSION
 from server.schemas.common import Coordinate
 
+_NOT_RECORDED = object()
+
 
 def _utcnow() -> datetime:
     """Return a timezone-aware UTC timestamp for session lifecycle tracking."""
@@ -471,7 +473,29 @@ class SessionState:
                 return float(value)
         return None
 
-    def long_term_speed_series(self) -> tuple["pd.Series | None", str]:
+    @contextmanager
+    def using_reference_source(self, source: str):
+        """Correct against another reanalysis source for one call, leaving the session's own
+        choice as it was. A pipeline step names its source this way (decisions/0015.1); were it
+        to change the session's choice, two corrections in one pipeline would each read what
+        the other wrote, and could not be ordered."""
+        if not source:
+            yield
+            return
+        get_reference_source(source)
+        active = self.active_reference_source
+        recorded = self.runconfig.get("reference_source", _NOT_RECORDED)
+        self.set_active_reference_source(source)
+        try:
+            yield
+        finally:
+            self.active_reference_source = active
+            if recorded is _NOT_RECORDED:
+                self.runconfig.pop("reference_source", None)
+            else:
+                self.runconfig["reference_source"] = recorded
+
+    def long_term_speed_series(self, source: str | None = None) -> tuple["pd.Series | None", str]:
         """Return the best available long-term corrected speed series, and where it came from.
 
         Preference order matches the pipeline: the ensemble blend, then any single LTC
@@ -479,7 +503,21 @@ class SessionState:
         climate — the energy sensitivity factor, the extreme wind — should describe the
         distribution the P-values will actually be quoted against, and every consumer should
         agree about which series that is.
+
+        ``source`` (``"ltc:<algorithm>"``) names one correction's series instead. A sweep
+        scenario's uncertainty reads its own correction this way, so its energy figures do
+        not depend on what else the session holds (decisions/0015.1, P3-7b).
         """
+        if source is not None:
+            algorithm = source.removeprefix("ltc:")
+            payload = self.ltc_results.get(algorithm)
+            if isinstance(payload, dict) and "df" in payload:
+                frame = pd.DataFrame(payload["df"])
+                if "corrected_wind_speed" in frame.columns:
+                    series = frame["corrected_wind_speed"].dropna()
+                    if not series.empty:
+                        return self._timestamped(frame, series), f"ltc:{algorithm}"
+            return None, "unavailable"
         if self.ensemble_df is not None:
             frame = pd.DataFrame(self.ensemble_df)
             if "Ensemble_Speed" in frame.columns:

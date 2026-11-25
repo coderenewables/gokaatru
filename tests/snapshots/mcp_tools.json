@@ -1221,6 +1221,40 @@
  },
  {
   "annotations": null,
+  "description": "Fill the 12x24 shear table with one exponent: the given one (analyst-supplied), or,\nwithout one, the mean of the shear timeseries (one site-wide exponent).",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "alpha": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    }
+   },
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "build_constant_shear_table",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
   "description": "Build a 12x24 roughness lookup table in log-space traced to IEC logarithmic profile practice.",
   "execution": null,
   "icons": null,
@@ -1341,14 +1375,32 @@
  },
  {
   "annotations": null,
-  "description": "Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B.",
+  "description": "Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B.\n\n``reference_columns`` limits the measured heights carried up to those sensors (a sweep's\nextrapolation-reference policy); without it every mapped speed sensor is used.\n``extrapolate_reanalysis`` false leaves the reanalysis frames as they are, as a sweep does.",
   "execution": null,
   "icons": null,
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
+    "extrapolate_reanalysis": {
+     "default": true,
+     "type": "boolean"
+    },
     "hub_height_m": {
      "type": "number"
+    },
+    "reference_columns": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
     },
     "shear_model": {
      "default": "power_law",
@@ -1641,6 +1693,10 @@
     "long_col": {
      "type": "string"
     },
+    "reference_source": {
+     "default": "",
+     "type": "string"
+    },
     "short_col": {
      "type": "string"
     }
@@ -1672,6 +1728,10 @@
    "additionalProperties": false,
    "properties": {
     "long_col": {
+     "type": "string"
+    },
+    "reference_source": {
+     "default": "",
      "type": "string"
     },
     "short_col": {
@@ -1708,6 +1768,10 @@
      "type": "string"
     },
     "long_dir_col": {
+     "default": "",
+     "type": "string"
+    },
+    "reference_source": {
      "default": "",
      "type": "string"
     },
@@ -1748,6 +1812,10 @@
     "long_col": {
      "type": "string"
     },
+    "reference_source": {
+     "default": "",
+     "type": "string"
+    },
     "short_col": {
      "type": "string"
     }
@@ -1782,6 +1850,10 @@
      "type": "string"
     },
     "long_dir_col": {
+     "default": "",
+     "type": "string"
+    },
+    "reference_source": {
      "default": "",
      "type": "string"
     },
@@ -2752,6 +2824,68 @@
    }
   },
   "name": "calculate_uncertainty",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Calculate a sweep scenario's uncertainty with every input derived from its own results:\nthe correction's fit and concurrent period, the shear series' dispersion for a fitted\npower law, the reference heights it was carried from, and its shear model's constant.\nNothing else the session holds is read, so it answers as the scenario's sweep row did.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "algorithm": {
+     "type": "string"
+    },
+    "hub_height_m": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    },
+    "reference_heights": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "number"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    },
+    "shear_model": {
+     "type": "string"
+    },
+    "shear_source": {
+     "default": "fitted",
+     "type": "string"
+    }
+   },
+   "required": [
+    "algorithm",
+    "shear_model"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "calculate_scenario_uncertainty",
   "outputSchema": {
    "additionalProperties": true,
    "type": "object"

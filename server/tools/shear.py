@@ -822,6 +822,44 @@ def build_shear_table(aggregation: str = "mean") -> dict:
     return _build_shear_table(session, aggregation)
 
 
+def _build_constant_shear_table(state: SessionState, alpha: float | None = None) -> dict:
+    """Fill the 12x24 table with one exponent: the analyst's, or the mean of the shear series.
+
+    The sweep's ``power_law_constant`` level and an analyst-supplied exponent both build their
+    table here (P3-7b), so the canvas step and the sweep stage are one implementation.
+    """
+    if alpha is None:
+        frame = state.shear_timeseries_df
+        series = (
+            frame["shear_coefficient"].dropna()
+            if frame is not None and "shear_coefficient" in frame.columns
+            else pd.Series(dtype=float)
+        )
+        if series.empty:
+            raise ValueError(
+                "The shear series is empty, so no site-wide exponent exists: calculate the shear "
+                "timeseries first, or give the exponent"
+            )
+        value, source, aggregation = float(series.mean()), "fitted", "site_constant"
+    else:
+        value, source, aggregation = float(alpha), "analyst_supplied", "analyst_supplied"
+    state.shear_table = pd.DataFrame(np.full((12, 24), value), index=range(1, 13), columns=range(24))
+    state.stamp_derived("shear_table")
+    return {"status": "ok", "alpha": value, "shear_source": source, "aggregation": aggregation}
+
+
+@operation(
+    effect="change", stage="shear", disclosure=("shear_source",),
+    result=result_models.BuildConstantShearTableResult,
+    reads=("shear_timeseries",),
+    writes=("shear_table",),
+)
+def build_constant_shear_table(alpha: float | None = None) -> dict:
+    """Fill the 12x24 shear table with one exponent: the given one (analyst-supplied), or,
+    without one, the mean of the shear timeseries (one site-wide exponent)."""
+    return _build_constant_shear_table(session, alpha)
+
+
 @operation(
     effect="change", stage="shear",
     disclosure=(

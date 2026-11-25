@@ -1437,6 +1437,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/build_constant_shear_table": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * build_constant_shear_table
+         * @description Fill the 12x24 shear table with one exponent: the given one (analyst-supplied), or,
+         *     without one, the mean of the shear timeseries (one site-wide exponent).
+         */
+        post: operations["operation_build_constant_shear_table_api_sessions__session_id__operations_build_constant_shear_table_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/build_data_model": {
         parameters: {
             query?: never;
@@ -1534,6 +1555,29 @@ export interface paths {
          * @description Calculate timestamp-wise roughness lengths from U versus ln(z) fits traced to IEC 61400-12-1 Section B.3.
          */
         post: operations["operation_calculate_roughness_timeseries_api_sessions__session_id__operations_calculate_roughness_timeseries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/operations/calculate_scenario_uncertainty": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * calculate_scenario_uncertainty
+         * @description Calculate a sweep scenario's uncertainty with every input derived from its own results:
+         *     the correction's fit and concurrent period, the shear series' dispersion for a fitted
+         *     power law, the reference heights it was carried from, and its shear model's constant.
+         *     Nothing else the session holds is read, so it answers as the scenario's sweep row did.
+         */
+        post: operations["operation_calculate_scenario_uncertainty_api_sessions__session_id__operations_calculate_scenario_uncertainty_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2298,6 +2342,10 @@ export interface paths {
         /**
          * extrapolate_to_hub_height
          * @description Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B.
+         *
+         *     ``reference_columns`` limits the measured heights carried up to those sensors (a sweep's
+         *     extrapolation-reference policy); without it every mapped speed sensor is used.
+         *     ``extrapolate_reanalysis`` false leaves the reanalysis frames as they are, as a sweep does.
          */
         post: operations["operation_extrapolate_to_hub_height_api_sessions__session_id__operations_extrapolate_to_hub_height_post"];
         delete?: never;
@@ -5126,6 +5174,22 @@ export interface components {
             /** Warning */
             warning?: string | null;
         };
+        /** BuildConstantShearTableParameters */
+        BuildConstantShearTableParameters: {
+            /** Alpha */
+            alpha?: number | null;
+        };
+        /** BuildConstantShearTableResult */
+        BuildConstantShearTableResult: {
+            /** Aggregation */
+            aggregation: string;
+            /** Alpha */
+            alpha: number | null;
+            /** Shear Source */
+            shear_source: string;
+            /** Status */
+            status: string;
+        };
         /** BuildDataModelParameters */
         BuildDataModelParameters: {
             /** Spec */
@@ -5351,6 +5415,52 @@ export interface components {
             status: string;
             /** Std Roughness */
             std_roughness: number | null;
+            /** Warning */
+            warning?: string | null;
+        };
+        /** CalculateScenarioUncertaintyParameters */
+        CalculateScenarioUncertaintyParameters: {
+            /** Algorithm */
+            algorithm: string;
+            /** Hub Height M */
+            hub_height_m?: number | null;
+            /** Reference Heights */
+            reference_heights?: number[] | null;
+            /** Shear Model */
+            shear_model: string;
+            /**
+             * Shear Source
+             * @default fitted
+             */
+            shear_source?: string;
+        };
+        /**
+         * CalculateScenarioUncertaintyResult
+         * @description A sweep scenario's uncertainty (P3-7b): the same result, with where each input came from.
+         */
+        CalculateScenarioUncertaintyResult: {
+            /** Basis */
+            basis: string;
+            combination: components["schemas"]["Combination"];
+            components: components["schemas"]["Components"];
+            /** Data Version */
+            data_version: number;
+            /** Derived Inputs */
+            derived_inputs: {
+                [key: string]: unknown;
+            };
+            energy_sensitivity: components["schemas"]["EnergySensitivity"];
+            inputs: components["schemas"]["UncertaintyInputs"];
+            mcp_sampling_cap: components["schemas"]["McpSamplingCap"];
+            p_factors: components["schemas"]["PFactors"];
+            /** Stale Artifacts */
+            stale_artifacts: string[];
+            /** Stale Reasons */
+            stale_reasons?: {
+                [key: string]: string | null;
+            } | null;
+            /** Total Uncertainty Pct */
+            total_uncertainty_pct: number | null;
             /** Warning */
             warning?: string | null;
         };
@@ -7200,8 +7310,15 @@ export interface components {
         };
         /** ExtrapolateToHubHeightParameters */
         ExtrapolateToHubHeightParameters: {
+            /**
+             * Extrapolate Reanalysis
+             * @default true
+             */
+            extrapolate_reanalysis?: boolean;
             /** Hub Height M */
             hub_height_m: number;
+            /** Reference Columns */
+            reference_columns?: string[] | null;
             /**
              * Shear Model
              * @default power_law
@@ -9344,6 +9461,11 @@ export interface components {
         RunLtcLinearLeastSquaresParameters: {
             /** Long Col */
             long_col: string;
+            /**
+             * Reference Source
+             * @default
+             */
+            reference_source?: string;
             /** Short Col */
             short_col: string;
         };
@@ -9386,6 +9508,11 @@ export interface components {
              * @default
              */
             long_dir_col?: string;
+            /**
+             * Reference Source
+             * @default
+             */
+            reference_source?: string;
             /** Short Col */
             short_col: string;
             /**
@@ -9408,6 +9535,11 @@ export interface components {
         RunLtcTotalLeastSquaresParameters: {
             /** Long Col */
             long_col: string;
+            /**
+             * Reference Source
+             * @default
+             */
+            reference_source?: string;
             /** Short Col */
             short_col: string;
         };
@@ -9425,6 +9557,11 @@ export interface components {
         RunLtcVarianceRatioParameters: {
             /** Long Col */
             long_col: string;
+            /**
+             * Reference Source
+             * @default
+             */
+            reference_source?: string;
             /** Short Col */
             short_col: string;
         };
@@ -9447,6 +9584,11 @@ export interface components {
              * @default
              */
             long_dir_col?: string;
+            /**
+             * Reference Source
+             * @default
+             */
+            reference_source?: string;
             /** Short Col */
             short_col: string;
             /**
@@ -14060,6 +14202,61 @@ export interface operations {
             };
         };
     };
+    operation_build_constant_shear_table_api_sessions__session_id__operations_build_constant_shear_table_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["BuildConstantShearTableParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuildConstantShearTableResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
     operation_build_data_model_api_sessions__session_id__operations_build_data_model_post: {
         parameters: {
             query?: never;
@@ -14304,6 +14501,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CalculateRoughnessTimeseriesResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
+    operation_calculate_scenario_uncertainty_api_sessions__session_id__operations_calculate_scenario_uncertainty_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CalculateScenarioUncertaintyParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalculateScenarioUncertaintyResult"];
                 };
             };
             /** @description Refused: the request cannot be answered as asked */

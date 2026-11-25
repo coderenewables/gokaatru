@@ -177,6 +177,7 @@ def derive_uncertainty_inputs(
     shear_source: str = "fitted",
     measurement_uncertainty_pct: float = DEFAULT_MEASUREMENT_UNCERTAINTY_PCT,
     iav_pct: float | None = None,
+    shear_model: str | None = None,
 ) -> dict[str, object]:
     """Build one scenario's complete uncertainty-input set, with provenance.
 
@@ -184,6 +185,10 @@ def derive_uncertainty_inputs(
     (design doc §3.A.1). A supplied exponent has no measured dispersion, so it must take
     the analyst-supplied branch and carry its larger `u_vert`; left implicit it would
     inherit a fitted-shear uncertainty from a sibling scenario and under-report.
+
+    ``shear_model`` (a sweep axis B level) decides the shear method from the scenario's own
+    profile. Without it the method is read from which tables the session holds, which in a
+    sweep leaf is the scenario's own but in a campaign may be any earlier run's (P3-7b).
     """
     if shear_source not in {"fitted", "analyst_supplied"}:
         raise ValueError(
@@ -201,7 +206,9 @@ def derive_uncertainty_inputs(
         shear_std = DerivedInput(
             0.0, False, "analyst-supplied exponent has no measured dispersion"
         )
-    elif (
+    elif shear_model is not None and shear_model.startswith("log_law"):
+        shear_method = "log_law"
+    elif shear_model is None and (
         getattr(state, "roughness_table", None) is not None
         and getattr(state, "shear_table", None) is None
     ):

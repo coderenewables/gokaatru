@@ -72,13 +72,13 @@ CORRELATION_SENSITIVITY_RHO = 0.5
 CORRELATED_COMPONENTS = ("measurement", "vertical_extrapolation", "mcp")
 
 
-def _long_term_speed_series(state: SessionState) -> tuple["pd.Series | None", str]:
+def _long_term_speed_series(state: SessionState, source: str | None = None) -> tuple["pd.Series | None", str]:
     """Return the best available long-term corrected speed series, and where it came from.
 
     Delegates to the session so this tool and the extreme-wind tool cannot disagree about
-    which series counts as "long term" (F-79).
+    which series counts as "long term" (F-79). ``source`` names one correction instead.
     """
-    return state.long_term_speed_series()
+    return state.long_term_speed_series(source)
 
 
 def _density_normalised(
@@ -132,7 +132,9 @@ def _density_normalised(
     }
 
 
-def _energy_sensitivity_block(state: SessionState, u_total: float) -> dict[str, object]:
+def _energy_sensitivity_block(
+    state: SessionState, u_total: float, long_term_source: str | None = None
+) -> dict[str, object]:
     """Return the energy sensitivity factor and how to use it, or say why it is unavailable.
 
     The uncertainty this tool reports is a wind-speed uncertainty, and every component of
@@ -143,7 +145,7 @@ def _energy_sensitivity_block(state: SessionState, u_total: float) -> dict[str, 
     because a defensible one needs loss and power-curve terms this application does not
     model.
     """
-    series, source = _long_term_speed_series(state)
+    series, source = _long_term_speed_series(state, long_term_source)
     if series is None:
         return {
             "available": False,
@@ -218,11 +220,17 @@ def _calculate_uncertainty(
     project_life_years: float = PROJECT_LIFE_YEARS,
     concurrent_months_cap: float = DEFAULT_CONCURRENT_MONTHS_CAP,
     component_correlation: float = DEFAULT_COMPONENT_CORRELATION,
+    measured_iav: bool = True,
+    long_term_source: str | None = None,
 ) -> dict:
     """Calculate total uncertainty by root-sum-square combination of measurement, vertical, MCP, and future terms.
 
     Valid shear_method values: "calculate_shear", "simple_power_law", "log_law",
     "analyst_supplied", "power_law" (alias for simple_power_law).
+
+    ``measured_iav`` False keeps the default inter-annual variability even when a clipping
+    run measured one, and ``long_term_source`` names the correction whose series the energy
+    figures are measured on: a sweep scenario computes from its own results only (P3-7b).
     """
     if shear_method not in VALID_SHEAR_METHODS:
         raise ValueError(
@@ -280,7 +288,7 @@ def _calculate_uncertainty(
     # Prefer the site's own inter-annual variability over the generic default.  The
     # clipping run measures it on the window it selected; without this the term used a
     # hand-typed 6% while the measured value sat on screen in another view.
-    measured_iav_pct = state.get_measured_iav_pct()
+    measured_iav_pct = state.get_measured_iav_pct() if measured_iav else None
     iav_source = "default"
     if measured_iav_pct is not None and float(iav_pct) == DEFAULT_IAV_PCT:
         iav_pct = measured_iav_pct
@@ -392,7 +400,7 @@ def _calculate_uncertainty(
             f"{concurrent_months_cap:g} were used. Uncapped, u_mcp would be "
             f"{u_mcp_uncapped:.2f}% against the reported {u_mcp:.2f}%."
         )
-    result["energy_sensitivity"] = _energy_sensitivity_block(state, u_total)
+    result["energy_sensitivity"] = _energy_sensitivity_block(state, u_total, long_term_source)
     result.update(state.staleness_report())
     state.latest_uncertainty = result
     state.stamp_derived("uncertainty")
@@ -463,6 +471,75 @@ def calculate_uncertainty(
         concurrent_months_cap,
         component_correlation,
     )
+
+
+def _scenario_uncertainty(
+    state: SessionState,
+    algorithm: str,
+    shear_model: str,
+    reference_heights: list[float] | None = None,
+    hub_height_m: float | None = None,
+    shear_source: str = "fitted",
+) -> dict:
+    """A sweep scenario's uncertainty, every input derived from the scenario's own results.
+
+    The sweep's uncertainty stage and the canvas's step both call this, so a scenario
+    loaded into the canvas answers as its sweep row did (decisions/0015.1). In a sweep leaf
+    the scenario's results are the only ones; in a campaign the session may also hold an
+    ensemble, a clipping run or another shear table, and none of them is read here: the
+    shear method follows ``shear_model``, the inter-annual variability stays the default
+    as a leaf has no clipping run, and the energy figures are measured on this correction.
+    """
+    from server.core.scenario_pipeline import SHEAR_MODELS
+    from server.core.uncertainty_inputs import derive_uncertainty_inputs, uncertainty_call_args
+
+    if shear_model not in SHEAR_MODELS:
+        raise ValueError(f"shear_model must be one of {', '.join(SHEAR_MODELS)}, got '{shear_model}'")
+    if algorithm not in state.ltc_results:
+        raise ValueError(f"No '{algorithm}' long-term correction has been run, so it has no uncertainty")
+    inputs = derive_uncertainty_inputs(
+        state,
+        algorithm,
+        hub_height_m=hub_height_m,
+        reference_heights=reference_heights,
+        shear_source=shear_source,
+        shear_model=shear_model,
+    )
+    result = _calculate_uncertainty(
+        state, **uncertainty_call_args(inputs), measured_iav=False, long_term_source=f"ltc:{algorithm}"
+    )
+    return {**result, "derived_inputs": inputs["provenance"]}
+
+
+@operation(
+    effect="change", stage="uncertainty",
+    disclosure=(
+        "mcp_sampling_cap",
+        "combination",
+        "k_shear",
+        "k_shear_basis",
+        "density_normalisation",
+    ),
+    result=result_models.CalculateScenarioUncertaintyResult,
+    reads=(
+        "ltc:linear_least_squares", "ltc:total_least_squares", "ltc:variance_ratio", "ltc:speedsort",
+        "ltc:xgboost", "shear_timeseries", "settings", "measured_data", "data_model", "site",
+    ),
+    writes=("uncertainty",),
+)
+def calculate_scenario_uncertainty(
+    algorithm: str,
+    shear_model: str,
+    reference_heights: list[float] | None = None,
+    hub_height_m: float | None = None,
+    shear_source: str = "fitted",
+) -> dict:
+    """Calculate a sweep scenario's uncertainty with every input derived from its own results:
+    the correction's fit and concurrent period, the shear series' dispersion for a fitted
+    power law, the reference heights it was carried from, and its shear model's constant.
+    Nothing else the session holds is read, so it answers as the scenario's sweep row did.
+    """
+    return _scenario_uncertainty(session, algorithm, shear_model, reference_heights, hub_height_m, shear_source)
 
 
 def _compute_energy_sensitivity(state: SessionState, speed_uncertainty_pct: float = 0.0) -> dict:

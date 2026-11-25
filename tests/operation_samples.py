@@ -120,6 +120,12 @@ def _changes(samples: Samples, state: SessionState, workspace: Path) -> None:
     # Another height than the pipeline's 120 m, so the call writes a column of its own.
     samples.call(state, "extrapolate_reanalysis_to_hub", hub_height_m=110.0, reference_height_m=100.0)
     samples.call(state, "apply_homogeneity_cutoff", cutoff_year=2010)
+    samples.call(
+        state, "calculate_scenario_uncertainty",
+        algorithm="variance_ratio", shear_model="power_law_mean", reference_heights=[80.0, 100.0],
+    )
+    samples.call(state, "build_constant_shear_table", alpha=0.2)
+    samples.call(state, "build_constant_shear_table")
 
     lat, lon = NODES[0]
     node = state.era5_data[f"{float(lat)}_{float(lon)}"]

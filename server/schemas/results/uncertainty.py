@@ -1,6 +1,8 @@
 """Results of the uncertainty operations (P1-19)."""
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import ConfigDict, Field
 
 from server.schemas.results._base import Number, Result, Staleness
@@ -133,3 +135,9 @@ class ComputeEnergySensitivityResult(EnergySensitivity, Staleness):
     status: str
     #: ``latest_uncertainty`` when the conversion used the session's last uncertainty result.
     speed_uncertainty_source: str | None = None
+
+
+class CalculateScenarioUncertaintyResult(CalculateUncertaintyResult):
+    """A sweep scenario's uncertainty (P3-7b): the same result, with where each input came from."""
+
+    derived_inputs: dict[str, Any]

@@ -596,9 +596,19 @@ def _add_shear_to_timeseries(state: SessionState) -> bool:
     ),
     writes=("hub_height_series", "reanalysis_hub_series", "site"),
 )
-def extrapolate_to_hub_height(hub_height_m: float, shear_model: str = "power_law") -> dict:
-    """Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B."""
-    return _extrapolate_to_hub_height(session, hub_height_m, shear_model)
+def extrapolate_to_hub_height(
+    hub_height_m: float,
+    shear_model: str = "power_law",
+    reference_columns: list[str] | None = None,
+    extrapolate_reanalysis: bool = True,
+) -> dict:
+    """Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B.
+
+    ``reference_columns`` limits the measured heights carried up to those sensors (a sweep's
+    extrapolation-reference policy); without it every mapped speed sensor is used.
+    ``extrapolate_reanalysis`` false leaves the reanalysis frames as they are, as a sweep does.
+    """
+    return _extrapolate_to_hub_height(session, hub_height_m, shear_model, reference_columns, extrapolate_reanalysis)
 
 
 @operation(

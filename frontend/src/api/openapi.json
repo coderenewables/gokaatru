@@ -2059,6 +2059,60 @@
     "title": "BuildAggrMommShearTableResult",
     "type": "object"
    },
+   "BuildConstantShearTableParameters": {
+    "additionalProperties": false,
+    "properties": {
+     "alpha": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Alpha"
+     }
+    },
+    "title": "BuildConstantShearTableParameters",
+    "type": "object"
+   },
+   "BuildConstantShearTableResult": {
+    "additionalProperties": false,
+    "properties": {
+     "aggregation": {
+      "title": "Aggregation",
+      "type": "string"
+     },
+     "alpha": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Alpha"
+     },
+     "shear_source": {
+      "title": "Shear Source",
+      "type": "string"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "alpha",
+     "shear_source",
+     "aggregation"
+    ],
+    "title": "BuildConstantShearTableResult",
+    "type": "object"
+   },
    "BuildDataModelParameters": {
     "additionalProperties": false,
     "properties": {
@@ -2747,6 +2801,157 @@
      "roughness_clipping"
     ],
     "title": "CalculateRoughnessTimeseriesResult",
+    "type": "object"
+   },
+   "CalculateScenarioUncertaintyParameters": {
+    "additionalProperties": false,
+    "properties": {
+     "algorithm": {
+      "title": "Algorithm",
+      "type": "string"
+     },
+     "hub_height_m": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Hub Height M"
+     },
+     "reference_heights": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "number"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reference Heights"
+     },
+     "shear_model": {
+      "title": "Shear Model",
+      "type": "string"
+     },
+     "shear_source": {
+      "default": "fitted",
+      "title": "Shear Source",
+      "type": "string"
+     }
+    },
+    "required": [
+     "algorithm",
+     "shear_model"
+    ],
+    "title": "CalculateScenarioUncertaintyParameters",
+    "type": "object"
+   },
+   "CalculateScenarioUncertaintyResult": {
+    "additionalProperties": false,
+    "description": "A sweep scenario's uncertainty (P3-7b): the same result, with where each input came from.",
+    "properties": {
+     "basis": {
+      "title": "Basis",
+      "type": "string"
+     },
+     "combination": {
+      "$ref": "#/components/schemas/Combination"
+     },
+     "components": {
+      "$ref": "#/components/schemas/Components"
+     },
+     "data_version": {
+      "title": "Data Version",
+      "type": "integer"
+     },
+     "derived_inputs": {
+      "additionalProperties": true,
+      "title": "Derived Inputs",
+      "type": "object"
+     },
+     "energy_sensitivity": {
+      "$ref": "#/components/schemas/EnergySensitivity"
+     },
+     "inputs": {
+      "$ref": "#/components/schemas/UncertaintyInputs"
+     },
+     "mcp_sampling_cap": {
+      "$ref": "#/components/schemas/McpSamplingCap"
+     },
+     "p_factors": {
+      "$ref": "#/components/schemas/PFactors"
+     },
+     "stale_artifacts": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Stale Artifacts",
+      "type": "array"
+     },
+     "stale_reasons": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stale Reasons"
+     },
+     "total_uncertainty_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Total Uncertainty Pct"
+     },
+     "warning": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Warning"
+     }
+    },
+    "required": [
+     "data_version",
+     "stale_artifacts",
+     "total_uncertainty_pct",
+     "components",
+     "combination",
+     "basis",
+     "p_factors",
+     "inputs",
+     "mcp_sampling_cap",
+     "energy_sensitivity",
+     "derived_inputs"
+    ],
+    "title": "CalculateScenarioUncertaintyResult",
     "type": "object"
    },
    "CalculateShearRequest": {
@@ -8911,9 +9116,28 @@
    "ExtrapolateToHubHeightParameters": {
     "additionalProperties": false,
     "properties": {
+     "extrapolate_reanalysis": {
+      "default": true,
+      "title": "Extrapolate Reanalysis",
+      "type": "boolean"
+     },
      "hub_height_m": {
       "title": "Hub Height M",
       "type": "number"
+     },
+     "reference_columns": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reference Columns"
      },
      "shear_model": {
       "default": "power_law",
@@ -15948,6 +16172,11 @@
       "title": "Long Col",
       "type": "string"
      },
+     "reference_source": {
+      "default": "",
+      "title": "Reference Source",
+      "type": "string"
+     },
      "short_col": {
       "title": "Short Col",
       "type": "string"
@@ -16029,6 +16258,11 @@
       "title": "Long Dir Col",
       "type": "string"
      },
+     "reference_source": {
+      "default": "",
+      "title": "Reference Source",
+      "type": "string"
+     },
      "short_col": {
       "title": "Short Col",
       "type": "string"
@@ -16081,6 +16315,11 @@
       "title": "Long Col",
       "type": "string"
      },
+     "reference_source": {
+      "default": "",
+      "title": "Reference Source",
+      "type": "string"
+     },
      "short_col": {
       "title": "Short Col",
       "type": "string"
@@ -16126,6 +16365,11 @@
     "properties": {
      "long_col": {
       "title": "Long Col",
+      "type": "string"
+     },
+     "reference_source": {
+      "default": "",
+      "title": "Reference Source",
       "type": "string"
      },
      "short_col": {
@@ -16178,6 +16422,11 @@
      "long_dir_col": {
       "default": "",
       "title": "Long Dir Col",
+      "type": "string"
+     },
+     "reference_source": {
+      "default": "",
+      "title": "Reference Source",
       "type": "string"
      },
      "short_col": {
@@ -27019,6 +27268,103 @@
     ]
    }
   },
+  "/api/sessions/{session_id}/operations/build_constant_shear_table": {
+   "post": {
+    "description": "Fill the 12x24 shear table with one exponent: the given one (analyst-supplied), or,\nwithout one, the mean of the shear timeseries (one site-wide exponent).",
+    "operationId": "operation_build_constant_shear_table_api_sessions__session_id__operations_build_constant_shear_table_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/BuildConstantShearTableParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BuildConstantShearTableResult",
+         "title": "Response Operation Build Constant Shear Table Api Sessions  Session Id  Operations Build Constant Shear Table Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "build_constant_shear_table",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
   "/api/sessions/{session_id}/operations/build_data_model": {
    "post": {
     "description": "Build a minimal IEA Task 43 data model from declared columns and load it.\n\nRefused while the campaign's own uploaded data model is in use. Undoable, except the\nbuild that first puts the records into UTC.",
@@ -27499,6 +27845,103 @@
      }
     },
     "summary": "calculate_roughness_timeseries",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
+  "/api/sessions/{session_id}/operations/calculate_scenario_uncertainty": {
+   "post": {
+    "description": "Calculate a sweep scenario's uncertainty with every input derived from its own results:\nthe correction's fit and concurrent period, the shear series' dispersion for a fitted\npower law, the reference heights it was carried from, and its shear model's constant.\nNothing else the session holds is read, so it answers as the scenario's sweep row did.",
+    "operationId": "operation_calculate_scenario_uncertainty_api_sessions__session_id__operations_calculate_scenario_uncertainty_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/CalculateScenarioUncertaintyParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CalculateScenarioUncertaintyResult",
+         "title": "Response Operation Calculate Scenario Uncertainty Api Sessions  Session Id  Operations Calculate Scenario Uncertainty Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "calculate_scenario_uncertainty",
     "tags": [
      "operations"
     ]
@@ -30804,7 +31247,7 @@
   },
   "/api/sessions/{session_id}/operations/extrapolate_to_hub_height": {
    "post": {
-    "description": "Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B.",
+    "description": "Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B.\n\n``reference_columns`` limits the measured heights carried up to those sensors (a sweep's\nextrapolation-reference policy); without it every mapped speed sensor is used.\n``extrapolate_reanalysis`` false leaves the reanalysis frames as they are, as a sweep does.",
     "operationId": "operation_extrapolate_to_hub_height_api_sessions__session_id__operations_extrapolate_to_hub_height_post",
     "parameters": [
      {

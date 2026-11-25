@@ -27,11 +27,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-import numpy as np
-import pandas as pd
-
 from server.core.sensor_selection import SensorSelection, resolve_policy
-from server.core.uncertainty_inputs import derive_uncertainty_inputs, uncertainty_call_args
 
 #: Axis B levels that map onto the existing shear tooling.
 POWER_LAW_AGGREGATIONS = ("mean", "median", "momm")
@@ -145,11 +141,6 @@ def resolve_sensors(state: Any, spec: ScenarioSpec) -> tuple[SensorSelection, Se
     return resolve_fit(state, spec), resolve_reference(state, spec)
 
 
-def _constant_shear_table(alpha: float) -> pd.DataFrame:
-    """Return a 12x24 lookup filled with one exponent, for the constant-alpha levels."""
-    return pd.DataFrame(np.full((12, 24), float(alpha)), index=range(1, 13), columns=range(24))
-
-
 def build_shear(state: Any, spec: ScenarioSpec, fit: SensorSelection) -> StageResult:
     """Build the scenario's vertical-profile table (axis B).
 
@@ -159,6 +150,7 @@ def build_shear(state: Any, spec: ScenarioSpec, fit: SensorSelection) -> StageRe
     mechanism is what marks the difference (design doc §3.A.1).
     """
     from server.tools.shear import (
+        _build_constant_shear_table,
         _build_roughness_table,
         _build_shear_table,
         _calculate_roughness_timeseries,
@@ -180,8 +172,7 @@ def build_shear(state: Any, spec: ScenarioSpec, fit: SensorSelection) -> StageRe
     height_sensors = _height_sensors_json(fit)
 
     if spec.analyst_shear_alpha is not None:
-        state.shear_table = _constant_shear_table(spec.analyst_shear_alpha)
-        state.stamp_derived("shear_table")
+        _build_constant_shear_table(state, spec.analyst_shear_alpha)
         return StageResult(
             "build_shear",
             True,
@@ -210,12 +201,10 @@ def build_shear(state: Any, spec: ScenarioSpec, fit: SensorSelection) -> StageRe
     _calculate_shear_timeseries(state, height_sensors)
     if spec.shear_model == "power_law_constant":
         # One site-wide exponent: the mean of the scenario's own series, not a default.
-        series = state.shear_timeseries_df["shear_coefficient"].dropna()
-        if series.empty:
-            raise ScenarioError("build_shear", "shear series is empty, so no site-wide alpha exists")
-        alpha = float(series.mean())
-        state.shear_table = _constant_shear_table(alpha)
-        state.stamp_derived("shear_table")
+        try:
+            alpha = _build_constant_shear_table(state)["alpha"]
+        except ValueError as exc:
+            raise ScenarioError("build_shear", "shear series is empty, so no site-wide alpha exists") from exc
         return StageResult(
             "build_shear",
             True,
@@ -309,25 +298,26 @@ def run_ltc(state: Any, spec: ScenarioSpec) -> StageResult:
 
 
 def run_uncertainty(state: Any, spec: ScenarioSpec, reference: SensorSelection) -> StageResult:
-    """Compute uncertainty from this scenario's own fit, series and geometry (§7.5)."""
-    from server.tools.uncertainty import _calculate_uncertainty
+    """Compute uncertainty from this scenario's own fit, series and geometry (§7.5), as the
+    canvas's ``calculate_scenario_uncertainty`` step does."""
+    from server.tools.uncertainty import _scenario_uncertainty
 
     shear_source = "analyst_supplied" if spec.analyst_shear_alpha is not None else "fitted"
-    inputs = derive_uncertainty_inputs(
+    result = _scenario_uncertainty(
         state,
         spec.ltc_algorithm,
-        hub_height_m=spec.hub_height_m,
+        spec.shear_model,
         reference_heights=list(reference.heights_m),
+        hub_height_m=spec.hub_height_m,
         shear_source=shear_source,
     )
-    result = _calculate_uncertainty(state, **uncertainty_call_args(inputs))
     return StageResult(
         "run_uncertainty",
         True,
         {
             "total_uncertainty_pct": result.get("total_uncertainty_pct"),
             "components": result.get("components"),
-            "provenance": inputs["provenance"],
+            "provenance": result["derived_inputs"],
         },
     )
 

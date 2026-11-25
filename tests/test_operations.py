@@ -132,7 +132,7 @@ PINNED_READ_TIER = frozenset({
 # Changes, file writes and network calls: offered only with allow_mutating_tools.
 PINNED_CHANGE_TIER = frozenset({
     "undo_last_change", "redo_last_change", "define_selection", "delete_selection", "remove_sensors",
-    "save_pipeline", "delete_pipeline",
+    "save_pipeline", "delete_pipeline", "build_constant_shear_table", "calculate_scenario_uncertainty",
     "apply_cleaning_rule", "apply_homogeneity_cutoff", "build_aggr_momm_shear_table", "build_data_model",
     "build_roughness_table", "build_shear_table", "calculate_roughness_timeseries",
     "calculate_shear_timeseries", "calculate_uncertainty", "compute_era5_wind_speed",

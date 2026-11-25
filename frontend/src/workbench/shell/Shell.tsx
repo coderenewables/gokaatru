@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, unwrap } from "../api";
 import { dropOnChart, useCharts } from "../charts/store";
+import { WindowDrop } from "../datamodel/WindowDrop";
 import { WorkbenchDnd } from "../dnd";
 import { useSelection } from "../selection/store";
 import { useTheme } from "../theme/theme";
@@ -205,6 +206,7 @@ export function Shell({ sessionId, projectId }: ShellProps) {
           </>
         )}
       </footer>
+      <WindowDrop sessionId={sessionId} campaignName={campaign?.name ?? summary.data?.project_name ?? "the campaign"} />
       {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
     </div>
   );

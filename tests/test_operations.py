@@ -128,7 +128,7 @@ PINNED_READ_TIER = frozenset({
 })
 # Changes, file writes and network calls: offered only with allow_mutating_tools.
 PINNED_CHANGE_TIER = frozenset({
-    "undo_last_change", "redo_last_change", "define_selection", "delete_selection",
+    "undo_last_change", "redo_last_change", "define_selection", "delete_selection", "remove_sensors",
     "apply_cleaning_rule", "apply_homogeneity_cutoff", "build_aggr_momm_shear_table", "build_data_model",
     "build_roughness_table", "build_shear_table", "calculate_roughness_timeseries",
     "calculate_shear_timeseries", "calculate_uncertainty", "compute_atmospheric_conditions", "compute_era5_wind_speed",
@@ -151,6 +151,7 @@ PINNED_NOT_ON_CANVAS = frozenset({
     "define_selection", "delete_selection", "list_selections", "resolve_selection",
     "analyze_sweep_spread", "build_data_model", "draft_data_model", "get_fixed_prefix_hash",
     "get_sweep_summary", "list_sweeps", "get_flag_intervals", "get_scatter_pairs",
+    "remove_sensors",
 })
 # Module to stage, in the executor's pipeline order before P1-4 (F-09).
 PINNED_STAGE_BY_MODULE = {
@@ -161,7 +162,7 @@ PINNED_STAGE_BY_MODULE = {
     "statistics": "statistics", "visualization": "visualization", "map": "map", "config": "config",
     "advanced_analysis": "analysis", "atmosphere": "atmosphere", "diagnostics": "diagnostics",
     "scenario_result": "sweep", "sweep_analysis": "sweep", "history": "config", "selections": "selection",
-    "series": "visualization", "flags": "cleaning",
+    "series": "visualization", "flags": "cleaning", "sensors": "ingest",
 }
 PINNED_STAGES = (
     "ingest", "cleaning", "reanalysis_download", "reanalysis", "homogeneity", "shear", "extrapolation",

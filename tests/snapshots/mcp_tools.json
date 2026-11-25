@@ -1451,7 +1451,39 @@
  },
  {
   "annotations": null,
-  "description": "Undo the last cleaning rule or configuration change still in the history.",
+  "description": "Remove sensors from the analysis: inventory, height mapping, working and raw data.\n\nThe removal is recorded in the run configuration's excluded_sensors, so a datamodel\nre-import keeps them out; loading a new timeseries brings every sensor back. Undoable.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "sensor_names": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "sensor_names"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "remove_sensors",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Undo the last cleaning rule, configuration change or sensor removal still in the history.",
   "execution": null,
   "icons": null,
   "inputSchema": {

@@ -13899,6 +13899,9 @@
         "$ref": "#/components/schemas/ApplyCleaningRuleResult"
        },
        {
+        "$ref": "#/components/schemas/RemoveSensorsResult"
+       },
+       {
         "$ref": "#/components/schemas/RunConfig"
        }
       ],
@@ -14016,6 +14019,124 @@
     "title": "ReferenceHeights",
     "type": "object"
    },
+   "RemoveSensorsParameters": {
+    "additionalProperties": false,
+    "properties": {
+     "sensor_names": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Sensor Names",
+      "type": "array"
+     }
+    },
+    "required": [
+     "sensor_names"
+    ],
+    "title": "RemoveSensorsParameters",
+    "type": "object"
+   },
+   "RemoveSensorsPreview": {
+    "additionalProperties": false,
+    "properties": {
+     "applied": {
+      "title": "Applied",
+      "type": "boolean"
+     },
+     "changes": {
+      "$ref": "#/components/schemas/FrameChange"
+     },
+     "columns_dropped": {
+      "additionalProperties": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "title": "Columns Dropped",
+      "type": "object"
+     },
+     "not_found": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Not Found",
+      "type": "array"
+     },
+     "remaining_count": {
+      "title": "Remaining Count",
+      "type": "integer"
+     },
+     "removed": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Removed",
+      "type": "array"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "removed",
+     "not_found",
+     "remaining_count",
+     "columns_dropped",
+     "applied",
+     "changes"
+    ],
+    "title": "RemoveSensorsPreview",
+    "type": "object"
+   },
+   "RemoveSensorsResult": {
+    "additionalProperties": false,
+    "properties": {
+     "columns_dropped": {
+      "additionalProperties": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "title": "Columns Dropped",
+      "type": "object"
+     },
+     "not_found": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Not Found",
+      "type": "array"
+     },
+     "remaining_count": {
+      "title": "Remaining Count",
+      "type": "integer"
+     },
+     "removed": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Removed",
+      "type": "array"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "removed",
+     "not_found",
+     "remaining_count",
+     "columns_dropped"
+    ],
+    "title": "RemoveSensorsResult",
+    "type": "object"
+   },
    "Residual": {
     "additionalProperties": false,
     "properties": {
@@ -14121,6 +14242,24 @@
      "restored_paths"
     ],
     "title": "RestoredPaths",
+    "type": "object"
+   },
+   "RestoredSensors": {
+    "additionalProperties": false,
+    "description": "Undoing a sensor removal: the sensors put back.",
+    "properties": {
+     "restored": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Restored",
+      "type": "array"
+     }
+    },
+    "required": [
+     "restored"
+    ],
+    "title": "RestoredSensors",
     "type": "object"
    },
    "RoughnessClipping": {
@@ -18204,6 +18343,9 @@
        },
        {
         "$ref": "#/components/schemas/RestoredPaths"
+       },
+       {
+        "$ref": "#/components/schemas/RestoredSensors"
        }
       ],
       "title": "Detail"
@@ -32484,6 +32626,200 @@
     ]
    }
   },
+  "/api/sessions/{session_id}/operations/remove_sensors": {
+   "post": {
+    "description": "Remove sensors from the analysis: inventory, height mapping, working and raw data.\n\nThe removal is recorded in the run configuration's excluded_sensors, so a datamodel\nre-import keeps them out; loading a new timeseries brings every sensor back. Undoable.",
+    "operationId": "operation_remove_sensors_api_sessions__session_id__operations_remove_sensors_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/RemoveSensorsParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RemoveSensorsResult",
+         "title": "Response Operation Remove Sensors Api Sessions  Session Id  Operations Remove Sensors Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "remove_sensors",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
+  "/api/sessions/{session_id}/operations/remove_sensors/preview": {
+   "post": {
+    "description": "Remove sensors from the analysis: inventory, height mapping, working and raw data.\n\nThe removal is recorded in the run configuration's excluded_sensors, so a datamodel\nre-import keeps them out; loading a new timeseries brings every sensor back. Undoable.",
+    "operationId": "operation_remove_sensors_preview_api_sessions__session_id__operations_remove_sensors_preview_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/RemoveSensorsParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RemoveSensorsPreview",
+         "title": "Response Operation Remove Sensors Preview Api Sessions  Session Id  Operations Remove Sensors Preview Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "remove_sensors (dry run)",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
   "/api/sessions/{session_id}/operations/resolve_selection": {
    "post": {
     "description": "Resolve a named selection against the working data: how many records, and where.",
@@ -33553,7 +33889,7 @@
   },
   "/api/sessions/{session_id}/operations/undo_last_change": {
    "post": {
-    "description": "Undo the last cleaning rule or configuration change still in the history.",
+    "description": "Undo the last cleaning rule, configuration change or sensor removal still in the history.",
     "operationId": "operation_undo_last_change_api_sessions__session_id__operations_undo_last_change_post",
     "parameters": [
      {
@@ -35009,7 +35345,7 @@
   },
   "/api/sessions/{session_id}/sensors/delete": {
    "post": {
-    "description": "Remove unwanted sensors from the session inventory, mapping, and data.\n\nRemoves the named sensors from ``sensor_inventory``, clears their column\nslot from ``sensor_mapping`` (by height), and drops their columns from both\nthe working and raw timeseries dataframes. If a height entry in the mapping\nbecomes entirely ``None`` after removal, the height is dropped from the\nmapping. The exclusion is persisted to ``excluded_sensors`` in the\nrunconfig so the selection is authoritative and survives config saves and\ndatamodel-only re-imports. Loading the timeseries again or re-importing\nfrom BrightHub clears the exclusion and restores the full dataset.",
+    "description": "Remove unwanted sensors from the session inventory, mapping, and data.\n\nThe same logic as the ``remove_sensors`` operation (``server/tools/sensors.py``), which\nthe workbench calls through the generated route so the removal can be undone; this route\nstays for the current interface until Phase 3 retires it.",
     "operationId": "delete_sensors_api_sessions__session_id__sensors_delete_post",
     "parameters": [
      {

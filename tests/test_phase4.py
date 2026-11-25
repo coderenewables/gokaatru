@@ -143,4 +143,4 @@ def test_all_tools_registered() -> None:
     # undo and redo over the operation log, and the log itself as a read).
     # 93 + define_selection/delete_selection/list_selections/resolve_selection (2026-11-19,
     # P1-15: selections are server objects every view resolves the same way).
-    assert len(tools) == 100
+    assert len(tools) == 101

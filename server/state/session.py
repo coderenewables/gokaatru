@@ -123,6 +123,10 @@ class SessionState:
     # Named record selections (decisions/0011): each a definition from server.core.selection
     # plus who made it and when. Resolved against the data each time they are used.
     selections: dict[str, dict[str, object]]
+    # What each undoable sensor removal took out, keyed by its operation-log sequence, so
+    # undo can put it back: the inventory entries, the mapping and exclusion list before and
+    # after, and the removed columns of the working and raw frames.
+    removed_sensors: dict[str, dict[str, object]]
 
     def __init__(self) -> None:
         """Initialize the singleton session state per the GoKaatru build spec."""
@@ -188,6 +192,7 @@ class SessionState:
         self.operation_log = []
         self.undo_stack = []
         self.selections = {}
+        self.removed_sensors = {}
         self.session_id = preserved_session_id
         self.workspace_dir = preserved_workspace_dir
         self.created_at = preserved_created_at

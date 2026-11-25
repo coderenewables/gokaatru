@@ -117,6 +117,7 @@ class SessionManager:
         target.operation_log = copy.deepcopy(source.operation_log)
         target.undo_stack = list(source.undo_stack)
         target.selections = copy.deepcopy(source.selections)
+        target.removed_sensors = copy.deepcopy(source.removed_sensors)
 
         target.timezone = source.timezone
         target.clipping_result = copy.deepcopy(source.clipping_result)

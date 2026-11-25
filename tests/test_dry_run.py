@@ -143,7 +143,7 @@ def test_a_summary_counts_runs_and_caps_the_listed_ranges() -> None:
 
 def test_the_registry_carries_the_dry_runs_with_their_operations_signatures() -> None:
     declared = {op.name for op in REGISTRY if op.dry_run is not None}
-    assert declared == {"apply_cleaning_rule", "undo_cleaning_rule"}
+    assert declared == {"apply_cleaning_rule", "undo_cleaning_rule", "remove_sensors"}
     state = _state()
     with bind_session(state):
         preview = REGISTRY.get("apply_cleaning_rule").dry_run(rule_type="range_check", sensor="Spd_100m", params="{}")

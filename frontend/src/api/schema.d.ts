@@ -2914,6 +2914,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/remove_sensors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * remove_sensors
+         * @description Remove sensors from the analysis: inventory, height mapping, working and raw data.
+         *
+         *     The removal is recorded in the run configuration's excluded_sensors, so a datamodel
+         *     re-import keeps them out; loading a new timeseries brings every sensor back. Undoable.
+         */
+        post: operations["operation_remove_sensors_api_sessions__session_id__operations_remove_sensors_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/operations/remove_sensors/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * remove_sensors (dry run)
+         * @description Remove sensors from the analysis: inventory, height mapping, working and raw data.
+         *
+         *     The removal is recorded in the run configuration's excluded_sensors, so a datamodel
+         *     re-import keeps them out; loading a new timeseries brings every sensor back. Undoable.
+         */
+        post: operations["operation_remove_sensors_preview_api_sessions__session_id__operations_remove_sensors_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/resolve_selection": {
         parameters: {
             query?: never;
@@ -3171,7 +3217,7 @@ export interface paths {
         put?: never;
         /**
          * undo_last_change
-         * @description Undo the last cleaning rule or configuration change still in the history.
+         * @description Undo the last cleaning rule, configuration change or sensor removal still in the history.
          */
         post: operations["operation_undo_last_change_api_sessions__session_id__operations_undo_last_change_post"];
         delete?: never;
@@ -3541,14 +3587,9 @@ export interface paths {
          * Delete Sensors
          * @description Remove unwanted sensors from the session inventory, mapping, and data.
          *
-         *     Removes the named sensors from ``sensor_inventory``, clears their column
-         *     slot from ``sensor_mapping`` (by height), and drops their columns from both
-         *     the working and raw timeseries dataframes. If a height entry in the mapping
-         *     becomes entirely ``None`` after removal, the height is dropped from the
-         *     mapping. The exclusion is persisted to ``excluded_sensors`` in the
-         *     runconfig so the selection is authoritative and survives config saves and
-         *     datamodel-only re-imports. Loading the timeseries again or re-importing
-         *     from BrightHub clears the exclusion and restores the full dataset.
+         *     The same logic as the ``remove_sensors`` operation (``server/tools/sensors.py``), which
+         *     the workbench calls through the generated route so the removal can be undone; this route
+         *     stays for the current interface until Phase 3 retires it.
          */
         post: operations["delete_sensors_api_sessions__session_id__sensors_delete_post"];
         delete?: never;
@@ -8487,7 +8528,7 @@ export interface components {
             /** Data Version */
             data_version: number;
             /** Detail */
-            detail: components["schemas"]["ApplyCleaningRuleResult"] | components["schemas"]["RunConfig"];
+            detail: components["schemas"]["ApplyCleaningRuleResult"] | components["schemas"]["RemoveSensorsResult"] | components["schemas"]["RunConfig"];
             redone: components["schemas"]["LoggedCall"];
             /** Stale Artifacts */
             stale_artifacts: string[];
@@ -8512,6 +8553,44 @@ export interface components {
             record_counts: {
                 [key: string]: number;
             };
+        };
+        /** RemoveSensorsParameters */
+        RemoveSensorsParameters: {
+            /** Sensor Names */
+            sensor_names: string[];
+        };
+        /** RemoveSensorsPreview */
+        RemoveSensorsPreview: {
+            /** Applied */
+            applied: boolean;
+            changes: components["schemas"]["FrameChange"];
+            /** Columns Dropped */
+            columns_dropped: {
+                [key: string]: string[];
+            };
+            /** Not Found */
+            not_found: string[];
+            /** Remaining Count */
+            remaining_count: number;
+            /** Removed */
+            removed: string[];
+            /** Status */
+            status: string;
+        };
+        /** RemoveSensorsResult */
+        RemoveSensorsResult: {
+            /** Columns Dropped */
+            columns_dropped: {
+                [key: string]: string[];
+            };
+            /** Not Found */
+            not_found: string[];
+            /** Remaining Count */
+            remaining_count: number;
+            /** Removed */
+            removed: string[];
+            /** Status */
+            status: string;
         };
         /** Residual */
         Residual: {
@@ -8548,6 +8627,14 @@ export interface components {
         RestoredPaths: {
             /** Restored Paths */
             restored_paths: string[];
+        };
+        /**
+         * RestoredSensors
+         * @description Undoing a sensor removal: the sensors put back.
+         */
+        RestoredSensors: {
+            /** Restored */
+            restored: string[];
         };
         /**
          * RoughnessClipping
@@ -9677,7 +9764,7 @@ export interface components {
             /** Data Version */
             data_version: number;
             /** Detail */
-            detail: components["schemas"]["UndoCleaningRuleResult"] | components["schemas"]["RestoredPaths"];
+            detail: components["schemas"]["UndoCleaningRuleResult"] | components["schemas"]["RestoredPaths"] | components["schemas"]["RestoredSensors"];
             /** Stale Artifacts */
             stale_artifacts: string[];
             /** Stale Reasons */
@@ -17154,6 +17241,116 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RedoLastChangeResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
+    operation_remove_sensors_api_sessions__session_id__operations_remove_sensors_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RemoveSensorsParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoveSensorsResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
+    operation_remove_sensors_preview_api_sessions__session_id__operations_remove_sensors_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RemoveSensorsParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoveSensorsPreview"];
                 };
             };
             /** @description Refused: the request cannot be answered as asked */

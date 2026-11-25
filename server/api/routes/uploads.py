@@ -22,6 +22,7 @@ from server.tools.data_io import (
     _parse_timeseries,
 )
 from server.tools.datamodel_builder import _build_data_model, _draft_data_model
+from server.tools.sensors import _remove_sensors
 
 router = APIRouter(prefix="/sessions/{session_id}", tags=["uploads"])
 
@@ -202,16 +203,6 @@ def get_sensor_coverage(
 # Sensor selection / removal
 # ---------------------------------------------------------------------------
 
-# Maps sensor_type (as stored in sensor_inventory) to the sensor_mapping slot
-# that holds the column name for that measurement kind.
-_SENSOR_TYPE_TO_SLOT: dict[str, str] = {
-    "wind_speed": "speed_col",
-    "wind_direction": "dir_col",
-    "temperature": "temp_col",
-    "pressure": "pressure_col",
-}
-
-
 class DeleteSensorsRequest(BaseModel):
     """Request body for POST /sensors/delete — a list of sensor names to remove."""
 
@@ -226,76 +217,15 @@ def delete_sensors(
 ) -> dict:
     """Remove unwanted sensors from the session inventory, mapping, and data.
 
-    Removes the named sensors from ``sensor_inventory``, clears their column
-    slot from ``sensor_mapping`` (by height), and drops their columns from both
-    the working and raw timeseries dataframes. If a height entry in the mapping
-    becomes entirely ``None`` after removal, the height is dropped from the
-    mapping. The exclusion is persisted to ``excluded_sensors`` in the
-    runconfig so the selection is authoritative and survives config saves and
-    datamodel-only re-imports. Loading the timeseries again or re-importing
-    from BrightHub clears the exclusion and restores the full dataset.
+    The same logic as the ``remove_sensors`` operation (``server/tools/sensors.py``), which
+    the workbench calls through the generated route so the removal can be undone; this route
+    stays for the current interface until Phase 3 retires it.
     """
     del session_id
-    if not state.sensor_inventory:
-        raise to_bad_request(ValueError("Sensor inventory is not loaded"))
-
-    removed: list[str] = []
-    not_found: list[str] = []
-
-    for name in body.sensor_names:
-        if name not in state.sensor_inventory:
-            not_found.append(name)
-            continue
-
-        meta = state.sensor_inventory.pop(name)
-        removed.append(name)
-
-        # Clean up the height-keyed sensor_mapping slot for this sensor type.
-        height = meta.get("height_m")
-        sensor_type = meta.get("sensor_type", "")
-        slot = _SENSOR_TYPE_TO_SLOT.get(str(sensor_type))
-        if slot is not None and height is not None:
-            # sensor_mapping keys are float heights; match loosely.
-            for map_height, slots in list(state.sensor_mapping.items()):
-                if abs(float(map_height) - float(height)) < 0.01 and slots.get(slot) == name:
-                    slots[slot] = None
-                    # Also clear auto-derived sd_col if this was a speed sensor.
-                    if slot == "speed_col":
-                        slots["sd_col"] = None
-                    # If every slot is now None, drop the height entirely.
-                    if all(v is None for v in slots.values()):
-                        del state.sensor_mapping[map_height]
-                    break
-
-    # Re-sort the mapping descending by height (consistent with parse_datamodel).
-    state.sensor_mapping = dict(sorted(state.sensor_mapping.items(), reverse=True))
-
-    if removed:
-        # The selection is authoritative: drop the excluded columns from the
-        # working and raw data so downstream analysis never sees them.
-        removed_set = set(removed)
-        for frame_attr in ("timeseries_df", "raw_timeseries_df"):
-            frame = getattr(state, frame_attr)
-            if frame is not None:
-                drop_cols = [column for column in frame.columns if column in removed_set]
-                if drop_cols:
-                    setattr(state, frame_attr, frame.drop(columns=drop_cols))
-
-        # Persist the exclusion so it survives config saves and datamodel-only
-        # re-imports. runconfig.json is the single source of truth — write through.
-        existing = state.runconfig.get("excluded_sensors")
-        excluded_list = [str(name) for name in existing] if isinstance(existing, list) else []
-        for name in removed:
-            if name not in excluded_list:
-                excluded_list.append(name)
-        state.runconfig["excluded_sensors"] = excluded_list
+    try:
+        result = _remove_sensors(state, body.sensor_names)
+    except ValueError as exc:
+        raise to_bad_request(exc) from exc
+    if result["removed"]:
         _persist_runconfig(state)
-
-    state.touch()
-
-    return {
-        "status": "ok",
-        "removed": removed,
-        "not_found": not_found,
-        "remaining_count": len(state.sensor_inventory),
-    }
+    return result

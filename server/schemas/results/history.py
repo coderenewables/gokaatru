@@ -5,6 +5,7 @@ from typing import Any
 
 from server.schemas.results._base import Result, RunConfig, Staleness
 from server.schemas.results.cleaning import ApplyCleaningRuleResult, UndoCleaningRuleResult
+from server.schemas.results.sensors import RemoveSensorsResult, RestoredSensors
 
 
 class LoggedCall(Result):
@@ -24,8 +25,8 @@ class UndoLastChangeResult(Staleness):
     status: str
     undone: LoggedCall
     #: A cleaning rule's undo is a replay from raw data; a configuration change's names the
-    #: paths restored.
-    detail: UndoCleaningRuleResult | RestoredPaths
+    #: paths restored; a sensor removal's names the sensors put back.
+    detail: UndoCleaningRuleResult | RestoredPaths | RestoredSensors
     can_undo: bool
     can_redo: bool
 
@@ -34,7 +35,7 @@ class RedoLastChangeResult(Staleness):
     status: str
     redone: LoggedCall
     #: What the change returned when it was made again.
-    detail: ApplyCleaningRuleResult | RunConfig
+    detail: ApplyCleaningRuleResult | RemoveSensorsResult | RunConfig
     can_undo: bool
     can_redo: bool
 

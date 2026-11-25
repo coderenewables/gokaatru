@@ -15,7 +15,7 @@ those citations have not been checked against the clause text, and the only word
 is "traced to", never "compliant with" or "follows".
 
 Two parts, one logic core:
-- **`server/`** — Python MCP server (FastMCP) + FastAPI web API. 98 tools across ingest,
+- **`server/`** — Python MCP server (FastMCP) + FastAPI web API. 103 tools across ingest,
   cleaning, statistics, shear/extrapolation, ERA5+MERRA-2 reanalysis, homogeneity, 5 LTC/MCP
   algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration,
   and a scenario **sweep/Analysis Engine**. DTU's WindKit (pinned `==2.2.0`) is used only
@@ -32,7 +32,10 @@ Two parts, one logic core:
   toggle (saved workflow-run comparison, retired as its own tab). A ⌘K command palette
   (`CommandPalette`) jumps to any phase/stage/preset/metric/gate or falls through to
   "Ask Copilot". See "Current state" below (2026-09-06 and 2026-09-07 entries) for the full
-  rationale.
+  rationale. The new workbench is built beside it at `/workbench/` (Phase 2: projects of
+  campaigns, Dockview panels, data tree and mast diagram, linked timeline, scatter, rose and
+  profile, flags drawn on the charts, undo through the server's history; `decisions/0014`), and
+  replaces it at the Phase 3 gate.
 
 **Single trusted user, local deployment.** No auth layer; the session id is the only
 credential. See README's "Deployment model" section before ever discussing hosting this for
@@ -187,12 +190,12 @@ the synthetic-data tests; `GOKAATRU_TEST_UPLOADS_DIR` points the suite at anothe
 folder, and a missing campaign file skips its test by name (`require_campaign_file` in
 `tests/conftest.py`), never errors.
 
-Current baseline (verified 2026-11-24, branch `phase1-foundations` at the Phase 1 gate):
-1572 backend tests passing / 4 skipped (each skip states its reason), 269 frontend tests
-passing (32 files), 1 Playwright smoke test passing, frontend typecheck and build clean, the
-generated API client current, 98 MCP tools registered and identical to the snapshot, and
-`ruff check server/ tests/` clean. Without the campaign files (CI run 45440289043, Ubuntu and
-Windows): 1510 passed / 66 skipped; all four CI jobs passed. These numbers move as the project
+Current baseline (verified 2026-11-25, branch `phase2-workbench` at the Phase 2 gate):
+1701 backend tests passing / 4 skipped (each skip states its reason), 346 frontend tests
+passing (45 files), 41 Playwright tests passing (the smoke test and the workbench's), frontend
+typecheck and build clean, the generated API client current, 103 MCP tools registered and
+identical to the snapshot, and `ruff check server/ tests/` clean. Without the campaign files
+(CI run 45592898191, Ubuntu and Windows): 1639 passed / 66 skipped; all four CI jobs passed. These numbers move as the project
 grows — `validate-gokaatru` always re-derives the live count rather than trusting any written
 baseline, this one included. Backend count assumes the gitignored `data/uploads/` fixtures are
 present (see the `tests/` layout note above); without them the tests that need them skip.
@@ -201,9 +204,17 @@ present (see the `tests/` layout note above); without them the tests that need t
 3 F841, 1 F811) had accumulated because `ruff>=0.1` is unpinned and the check was not being
 run to zero. They are all fixed now; keep it at zero rather than letting a second wall build.
 
-## Current state (last verified 2026-11-24)
+## Current state (last verified 2026-11-25)
 
-**2026-11-19 to 2026-11-24: workbench Phase 1 on branch `phase1-foundations`, gate passed and pushed (not merged).** Task list and status in `Claude outputs/WORKBENCH_PLAN.md` §8c; the gate is every published number identical, all tests passing through the new layer, and a project that reopens intact after a restart.
+**2026-11-25: workbench Phase 2 on branch `phase2-workbench`, gate passed and pushed (not merged).** Phase 1 was merged as PR #8. The owner's Phase 2 decisions, taken by interview on 2026-11-25, are `decisions/0014-workbench-prepare.md`; the task list is `Claude outputs/WORKBENCH_PLAN.md` §8d. The gate: browser tests for every Prepare row of plan §3.3; flags drawn on a chart equal, record for record, those of the old rules for the same records; every published number identical; every suite and CI green.
+
+- **P2-G, the gate (2026-11-25):** all of it holds. 1701 backend tests pass / 4 skipped, 346 frontend tests (45 files), 41 Playwright tests (smoke included), typecheck, build and the generated client clean, 103 MCP tools identical to the snapshot, ruff clean, every published number identical on the three campaigns. CI run 45592898191 green on all four jobs (Ubuntu and Windows backend 1639 passed / 66 skipped without the campaign files, frontend 346 in 45 files, Playwright 41). Flags drawn in the browser equal the old rules' (`e2e/flags.spec.ts`): a brushed period and `custom_period_exclude` over the same records, rose sectors and `tower_shadow` through the old route; the scatter box against `expression_filter` and the period against `custom_period_exclude` are also held on the server (`tests/test_exclude_selection.py`). **Open for the owner:** the energy sensitivity's order dependence (P1-5b) and the wording of decision 13's sweep exclusion, both carried from Phase 1. **Known, not fixed:** before a data model exists the sensors route guesses types from names, so the charts' defaults can include a statistic column (`Spd_100m_sd` read as a speed) until the model is built; the start screen fetches every project's details, which will be slow with many projects; the mast diagram scrolls inside the narrow Data panel, and a pointer drag to a level out of view needs the panel taller.
+- **Server (P2-1 to P2-8c):** polygon selections (lasso; even-odd rule, a rectangle equals its two half-open bands; the edge loop sorted by y took a 199-vertex lasso over 262,800 records from 1,037 ms to 59 ms). A `selection` is a saved name or an inline definition, and a read on an inline one is not logged (brushing is view state). `exclude_selection`, the rule a drawn flag applies: the definition frozen into the rule, the whole instrument as one log entry, a reason from `MANUAL_FLAG_REASONS` and a note. New reads `get_flag_intervals`, `get_scatter_pairs` (Arrow at `/sessions/{id}/pairs`), `summarise_channels`, `list_instruments`. `remove_sensors` is an operation with a dry run and undo (removed columns kept in `state.removed_sensors`); a rebuilt drafted data model is undoable, a campaign's own uploaded one refuses any build. Projects of campaigns (`/api/projects`, `server/state/projects.py`), one reanalysis node cache per project; a cached BrightHub node is reused when it reaches the campaign's last record. 98 -> 103 tools.
+- **Defects found on the way, each its own commit:** a replayed cleaning rule took the undoer's actor and time (P2-4a; the actor is now on each log entry, unhashed in the prefix); a data model declaring another timezone for records already in UTC was accepted while the records kept the first (P2-7a, refused now); a refused build left its document on disk (P2-7); a rebuilt mapping did not mark results stale (P2-7); a removal did not either (P2-6); the BrightHub route and preparation each had their own download loop (P2-8b); the project view read a campaign's site only from `runconfig.json`, which the generated routes do not write (P2-10a).
+- **Interface (P2-9 to P2-20), at `/workbench/` beside the current interface:** Dockview shell with a title-only tab (axe's nested-interactive), light and dark tokens; start screen of projects and campaigns, campaign switcher; data tree with every channel draggable onto a chart; loading by drop or chooser and the mast diagram (drafted model editable by drag, uploaded model read-only); timeline (uPlot over Arrow windows, brush, flag bands, arrows through flags); scatter (regl-scatterplot, own lasso); rose (sectors as the server bins them, tower-shadow proposal); profile; inspector (crossfilter terms and counts, flag the selection with preview, a proposed rule, the focused flag with one-click removal); undo and redo on Ctrl+Z / Ctrl+Shift+Z through the server's history; Ctrl+K palette; status bar (actions, data version, prefix hash, stale results); reanalysis acquisition one node at a time. Every browser spec fails on any error the page throws: two uPlot throws that left the timeline blank, and an unhandled regl rejection, were found that way. Each Playwright run's backend keeps its data in its own folder (`GOKAATRU_DATA_DIR`).
+- **Work split (decision 0014.13):** the timeline, scatter, start screen, reanalysis panel and mast diagram were built by Sonnet agents in separate worktrees, each verified and merged with its own follow-up fixes; the rest inline.
+
+**2026-11-19 to 2026-11-24: workbench Phase 1 on branch `phase1-foundations`, gate passed; merged by the owner as PR #8 (`cc35605`, 2026-11-25).** Task list and status in `Claude outputs/WORKBENCH_PLAN.md` §8c; the gate is every published number identical, all tests passing through the new layer, and a project that reopens intact after a restart.
 
 - **P1-G, the gate (2026-11-24):** all three items hold. Every test passes through the new layer: 1572 passed / 4 skipped locally (three disclosure fields this pipeline never reaches, and the operation log, which each surface logs differently by design), 269 frontend, Playwright, CI run 45440289043 green on all four jobs (Ubuntu and Windows backend 1510 / 66 without the campaign files). Every published number is identical on the three reference campaigns (Boxkite 6,093, Horns Rev 4,367, Launakalana 7,613). A project reopens after the server process is killed with every result, its log and its staleness intact (`tests/test_restart.py`, in the suite and in CI). The MCP surface equals its snapshot and the OpenAPI schema equals the committed one. 30 commits since `origin/master` (PR #7). **Still open for the owner:** the energy sensitivity depends on whether the atmospheric diagnostic ran first (P1-5b); the stray remote `phase0-stabilise` branch (pushed again by mistake after PR #5 merged it); confirmation of how decision 13's sweep exclusion is mentioned. **Carried to Phase 2:** the working frame is still stored with its missing values rather than derived from raw data plus flags; the hand-written routes and their logging middleware stay until the interface moves to the generated routes and client; the GitHub actions used target Node 20, which GitHub now forces onto Node 24 (annotation only).
 

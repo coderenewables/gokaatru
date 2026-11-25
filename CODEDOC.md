@@ -365,25 +365,46 @@ frontend/src/
 │   │                     #   frontend/workbench/index.html, a second Vite input
 │   ├── main.tsx          # React root, TanStack Query client, theme applied before render
 │   ├── Workbench.tsx     # ?campaign= opens the Shell, otherwise the StartScreen
-│   ├── StartScreen.tsx   # projects and their campaigns (GET /api/projects)
+│   ├── StartScreen.tsx, projects/  # projects of campaigns: new, rename, add a campaign,
+│   │                     #   each campaign's own site and timezone, a notice when they differ
 │   ├── api.ts            # the generated client on this origin; unwrap/refusal helpers
+│   ├── invalidate.ts     # every view of a campaign reads again after a change
 │   ├── storage.ts        # guarded localStorage for per-viewer conveniences
 │   ├── sensors.ts        # the sensors route's rows, checked (its response is untyped)
 │   ├── datatree/         # DataPanel: the data tree (list_instruments by height, statistics,
 │   │                     #   other channels, reanalysis, saved selections, flags); every
 │   │                     #   channel a dnd-kit draggable onto a chart
-│   ├── charts/, dnd.tsx, flags/  # chart channels store, the drop context, flag focus
+│   ├── timeline/         # uPlot over Arrow series windows (POST /series), refetched on
+│   │                     #   zoom; brush = the period term; flag bands (get_flag_intervals),
+│   │                     #   clicked or stepped with the arrow keys; drop a channel to add it
+│   ├── scatter/          # regl-scatterplot over Arrow pairs (POST /pairs, the shared
+│   │                     #   selection as the highlight); own SVG lasso = the polygon term;
+│   │                     #   draws queued (regl rejects a draw while one runs)
+│   ├── rose/             # SVG rose (compute_windrose_data), sectors binned as the server
+│   │                     #   bins them = the direction term; a run of sectors proposes a
+│   │                     #   tower-shadow rule
+│   ├── profile/          # SVG mean profile (compute_vertical_structure) for every record
+│   │                     #   and the selection, with each power-law exponent
+│   ├── reanalysis/       # BrightHub and EarthDataHub acquisition, one node at a time
+│   ├── charts/, dnd.tsx  # which channels each chart draws; the drop context resolving a
+│   │                     #   channel dropped on a chart
+│   ├── flags/            # the focused flag band; a rule a view proposes (draft.ts)
 │   ├── selection/        # store.ts: the crossfilter (decisions/0014.5), one term per view,
 │   │                     #   intersected, sent inline; describe.ts words a term for its chip
-│   ├── inspector/        # InspectorPanel, SelectionSection (count, terms, mean against all
-│   │                     #   records through summarise_channels)
-│   ├── theme/            # tokens.css (light and dark design tokens, the .gk-dockview
-│   │                     #   theme class over dockview's --dv-* variables), theme.ts
-│   └── shell/            # Shell.tsx (header, DockviewReact, status bar), layout.ts (the
-│                         #   six Prepare panels, default arrangement, stored layout),
-│                         #   tabs.tsx (title-only tab; close in the group actions, outside
-│                         #   role=tab, decisions/0006), panels.tsx (the view each panel
-│                         #   renders), context.ts (the open campaign for every panel)
+│   ├── inspector/        # the selection (count, terms, means through summarise_channels),
+│   │                     #   flagging it (instrument columns, reason, note, preview, apply:
+│   │                     #   one exclude_selection rule), a proposed rule, the focused flag
+│   │                     #   (who, when, why; remove its rule)
+│   ├── history/          # undo, redo and the status bar's history (get_operation_log,
+│   │                     #   get_fixed_prefix_hash), shared with the assistant and MCP
+│   ├── theme/            # tokens.css (light and dark design tokens, series colours, the
+│   │                     #   .gk-dockview theme class over dockview's --dv-* variables)
+│   └── shell/            # Shell.tsx (header with undo, redo and commands; DockviewReact;
+│                         #   status bar), layout.ts (the seven panels, default arrangement,
+│                         #   stored layout versioned with them), tabs.tsx (title-only tab;
+│                         #   close in the group actions, outside role=tab, decisions/0006),
+│                         #   panels.tsx, context.ts, keys.ts (Ctrl+Z, Ctrl+Shift+Z, Ctrl+K),
+│                         #   CommandPalette.tsx, CampaignSwitcher.tsx
 ├── App.tsx              # thin shell; gates on session existence, switches on activePhase
 ├── main.tsx             # React entry
 ├── components/
@@ -524,7 +545,7 @@ python -m pytest tests/ -v
 python -c "import asyncio; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())), 'tools')"
 ```
 
-### Frontend (`frontend/src/test/`, vitest — 32 files)
+### Frontend (`frontend/src/test/`, vitest — 45 files)
 
 Covers the stores, the workflow/DAG builder, stage-status logic, the sweep lifecycle and
 analysis, disclosure rendering, and the stage/results views.

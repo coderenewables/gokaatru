@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type Request } from "@playwright/test";
 
-import { campaignWithData, FROZEN_RECORDS, workbenchUrl } from "./fixtures";
+import { campaignWithData, FROZEN_RECORDS, pageErrors, workbenchUrl } from "./fixtures";
 
 // The scatter panel (P2-15, plan §3.3 "Scatter"): lasso the points that disagree and every
 // view shares the same selection. Headless Chromium draws WebGL in software, so these assert
@@ -65,6 +65,16 @@ async function open(page: Page) {
   return opened;
 }
 
+
+// A chart that throws inside its library draws nothing and passes every other check.
+let thrown: string[] = [];
+test.beforeEach(({ page }) => {
+  thrown = pageErrors(page);
+});
+test.afterEach(() => {
+  expect(thrown).toEqual([]);
+});
+
 test("the scatter draws the two highest speeds and passes axe", async ({ page }) => {
   await open(page);
   await expect(page.getByLabel("X axis")).toHaveValue("Spd_80m");
@@ -77,7 +87,7 @@ test("the scatter draws the two highest speeds and passes axe", async ({ page })
 test("a lasso around the frozen cup selects its records, counted by the server", async ({ page }) => {
   const opened = await open(page);
   const request = highlightedPairs(page);
-  await lasso(page, await strip(page, -0.4, 0.595));
+  await lasso(page, await strip(page, -0.4, 0.5));
   const selection = JSON.parse((await request).postData() ?? "{}").highlight as string;
   const polygon = JSON.parse(selection);
   expect(polygon.kind).toBe("polygon");
@@ -98,14 +108,14 @@ test("a lasso around the frozen cup selects its records, counted by the server",
 
 test("Escape clears the term and Shift adds a second lasso to the same chip", async ({ page }) => {
   await open(page);
-  await lasso(page, await strip(page, -0.4, 0.595));
+  await lasso(page, await strip(page, -0.4, 0.5));
   await expect(chip(page)).toBeVisible();
   await page.getByRole("img", { name: /Scatter of/ }).focus();
   await page.keyboard.press("Escape");
   await expect(chip(page)).toHaveCount(0);
   await expect(page.locator(".gk-scatter-caption")).not.toContainText("highlighted");
 
-  await lasso(page, await strip(page, -0.4, 0.595));
+  await lasso(page, await strip(page, -0.4, 0.5));
   await expect(chip(page)).toHaveCount(1);
   await lasso(page, [[0.3, 0.3], [0.6, 0.3], [0.6, 0.6], [0.3, 0.6]], true);
   await expect(chip(page)).toHaveCount(1);
@@ -132,7 +142,7 @@ for (const theme of ["light", "dark"] as const) {
       await page.getByRole("button", { name: "Dark theme" }).click();
       await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     }
-    await lasso(page, await strip(page, -0.4, 0.595));
+    await lasso(page, await strip(page, -0.4, 0.5));
     await expect(chip(page)).toBeVisible();
     await expect(page.locator(".gk-scatter-caption")).toContainText("highlighted");
     await expectNoAxeViolations(page);

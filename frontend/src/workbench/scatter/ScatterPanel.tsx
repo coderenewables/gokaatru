@@ -170,11 +170,18 @@ export function ScatterPanel(_props: IDockviewPanelProps) {
     });
   }, [box, theme]);
 
+  // regl-scatterplot refuses, with a rejected promise, a draw issued while the previous one
+  // is still running; draws are queued so each starts after the last, and a queued draw for
+  // a scatterplot since destroyed is dropped.
+  const drawing = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     const scatter = scatterRef.current;
     if (!scatter || !data || !ranges || box.width < 2) return;
     const points = plotPoints(data, ranges.x, ranges.y);
-    void scatter.draw({ x: points.x, y: points.y, category: points.category });
+    drawing.current = drawing.current.then(async () => {
+      if (scatterRef.current !== scatter) return;
+      await scatter.draw({ x: points.x, y: points.y, category: points.category });
+    });
   }, [data, ranges, box, theme]);
 
   const polygons: Polygon[] = polygonsOf(term, x, y);

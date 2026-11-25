@@ -3,8 +3,9 @@ import { expect, type Page } from "@playwright/test";
 // A campaign with records, for the workbench's browser tests: 30 days of 10-minute data on a
 // mast at 60, 80 and 100 m with a vane and a thermometer at 100 m, uploaded through the real
 // route and given a data model through the generated operation. Deterministic, so a test can
-// name the records it expects. Spd_100m reads under 0.6 m/s for FROZEN_RECORDS records from
-// FROZEN_START while the lower cups keep turning: a frozen cup, for the flag tests.
+// name the records it expects. Spd_100m reads 0.35 to 0.43 m/s for FROZEN_RECORDS records
+// from FROZEN_START while the lower cups keep turning, and never under 0.6 m/s otherwise: a
+// frozen cup, for the flag tests, with a clear gap a lasso or a band can cut through.
 
 export const FIXTURE_START = Date.UTC(2023, 2, 1);
 export const STEP_MS = 10 * 60 * 1000;
@@ -45,7 +46,8 @@ export function fixtureCsv(): string {
     const at60 = Math.max(0.3, speed * (60 / 100) ** alpha + 0.12 * gauss());
     direction += 0.06 * (235 + 50 * Math.sin((day * 2 * Math.PI) / 6.5) - direction) + 5 * gauss();
     const frozen = i >= FROZEN_START && i < FROZEN_START + FROZEN_RECORDS;
-    const at100 = frozen ? 0.35 + 0.08 * Math.abs(gauss()) : speed;
+    // A frozen cup reads a near-constant value well under the working cup's 0.6 m/s floor.
+    const at100 = frozen ? 0.35 + 0.02 * (i % 5) : speed;
     const temperature = 6 + 4 * Math.sin(((i % 144) / 144) * 2 * Math.PI) + 0.5 * gauss();
     rows.push(
       [stamp(i), at100, at80, at60, ((direction % 360) + 360) % 360, temperature, 0.1 * at100 + 0.05 * Math.abs(gauss())]

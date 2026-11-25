@@ -24,6 +24,7 @@ from server.api.routes.exports import router as exports_router
 from server.api.routes.health import router as health_router
 from server.api.routes.mcp import router as mcp_router
 from server.api.routes.operations import router as operations_router
+from server.api.routes.projects import router as projects_router
 from server.api.routes.results import router as results_router
 from server.api.routes.series import router as series_router
 from server.api.routes.sessions import router as sessions_router
@@ -91,6 +92,7 @@ def create_app() -> FastAPI:
     app.include_router(chat_router, prefix="/api")
     app.include_router(operations_router, prefix="/api")
     app.include_router(series_router, prefix="/api")
+    app.include_router(projects_router, prefix="/api")
 
     def _session_manager_provider():
         override = app.dependency_overrides.get(get_session_manager)

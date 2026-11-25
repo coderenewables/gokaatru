@@ -130,6 +130,9 @@ class SessionState:
     # The data model the mapping was parsed from: its file, whether the builder wrote it
     # (only a built one may be edited, decisions/0014.8) and, for one built here, the spec.
     datamodel_origin: dict[str, object] | None
+    # The project this campaign belongs to (decisions/0014.11): its id and the folder of the
+    # reanalysis node cache its campaigns share. None for a session outside any project.
+    project: dict[str, str] | None
 
     def __init__(self) -> None:
         """Initialize the singleton session state per the GoKaatru build spec."""
@@ -144,6 +147,8 @@ class SessionState:
         preserved_session_id = self.session_id if preserve_workspace else None
         preserved_workspace_dir = self.workspace_dir if preserve_workspace else None
         preserved_created_at = self.created_at if preserve_workspace else None
+        # Resetting a campaign clears its analysis, not which project it belongs to.
+        preserved_project = getattr(self, "project", None) if preserve_workspace else None
         self.project_name = None
         self.coordinate = None
         self.measurement_type = None
@@ -200,6 +205,7 @@ class SessionState:
         self.session_id = preserved_session_id
         self.workspace_dir = preserved_workspace_dir
         self.created_at = preserved_created_at
+        self.project = preserved_project
         self.updated_at = _utcnow() if preserve_workspace else None
 
     def touch(self) -> None:
@@ -592,6 +598,18 @@ class SessionState:
         data_dir = self.workspace_dir if self.workspace_dir is not None else Path("data")
         data_dir.mkdir(parents=True, exist_ok=True)
         return str(data_dir)
+
+    def reanalysis_cache_dir(self, provider: str) -> Path:
+        """Where a provider's reanalysis nodes are cached: the project's shared cache for a
+        campaign in one (decisions/0014.11), the session's own folder otherwise. Files are
+        keyed by dataset and node coordinate, so campaigns at different coordinates share
+        a node without confusing it."""
+        if self.project is not None:
+            folder = Path(self.project["cache_dir"]) / provider
+        else:
+            folder = Path(self.get_data_dir()) / f"{provider}_cache"
+        folder.mkdir(parents=True, exist_ok=True)
+        return folder
 
 
 _default_session = SessionState()

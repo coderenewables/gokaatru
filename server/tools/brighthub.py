@@ -406,13 +406,11 @@ _BRIGHTHUB_CACHE_TOKENS = {"ERA5": "ERA5", "MERRA-2": "MERRA-2"}
 def _brighthub_cache_path(state: SessionState, dataset: str, latitude: float, longitude: float) -> Path:
     """Build the standard BrightHub reanalysis cache parquet path for a node.
 
-    Mirrors the EarthDataHub ``_era5_cache_path`` layout (``earthdatahub_cache/``) so each
-    session owns its downloaded BrightHub ERA5 / MERRA-2 files under ``brighthub_cache/``.
+    Mirrors the EarthDataHub ``_era5_cache_path`` layout: the session's ``brighthub_cache/``,
+    or the project's shared cache for a campaign in one (``SessionState.reanalysis_cache_dir``).
     """
     token = _BRIGHTHUB_CACHE_TOKENS.get(dataset, dataset.replace(" ", "-"))
-    cache_dir = Path(state.get_data_dir()) / "brighthub_cache"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir / f"{token}_{latitude}_{longitude}.parquet"
+    return state.reanalysis_cache_dir("brighthub") / f"{token}_{latitude}_{longitude}.parquet"
 
 
 def _persist_reanalysis_frame(

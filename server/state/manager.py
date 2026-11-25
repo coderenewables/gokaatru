@@ -119,6 +119,7 @@ class SessionManager:
         target.selections = copy.deepcopy(source.selections)
         target.removed_sensors = copy.deepcopy(source.removed_sensors)
         target.datamodel_origin = copy.deepcopy(source.datamodel_origin)
+        target.project = copy.deepcopy(source.project)
 
         target.timezone = source.timezone
         target.clipping_result = copy.deepcopy(source.clipping_result)

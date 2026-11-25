@@ -1,6 +1,25 @@
 {
  "components": {
   "schemas": {
+   "AddCampaign": {
+    "additionalProperties": false,
+    "properties": {
+     "kind": {
+      "title": "Kind",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "kind"
+    ],
+    "title": "AddCampaign",
+    "type": "object"
+   },
    "AirDensitySummary": {
     "additionalProperties": false,
     "properties": {
@@ -3122,6 +3141,109 @@
      "energy_sensitivity"
     ],
     "title": "CalculateUncertaintyResult",
+    "type": "object"
+   },
+   "Campaign": {
+    "additionalProperties": false,
+    "properties": {
+     "added_at": {
+      "title": "Added At",
+      "type": "string"
+     },
+     "kind": {
+      "title": "Kind",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "session_id": {
+      "title": "Session Id",
+      "type": "string"
+     }
+    },
+    "required": [
+     "session_id",
+     "name",
+     "kind",
+     "added_at"
+    ],
+    "title": "Campaign",
+    "type": "object"
+   },
+   "CampaignSite": {
+    "additionalProperties": false,
+    "description": "A campaign with its site as its own data model and configuration declare it.",
+    "properties": {
+     "added_at": {
+      "title": "Added At",
+      "type": "string"
+     },
+     "elevation_m": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Elevation M"
+     },
+     "kind": {
+      "title": "Kind",
+      "type": "string"
+     },
+     "latitude": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Latitude"
+     },
+     "longitude": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Longitude"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "session_id": {
+      "title": "Session Id",
+      "type": "string"
+     },
+     "timezone": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Timezone"
+     }
+    },
+    "required": [
+     "session_id",
+     "name",
+     "kind",
+     "added_at"
+    ],
+    "title": "CampaignSite",
     "type": "object"
    },
    "CandidateWindow": {
@@ -7154,6 +7276,25 @@
      "elevation_m"
     ],
     "title": "Coordinate",
+    "type": "object"
+   },
+   "CreateProject": {
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "site_name": {
+      "default": "",
+      "title": "Site Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "CreateProject",
     "type": "object"
    },
    "CreateSessionResponse": {
@@ -13517,6 +13658,112 @@
     "title": "ProfilePoint",
     "type": "object"
    },
+   "Project": {
+    "additionalProperties": false,
+    "properties": {
+     "campaigns": {
+      "items": {
+       "$ref": "#/components/schemas/Campaign"
+      },
+      "title": "Campaigns",
+      "type": "array"
+     },
+     "created_at": {
+      "title": "Created At",
+      "type": "string"
+     },
+     "id": {
+      "title": "Id",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "site_name": {
+      "title": "Site Name",
+      "type": "string"
+     },
+     "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "site_name",
+     "created_at",
+     "updated_at",
+     "campaigns"
+    ],
+    "title": "Project",
+    "type": "object"
+   },
+   "ProjectDetail": {
+    "additionalProperties": false,
+    "properties": {
+     "campaigns": {
+      "items": {
+       "$ref": "#/components/schemas/CampaignSite"
+      },
+      "title": "Campaigns",
+      "type": "array"
+     },
+     "created_at": {
+      "title": "Created At",
+      "type": "string"
+     },
+     "id": {
+      "title": "Id",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "site_name": {
+      "title": "Site Name",
+      "type": "string"
+     },
+     "timezones_differ": {
+      "title": "Timezones Differ",
+      "type": "boolean"
+     },
+     "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "site_name",
+     "created_at",
+     "updated_at",
+     "campaigns",
+     "timezones_differ"
+    ],
+    "title": "ProjectDetail",
+    "type": "object"
+   },
+   "ProjectList": {
+    "additionalProperties": false,
+    "properties": {
+     "projects": {
+      "items": {
+       "$ref": "#/components/schemas/Project"
+      },
+      "title": "Projects",
+      "type": "array"
+     }
+    },
+    "required": [
+     "projects"
+    ],
+    "title": "ProjectList",
+    "type": "object"
+   },
    "QcSensor": {
     "additionalProperties": false,
     "properties": {
@@ -14180,6 +14427,20 @@
      "columns_dropped"
     ],
     "title": "RemoveSensorsResult",
+    "type": "object"
+   },
+   "RenameCampaign": {
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "RenameCampaign",
     "type": "object"
    },
    "Residual": {
@@ -18480,6 +18741,35 @@
     "title": "UndoLastChangeResult",
     "type": "object"
    },
+   "UpdateProject": {
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "site_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Site Name"
+     }
+    },
+    "title": "UpdateProject",
+    "type": "object"
+   },
    "UpdateRunConfigParameters": {
     "additionalProperties": false,
     "properties": {
@@ -20907,6 +21197,377 @@
     "summary": "List Operations",
     "tags": [
      "operations"
+    ]
+   }
+  },
+  "/api/projects": {
+   "get": {
+    "description": "Every project, most recently changed first.",
+    "operationId": "list_projects_api_projects_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProjectList"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "List Projects",
+    "tags": [
+     "projects"
+    ]
+   },
+   "post": {
+    "description": "A new project with no campaigns yet.",
+    "operationId": "create_project_api_projects_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CreateProject"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Project"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Create Project",
+    "tags": [
+     "projects"
+    ]
+   }
+  },
+  "/api/projects/{project_id}": {
+   "get": {
+    "description": "The project, each campaign with its own coordinate and timezone.",
+    "operationId": "get_project_api_projects__project_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "project_id",
+      "required": true,
+      "schema": {
+       "title": "Project Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProjectDetail"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Project",
+    "tags": [
+     "projects"
+    ]
+   },
+   "patch": {
+    "description": "Rename the project or its site.",
+    "operationId": "update_project_api_projects__project_id__patch",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "project_id",
+      "required": true,
+      "schema": {
+       "title": "Project Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UpdateProject"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Project"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Update Project",
+    "tags": [
+     "projects"
+    ]
+   }
+  },
+  "/api/projects/{project_id}/campaigns": {
+   "post": {
+    "description": "A new campaign in the project: a new session, sharing the project's reanalysis cache.",
+    "operationId": "add_campaign_api_projects__project_id__campaigns_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "project_id",
+      "required": true,
+      "schema": {
+       "title": "Project Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AddCampaign"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Campaign"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Add Campaign",
+    "tags": [
+     "projects"
+    ]
+   }
+  },
+  "/api/projects/{project_id}/campaigns/{session_id}": {
+   "patch": {
+    "description": "Rename one of the project's campaigns.",
+    "operationId": "rename_campaign_api_projects__project_id__campaigns__session_id__patch",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "project_id",
+      "required": true,
+      "schema": {
+       "title": "Project Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RenameCampaign"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Project"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Rename Campaign",
+    "tags": [
+     "projects"
     ]
    }
   },

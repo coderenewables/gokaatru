@@ -150,6 +150,10 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
+| `/projects` | GET, POST | List projects, most recently changed first; create one (`name`, `site_name`). A project holds the campaigns measured at one site and one reanalysis node cache they share (decisions/0014.11) |
+| `/projects/{id}` | GET, PATCH | One project with each campaign's own coordinate and timezone (read from its configuration) and `timezones_differ`, shown and never reconciled; rename it or its site |
+| `/projects/{id}/campaigns` | POST | Add a campaign (`name`, `kind`: `mast`, `lidar` or `floating_lidar`): a new session, reopened by its own id after a restart, whose reanalysis nodes are cached in the project |
+| `/projects/{id}/campaigns/{session_id}` | PATCH | Rename a campaign |
 | `/sessions` | POST | Create a new browser session |
 | `/sessions/{id}` | GET | Session summary + `completed_steps` |
 | `/sessions/{id}/config` | GET/PUT | Read or update runconfig |

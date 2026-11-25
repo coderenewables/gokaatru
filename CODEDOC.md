@@ -257,6 +257,7 @@ logic as the MCP tools, and shape the response with the Pydantic models in `sche
 | `uploads.py` | 7 | Timeseries/datamodel upload, the data model builder (draft/build), sensor inventory + coverage, delete. |
 | `results.py` | 5 | LTC/ensemble results, plots, site map, runconfig export. |
 | `sessions.py` | 4 | Session lifecycle. |
+| `projects.py` | 6 | Projects of campaigns (decisions/0014.11): list, create, read (each campaign's coordinate and timezone, `timezones_differ`), rename, add a campaign (a new session), rename a campaign. Workspace management above the sessions, like `POST /sessions`, so routes and not operations. |
 | `exports.py` | 4 | File downloads (timeseries CSV, LTC CSV, ensemble CSV, runconfig JSON). |
 | `config.py` | 3 | Runconfig get/update + workflow summary. |
 | `mcp.py` | 1 | MCP catalog endpoint. |
@@ -275,6 +276,7 @@ browser session and an MCP client can share the same live session state.
 | `session.py` | `SessionState` — the mutating singleton holding all working data for one analysis (loaded frames, derived tables, LTC results, runconfig). Bound per-session through a `ContextVar` (`session`). Carries `data_version` stamps: `stamp_derived()` / `staleness_report()` implement the **no-silent-recomputation** rule (derived artifacts are marked stale, never auto-recomputed). |
 | `manager.py` | `SessionManager` — the registry of browser workspaces (create / get / fork / delete). `_clone_session_state` copies every `SessionState` field; `_CLONE_EXCLUDED` names the identity fields a fork must not inherit. A coverage test enforces that every attribute is cloned or excluded. |
 | `dataset_pool.py` | Shared dataset-pool storage and metadata, so an ingested dataset can be reused across sessions. |
+| `projects.py` | `ProjectRegistry` (decisions/0014.11): projects beside the session workspaces, `data/projects/<id>/project.json` (name, site name, campaigns) and `reanalysis_cache/`, which every campaign's `SessionState.reanalysis_cache_dir` resolves to (`state.project`), so a node downloaded for one campaign is a cache hit for another. Read from disk on every call; a project id must be 32 hex characters, so it cannot reach outside the folder. Campaign kinds: `CAMPAIGN_KINDS`. |
 | `project.py` | `ProjectStore` (decisions/0010): a session's state on disk. Raw inputs stay in `uploads/`, each with its SHA-256 in `catalogue.sqlite`; opening refuses (`ProjectIntegrityError`, HTTP 409) if one was changed or removed. Every DataFrame is written to `working/<content sha256>.parquet`, so an unchanged frame is not rewritten and identical frames are stored once; every other field is JSON in the catalogue. `EXCLUDED_FIELDS` names what is never written and why (identity, credentials, in-flight run status). `SessionManager.get_session` reopens a saved project after a restart, falling back to `runconfig.json` alone for a workspace without one. |
 
 ### 4.7 `server/schemas/`

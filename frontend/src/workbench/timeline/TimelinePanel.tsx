@@ -11,6 +11,7 @@ import { useSelection } from "../selection/store";
 import { speedChannels, useSensors } from "../sensors";
 import { useCampaign } from "../shell/context";
 import {
+  adjacentBand,
   bandAt,
   brushTerm,
   CLICK_PIXELS,
@@ -411,6 +412,18 @@ export function TimelinePanel() {
             style={{ position: "absolute", inset: 0 }}
             onKeyDown={(event) => {
               if (event.key === "Escape") clear("timeline");
+              if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+                const band = adjacentBand(
+                  flags.data ?? [],
+                  useFlagFocus.getState().focused,
+                  event.key === "ArrowRight" ? 1 : -1,
+                );
+                if (band) {
+                  event.preventDefault();
+                  focusFlag({ sensor: band.sensor, interval: band.interval });
+                  setAnnouncement(flagLine(band));
+                }
+              }
             }}
           />
         )}

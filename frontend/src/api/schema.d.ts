@@ -2460,7 +2460,8 @@ export interface paths {
         put?: never;
         /**
          * get_operation_log
-         * @description Return the most recent operation calls: who, what, with which parameters, and the undo state.
+         * @description Return the most recent operation calls: who, what, with which parameters, the undo state,
+         *     and which derived results are stale.
          */
         post: operations["operation_get_operation_log_api_sessions__session_id__operations_get_operation_log_post"];
         delete?: never;
@@ -7397,12 +7398,22 @@ export interface components {
             can_redo: boolean;
             /** Can Undo */
             can_undo: boolean;
+            /** Data Version */
+            data_version: number;
             /** Entries */
             entries: components["schemas"]["OperationLogEntry"][];
+            /** Stale Artifacts */
+            stale_artifacts: string[];
+            /** Stale Reasons */
+            stale_reasons?: {
+                [key: string]: string | null;
+            } | null;
             /** Total */
             total: number;
             /** Undo Stack */
             undo_stack: number[];
+            /** Warning */
+            warning?: string | null;
         };
         /** GetPeriodOfRecordParameters */
         GetPeriodOfRecordParameters: Record<string, never>;

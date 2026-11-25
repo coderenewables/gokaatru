@@ -1549,7 +1549,7 @@
  },
  {
   "annotations": null,
-  "description": "Return the most recent operation calls: who, what, with which parameters, and the undo state.",
+  "description": "Return the most recent operation calls: who, what, with which parameters, the undo state,\nand which derived results are stale.",
   "execution": null,
   "icons": null,
   "inputSchema": {

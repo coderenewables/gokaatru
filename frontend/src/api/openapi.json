@@ -9815,12 +9815,44 @@
       "title": "Can Undo",
       "type": "boolean"
      },
+     "data_version": {
+      "title": "Data Version",
+      "type": "integer"
+     },
      "entries": {
       "items": {
        "$ref": "#/components/schemas/OperationLogEntry"
       },
       "title": "Entries",
       "type": "array"
+     },
+     "stale_artifacts": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Stale Artifacts",
+      "type": "array"
+     },
+     "stale_reasons": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stale Reasons"
      },
      "total": {
       "title": "Total",
@@ -9832,9 +9864,22 @@
       },
       "title": "Undo Stack",
       "type": "array"
+     },
+     "warning": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Warning"
      }
     },
     "required": [
+     "data_version",
+     "stale_artifacts",
      "total",
      "entries",
      "undo_stack",
@@ -31046,7 +31091,7 @@
   },
   "/api/sessions/{session_id}/operations/get_operation_log": {
    "post": {
-    "description": "Return the most recent operation calls: who, what, with which parameters, and the undo state.",
+    "description": "Return the most recent operation calls: who, what, with which parameters, the undo state,\nand which derived results are stale.",
     "operationId": "operation_get_operation_log_api_sessions__session_id__operations_get_operation_log_post",
     "parameters": [
      {

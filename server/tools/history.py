@@ -269,6 +269,8 @@ def _get_operation_log(state: SessionState, limit: int) -> dict[str, Any]:
         "undo_stack": list(state.undo_stack),
         "can_undo": bool(_applied(state)),
         "can_redo": bool(state.undo_stack),
+        # The workbench's status bar reads the history and what is stale in one call.
+        **state.staleness_report(),
     }
 
 
@@ -286,5 +288,6 @@ def redo_last_change() -> dict:
 
 @operation(effect="read", stage="config", canvas=False, result=result_models.GetOperationLogResult)
 def get_operation_log(limit: int = 50) -> dict:
-    """Return the most recent operation calls: who, what, with which parameters, and the undo state."""
+    """Return the most recent operation calls: who, what, with which parameters, the undo state,
+    and which derived results are stale."""
     return _get_operation_log(session, limit)

@@ -348,3 +348,68 @@
   margin: 2px 0 0;
   font-size: 12px;
 }
+
+.gk-stale {
+  color: var(--gk-flag);
+  font-weight: 600;
+}
+
+.gk-status-said {
+  margin-left: auto;
+  color: var(--gk-text);
+}
+
+.gk-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.gk-palette {
+  width: min(520px, calc(100vw - 32px));
+  border: 1px solid var(--gk-border-strong);
+  border-radius: 8px;
+  background: var(--gk-surface);
+  color: var(--gk-text);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.gk-palette input {
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-bottom: 1px solid var(--gk-border);
+  background: var(--gk-surface);
+  color: var(--gk-text);
+  font: inherit;
+  font-size: 15px;
+}
+
+.gk-palette ul {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.gk-command {
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.gk-command[aria-disabled="true"] {
+  color: var(--gk-muted);
+  cursor: not-allowed;
+}
+
+.gk-command-active {
+  background: var(--gk-accent-soft);
+}

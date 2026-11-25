@@ -127,6 +127,26 @@ export interface FlagBand {
   end: number;
 }
 
+/** The band after (``1``) or before (``-1``) the focused one in time, for the arrow keys
+ * (plan §3.3 "Anywhere"); with none focused, the first or the last. Bands starting together
+ * keep their order by channel. */
+export function adjacentBand(
+  bands: FlagBand[],
+  focused: { sensor: string; interval: FlagInterval } | null,
+  direction: 1 | -1,
+): FlagBand | null {
+  if (bands.length === 0) return null;
+  const ordered = [...bands].sort((a, b) => a.start - b.start || a.sensor.localeCompare(b.sensor));
+  const at = focused
+    ? ordered.findIndex(
+        (band) => band.sensor === focused.sensor && band.interval.first === focused.interval.first &&
+          band.interval.rule_sequence === focused.interval.rule_sequence,
+      )
+    : -1;
+  if (at === -1) return direction === 1 ? ordered[0] : ordered[ordered.length - 1];
+  return ordered[at + direction] ?? null;
+}
+
 /** A flagged run as the band it paints: from its first record to the next one's, or past the
  * last by one step when it ends the record. */
 export function flagBand(sensor: string, interval: FlagInterval, stepMs = DEFAULT_STEP_MS): FlagBand {

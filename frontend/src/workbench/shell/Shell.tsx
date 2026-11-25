@@ -1,15 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent } from "dockview-react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, unwrap } from "../api";
 import { dropOnChart, useCharts } from "../charts/store";
 import { WorkbenchDnd } from "../dnd";
 import { useSelection } from "../selection/store";
 import { useTheme } from "../theme/theme";
+import { useHistory } from "../history/useHistory";
 import { CampaignSwitcher } from "./CampaignSwitcher";
+import { type Command, CommandPalette } from "./CommandPalette";
 import { Campaign } from "./context";
-import { addDefaultLayout, forgetLayout, saveLayout, storedLayout } from "./layout";
+import { keyCommand } from "./keys";
+import { PANELS, type PanelId, addDefaultLayout, forgetLayout, saveLayout, storedLayout } from "./layout";
 import { panelComponents } from "./panels";
 import { GroupActions, TabTitle } from "./tabs";
 
@@ -69,6 +72,44 @@ export function Shell({ sessionId, projectId }: ShellProps) {
     saveLayout(current);
   }, []);
 
+  const history = useHistory(sessionId);
+  const [palette, setPalette] = useState(false);
+  const { undo, redo } = history;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const command = keyCommand(event);
+      if (command === null) return;
+      event.preventDefault();
+      if (command === "palette") setPalette(true);
+      else if (command === "undo") undo();
+      else redo();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
+
+  const showPanel = useCallback((id: PanelId) => {
+    const current = dockview.current;
+    if (!current) return;
+    const panel = current.getPanel(id) ?? current.addPanel({ id, component: id, title: PANELS[id] });
+    panel.api.setActive();
+  }, []);
+
+  const commands: Command[] = [
+    { id: "undo", label: "Undo the last change", run: undo, disabled: !history.canUndo },
+    { id: "redo", label: "Redo", run: redo, disabled: !history.canRedo },
+    { id: "clear", label: "Clear the selection", run: () => useSelection.getState().clearAll() },
+    ...(Object.keys(PANELS) as PanelId[]).map((id) => ({
+      id: `show-${id}`,
+      label: `Show the ${PANELS[id]} panel`,
+      run: () => showPanel(id),
+    })),
+    { id: "reset", label: "Reset the layout", run: resetLayout },
+    { id: "theme", label: theme === "dark" ? "Use the light theme" : "Use the dark theme", run: toggleTheme },
+  ];
+  const log = history.log;
+  const stale = log?.stale_artifacts ?? [];
+
   return (
     <div className="gk-app">
       <header className="gk-header">
@@ -89,6 +130,35 @@ export function Shell({ sessionId, projectId }: ShellProps) {
           </a>
         </nav>
         <div className="gk-header-actions">
+          <button
+            type="button"
+            className="gk-header-button"
+            onClick={undo}
+            disabled={!history.canUndo}
+            aria-keyshortcuts="Control+Z"
+            title="Undo the last change (Ctrl+Z)"
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            className="gk-header-button"
+            onClick={redo}
+            disabled={!history.canRedo}
+            aria-keyshortcuts="Control+Shift+Z Control+Y"
+            title="Redo (Ctrl+Shift+Z)"
+          >
+            Redo
+          </button>
+          <button
+            type="button"
+            className="gk-header-button"
+            onClick={() => setPalette(true)}
+            aria-keyshortcuts="Control+K"
+            title="Every command (Ctrl+K)"
+          >
+            Commands
+          </button>
           <button type="button" className="gk-header-button" onClick={resetLayout}>
             Reset layout
           </button>
@@ -117,9 +187,25 @@ export function Shell({ sessionId, projectId }: ShellProps) {
           <>
             <span>{summary.data?.timeseries_loaded ? "Records loaded" : "No records loaded"}</span>
             <span>{summary.data?.datamodel_loaded ? "Data model loaded" : "No data model"}</span>
+            {log && (
+              <>
+                <span>{log.total === 1 ? "1 action" : `${log.total} actions`}</span>
+                <span>data version {log.data_version}</span>
+              </>
+            )}
+            {history.prefix && <span title={history.prefix.fixed_prefix_hash}>prefix {history.prefix.fixed_prefix_hash.slice(0, 8)}</span>}
+            {stale.length > 0 && (
+              <span className="gk-stale" title={log?.warning ?? undefined}>
+                {stale.length === 1 ? "1 result stale" : `${stale.length} results stale`}
+              </span>
+            )}
+            <span aria-live="polite" className="gk-status-said">
+              {history.said}
+            </span>
           </>
         )}
       </footer>
+      {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
     </div>
   );
 }

@@ -65,7 +65,7 @@ class OperationLogEntry(Result):
     undo: dict[str, Any] | None = None
 
 
-class GetOperationLogResult(Result):
+class GetOperationLogResult(Staleness):
     total: int
     entries: list[OperationLogEntry]
     #: Log sequence numbers of undone changes that can be redone, newest last.

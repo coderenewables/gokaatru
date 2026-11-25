@@ -7,6 +7,7 @@ import { dropOnChart, useCharts } from "../charts/store";
 import { WindowDrop } from "../datamodel/WindowDrop";
 import { WorkbenchDnd } from "../dnd";
 import { usePipeline } from "../model/store";
+import { resetRunPhase } from "../run/store";
 import { useSelection } from "../selection/store";
 import { useTheme } from "../theme/theme";
 import { useHistory } from "../history/useHistory";
@@ -67,6 +68,7 @@ export function Shell({ sessionId, projectId }: ShellProps) {
   useEffect(() => {
     useSelection.getState().clearAll();
     useCharts.getState().reset();
+    resetRunPhase();
   }, [sessionId]);
 
   const onReady = useCallback((event: DockviewReadyEvent) => {

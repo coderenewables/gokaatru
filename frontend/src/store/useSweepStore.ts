@@ -145,7 +145,7 @@ interface SweepStore {
   reset: () => void;
 }
 
-function toRequestBody(selection: SweepSelection): SweepRequestBody {
+export function toRequestBody(selection: SweepSelection): SweepRequestBody {
   return {
     shear_fit_policies: selection.shearFitPolicies,
     reference_policies: selection.referencePolicies,

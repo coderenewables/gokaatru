@@ -11,6 +11,8 @@ import { OverviewPanel } from "../prepare/OverviewPanel";
 import { RulesPanel } from "../prepare/RulesPanel";
 import { ReanalysisPanel } from "../reanalysis/ReanalysisPanel";
 import { RosePanel } from "../rose/RosePanel";
+import { MatrixPanel } from "../run/MatrixPanel";
+import { MonitorPanel } from "../run/MonitorPanel";
 import { ScatterPanel } from "../scatter/ScatterPanel";
 import { TimelinePanel } from "../timeline/TimelinePanel";
 import { PANEL_TITLES, PHASE_PANELS, type PanelId, type PhaseId } from "./layout";
@@ -63,6 +65,8 @@ const BUILT: Partial<Record<PanelId, FunctionComponent<IDockviewPanelProps>>> = 
   inspector: InspectorPanel,
   palette: PalettePanel,
   pipeline: PipelinePanel,
+  matrix: MatrixPanel,
+  monitor: MonitorPanel,
   profile: ProfilePanel,
   overview: OverviewPanel,
   reanalysis: ReanalysisPanel,

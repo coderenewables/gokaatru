@@ -401,6 +401,11 @@ frontend/src/
 │   │                     #   each from its operation, a refusal shown as the server's reason;
 │   │                     #   rules.ts: the request a rule's form makes (decisions/0015.13)
 │   ├── reanalysis/       # BrightHub and EarthDataHub acquisition, one node at a time
+│   ├── run/              # the Run phase (decisions/0015.6): design.ts (axes, presets, retain what the
+│   │                     #   campaign can run, the request body), store.ts (design, run and latest-sweep
+│   │                     #   stores per campaign; setDesign takes a request-shaped spec), progress.ts (SSE
+│   │                     #   reducer), stream.ts (fetch reader), MatrixPanel (levels, live /estimate with
+│   │                     #   duplicates and refusals), MonitorPanel (events, outcome, not-swept sentence)
 │   ├── charts/, dnd.tsx  # which channels each chart draws; the drop context resolving a
 │   │                     #   channel dropped on a chart
 │   ├── flags/            # the focused flag band; a rule a view proposes (draft.ts)

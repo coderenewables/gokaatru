@@ -1,0 +1,82 @@
+.gk-rose {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.gk-rose-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  align-self: stretch;
+  font-size: 13px;
+}
+
+.gk-rose-chart {
+  width: 100%;
+  max-width: 260px;
+  aspect-ratio: 1;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.gk-rose-ring {
+  fill: none;
+  stroke: var(--gk-border);
+  stroke-width: 1;
+}
+
+.gk-rose-all {
+  fill: var(--gk-border-strong);
+  stroke: var(--gk-surface);
+  stroke-width: 1;
+}
+
+.gk-rose-selected {
+  fill: var(--gk-accent);
+  stroke: var(--gk-surface);
+  stroke-width: 1;
+}
+
+.gk-rose-picked {
+  fill: var(--gk-select-soft);
+  stroke: var(--gk-accent);
+  stroke-width: 1.2;
+}
+
+.gk-rose-label {
+  fill: var(--gk-muted);
+  font-size: 11px;
+  text-anchor: middle;
+}
+
+.gk-rose-sectors {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+  align-self: stretch;
+}
+
+.gk-rose-sectors button {
+  height: 28px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid var(--gk-border-strong);
+  background: var(--gk-surface);
+  color: var(--gk-text);
+  font-size: 12px;
+}
+
+.gk-rose-sectors button[aria-pressed="true"] {
+  border-color: var(--gk-accent);
+  background: var(--gk-accent);
+  color: var(--gk-accent-text);
+}
+
+.gk-drop-over {
+  outline: 2px dashed var(--gk-accent);
+  outline-offset: -4px;
+}

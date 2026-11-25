@@ -4,8 +4,9 @@ import { useCallback, useMemo, useRef } from "react";
 
 import { api, unwrap } from "../api";
 import { useTheme } from "../theme/theme";
-import { PANELS, type PanelId, addDefaultLayout, forgetLayout, saveLayout, storedLayout } from "./layout";
-import { emptyPanel } from "./panels";
+import { Campaign } from "./context";
+import { addDefaultLayout, forgetLayout, saveLayout, storedLayout } from "./layout";
+import { panelComponents } from "./panels";
 import { GroupActions, TabTitle } from "./tabs";
 
 export interface ShellProps {
@@ -31,10 +32,8 @@ export function Shell({ sessionId, projectId }: ShellProps) {
   });
   const campaign = project.data?.campaigns.find((item) => item.session_id === sessionId);
 
-  const components = useMemo(
-    () => Object.fromEntries(Object.entries(PANELS).map(([id, title]) => [id, emptyPanel(id as PanelId, title)])),
-    [],
-  );
+  const components = useMemo(panelComponents, []);
+  const open = useMemo(() => ({ sessionId, projectId }), [sessionId, projectId]);
 
   const onReady = useCallback((event: DockviewReadyEvent) => {
     dockview.current = event.api;
@@ -85,13 +84,15 @@ export function Shell({ sessionId, projectId }: ShellProps) {
         </div>
       </header>
       <main className="gk-main">
-        <DockviewReact
-          className="dockview-theme-light gk-dockview"
-          components={components}
-          defaultTabComponent={TabTitle}
-          rightHeaderActionsComponent={GroupActions}
-          onReady={onReady}
-        />
+        <Campaign.Provider value={open}>
+          <DockviewReact
+            className="dockview-theme-light gk-dockview"
+            components={components}
+            defaultTabComponent={TabTitle}
+            rightHeaderActionsComponent={GroupActions}
+            onReady={onReady}
+          />
+        </Campaign.Provider>
       </main>
       <footer className="gk-status" aria-label="Status">
         {summary.isError ? (

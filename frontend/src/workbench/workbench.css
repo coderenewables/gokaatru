@@ -184,3 +184,93 @@
   margin: 8px 0 0;
   padding-left: 18px;
 }
+
+.gk-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.gk-inspector-section h2 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.gk-selection-count {
+  margin: 0 0 8px;
+}
+
+.gk-selection-count strong {
+  font-size: 24px;
+  color: var(--gk-accent);
+}
+
+.gk-terms {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.gk-term {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 8px;
+  border: 1px solid var(--gk-border);
+  border-radius: 4px;
+  background: var(--gk-select-soft);
+  font-size: 12px;
+}
+
+.gk-term-label {
+  font-weight: 600;
+}
+
+.gk-term-text {
+  overflow-wrap: anywhere;
+}
+
+.gk-button {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 4px;
+  border: 1px solid var(--gk-border-strong);
+  background: var(--gk-surface);
+  color: var(--gk-text);
+  font-size: 13px;
+}
+
+.gk-button-primary {
+  border-color: var(--gk-accent);
+  background: var(--gk-accent);
+  color: var(--gk-accent-text);
+  font-weight: 600;
+}
+
+.gk-compare {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.gk-compare caption {
+  text-align: left;
+  font-size: 12px;
+  padding-bottom: 4px;
+}
+
+.gk-compare th,
+.gk-compare td {
+  padding: 3px 4px;
+  border-top: 1px solid var(--gk-border);
+  text-align: right;
+}
+
+.gk-compare th[scope="row"],
+.gk-compare th[scope="col"]:first-child {
+  text-align: left;
+  font-weight: 500;
+}

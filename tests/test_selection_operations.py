@@ -45,6 +45,7 @@ SELECTABLE = {
     "compute_wind_ramps",
     "compute_windrose_data",
     "get_series_window",
+    "summarise_channels",
     "plot_diurnal",
     "plot_monthly_means",
     "plot_scatter",

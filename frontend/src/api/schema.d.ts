@@ -3259,6 +3259,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/summarise_channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * summarise_channels
+         * @description Valid records, mean, minimum and maximum of measured channels (comma-separated); with a
+         *     selection, of its records only, which is how a selection is compared with every record.
+         */
+        post: operations["operation_summarise_channels_api_sessions__session_id__operations_summarise_channels_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/undo_cleaning_rule": {
         parameters: {
             query?: never;
@@ -5457,6 +5478,17 @@ export interface components {
             flagged_records: number;
             /** Intervals */
             intervals: components["schemas"]["FlagInterval"][];
+        };
+        /** ChannelSummary */
+        ChannelSummary: {
+            /** Max */
+            max: number | null;
+            /** Mean */
+            mean: number | null;
+            /** Min */
+            min: number | null;
+            /** Valid */
+            valid: number;
         };
         /** ChatMessage */
         ChatMessage: {
@@ -9662,6 +9694,26 @@ export interface components {
             /** Scenarios Missing Components */
             scenarios_missing_components: number;
             substituted: components["schemas"]["Distribution"] | null;
+        };
+        /** SummariseChannelsParameters */
+        SummariseChannelsParameters: {
+            /** Channels */
+            channels: string;
+            /**
+             * Selection
+             * @default
+             */
+            selection?: string;
+        };
+        /** SummariseChannelsResult */
+        SummariseChannelsResult: {
+            /** Channels */
+            channels: {
+                [key: string]: components["schemas"]["ChannelSummary"];
+            };
+            /** Records */
+            records: number;
+            selection?: components["schemas"]["SelectionUsed"] | null;
         };
         /**
          * SweepEntry
@@ -18349,6 +18401,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SaveRunConfigResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
+    operation_summarise_channels_api_sessions__session_id__operations_summarise_channels_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SummariseChannelsParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SummariseChannelsResult"];
                 };
             };
             /** @description Refused: the request cannot be answered as asked */

@@ -138,6 +138,36 @@ def _resolve_selection(state: SessionState, name: str) -> dict[str, Any]:
     return _summary(name, state.selections[name]["definition"], _frame(state))
 
 
+def _summarise_channels(state: SessionState, channels: str) -> dict[str, Any]:
+    frame = _frame(state)
+    names = [name.strip() for name in channels.split(",") if name.strip()]
+    if not names:
+        raise ValueError("Name at least one channel")
+    missing = [name for name in names if name not in frame.columns]
+    if missing:
+        raise ValueError(f"No channel named {', '.join(missing)}")
+    summary: dict[str, dict[str, Any]] = {}
+    for name in names:
+        values = pd.to_numeric(frame[name], errors="coerce").dropna()
+        summary[name] = {
+            "valid": int(len(values)),
+            "mean": float(values.mean()) if len(values) else None,
+            "min": float(values.min()) if len(values) else None,
+            "max": float(values.max()) if len(values) else None,
+        }
+    return {"records": int(len(frame)), "channels": summary}
+
+
+@operation(
+    effect="read", stage="selection", canvas=False, selectable=True,
+    result=result_models.SummariseChannelsResult,
+)
+def summarise_channels(channels: str) -> dict:
+    """Valid records, mean, minimum and maximum of measured channels (comma-separated); with a
+    selection, of its records only, which is how a selection is compared with every record."""
+    return _summarise_channels(session, channels)
+
+
 @operation(effect="change", stage="selection", canvas=False, result=result_models.DefineSelectionResult)
 def define_selection(name: str, definition: dict) -> dict:
     """Define or replace a named selection of records: time ranges, direction sectors, value

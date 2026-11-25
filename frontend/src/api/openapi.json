@@ -3418,6 +3418,56 @@
     "title": "ChannelFlags",
     "type": "object"
    },
+   "ChannelSummary": {
+    "additionalProperties": false,
+    "properties": {
+     "max": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max"
+     },
+     "mean": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mean"
+     },
+     "min": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min"
+     },
+     "valid": {
+      "title": "Valid",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "valid",
+     "mean",
+     "min",
+     "max"
+    ],
+    "title": "ChannelSummary",
+    "type": "object"
+   },
    "ChatMessage": {
     "properties": {
      "content": {
@@ -17467,6 +17517,57 @@
      "combination"
     ],
     "title": "SubstitutionTotals",
+    "type": "object"
+   },
+   "SummariseChannelsParameters": {
+    "additionalProperties": false,
+    "properties": {
+     "channels": {
+      "title": "Channels",
+      "type": "string"
+     },
+     "selection": {
+      "default": "",
+      "title": "Selection",
+      "type": "string"
+     }
+    },
+    "required": [
+     "channels"
+    ],
+    "title": "SummariseChannelsParameters",
+    "type": "object"
+   },
+   "SummariseChannelsResult": {
+    "additionalProperties": false,
+    "properties": {
+     "channels": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/ChannelSummary"
+      },
+      "title": "Channels",
+      "type": "object"
+     },
+     "records": {
+      "title": "Records",
+      "type": "integer"
+     },
+     "selection": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/SelectionUsed"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "records",
+     "channels"
+    ],
+    "title": "SummariseChannelsResult",
     "type": "object"
    },
    "SweepEntry": {
@@ -34464,6 +34565,103 @@
      }
     },
     "summary": "save_run_config",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
+  "/api/sessions/{session_id}/operations/summarise_channels": {
+   "post": {
+    "description": "Valid records, mean, minimum and maximum of measured channels (comma-separated); with a\nselection, of its records only, which is how a selection is compared with every record.",
+    "operationId": "operation_summarise_channels_api_sessions__session_id__operations_summarise_channels_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/SummariseChannelsParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SummariseChannelsResult",
+         "title": "Response Operation Summarise Channels Api Sessions  Session Id  Operations Summarise Channels Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "summarise_channels",
     "tags": [
      "operations"
     ]

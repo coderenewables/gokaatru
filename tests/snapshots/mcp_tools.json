@@ -1879,6 +1879,40 @@
  },
  {
   "annotations": null,
+  "description": "Valid records, mean, minimum and maximum of measured channels (comma-separated); with a\nselection, of its records only, which is how a selection is compared with every record.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "channels": {
+     "type": "string"
+    },
+    "selection": {
+     "default": "",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "channels"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "summarise_channels",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
   "description": "Define or replace a named selection of records: time ranges, direction sectors, value\nbands, polygons over two channels or record sets, combined by union and intersection.",
   "execution": null,
   "icons": null,

@@ -42,7 +42,7 @@ README's "Deployment model" section first.
 |------|--------|
 | Backend Python | ~25.6k LOC across 85 files |
 | Frontend TS/TSX | ~17.6k LOC |
-| MCP tools registered | **101** (the 142 WindKit pass-throughs were removed 2026-11-19, decisions/0009) |
+| MCP tools registered | **102** (the 142 WindKit pass-throughs were removed 2026-11-19, decisions/0009) |
 | FastAPI endpoints | ~100 across 13 route files |
 | Backend tests | 83 pytest files (incl. an independent oracle harness) |
 | Frontend tests | 30 vitest files |
@@ -159,7 +159,7 @@ with `canvas`, `assistant` and `network` where they differ from the defaults. Th
 publishes the MCP tool itself (`_publish_to_mcp`, through `mcp.tool()`); no tool module touches
 `mcp` directly, and `tests/test_mcp_surface.py` compares what clients receive with
 `tests/snapshots/mcp_tools.json` (`python -m tests.mcp_surface --write` to refresh). `Operation` also carries disclosure fields, standards references, a code version and
-an optional dry run; `REGISTRY` holds all 101. The parameter schema is read from the signature
+an optional dry run; `REGISTRY` holds all 102. The parameter schema is read from the signature
 by FastMCP's own parser. `STAGES` is the pipeline order used for the canvas tie-break. It lives
 outside `core/` because it imports FastMCP. Each declaration wraps its function (`_logged`,
 `functools.wraps`, so the MCP schema is unchanged): every call appends to
@@ -170,7 +170,7 @@ saves the project. The actor comes from the `ACTOR` context variable that each s
 (executor), `mcp` (the MCP mount and stdio server); otherwise `direct`. Hand-written session
 routes bypass the operations, so a middleware in `server/api/main.py` logs and saves after a
 successful change through one (`record_route_change`, route template only, never the body)
-until Phases 2-3 move the interface onto the generated routes. A declaration with `selectable=True` (reads only; 24 statistics, charts and the series window, pinned in `tests/test_selection_operations.py`) gains a keyword-only `selection` parameter in the published signature (`_selectable_signature`), so MCP, the generated routes, the canvas and chat all offer it; given a saved selection's name or an inline JSON definition (`server/tools/selections.py` `is_inline`, `selection_mask`), the wrapper runs the function on a copy of the session whose working frame and `PER_RECORD_FRAMES` (raw, shear and roughness timeseries) are blank outside the selection (`selection_view`) and adds a `selection` block to the result. A read on an inline definition is not written to the operation log (decisions/0014.6). The chat route's two tiers and callables, the
+until Phases 2-3 move the interface onto the generated routes. A declaration with `selectable=True` (reads only; 25 statistics, charts, the series window and the channel summary, pinned in `tests/test_selection_operations.py`) gains a keyword-only `selection` parameter in the published signature (`_selectable_signature`), so MCP, the generated routes, the canvas and chat all offer it; given a saved selection's name or an inline JSON definition (`server/tools/selections.py` `is_inline`, `selection_mask`), the wrapper runs the function on a copy of the session whose working frame and `PER_RECORD_FRAMES` (raw, shear and roughness timeseries) are blank outside the selection (`selection_view`) and adds a `selection` block to the result. A read on an inline definition is not written to the operation log (decisions/0014.6). The chat route's two tiers and callables, the
 executor's canvas dispatch (`_tool_registry`) and its stage tie-break are all read from it;
 `tests/test_operations.py` pins the tiers, the non-canvas set and the stage order by name.
 
@@ -188,7 +188,7 @@ private helpers behind them. They total **90**.
 | `series.py` | 2 | `get_series_window` (selectable), the JSON form of `_series_window`, and `get_scatter_pairs`, the JSON form of `_scatter_pairs` (every record of a window where two channels are both valid, a `highlight` selection marked rather than applied; refused past `MAX_JSON_PAIRS`, a leap year of 10-minute records); both cut the window with `_window_rows`; the Arrow route `api/routes/series.py` calls the same function with a selection's mask (`keep`) instead of a blanked copy of the session. `DEFAULT_SERIES_BUCKETS`, `MAX_SERIES_BUCKETS`. |
 | `sensors.py` | 1 | `remove_sensors` (dry run, undoable): inventory, mapping slot (and a speed sensor's `sd_col`), working and raw columns, `excluded_sensors`; bumps the data version. What a removal took out is kept in `state.removed_sensors` under its log sequence (`_remove_sensors(..., stash_key)`), and `_restore_sensors` puts back every field, refusing when a later change moved the mapping, the exclusion list or the records. The hand-written `POST /sensors/delete` calls the same `_remove_sensors` without a stash. |
 | `flags.py` | 1 | `get_flag_intervals`: the cleaning flags of a window run-length encoded per channel (consecutive working records flagged by one rule application, with rule, reason, actor and time, and `next`, the record where a band ends), for the timeline's flag bands; expanding the intervals gives the flag table back exactly (`tests/test_flag_intervals.py`). At most `MAX_FLAG_INTERVALS` (20,000) per response, `truncated` saying so. |
-| `selections.py` | 4 | `define_selection`, `delete_selection`, `list_selections`, `resolve_selection`; named selections live on `state.selections` and are resolved against the working data each time (`selection_mask`). |
+| `selections.py` | 5 | `define_selection`, `delete_selection`, `list_selections`, `resolve_selection`; named selections live on `state.selections` and are resolved against the working data each time (`selection_mask`, which also takes an inline definition: `is_inline`, `inline_definition`). `summarise_channels` (selectable): valid records, mean, minimum and maximum of named channels. |
 | `history.py` | 3 | `undo_last_change`, `redo_last_change`, `get_operation_log`. Undo inverts the last undoable call (`UNDOABLE_OPERATIONS`): a cleaning rule through the replay undo, a configuration change by restoring exactly the paths and synced fields it changed, a sensor removal from what `sensors.py` kept aside, a data model build from its noted state before and after (`_undo_data_model`) (`_UNDO`, `_REDO`); it refuses when a later change moved them. Redo calls the operation again with its logged parameters. `state.undo_stack` holds what was undone; any other change clears it. |
 | `cleaning.py` | 4 | Rule-based timeseries cleaning (list/apply/log/undo). Every record a rule removes gets a row in `state.cleaning_flags` (timestamp, sensor, rule sequence and type, reason code from `FLAG_REASONS`, or the analyst's `MANUAL_FLAG_REASONS` code for `exclude_selection`, actor, time), found by diffing each column the rule names before and after it (`exclude_selection` names several: `_selection_columns`, `_logged_columns`; it resolves its frozen definition with `server/core/selection.py`); `_clean_series(raw, index, flags)` rebuilds the cleaned series from raw data, bit for bit. Each log entry records its `actor` (unhashed in the prefix, like `applied_at`). Undo replays the remaining rules as before and keeps each one's original actor and time on its flags and its log entry (`_carry_flag_provenance`, `_carry_entry_provenance`), including the flags of a rule that only removes records once an earlier rule is undone. `get_cleaning_log` returns a flag summary. Apply and undo have dry runs (`preview_cleaning_rule`, `preview_undo_cleaning_rule`): the real function runs on a replica of the session (`_replica`) and `_change_summary` reports rows inserted, columns dropped, and per column the records set missing, restored or changed with their runs (at most `PREVIEW_RANGE_LIMIT` listed, `ranges_truncated` saying so). |
 | `statistics.py` | 9 | Weibull, wind climate, turbulence, windrose, diurnal/monthly, MoMM, scatter. |
@@ -264,7 +264,7 @@ logic as the MCP tools, and shape the response with the Pydantic models in `sche
 | `health.py` | 1 | Health check. |
 | `chat.py` | 1 | OpenAI-compatible LLM chat proxy with MCP tool execution (drives the BYOK Copilot). |
 | `series.py` | 4 | `GET` and `POST /sessions/{id}/series`: a series window as an Arrow IPC stream (`series_arrow`, `window_table`), the window's description in the schema metadata; `GET` and `POST /sessions/{id}/pairs`, a scatter's points from `_scatter_pairs` (`pairs_table`); POST takes the query as a body for a selection too long for a URL and is listed in `api/main.py`'s `_READING_POST_ROUTES`, so neither is logged as a change. Hand-written because the generated routes return JSON. |
-| `operations.py` | 105 | Generated from the registry: `POST /sessions/{id}/operations/{name}` for each of the 101 operations, `.../preview` for the three with a dry run, with a body model built from the function signature (`<Name>Parameters`, extra fields refused), and `GET /operations` listing every declaration. Same session binding and error mapping as chat. |
+| `operations.py` | 106 | Generated from the registry: `POST /sessions/{id}/operations/{name}` for each of the 102 operations, `.../preview` for the three with a dry run, with a body model built from the function signature (`<Name>Parameters`, extra fields refused), and `GET /operations` listing every declaration. Same session binding and error mapping as chat. |
 
 `api/mcp.py` additionally mounts a **session-aware MCP transport** into the FastAPI app, so a
 browser session and an MCP client can share the same live session state.
@@ -368,12 +368,18 @@ frontend/src/
 │   ├── StartScreen.tsx   # projects and their campaigns (GET /api/projects)
 │   ├── api.ts            # the generated client on this origin; unwrap/refusal helpers
 │   ├── storage.ts        # guarded localStorage for per-viewer conveniences
+│   ├── sensors.ts        # the sensors route's rows, checked (its response is untyped)
+│   ├── selection/        # store.ts: the crossfilter (decisions/0014.5), one term per view,
+│   │                     #   intersected, sent inline; describe.ts words a term for its chip
+│   ├── inspector/        # InspectorPanel, SelectionSection (count, terms, mean against all
+│   │                     #   records through summarise_channels)
 │   ├── theme/            # tokens.css (light and dark design tokens, the .gk-dockview
 │   │                     #   theme class over dockview's --dv-* variables), theme.ts
 │   └── shell/            # Shell.tsx (header, DockviewReact, status bar), layout.ts (the
 │                         #   six Prepare panels, default arrangement, stored layout),
 │                         #   tabs.tsx (title-only tab; close in the group actions, outside
-│                         #   role=tab, decisions/0006), panels.tsx
+│                         #   role=tab, decisions/0006), panels.tsx (the view each panel
+│                         #   renders), context.ts (the open campaign for every panel)
 ├── App.tsx              # thin shell; gates on session existence, switches on activePhase
 ├── main.tsx             # React entry
 ├── components/

@@ -1,12 +1,13 @@
 import type { IDockviewPanelProps } from "dockview-react";
 import type { FunctionComponent } from "react";
 
-import type { PanelId } from "./layout";
+import { InspectorPanel } from "../inspector/InspectorPanel";
+import { PANELS, type PanelId } from "./layout";
 
 /** What a panel shows before its view is built or before a campaign holds data for it. Not a
  * landmark of its own: dockview's group around it is already the region named after the
  * panel, and a second one of the same name is axe's landmark-unique. */
-export function EmptyPanel({ children }: { title: string; children: string }) {
+export function EmptyPanel({ children }: { children: string }) {
   return (
     <div className="gk-panel gk-panel-empty">
       <p>{children}</p>
@@ -23,10 +24,23 @@ const EMPTY: Record<PanelId, string> = {
   inspector: "What is selected, and what can be done with it.",
 };
 
-export function emptyPanel(id: PanelId, title: string): FunctionComponent<IDockviewPanelProps> {
+function emptyPanel(id: PanelId): FunctionComponent<IDockviewPanelProps> {
   function Panel() {
-    return <EmptyPanel title={title}>{EMPTY[id]}</EmptyPanel>;
+    return <EmptyPanel>{EMPTY[id]}</EmptyPanel>;
   }
-  Panel.displayName = `${title.replace(/\s/g, "")}Panel`;
+  Panel.displayName = `${PANELS[id].replace(/\s/g, "")}Panel`;
   return Panel;
+}
+
+/** The view each panel id renders; a view not built yet shows what it will hold. */
+const BUILT: Partial<Record<PanelId, FunctionComponent<IDockviewPanelProps>>> = {
+  inspector: InspectorPanel,
+};
+
+export function panelComponents(): Record<PanelId, FunctionComponent<IDockviewPanelProps>> {
+  const ids = Object.keys(PANELS) as PanelId[];
+  return Object.fromEntries(ids.map((id) => [id, BUILT[id] ?? emptyPanel(id)])) as Record<
+    PanelId,
+    FunctionComponent<IDockviewPanelProps>
+  >;
 }

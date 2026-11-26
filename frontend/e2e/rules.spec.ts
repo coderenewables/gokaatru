@@ -76,12 +76,16 @@ test("rules applied through the panel flag the records the old form's rules flag
   await panel.getByRole("button", { name: "Apply rule" }).click();
   await expect(panel.getByRole("status")).toContainText(`${FROZEN_RECORDS} values set missing`);
 
-  // The twin campaign takes the old form's own requests through the hand-written route it posts to.
+  // The twin campaign takes the old form's own requests. Its hand-written /cleaning/apply passed
+  // them to the function the operation calls, with params as JSON text; that route was retired
+  // in P3-17e, so they go to the operation as the route sent them on.
   const twin = await campaignWithData(page, `Rules twin ${Date.now()}`);
   const old = { start_date: "", end_date: "" };
-  await call(page, twin, "cleaning/apply", { rule_type: "range_check", sensor: "Spd_100m", params: { min: 0, max: 50 }, ...old });
-  await call(page, twin, "cleaning/apply", { rule_type: "stuck_sensor", sensor: "Spd_100m", params: { consecutive_count: 6 }, ...old });
-  await call(page, twin, "cleaning/apply", { rule_type: "expression_filter", sensor: "Spd_100m", params: { expression: "Spd_100m < 0.5" }, ...old });
+  const apply = (rule_type: string, params: object) =>
+    call(page, twin, "operations/apply_cleaning_rule", { rule_type, sensor: "Spd_100m", params: JSON.stringify(params), ...old });
+  await apply("range_check", { min: 0, max: 50 });
+  await apply("stuck_sensor", { consecutive_count: 6 });
+  await apply("expression_filter", { expression: "Spd_100m < 0.5" });
 
   const mine = await flagged(page, opened);
   const theirs = await flagged(page, twin);

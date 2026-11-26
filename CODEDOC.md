@@ -123,8 +123,11 @@ server/
   Run: `python -m server.main` (MCP over stdio).
 
 - **`server/api/main.py`** — the FastAPI app. `create_app()` includes 13 routers, all under
-  the `/api` prefix, in a fixed order (health, mcp, sessions, datasets, workflow_execution,
-  uploads, config, analysis, brighthub, results, sweep, exports, chat).
+  the `/api` prefix (health, mcp, sessions, datasets, uploads, analysis, results, sweep,
+  exports, chat, operations, series, projects). Every analysis step is reached through the
+  generated operation routes; the hand-written routes that duplicated one were retired in
+  P3-17e, and a middleware logs and saves after a change through one that remains (an
+  upload, a session reset, a dataset load, a sweep).
   Run: `python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000`.
 
 ### 4.2 `server/core/` — pure math + orchestration
@@ -172,8 +175,8 @@ saves the project. The actor comes from the `ACTOR` context variable that each s
 (`acting_as`): `user` (generated routes), `assistant:<provider>/<model>` (chat), `mcp` (the
 MCP mount and stdio server); otherwise `direct` (entries the retired Canvas logged say `canvas`). Hand-written session
 routes bypass the operations, so a middleware in `server/api/main.py` logs and saves after a
-successful change through one (`record_route_change`, route template only, never the body)
-until Phases 2-3 move the interface onto the generated routes. A declaration with `selectable=True` (reads only; 25 statistics, charts, the series window and the channel summary, pinned in `tests/test_selection_operations.py`) gains a keyword-only `selection` parameter in the published signature (`_selectable_signature`), so MCP, the generated routes, the canvas and chat all offer it; given a saved selection's name or an inline JSON definition (`server/tools/selections.py` `is_inline`, `selection_mask`), the wrapper runs the function on a copy of the session whose working frame and `PER_RECORD_FRAMES` (raw, shear and roughness timeseries) are blank outside the selection (`selection_view`) and adds a `selection` block to the result. A read on an inline definition is not written to the operation log (decisions/0014.6). The chat route's two tiers and callables, the
+successful change through one (`record_route_change`, route template only, never the body); since P3-17e the routes left are uploads, sessions, datasets, the sweep and the
+few kept for the owner. A declaration with `selectable=True` (reads only; 25 statistics, charts, the series window and the channel summary, pinned in `tests/test_selection_operations.py`) gains a keyword-only `selection` parameter in the published signature (`_selectable_signature`), so MCP, the generated routes, the canvas and chat all offer it; given a saved selection's name or an inline JSON definition (`server/tools/selections.py` `is_inline`, `selection_mask`), the wrapper runs the function on a copy of the session whose working frame and `PER_RECORD_FRAMES` (raw, shear and roughness timeseries) are blank outside the selection (`selection_view`) and adds a `selection` block to the result. A read on an inline definition is not written to the operation log (decisions/0014.6). The chat route's two tiers and callables, the
 operations a pipeline may hold (`canvas`) and its stage tie-break are all read from it;
 `tests/test_operations.py` pins the tiers, the non-canvas set and the stage order by name.
 Each declaration also names the artifacts it `reads` and `writes` (decisions/0015.2), from
@@ -260,17 +263,15 @@ logic as the MCP tools, and shape the response with the Pydantic models in `sche
 
 | Route file | Endpoints | Area |
 |------------|:--------:|------|
-| `analysis.py` | 37 | Workflow analysis (statistics, shear, extrapolation, ERA5, ensemble, clipping, homogeneity, uncertainty, scenarios). |
-| `brighthub.py` | 8 | BrightHub login/logout/status, location browsing, reanalysis, import. |
+| `analysis.py` | 8 | What the retired interface used and no operation does: sensor statistics, the overview summary, a clipping source's columns, runconfig import, and the named scenarios (save, list, delete, run). No screen calls them; kept until the owner decides (P3-17e). |
 | `sweep.py` | 8 | Scenario-sweep engine surface (axes, estimate with the duplicates and refusals the run will make (`core/sweep.py` `estimate_sweep`, P3-8), run, **run/stream** SSE, list, get, runconfig, **spread**). |
 | `datasets.py` | 6 | Shared dataset-pool CRUD + load-into-session. |
-| `uploads.py` | 7 | Timeseries/datamodel upload, the data model builder (draft/build), sensor inventory + coverage, delete. |
-| `results.py` | 5 | LTC/ensemble results, plots, site map, runconfig export. |
+| `uploads.py` | 3 | Timeseries and data model upload (multipart, so routes and not operations), and the sensor inventory the charts read. |
+| `results.py` | 4 | The retired Results report's summaries of the stored corrections and ensemble, its runconfig export, and `/plots/{name}`, the figures no `plot_*` operation draws. No screen calls them. |
 | `sessions.py` | 4 | Session lifecycle. |
 | `projects.py` | 6 | Projects of campaigns (decisions/0014.11): list, create, read (each campaign's coordinate and timezone, `timezones_differ`), rename, add a campaign (a new session), rename a campaign. Workspace management above the sessions, like `POST /sessions`, so routes and not operations. |
 | `exports.py` | 4 | File downloads (timeseries CSV, LTC CSV, ensemble CSV, runconfig JSON). |
-| `config.py` | 3 | Runconfig get/update + workflow summary. |
-| `mcp.py` | 1 | MCP catalog endpoint. |
+| `mcp.py` | 1 | MCP catalog: the tools and resources, for a browser MCP client (the retired Copilot used it). |
 | `health.py` | 1 | Health check. |
 | `chat.py` | 1 | OpenAI-compatible LLM chat proxy with MCP tool execution (drives the BYOK Copilot). |
 | `series.py` | 4 | `GET` and `POST /sessions/{id}/series`: a series window as an Arrow IPC stream (`series_arrow`, `window_table`), the window's description in the schema metadata; `GET` and `POST /sessions/{id}/pairs`, a scatter's points from `_scatter_pairs` (`pairs_table`); POST takes the query as a body for a selection too long for a URL and is listed in `api/main.py`'s `_READING_POST_ROUTES`, so neither is logged as a change. Hand-written because the generated routes return JSON. |
@@ -639,6 +640,23 @@ See the README's "Known limitations" section for the full list and rationale.
   tests moved to `tests/test_cleaning_staleness.py` and the sensors-route tests to
   `tests/test_api_sensors.py`. A saved project's stored copy of a retired field is left on disk
   and not restored.
+
+**2026-11-26 — the duplicated hand-written routes retired (P3-17e, decisions/0015.10)**
+
+- Deleted the hand-written routes an operation replaces: 32 in `analysis.py` (the diagnostics,
+  cleaning, shear and roughness, extrapolation, EarthDataHub and ERA5, the corrections,
+  ensemble, clipping, homogeneity, uncertainty), all of `brighthub.py` (8) and `config.py`
+  (3), `/map/site` from `results.py`, and the data model draft and build, coverage and sensor
+  removal from `uploads.py`. The tests that went through them call the generated routes
+  (`tests/http_operations.py`). Kept, with no operation and no screen, for the owner to
+  decide: sensor statistics, the overview summary, clipping columns, runconfig import, the
+  named scenarios, the Results report's summaries and runconfig export, `/plots/{name}`, the
+  exports, the dataset pool and the MCP catalog.
+- Four differences between a route and its operation were found and closed first: the
+  BrightHub node finder did not record the nodes interpolation reads, and a BrightHub location
+  id reached file names unchecked (P3-17a); an ERA5 extraction's date and coordinate checks
+  lived in the route's request model only (P3-17b); `/extrapolation/hub` also copied the shear
+  coefficients into the working data, which nothing reads from there.
 
 **Candidates for a future pass** (larger modules with a plausible seam, left intact here
 because the risk/benefit did not clearly favor churn):

@@ -1,6 +1,8 @@
-"""test_api_workflow — Browser-oriented API workflow validation for GoKaatru.
+"""test_api_workflow — the HTTP surface end to end on a real campaign.
 
-Part of GoKaatru MCP Server.
+Uploads go through their own routes; every analysis step through the generated operation
+routes (P3-17e retired the hand-written ones that duplicated them). The figures the old
+interface drew are still served by ``/plots/{name}``, which no operation replaces.
 """
 from __future__ import annotations
 
@@ -15,6 +17,7 @@ from server.api.deps import get_session_manager
 from server.api.main import create_app
 from server.state.manager import SessionManager
 from tests.conftest import require_campaign_file
+from tests.http_operations import operation
 
 
 @pytest.fixture
@@ -84,7 +87,7 @@ def test_api_workflow(
         "elevation_m": 0.0,
     }
 
-    config_seed_response = client.get(f"/api/sessions/{session_id}/config", headers=headers)
+    config_seed_response = operation(client, session_id, "get_run_config")
     assert config_seed_response.status_code == 200
     assert config_seed_response.json()["location"] == {
         "latitude": 52.57005,
@@ -97,7 +100,7 @@ def test_api_workflow(
     assert len(sensors_response.json()["sensors"]) == 16
     assert "Spd_250m" in {sensor["name"] for sensor in sensors_response.json()["sensors"]}
 
-    coverage_response = client.get(f"/api/sessions/{session_id}/coverage/Spd_100m", headers=headers)
+    coverage_response = operation(client, session_id, "get_data_coverage", sensor_name="Spd_100m")
     assert coverage_response.status_code == 200
     assert coverage_response.json()["valid_records"] == 65879
     assert coverage_response.json()["largest_gap_minutes"] == 314310
@@ -108,9 +111,8 @@ def test_api_workflow(
     assert statistics_response.json()["count"] == 65879
     assert statistics_response.json()["coverage_pct"] == pytest.approx(89.59228635152043)
 
-    wind_climate_response = client.get(
-        f"/api/sessions/{session_id}/wind-climate/Spd_100m?direction_sensor=Dir_100m",
-        headers=headers,
+    wind_climate_response = operation(
+        client, session_id, "compute_wind_climate", speed_sensor="Spd_100m", direction_sensor="Dir_100m"
     )
     assert wind_climate_response.status_code == 200
     wind_climate = wind_climate_response.json()
@@ -126,9 +128,12 @@ def test_api_workflow(
     assert distribution_response.status_code == 200
     assert json.loads(distribution_response.json()["plotly_json"])["data"]
 
-    vertical_structure_response = client.get(
-        f"/api/sessions/{session_id}/vertical-structure?speed_sensors=Spd_80m,Spd_100m,Spd_120m&direction_sensors=Dir_80m,Dir_100m,Dir_120m",
-        headers=headers,
+    vertical_structure_response = operation(
+        client,
+        session_id,
+        "compute_vertical_structure",
+        speed_sensors="Spd_80m,Spd_100m,Spd_120m",
+        direction_sensors="Dir_80m,Dir_100m,Dir_120m",
     )
     assert vertical_structure_response.status_code == 200
     assert vertical_structure_response.json()["alpha"]["record_count"] > 0
@@ -142,20 +147,15 @@ def test_api_workflow(
     assert alpha_plot_response.status_code == 200
     assert json.loads(alpha_plot_response.json()["plotly_json"])["data"]
 
-    config_response = client.put(
-        f"/api/sessions/{session_id}/config",
-        headers=headers,
-        json={
-            "updates": [
-                {"key": "project_name", "value": "HKW-B-FLS-Boxkite"},
-                {"key": "location.latitude", "value": 52.57005},
-                {"key": "location.longitude", "value": 3.737733},
-                {"key": "hub_height_m", "value": 150},
-            ]
-        },
-    )
-    assert config_response.status_code == 200
-    assert config_response.json()["runconfig"]["hub_height_m"] == 150
+    for key, value in [
+        ("project_name", '"HKW-B-FLS-Boxkite"'),
+        ("location.latitude", "52.57005"),
+        ("location.longitude", "3.737733"),
+        ("hub_height_m", "150"),
+    ]:
+        config_response = operation(client, session_id, "update_run_config", key=key, value=value)
+        assert config_response.status_code == 200, config_response.text
+    assert config_response.json()["hub_height_m"] == 150
 
     height_sensors = json.dumps(
         {
@@ -169,29 +169,19 @@ def test_api_workflow(
             "80": "Spd_80m",
         }
     )
-    shear_response = client.post(
-        f"/api/sessions/{session_id}/shear/calculate",
-        headers=headers,
-        json={"height_sensors": height_sensors},
-    )
+    shear_response = operation(client, session_id, "calculate_shear_timeseries", height_sensors=height_sensors)
     assert shear_response.status_code == 200
     # Re-baselined for the 3.0 m/s valid-record gate (D3).
     assert shear_response.json()["records"] == 62570
     assert shear_response.json()["mean_shear"] == pytest.approx(0.0630790411395217)
     assert shear_response.json()["min_speed_mps"] == 3.0
     assert shear_response.json()["clamped_fraction"] == pytest.approx(0.0024132971072398915)
-    table_response = client.post(
-        f"/api/sessions/{session_id}/shear/table",
-        headers=headers,
-        json={"aggregation": "momm"},
-    )
+    table_response = operation(client, session_id, "build_shear_table", aggregation="momm")
     assert table_response.status_code == 200
     assert len(table_response.json()["table"]) == 12
 
-    extrapolation_response = client.post(
-        f"/api/sessions/{session_id}/extrapolation/hub",
-        headers=headers,
-        json={"hub_height_m": 150.0, "shear_model": "power_law"},
+    extrapolation_response = operation(
+        client, session_id, "extrapolate_to_hub_height", hub_height_m=150.0, shear_model="power_law"
     )
     assert extrapolation_response.status_code == 200
     assert extrapolation_response.json()["column_name"] == "Spd_150m_hub"
@@ -225,10 +215,8 @@ def test_api_workflow(
         {"latitude": 52.5, "longitude": 4.75, "distance_km": 5.0, "bearing": "SE"},
     ]
 
-    ltc_response = client.post(
-        f"/api/sessions/{session_id}/ltc/linear_least_squares",
-        headers=headers,
-        json={"short_col": "Spd_100m", "long_col": "Spd_100m_hub"},
+    ltc_response = operation(
+        client, session_id, "run_ltc_linear_least_squares", short_col="Spd_100m", long_col="Spd_100m_hub"
     )
     assert ltc_response.status_code == 200
     assert ltc_response.json()["algorithm"] == "linear_least_squares"
@@ -246,7 +234,7 @@ def test_api_workflow(
     assert "plotly_json" in plot_response.json()
     assert plot_response.json()["title"] == "Data Preview — First 7 Days"
 
-    map_response = client.get(f"/api/sessions/{session_id}/map/site", headers=headers)
+    map_response = operation(client, session_id, "get_site_overview_map")
     assert map_response.status_code == 200
     assert map_response.json()["type"] == "FeatureCollection"
 
@@ -278,9 +266,13 @@ def test_api_atmosphere_workflow(
         )
         assert response.status_code == 200
 
-    atmosphere_response = client.get(
-        f"/api/sessions/{session_id}/atmosphere?temperature_sensor=Tmp2_55m&pressure_sensor=Prs_55m&humidity_sensor=Hum_13m",
-        headers=headers,
+    atmosphere_response = operation(
+        client,
+        session_id,
+        "compute_atmospheric_conditions",
+        temperature_sensor="Tmp2_55m",
+        pressure_sensor="Prs_55m",
+        humidity_sensor="Hum_13m",
     )
     assert atmosphere_response.status_code == 200
     assert 0.9 < atmosphere_response.json()["air_density"]["mean"] < 1.4
@@ -293,9 +285,8 @@ def test_api_atmosphere_workflow(
     assert density_plot_response.status_code == 200
     assert json.loads(density_plot_response.json()["plotly_json"])["data"]
 
-    energy_response = client.get(
-        f"/api/sessions/{session_id}/energy/Spd_58m?direction_sensor=Dir_58m",
-        headers=headers,
+    energy_response = operation(
+        client, session_id, "compute_energy_metrics", speed_sensor="Spd_58m", direction_sensor="Dir_58m"
     )
     assert energy_response.status_code == 200
     assert energy_response.json()["wind_power_density_w_m2"] > 0
@@ -303,24 +294,23 @@ def test_api_atmosphere_workflow(
     # This fixture is a 10.5-month campaign, so no calendar year is complete and there is no
     # annual maximum to fit (F-78). The endpoint refuses rather than publishing a design
     # value that cannot exist.
-    extremes_response = client.get(f"/api/sessions/{session_id}/extremes/Spd_58m", headers=headers)
+    extremes_response = operation(client, session_id, "compute_extreme_winds", speed_sensor="Spd_58m")
     assert extremes_response.status_code == 400
     assert "at least 2 calendar years" in extremes_response.json()["detail"]
 
     # Asking for the screening estimate explicitly still works, and still withholds the GEV.
-    screening_response = client.get(
-        f"/api/sessions/{session_id}/extremes/Spd_58m?min_year_coverage=0",
-        headers=headers,
+    screening_response = operation(
+        client, session_id, "compute_extreme_winds", speed_sensor="Spd_58m", min_year_coverage=0
     )
     assert screening_response.status_code == 200
     assert screening_response.json()["screening_only"] is True
     assert screening_response.json()["gev"]["available"] is False
 
-    ramps_response = client.get(f"/api/sessions/{session_id}/ramps/Spd_58m", headers=headers)
+    ramps_response = operation(client, session_id, "compute_wind_ramps", speed_sensor="Spd_58m")
     assert ramps_response.status_code == 200
     assert ramps_response.json()["record_count"] > 0
 
-    persistence_response = client.get(f"/api/sessions/{session_id}/persistence/Spd_58m", headers=headers)
+    persistence_response = operation(client, session_id, "compute_wind_persistence", speed_sensor="Spd_58m")
     assert persistence_response.status_code == 200
     assert persistence_response.json()["calm_period_count"] > 0
 
@@ -332,19 +322,16 @@ def test_api_atmosphere_workflow(
     assert power_density_plot_response.status_code == 200
     assert json.loads(power_density_plot_response.json()["plotly_json"])["data"]
 
-    comparison_response = client.get(f"/api/sessions/{session_id}/comparison", headers=headers)
+    comparison_response = operation(client, session_id, "compute_sensor_comparison")
     assert comparison_response.status_code == 200
     comparison = comparison_response.json()
     assert comparison["record_count"] > 0
 
-    mast_effects_response = client.get(
-        f"/api/sessions/{session_id}/mast-effects?direction_sensor=Dir_43m",
-        headers=headers,
-    )
+    mast_effects_response = operation(client, session_id, "compute_mast_effects", direction_sensor="Dir_43m")
     assert mast_effects_response.status_code == 200
     assert len(mast_effects_response.json()["sectors"]) == 16
 
-    qc_response = client.get(f"/api/sessions/{session_id}/qc-diagnostics", headers=headers)
+    qc_response = operation(client, session_id, "compute_qc_diagnostics")
     assert qc_response.status_code == 200
     assert len(qc_response.json()["sensors"]) == 8
 
@@ -354,7 +341,7 @@ def test_api_atmosphere_workflow(
         {"Spd_100m": hourly["Spd_58m"].to_numpy(dtype=float) * 0.96 + 0.35},
         index=hourly.index,
     )
-    mcp_response = client.get(f"/api/sessions/{session_id}/mcp-readiness/Spd_58m", headers=headers)
+    mcp_response = operation(client, session_id, "compute_mcp_readiness", speed_sensor="Spd_58m")
     assert mcp_response.status_code == 200
     assert mcp_response.json()["r_squared"] > 0.99
 

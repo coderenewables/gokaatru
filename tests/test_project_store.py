@@ -19,6 +19,7 @@ from server.state.project import (
 )
 from server.state.session import SessionState
 from server.tools.era5 import _store_coordinate
+from tests.http_operations import operation
 
 
 def _rich_state(workspace: Path) -> SessionState:
@@ -230,9 +231,7 @@ def test_the_api_refuses_a_project_whose_raw_input_changed(tmp_path: Path) -> No
     app = create_app()
     app.dependency_overrides[get_session_manager] = lambda: SessionManager(base_dir=tmp_path)
     with TestClient(app) as client:
-        response = client.get(
-            f"/api/sessions/{state.session_id}/config", headers={"X-GoKaatru-Session": state.session_id}
-        )
+        response = operation(client, state.session_id, "get_run_config")
     assert response.status_code == 409
     assert "mast.csv" in response.json()["detail"]
 

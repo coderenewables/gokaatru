@@ -159,6 +159,13 @@ tests/                  # backend pytest suite
 
 All session-scoped routes require the `X-GoKaatru-Session` header matching the path `{id}`. Errors: `ValueError` → 400, upstream → 502.
 
+Every analysis step is an operation, run through its generated route (`/sessions/{id}/operations/{name}`,
+below). The hand-written routes that duplicated one were retired in P3-17e: the configuration, the
+data model draft and build, coverage, sensor removal, the diagnostics, cleaning, shear and
+roughness, extrapolation, ERA5 and EarthDataHub, BrightHub, the corrections, ensemble, clipping,
+homogeneity, uncertainty and the site map. A missing BrightHub login is now a 400 naming it, as
+every refusal is, where the hand-written routes answered 401.
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/projects` | GET, POST | List projects, most recently changed first; create one (`name`, `site_name`). A project holds the campaigns measured at one site and one reanalysis node cache they share (decisions/0014.11) |
@@ -167,36 +174,21 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/projects/{id}/campaigns/{session_id}` | PATCH | Rename a campaign |
 | `/sessions` | POST | Create a new browser session |
 | `/sessions/{id}` | GET | Session summary + `completed_steps` |
-| `/sessions/{id}/config` | GET/PUT | Read or update runconfig |
 | `/sessions/{id}/config/import` | POST | Import a complete runconfig JSON payload |
-| `/sessions/{id}/summary` | GET | Workflow progress and analysis readiness |
 | `/sessions/{id}/uploads/{timeseries\|datamodel}` | POST | Upload a file (multipart) |
 | `/sessions/{id}/sweep/estimate` | POST | Price a specification without running it: leaf and prefix counts, and which leaves the run will skip as duplicates (`duplicates`, each with the leaf it repeats) and which it will refuse (`unavailable`, each with the stage and reason), predicted with the stages' own checks (`check_shear_model`, `check_hub`, `check_ltc`, the policy resolvers). `duplicates_basis` and `refusals_basis` say what it cannot know: a duplicate assumes the first of its computation completes, and a leaf can still fail while it runs |
 | `/sessions/{id}/sweep/{sweep_id}/spread` | POST | Decompose one sweep metric's variance across the five scenario axes |
-| `/sessions/{id}/datamodel/draft` | GET | Draft a Task 43 reading of the loaded timeseries columns (header inference, for review) |
-| `/sessions/{id}/datamodel/build` | POST | Build a minimal Task 43 data model from declared columns, persist it, and load it |
 | `/sessions/{id}/sensors` | GET | Sensor inventory |
-| `/sessions/{id}/sensors/delete` | POST | Remove sensors from the session (drops their columns; persists `excluded_sensors`). The same logic as `remove_sensors`, which is undoable through the generated route; this one, for the current interface, is not |
-| `/sessions/{id}/coverage/{sensor}` | GET | Per-sensor coverage/gap stats |
 | `/sessions/{id}/statistics/{sensor}` | GET | Weibull, monthly/diurnal, percentiles |
-| `/sessions/{id}/era5/{nodes\|extract\|interpolate}` | POST | ERA5 node discovery, extraction, interpolation |
-| `/sessions/{id}/era5/credential` | POST/DELETE | Set or clear this session's EarthDataHub PAT (direct-ERA5 path) |
-| `/sessions/{id}/era5/credential/status` | GET | Whether this session has an EarthDataHub PAT configured |
-| `/sessions/{id}/shear/{calculate\|table}` | POST | Shear timeseries + 12×24 lookup |
-| `/sessions/{id}/roughness/{calculate\|table}` | POST | Log-law roughness equivalents |
-| `/sessions/{id}/extrapolation/hub` | POST | Extrapolate measured + reanalysis to hub height |
-| `/sessions/{id}/homogeneity/{analyze\|apply}` | POST | Pettitt test + cutoff year |
-| `/sessions/{id}/ltc/{algorithm}` | POST | Run one LTC algorithm |
-| `/sessions/{id}/ensemble` | POST | Blend LTC algorithms |
-| `/sessions/{id}/clipping` | POST | Representative-period analysis |
-| `/sessions/{id}/uncertainty` | POST | Total uncertainty + P-factors |
+| `/sessions/{id}/overview-summary` | GET | The retired interface's Sensor Overview summary table. No operation does this and no screen calls it; kept until the owner decides (P3-17e) |
+| `/sessions/{id}/clipping/columns` | GET | The numeric columns of a clipping source, for the retired interface's form; kept as above |
+| `/sessions/{id}/results/{ltc\|ensemble}` | GET | Compact summaries of the stored corrections and ensemble, for the retired Results report (Phase 7 rebuilds it); kept as above |
+| `/sessions/{id}/runconfig/export` | GET | Persist and return the run configuration, for the retired Results report; kept as above |
 | `/sessions/{id}/scenarios` | GET/POST | List or save scenarios |
 | `/sessions/{id}/scenarios/run` | POST | Import config + execute pipeline + save scenario |
 | `/sessions/{id}/scenarios/{index}` | DELETE | Remove a saved scenario |
 | `/sessions/{id}/plots/{name}` | POST | Generate a named Plotly figure |
 | `/sessions/{id}/exports/*` | GET | Download timeseries, LTC, ensemble, or runconfig files |
-| `/sessions/{id}/brighthub/*` | various | BrightHub login/locations/import/reanalysis |
-| `/sessions/{id}/map/site` | GET | Site-overview GeoJSON (mast + ERA5 nodes) |
 | `/sessions/{id}/chat` | POST | BYOK LLM chat proxy with server-side tool execution (read-only by default; see [Chat tool authority](#chat-tool-authority)) |
 | `/mcp/catalog` | GET | MCP tool/resource catalog for discovery |
 | `/operations` | GET | Every declared operation: effect, stage, canvas, assistant, network, the artifacts it reads and writes (`server/state/artifacts.py`), parameters |

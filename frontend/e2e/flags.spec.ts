@@ -83,10 +83,11 @@ test("a brushed period flags the whole instrument, shows as a band, and is remov
   const twin = await campaignWithData(page, `Flag twin ${Date.now()}`);
   const step = 10 * 60 * 1000;
   const lastInside = new Date(Math.ceil(Date.parse(period.end) / step) * step - step).toISOString().slice(0, 16).replace("T", " ");
-  await call(page, twin, "cleaning/apply", {
+  // The old rule, through the operation its retired hand-written route called (P3-17e).
+  await call(page, twin, "operations/apply_cleaning_rule", {
     rule_type: "custom_period_exclude",
     sensor: "Spd_100m",
-    params: {},
+    params: "{}",
     start_date: new Date(Math.ceil(Date.parse(period.start) / step) * step).toISOString().slice(0, 16).replace("T", " "),
     end_date: lastInside,
   });
@@ -131,10 +132,10 @@ test("rose sectors become a tower-shadow rule, previewed then applied", async ({
   await expect(page.getByRole("region", { name: "Flags" })).toContainText("tower shadow");
 
   const twin = await campaignWithData(page, `Shadow twin ${Date.now()}`);
-  await call(page, twin, "cleaning/apply", {
+  await call(page, twin, "operations/apply_cleaning_rule", {
     rule_type: "tower_shadow",
     sensor: "Spd_100m",
-    params: { exclude_sectors: [225, 285] },
+    params: JSON.stringify({ exclude_sectors: [225, 285] }),
     start_date: "",
     end_date: "",
   });

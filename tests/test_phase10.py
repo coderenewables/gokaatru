@@ -16,6 +16,7 @@ from server.api.main import create_app
 from server.state.manager import SessionManager
 from server.state.session import SessionState, session
 from server.tools.visualization import _plot_scenario_comparison
+from tests.http_operations import operation
 
 
 @pytest.fixture
@@ -179,7 +180,7 @@ def test_summary_includes_scenario_count(api_client: tuple[TestClient, SessionMa
     _seed_scenario_ready_state(state)
     client.post(f"/api/sessions/{session_id}/scenarios", headers=headers, json={"name": "Scenario summary"})
 
-    response = client.get(f"/api/sessions/{session_id}/summary", headers=headers)
+    response = operation(client, session_id, "get_analysis_summary")
 
     assert response.status_code == 200
     assert response.json()["scenario_count"] == 1

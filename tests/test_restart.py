@@ -116,13 +116,12 @@ def test_a_project_reopens_intact_after_the_server_is_killed(tmp_path: Path) -> 
         with csv_path.open("rb") as handle:
             files = {"file": ("campaign.csv", handle)}
             _ok(client.post(f"/api/sessions/{session_id}/uploads/timeseries", files=files))
-        draft = _ok(client.get(f"/api/sessions/{session_id}/datamodel/draft"))
+        base = f"/api/sessions/{session_id}/operations"
+        draft = _ok(client.post(f"{base}/draft_data_model", json={}))
         columns = [column["name"] for column in draft["columns"]]
         spec = spec_from_draft(columns, {"name": "Synthetic", "offset_from_utc_hrs": 0})
-        _ok(client.post(f"/api/sessions/{session_id}/datamodel/build", json=spec))
-        hub = {"updates": [{"key": "hub_height_m", "value": 120}]}
-        _ok(client.put(f"/api/sessions/{session_id}/config", json=hub))
-        base = f"/api/sessions/{session_id}/operations"
+        _ok(client.post(f"{base}/build_data_model", json={"spec": spec}))
+        _ok(client.post(f"{base}/update_run_config", json={"key": "hub_height_m", "value": "120"}))
         pair = json.dumps({"80": "Spd_80m", "100": "Spd_100m"})
         for name, body in [
             ("apply_cleaning_rule", {"rule_type": "range_check", "sensor": "Spd_100m", "params": "{}"}),

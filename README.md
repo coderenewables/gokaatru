@@ -7,7 +7,7 @@ GoKaatru ships as two parts that work together:
 - **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **111 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
 - **[`frontend/`](./frontend)** — the **workbench** (React + Vite + TypeScript): projects of campaigns, worked in four phases, Prepare, Model, Run and Interrogate (decisions/0014, 0015).
 
-State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The frontend's convenience fields are **derived mirrors** of canonical backend keys, not independent state — the mapping is defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
+State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The workbench reads it through `get_run_config` and keeps no copy. The retired interface wrote **derived mirrors** of canonical keys into it; the backend still promotes and strips them from configurations that interface saved, with the mapping defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
 
 ## Application workflow
 

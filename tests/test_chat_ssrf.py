@@ -50,7 +50,8 @@ class TestCustomEndpointsRejected:
 
 class TestProviderListMatchesFrontend:
     def test_supported_providers_are_exactly_the_four_the_ui_offers(self) -> None:
-        # frontend/src/test/phaseG.test.ts pins the same literal on the UI side.
+        # The retired interface's Copilot offered exactly these; Phase 4 rebuilds it
+        # (decisions/0015.11) against this list.
         assert set(_PROVIDER_URLS) == {"openai", "openrouter", "groq", "together"}
 
     def test_unsupported_provider_error_names_it_and_lists_supported(self) -> None:

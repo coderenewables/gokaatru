@@ -36,6 +36,8 @@ Prepare ──► Model ──► Run ──► Interrogate
   saved selections, flags), loading by drop or chooser, and the mast diagram. A data model
   drafted from the CSV headers is edited by dragging a sensor to its height; an uploaded Task
   43 model is shown read-only. Columns the draft could not read are listed with the reason.
+  Sensors are taken out of the analysis here too: their columns leave the working data and the
+  mapping, after a preview, and Undo puts them back.
 - **Reanalysis**: BrightHub (ERA5 and MERRA-2) or EarthDataHub (ERA5), one node at a time
   with its progress.
 - **Timeline, Scatter, Wind rose, Profile**: linked charts. A brush on the timeline, a lasso

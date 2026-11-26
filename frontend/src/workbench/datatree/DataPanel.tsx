@@ -6,6 +6,7 @@ import { api, unwrap } from "../api";
 import type { ChannelDrag } from "../dnd";
 import { DataModelSection, DropArea } from "../datamodel/DataModel";
 import { useCampaign } from "../shell/context";
+import { RemovalSection } from "./Removal";
 import "./data.css";
 
 type Instrument = Schemas["Instrument"];
@@ -130,6 +131,7 @@ export function DataPanel() {
           </ul>
         </section>
       ))}
+      <RemovalSection instruments={listed} />
       {other.length > 0 && (
         <section aria-labelledby="gk-other-channels" className="gk-data-group">
           <h2 id="gk-other-channels">Other channels</h2>

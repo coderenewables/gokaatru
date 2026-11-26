@@ -386,7 +386,8 @@ frontend/src/
 │   ├── sensors.ts        # the sensors route's rows, checked (its response is untyped)
 │   ├── datatree/         # DataPanel: the data tree (list_instruments by height, statistics,
 │   │                     #   other channels, reanalysis, saved selections, flags); every
-│   │                     #   channel a dnd-kit draggable onto a chart
+│   │                     #   channel a dnd-kit draggable onto a chart; Removal.tsx takes
+│   │                     #   sensors out of the analysis (remove_sensors, previewed) (P3-12a)
 │   ├── timeline/         # uPlot over Arrow series windows (POST /series), refetched on
 │   │                     #   zoom; brush = the period term; flag bands (get_flag_intervals),
 │   │                     #   clicked or stepped with the arrow keys; drop a channel to add it

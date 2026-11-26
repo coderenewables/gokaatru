@@ -89,6 +89,39 @@ test("a channel dragged from the data tree onto the timeline joins it", async ({
   await expect(plot).toHaveAttribute("aria-label", /Tmp_100m/);
 });
 
+test("a sensor is removed from the analysis after a preview, and Undo puts it back", async ({ page }) => {
+  const opened = await campaignWithData(page, `Remove ${Date.now()}`);
+  await page.goto(workbenchUrl(opened));
+  await expect(page.getByRole("region", { name: "60 m" })).toBeVisible();
+
+  const removal = page.locator("details.gk-removal");
+  await removal.getByText("Remove sensors from the analysis").click();
+  const preview = removal.getByRole("button", { name: "Preview" });
+  await expect(preview).toBeDisabled();
+  await removal.getByRole("checkbox", { name: "Spd_60m" }).check();
+  await preview.click();
+  await expect(removal.getByRole("status")).toHaveText(
+    "Would remove Spd_60m, taking out the columns Spd_60m; 4 sensors remain.",
+  );
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations.map((violation) => violation.id)).toEqual([]);
+
+  await removal.getByRole("button", { name: "Remove 1 sensor" }).click();
+  await expect(page.getByRole("region", { name: "60 m" })).toHaveCount(0);
+  const log = await page.request.post(`/api/sessions/${opened.sessionId}/operations/get_operation_log`, {
+    headers: { "X-GoKaatru-Session": opened.sessionId },
+    data: {},
+  });
+  const entries = ((await log.json()) as { entries: Array<{ operation: string; actor: string }> }).entries;
+  // Through the generated route, as the user; the reads the panels make afterwards follow it.
+  expect(entries.filter((entry) => entry.operation === "remove_sensors")).toEqual([
+    expect.objectContaining({ operation: "remove_sensors", actor: "user" }),
+  ]);
+
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.getByRole("region", { name: "60 m" })).toBeVisible();
+});
+
 test("an empty campaign says to load its files", async ({ page }) => {
   const opened = await newCampaign(page, `Empty tree ${Date.now()}`);
   await page.goto(workbenchUrl(opened));

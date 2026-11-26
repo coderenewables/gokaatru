@@ -5,6 +5,7 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import time
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
 
@@ -365,8 +366,43 @@ def _store_coordinate(state: SessionState, latitude: float, longitude: float) ->
     state.set_coordinate(Coordinate(latitude=latitude, longitude=longitude, elevation_m=elevation))
 
 
+# The longest period one extraction may ask for (D35). The store is read node by node, so a
+# longer request is a cost a caller rarely means; a reversed one returned an empty frame.
+ERA5_MAX_SPAN_YEARS = 30
+
+
+def check_coordinate(latitude: float, longitude: float) -> None:
+    """Refuse a coordinate off the globe rather than let a grid lookup clamp it."""
+    if not -90.0 <= latitude <= 90.0:
+        raise ValueError(f"latitude {latitude} is outside -90 to 90")
+    if not -180.0 <= longitude <= 180.0:
+        raise ValueError(f"longitude {longitude} is outside -180 to 180")
+
+
+def _check_period(start_date: str, end_date: str) -> None:
+    """An ISO date or date-time each, the end on or after the start, at most
+    ``ERA5_MAX_SPAN_YEARS`` apart. These lived in the hand-written route's request model only,
+    so the operation took a reversed range and returned nothing (P3-17b)."""
+    parsed = []
+    for name, value in (("start_date", start_date), ("end_date", end_date)):
+        try:
+            parsed.append(datetime.fromisoformat(str(value)))
+        except ValueError as exc:
+            raise ValueError(f"{name} {value!r} is not an ISO date (YYYY-MM-DD)") from exc
+    start, end = (moment.replace(tzinfo=None) for moment in parsed)
+    if end < start:
+        raise ValueError(f"end_date ({end_date}) must be on or after start_date ({start_date})")
+    span_days = (end - start).days
+    max_days = ERA5_MAX_SPAN_YEARS * 365
+    if span_days > max_days:
+        raise ValueError(
+            f"Requested span of {span_days} days exceeds maximum of {ERA5_MAX_SPAN_YEARS} years ({max_days} days)"
+        )
+
+
 def _find_era5_nodes(state: SessionState, latitude: float, longitude: float) -> dict:
     """Find the four surrounding ERA5 grid nodes using 0.25° bounds and haversine distance."""
+    check_coordinate(latitude, longitude)
     dataset: xr.Dataset | None = None
     try:
         dataset = _open_era5_dataset(state)
@@ -426,6 +462,8 @@ def _extract_era5_data(
     "site" silently became that node's own coordinate - interpolation then degenerated to
     exactly one corner's value instead of a genuine blend, with no error raised.
     """
+    check_coordinate(latitude, longitude)
+    _check_period(start_date, end_date)
     try:
         cache_path = _era5_cache_path(state, latitude, longitude)
     except TypeError:

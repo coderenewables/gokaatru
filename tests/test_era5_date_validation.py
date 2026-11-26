@@ -1,133 +1,86 @@
-"""Regression tests for D35 — ERA5 date inputs must be validated.
+"""Regression tests for D35: an ERA5 extraction's period and coordinate are checked.
 
-Bug: ExtractEra5Request accepted plain strings for start_date/end_date with
-no format validation, no end >= start check, and no maximum span cap.  A
-reversed range silently produced an empty extraction; malformed dates surfaced
-as lower-level exceptions; uncapped spans were a cost/latency issue.
+Bug: the extraction accepted any strings for start_date and end_date: a reversed range
+silently produced an empty extraction, a malformed date surfaced as a lower-level exception,
+and an uncapped span was a cost a caller rarely means.
 
-Fix: Use datetime.date types (Pydantic parses and validates ISO dates),
-model validator for ordering and span cap (30 years), and return effective
-range in response.
+Fix (D35) was made in the hand-written route's request model only, so the operation, over MCP
+and its generated route, never had it. The checks now live in ``_extract_era5_data`` and
+``_find_era5_nodes`` (P3-17b), and refuse before anything is read from EarthDataHub.
 """
 
 from __future__ import annotations
 
 from datetime import date, timedelta
 
+import pandas as pd
 import pytest
-from pydantic import ValidationError
 
-from server.api.schemas import ERA5_MAX_SPAN_YEARS, ExtractEra5Request
-
-
-class TestExtractEra5RequestDateParsing:
-    """Pydantic must parse ISO date strings into datetime.date objects."""
-
-    def test_iso_string_parses(self) -> None:
-        req = ExtractEra5Request(
-            latitude=52.4, longitude=4.8,
-            start_date="2024-01-01", end_date="2024-12-31",
-        )
-        assert isinstance(req.start_date, date)
-        assert isinstance(req.end_date, date)
-        assert req.start_date == date(2024, 1, 1)
-        assert req.end_date == date(2024, 12, 31)
-
-    def test_date_objects_accepted(self) -> None:
-        req = ExtractEra5Request(
-            latitude=52.4, longitude=4.8,
-            start_date=date(2024, 1, 1), end_date=date(2024, 12, 31),
-        )
-        assert req.start_date == date(2024, 1, 1)
-
-    def test_defaults_are_dates(self) -> None:
-        req = ExtractEra5Request(latitude=52.4, longitude=4.8)
-        assert isinstance(req.start_date, date)
-        assert isinstance(req.end_date, date)
-
-    def test_malformed_date_rejected(self) -> None:
-        with pytest.raises(ValidationError):
-            ExtractEra5Request(
-                latitude=52.4, longitude=4.8,
-                start_date="not-a-date", end_date="2024-12-31",
-            )
-
-    def test_malformed_date_rejected_end(self) -> None:
-        with pytest.raises(ValidationError):
-            ExtractEra5Request(
-                latitude=52.4, longitude=4.8,
-                start_date="2024-01-01", end_date="Jan 1st",
-            )
+from server.state.session import SessionState
+from server.tools import era5
+from server.tools.era5 import ERA5_MAX_SPAN_YEARS, _extract_era5_data, _find_era5_nodes
 
 
-class TestExtractEra5RequestDateOrdering:
-    """end_date must be on or after start_date."""
+@pytest.fixture
+def reads(monkeypatch, tmp_path) -> list[tuple[str, str]]:
+    """Every read the extraction would make of the store, answered with a one-row frame."""
+    made: list[tuple[str, str]] = []
 
-    def test_end_before_start_raises(self) -> None:
-        with pytest.raises(ValidationError, match="end_date.*must be on or after start_date"):
-            ExtractEra5Request(
-                latitude=52.4, longitude=4.8,
-                start_date="2024-12-31", end_date="2024-01-01",
-            )
+    def download(_state, _lat, _lon, start, end):
+        made.append((start, end))
+        return pd.DataFrame({"u100": [1.0], "v100": [1.0]}, index=pd.DatetimeIndex([pd.Timestamp(start)], name="time"))
 
-    def test_equal_dates_pass(self) -> None:
-        req = ExtractEra5Request(
-            latitude=52.4, longitude=4.8,
-            start_date="2024-06-15", end_date="2024-06-15",
-        )
-        assert req.start_date == req.end_date
-
-    def test_normal_range_passes(self) -> None:
-        req = ExtractEra5Request(
-            latitude=52.4, longitude=4.8,
-            start_date="2020-01-01", end_date="2024-12-31",
-        )
-        assert req.end_date > req.start_date
+    monkeypatch.setattr(era5, "_download_era5_frame_with_retry", download)
+    monkeypatch.setattr(era5, "_era5_cache_path", lambda *_args: tmp_path / "node.parquet")
+    monkeypatch.setattr(era5, "_open_era5_dataset", lambda _state: pytest.fail("the store was opened"))
+    return made
 
 
-class TestExtractEra5RequestSpanCap:
-    """Requested span must not exceed ERA5_MAX_SPAN_YEARS."""
+def extract(start: object, end: object) -> dict:
+    return _extract_era5_data(SessionState(), 52.4, 4.8, str(start), str(end))
 
-    def test_span_exceeds_max_raises(self) -> None:
-        with pytest.raises(ValidationError, match=f"exceeds maximum of {ERA5_MAX_SPAN_YEARS} years"):
-            ExtractEra5Request(
-                latitude=52.4, longitude=4.8,
-                start_date="1900-01-01", end_date="2100-01-01",
-            )
 
-    def test_span_at_max_passes(self) -> None:
-        # Default span (2000-01-01 to 2025-12-31) = ~9496 days < 30*365 = 10950
-        req = ExtractEra5Request(latitude=52.4, longitude=4.8)
-        assert req.start_date < req.end_date
+class TestPeriod:
+    def test_an_iso_date_or_date_time_is_read(self, reads) -> None:
+        assert extract("2024-01-01", "2024-12-31")["status"] == "ok"
+        assert extract("2024-01-01", "2024-01-01T02:00:00")["status"] == "ok"
+        assert len(reads) == 2
 
-    def test_one_day_over_max_raises(self) -> None:
-        max_days = ERA5_MAX_SPAN_YEARS * 365
+    @pytest.mark.parametrize(("start", "end"), [("not-a-date", "2024-12-31"), ("2024-01-01", "Jan 1st")])
+    def test_a_malformed_date_is_refused_before_any_read(self, reads, start, end) -> None:
+        with pytest.raises(ValueError, match="is not an ISO date"):
+            extract(start, end)
+        assert reads == []
+
+    def test_a_reversed_range_is_refused(self, reads) -> None:
+        with pytest.raises(ValueError, match="end_date.*must be on or after start_date"):
+            extract("2024-12-31", "2024-01-01")
+        assert reads == []
+
+    def test_one_day_is_a_period(self, reads) -> None:
+        assert extract("2024-06-15", "2024-06-15")["status"] == "ok"
+
+    def test_a_span_beyond_the_cap_is_refused(self, reads) -> None:
+        with pytest.raises(ValueError, match=f"exceeds maximum of {ERA5_MAX_SPAN_YEARS} years"):
+            extract("1900-01-01", "2100-01-01")
         start = date(2000, 1, 1)
-        end = start + timedelta(days=max_days + 1)  # one day over
-        with pytest.raises(ValidationError, match="exceeds maximum"):
-            ExtractEra5Request(
-                latitude=52.4, longitude=4.8,
-                start_date=start, end_date=end,
-            )
+        with pytest.raises(ValueError, match="exceeds maximum"):
+            extract(start, start + timedelta(days=ERA5_MAX_SPAN_YEARS * 365 + 1))
+        assert reads == []
 
-    def test_exactly_max_days_passes(self) -> None:
-        max_days = ERA5_MAX_SPAN_YEARS * 365
+    def test_exactly_the_cap_is_read(self, reads) -> None:
         start = date(2000, 1, 1)
-        end = start + timedelta(days=max_days)
-        req = ExtractEra5Request(
-            latitude=52.4, longitude=4.8,
-            start_date=start, end_date=end,
-        )
-        assert (req.end_date - req.start_date).days == max_days
+        assert extract(start, start + timedelta(days=ERA5_MAX_SPAN_YEARS * 365))["status"] == "ok"
+
+    def test_the_default_period_is_within_the_cap(self, reads) -> None:
+        assert _extract_era5_data(SessionState(), 52.4, 4.8)["status"] == "ok"
 
 
-class TestExtractEra5RequestLatitudeLongitude:
-    """Existing coordinate constraints must still work alongside date validation."""
-
-    def test_latitude_out_of_range(self) -> None:
-        with pytest.raises(ValidationError):
-            ExtractEra5Request(latitude=91.0, longitude=4.8)
-
-    def test_longitude_out_of_range(self) -> None:
-        with pytest.raises(ValidationError):
-            ExtractEra5Request(latitude=52.4, longitude=-181.0)
+class TestCoordinate:
+    @pytest.mark.parametrize(("latitude", "longitude"), [(91.0, 4.8), (52.4, -181.0)])
+    def test_a_coordinate_off_the_globe_is_refused(self, reads, latitude, longitude) -> None:
+        with pytest.raises(ValueError, match="is outside"):
+            _extract_era5_data(SessionState(), latitude, longitude)
+        with pytest.raises(ValueError, match="is outside"):
+            _find_era5_nodes(SessionState(), latitude, longitude)
+        assert reads == []

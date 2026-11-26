@@ -99,7 +99,7 @@ class FindEra5NodesRequest(BaseModel):
     longitude: float = Field(..., ge=-180, le=180)
 
 
-ERA5_MAX_SPAN_YEARS = 30
+from server.tools.era5 import ERA5_MAX_SPAN_YEARS  # noqa: E402
 
 
 class ExtractEra5Request(BaseModel):

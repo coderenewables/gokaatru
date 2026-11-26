@@ -25,7 +25,7 @@ from server.operations import operation
 from server.schemas.common import Coordinate
 from server.schemas.results import brighthub as result_models
 from server.state.session import SessionState, get_active_session, session
-from server.tools.era5 import _era5_key
+from server.tools.era5 import _era5_key, check_coordinate
 
 
 class BrightHubAuthError(ValueError):
@@ -299,6 +299,7 @@ def _find_brighthub_nodes(state: SessionState, latitude: float, longitude: float
     """Find the ERA5 and MERRA-2 nodes around the site and record them with the site, as
     ``find_era5_nodes`` does on the EarthDataHub path: interpolation reads the node lists, so
     a node downloaded without them cannot be interpolated."""
+    check_coordinate(latitude, longitude)
     token = _require_token(state)
     try:
         found = fetch_reanalysis_nodes(token, latitude, longitude)

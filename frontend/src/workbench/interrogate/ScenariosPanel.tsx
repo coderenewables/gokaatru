@@ -13,6 +13,7 @@ import {
 } from "./store";
 import { loadScenario } from "../model/scenario";
 import { useCampaign } from "../shell/context";
+import { saveFile, toCsv } from "./export";
 import { useOpenSweep, useSweepList } from "./useSweeps";
 import "./interrogate.css";
 
@@ -142,10 +143,15 @@ export function ScenariosPanel() {
             })}
           </div>
 
-          <p className="gk-selection-count" aria-live="polite">
-            <strong>{filtered.length}</strong>
-            <span className="gk-muted"> of {all.length} scenarios</span>
-          </p>
+          <div className="gk-int-count">
+            <p className="gk-selection-count" aria-live="polite">
+              <strong>{filtered.length}</strong>
+              <span className="gk-muted"> of {all.length} scenarios</span>
+            </p>
+            <button type="button" className="gk-button" onClick={() => saveFile(`${sweepId}.csv`, toCsv(all), "text/csv")}>
+              Export all {all.length} as CSV
+            </button>
+          </div>
           {chips.length > 0 ? (
             <ul className="gk-terms" aria-label="Scenario terms">
               {chips.map((chip) => (

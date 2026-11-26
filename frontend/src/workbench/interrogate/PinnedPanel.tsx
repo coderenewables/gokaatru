@@ -5,6 +5,7 @@ import { AXIS_COLUMNS, AXIS_LABELS, METRIC_COLUMNS } from "../../types/sweep";
 import { api, unwrap } from "../api";
 import { loadScenario } from "../model/scenario";
 import { useCampaign } from "../shell/context";
+import { saveFile } from "./export";
 import { formatMetric, metricLabel } from "./ScenariosPanel";
 import { type SweepRow, metricValue, useInterrogate } from "./store";
 import "./interrogate.css";
@@ -103,7 +104,7 @@ export function PinnedPanel() {
         </tbody>
       </table>
       <div className="gk-actions">
-        {chosen.map((row) => (
+        {chosen.map((row, index) => (
           <span key={row.config_hash} className="gk-pinned-actions">
             <button
               type="button"
@@ -115,6 +116,16 @@ export function PinnedPanel() {
               }}
             >
               Load {label(row)} into Model
+            </button>
+            <button
+              type="button"
+              className="gk-button"
+              disabled={!configs[index]?.data}
+              onClick={() =>
+                saveFile(`${sweepId}-${row.config_hash}.runconfig.json`, `${JSON.stringify(configs[index].data, null, 2)}\n`, "application/json")
+              }
+            >
+              Download {label(row)} configuration
             </button>
             <button type="button" className="gk-button" onClick={() => unpin(row.config_hash)}>
               Unpin {label(row)}

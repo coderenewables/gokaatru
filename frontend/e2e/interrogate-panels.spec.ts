@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
@@ -139,6 +141,29 @@ test("the gates panel says what each gate checks, what it found and what it excl
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations.map((violation) => violation.id)).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath("interrogate-gates.png") });
+});
+
+test("every scenario exports as CSV, and a pinned scenario's configuration downloads", async ({ page }) => {
+  const { rows, scenarios } = await open(page);
+  const exported = page.waitForEvent("download");
+  await scenarios.getByRole("button", { name: `Export all ${rows.length} as CSV` }).click();
+  const csv = await exported;
+  expect(csv.suggestedFilename()).toBe("sweep-20261126-b.csv");
+  const lines = readFileSync(await csv.path(), "utf-8").trimEnd().split("\n");
+  expect(lines).toHaveLength(rows.length + 1);
+  expect(lines[0].split(",")).toEqual(expect.arrayContaining(["config_hash", "admissible", "long_term_mean_speed_mps", "gate_concurrent_period"]));
+  // Inadmissible scenarios are in the file although the table hides them by default.
+  expect(lines.filter((line) => line.includes(",false,"))).toHaveLength(rows.filter((row) => !row.admissible).length);
+
+  const first = rows[0];
+  await scenarios.getByRole("button", { name: `Pin scenario ${first.config_hash.slice(0, 8)}` }).click();
+  await tab(page, "Side by side").click();
+  const saved = page.waitForEvent("download");
+  await page.getByRole("button", { name: `Download ${first.config_hash.slice(0, 8)} configuration` }).click();
+  const runconfig = await saved;
+  expect(runconfig.suggestedFilename()).toBe(`sweep-20261126-b-${first.config_hash}.runconfig.json`);
+  const config = JSON.parse(readFileSync(await runconfig.path(), "utf-8"));
+  expect(config).toEqual({ hub_height_m: 120, scenario: { config_hash: first.config_hash, shear_model: first.shear_model, ltc_algorithm: first.ltc_algorithm } });
 });
 
 test("two pinned scenarios sit side by side with their differences, and one loads into Model", async ({ page }, testInfo) => {

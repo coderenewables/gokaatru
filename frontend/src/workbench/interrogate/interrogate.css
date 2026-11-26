@@ -243,3 +243,15 @@
 .gk-gate details {
   margin-top: 6px;
 }
+
+.gk-int-count {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.gk-int-count .gk-selection-count {
+  margin: 0;
+}

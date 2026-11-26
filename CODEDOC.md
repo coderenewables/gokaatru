@@ -430,7 +430,8 @@ frontend/src/
 │   │                     #   observed range and the scenarios behind each verdict, those that
 │   │                     #   could not run; axes over the sweep from get_sweep_summary), PinnedPanel
 │   │                     #   (two scenarios and where their runconfigs differ; load into
-│   │                     #   Model) (P3-15)
+│   │                     #   Model; download each runconfig) (P3-15); export.ts: the
+│   │                     #   sweep's rows as CSV, every column any row has (P3-14a)
 │   ├── history/          # undo, redo and the status bar's history (get_operation_log,
 │   │                     #   get_fixed_prefix_hash), shared with the assistant and MCP
 │   ├── model/            # the Model phase (P3-10, decisions/0015.1-0015.5): operations.ts

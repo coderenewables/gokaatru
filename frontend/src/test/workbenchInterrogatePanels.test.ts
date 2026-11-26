@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { GATE_META, GATE_STATUS_MEANING } from "../types/sweep";
+import { toCsv } from "../workbench/interrogate/export";
 import { gateValue, summariseGates } from "../workbench/interrogate/GatesPanel";
 import { differences, flatten } from "../workbench/interrogate/PinnedPanel";
 import { NO_TERMS, filterRows, type SweepRow } from "../workbench/interrogate/store";
@@ -95,6 +96,25 @@ describe("what a gate and a verdict mean", () => {
     expect(GATE_STATUS_MEANING.warn).toContain("counted");
     expect(GATE_STATUS_MEANING.not_applicable).toContain("distinct from a pass");
     expect(GATE_STATUS_MEANING.marked).toContain("Never excludes");
+  });
+});
+
+describe("the scenarios as CSV", () => {
+  it("takes every column any row has, so a failed first row drops none", () => {
+    const csv = toCsv([
+      { config_hash: "a", status: "failed", error: "No concurrent months." },
+      { config_hash: "b", status: "ok", long_term_mean_speed_mps: 7.25, gate_concurrent_period: "pass" },
+    ]);
+    expect(csv).toBe(
+      "config_hash,status,error,long_term_mean_speed_mps,gate_concurrent_period\n" +
+        "a,failed,No concurrent months.,,\n" +
+        "b,ok,,7.25,pass\n",
+    );
+  });
+
+  it("quotes a value holding a comma, a quote or a line break, and leaves a missing value empty", () => {
+    expect(toCsv([{ a: 'say "x", then\ny', b: null, c: true }])).toBe('a,b,c\n"say ""x"", then\ny",,true\n');
+    expect(toCsv([])).toBe("");
   });
 });
 

@@ -72,12 +72,12 @@ gate failures and the sentence saying what is not swept.
 ### Interrogate
 
 A sweep's scenarios under one crossfilter: **Scenarios** (filters per axis level, pins, load
-into Model), **Distribution** (a metric's histogram, brushed), **Parallel coordinates** (every
+into Model, every scenario of the sweep exported as CSV), **Distribution** (a metric's histogram, brushed), **Parallel coordinates** (every
 axis and metric, brushed), **Sensitivity** (the server's decomposition over the scenarios the
 filters keep, the uncertainty substitution and what is not swept), **Gates** (for the scenarios the
 filters keep, admissible or not: what each gate measures, its thresholds, the range it observed,
-the scenarios it excluded or flagged, those that could not run, and what the gates left varied) and **Side by side** (two pinned scenarios and where their
-configurations differ).
+the scenarios it excluded or flagged, those that could not run, and what the gates left varied) and **Side by side** (two pinned scenarios, where their
+configurations differ, and each configuration as a file).
 
 The Copilot and the Results report of the interface this replaced return in Phases 4 and 7
 (decisions/0015). Sessions made before projects existed are kept on disk but are not reached

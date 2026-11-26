@@ -475,7 +475,7 @@
  },
  {
   "annotations": null,
-  "description": "Find nearest ERA5 and MERRA-2 reanalysis nodes via BrightHub for a coordinate.",
+  "description": "Find the nearest ERA5 and MERRA-2 reanalysis nodes via BrightHub and record them with the site, nearest first.",
   "execution": null,
   "icons": null,
   "inputSchema": {

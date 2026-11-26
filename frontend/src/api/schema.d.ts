@@ -1265,7 +1265,7 @@ export interface paths {
         put?: never;
         /**
          * brighthub_find_reanalysis_nodes
-         * @description Find nearest ERA5 and MERRA-2 reanalysis nodes via BrightHub for a coordinate.
+         * @description Find the nearest ERA5 and MERRA-2 reanalysis nodes via BrightHub and record them with the site, nearest first.
          */
         post: operations["operation_brighthub_find_reanalysis_nodes_api_sessions__session_id__operations_brighthub_find_reanalysis_nodes_post"];
         delete?: never;

@@ -61,7 +61,6 @@ _NUMBERS = "takes its inputs as numbers, not records"
 NOT_SELECTABLE = {
     "analyze_homogeneity": "screens the reanalysis series, not the measured records",
     "analyze_sweep_spread": _STORED,
-    "brighthub_find_reanalysis_nodes": _STORED,
     "brighthub_get_data_model": _STORED,
     "brighthub_list_locations": _STORED,
     "brighthub_status": _STORED,

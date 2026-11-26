@@ -4,12 +4,26 @@ Part of GoKaatru MCP Server.
 """
 from __future__ import annotations
 
+import re
+
 import requests
 
 from server.core.spatial import bearing_compass, haversine_km
 
 BRIGHTHUB_BASE_URL = "https://api.brighthub.io"
 BRIGHTHUB_AUTH_URL = f"{BRIGHTHUB_BASE_URL}/auth/token"
+
+# BrightHub location ids are RFC-4122 hex strings. The id is put into a file name in the
+# campaign's uploads folder and into BrightHub's URL path, so anything else is refused.
+_LOCATION_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
+
+def validate_location_id(uuid: str) -> str:
+    """The location id, stripped; refused when it could leave a folder or a URL segment."""
+    cleaned = uuid.strip()
+    if not _LOCATION_ID.fullmatch(cleaned) or ".." in cleaned:
+        raise ValueError(f"Invalid BrightHub location id {uuid!r}: letters, digits, '.', '_' and '-' only, no '..'")
+    return cleaned
 
 
 def authenticate(client_id: str, client_secret: str) -> dict[str, str | None]:

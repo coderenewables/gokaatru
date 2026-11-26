@@ -46,6 +46,7 @@ _UNDO = (
 )
 WRITES_NOT_OBSERVED: dict[tuple[str, str], str] = {
     ("brighthub_prepare_reanalysis", "site"): _SAME_SITE,
+    ("brighthub_find_reanalysis_nodes", "site"): _SAME_SITE,
     ("extrapolate_to_hub_height", "site"): _SAME_SITE,
     ("parse_datamodel", "site"): _SAME_SITE,
     ("parse_datamodel", "label"): _SAME_SITE,

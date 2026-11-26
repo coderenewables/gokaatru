@@ -122,9 +122,6 @@ class SessionState:
     scenarios: list[dict[str, object]]
     runconfig: dict[str, object]
     timezone: object | None  # datetime.timezone or ZoneInfo — set from datamodel
-    executed_nodes: set[str]
-    workflow_execution: dict[str, object]
-    workflow_runs: list[dict[str, object]]
     # Every operation called on this session, in order (decisions/0010): who called it,
     # with what, and what it did to the data version. Written by server.operations.
     operation_log: list[dict[str, object]]
@@ -201,17 +198,6 @@ class SessionState:
         self.scenarios = []
         self.runconfig = {}
         self.timezone = None
-        # Node ids this session actually executed, so a client-supplied "done" can be
-        # corroborated instead of taken on trust (F-10).
-        self.executed_nodes = set()
-        self.workflow_execution = {
-            "run_id": None,
-            "is_running": False,
-            "cancel_requested": False,
-            "node_statuses": {},
-            "events": [],
-        }
-        self.workflow_runs = []
         self.operation_log = []
         self.undo_stack = []
         self.selections = {}

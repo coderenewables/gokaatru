@@ -138,8 +138,8 @@ npm run test                         # vitest
 
 ```
 server/                 # Python MCP server + FastAPI web API
-├── api/                # FastAPI routes (sessions, analysis, brighthub, workflow, …)
-├── core/               # executor, regression, spatial, formulas, validators, runconfig contract
+├── api/                # FastAPI routes: generated operation routes, sessions, projects, uploads, series, sweep, …
+├── core/               # pipeline order, sweep, regression, spatial, formulas, validators, runconfig contract
 ├── tools/              # MCP tools: data_io, cleaning, shear, extrapolation, era5, ltc, …
 ├── state/              # session + dataset pool managers
 └── schemas/            # Pydantic models (Coordinate, SensorInfo, PlotResult, …)
@@ -196,7 +196,6 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/sessions/{id}/plots/{name}` | POST | Generate a named Plotly figure |
 | `/sessions/{id}/exports/*` | GET | Download timeseries, LTC, ensemble, or runconfig files |
 | `/sessions/{id}/brighthub/*` | various | BrightHub login/locations/import/reanalysis |
-| `/sessions/{id}/workflow/{execute,step,status,…}` | various | Workflow canvas execution + snapshots + compare |
 | `/sessions/{id}/map/site` | GET | Site-overview GeoJSON (mast + ERA5 nodes) |
 | `/sessions/{id}/chat` | POST | BYOK LLM chat proxy with server-side tool execution (read-only by default; see [Chat tool authority](#chat-tool-authority)) |
 | `/mcp/catalog` | GET | MCP tool/resource catalog for discovery |

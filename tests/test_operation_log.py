@@ -182,24 +182,6 @@ def test_the_assistant_is_recorded_as_the_actor(api, monkeypatch) -> None:
     assert state.operation_log[-1]["actor"] == "assistant:openai/gpt-4o"
 
 
-def test_the_canvas_is_recorded_as_the_actor(api) -> None:
-    client, manager, _ = api
-    session_id, headers, state = _session(client, manager)
-    payload = {
-        "mode": "auto",
-        "nodes": [
-            {"id": "op-1", "kind": "operation", "label": "Config", "template_id": "get_run_config", "config": {}}
-        ],
-        "edges": [],
-    }
-    url = f"/api/sessions/{session_id}/workflow/execute"
-    assert client.post(url, headers=headers, json=payload).status_code == 200
-    node, request = state.operation_log[-2:]
-    assert (node["operation"], node["actor"]) == ("get_run_config", "canvas")
-    # The execute route is hand-written, so the request that ran the canvas is logged too.
-    assert request["operation"] == "http POST /api/sessions/{session_id}/workflow/execute"
-
-
 def test_a_change_through_a_hand_written_route_is_logged_and_saved(api) -> None:
     client, manager, base_dir = api
     session_id, headers, state = _session(client, manager)

@@ -432,9 +432,6 @@ UNTRACKED_FIELDS: dict[str, str] = {
     "artifact_clock": "bookkeeping: the clock artifact versions are read from",
     "artifact_versions": "bookkeeping: each artifact's version",
     "derived_inputs": "bookkeeping: the versions each result was built from",
-    "executed_nodes": "the current interface's Canvas run state",
-    "workflow_execution": "the current interface's Canvas run state",
-    "workflow_runs": "the current interface's archived Canvas runs",
 }
 
 

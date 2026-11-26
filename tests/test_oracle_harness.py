@@ -390,24 +390,6 @@ def test_windrose_sector_zero_is_centred_on_north(direction_deg: float, expected
     assert float(occupied[0]["center_deg"]) == pytest.approx(expected_centre_deg)
 
 
-def test_compare_tab_windrose_uses_a_different_sector_origin():
-    """FINDING (Step 1): the Compare-tab windrose bins from north instead of centring on it.
-
-    Every analysis windrose uses ``(dir + width/2) % 360 // width`` so sector 0 is
-    centred on north. ``workflow_execution._build_windrose_plots`` uses
-    ``(dir % 360) // 30`` with labels at ``index * 30 + 15``, so its sectors are
-    offset by half a width. The same data therefore renders as two different
-    roses depending on which tab is open. Presentational, but it breaks the
-    ledger invariant that one convention holds application-wide.
-    """
-    direction = 5.0
-    analysis_sector_centre = ((direction + 15.0) % 360.0 // 30.0) * 30.0
-    compare_sector_centre = (direction % 360.0 // 30.0) * 30.0 + 15.0
-    assert analysis_sector_centre == pytest.approx(0.0)
-    assert compare_sector_centre == pytest.approx(15.0)
-    assert analysis_sector_centre != compare_sector_centre
-
-
 # ---------------------------------------------------------------------------
 # Distribution and aggregation oracles
 # ---------------------------------------------------------------------------

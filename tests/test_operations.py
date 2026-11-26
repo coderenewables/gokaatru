@@ -6,7 +6,6 @@ import asyncio
 import pytest
 
 from server.api.routes.chat import _MUTATING_TOOLS, _READ_ONLY_TOOLS
-from server.core.executor import _tool_registry
 from server.main import mcp
 from server.operations import REGISTRY, STAGES, Operation, OperationRegistry, operation
 
@@ -196,15 +195,14 @@ def test_the_chat_route_offers_exactly_the_declared_tiers() -> None:
     assert _MUTATING_TOOLS == PINNED_CHANGE_TIER
 
 
-def test_the_canvas_dispatches_exactly_the_declared_canvas_operations() -> None:
-    dispatch = _tool_registry()
-    assert REGISTRY.names() - set(dispatch) == PINNED_NOT_ON_CANVAS
-    for name, (_module, function) in dispatch.items():
-        assert function is REGISTRY.get(name).fn, name
+def test_the_operations_a_pipeline_cannot_hold_are_the_pinned_ones() -> None:
+    """A pipeline step is a canvas operation (decisions/0015.1); the rest are pinned by name."""
+    assert {declared.name for declared in REGISTRY if not declared.canvas} == PINNED_NOT_ON_CANVAS
 
 
 def test_stages_and_their_order_are_the_pinned_ones() -> None:
-    """The canvas tie-break order (F-09) is the stage order, so it is pinned as well."""
+    """A pipeline's tie-break order (F-09, server/core/pipeline.py) is the stage order, so it is
+    pinned as well."""
     assert STAGES == PINNED_STAGES
     for declared in REGISTRY:
         assert declared.stage == PINNED_STAGE_BY_MODULE[declared.module.rsplit(".", 1)[-1]], declared.name

@@ -141,7 +141,6 @@ The interface-free heart. Nothing here imports FastAPI or FastMCP.
 | `reanalysis.py` | Per-source descriptors for the long-term reference datasets (ERA5, MERRA-2). |
 | `validators.py` | Shared Phase-1 validation + the timebase helpers `to_utc_index`, `detect_timestep_minutes`, `SENSOR_FIELDS`, and the timestamp-label convention (F-07). |
 | `runconfig.py` | **The canonical/mirror runconfig contract (D20)** — the single source of truth for site metadata; frontend convenience fields are derived mirrors. |
-| `executor.py` | Phase-3 workflow-execution orchestration: runs the Canvas DAG node by node. |
 | `brighthub.py` | BrightHub API auth + data-access client (used by both the MCP tool and the HTTP route layer). |
 | `admissibility.py` | Decides whether a scenario's result may enter the reported sweep spread (the sweep gates). |
 | `sweep.py` | Expands a scenario space, runs each leaf (grouped by prefix to reuse expensive upstream stages), and persists every scenario's record. Checkpoints after every shear-prefix group (`checkpoint`, an `in_progress` manifest via `_persist`); skips a leaf whose computation already ran (`_execution_key`, keyed on resolved columns); replaces every JSON file atomically (`_write_json_atomic`, `_REPLACE_ATTEMPTS` / `_REPLACE_RETRY_DELAY_S`). Manifests carry `engine_version` and `duplicates_skipped`. |
@@ -164,21 +163,21 @@ publishes the MCP tool itself (`_publish_to_mcp`, through `mcp.tool()`); no tool
 `mcp` directly, and `tests/test_mcp_surface.py` compares what clients receive with
 `tests/snapshots/mcp_tools.json` (`python -m tests.mcp_surface --write` to refresh). `Operation` also carries disclosure fields, standards references, a code version and
 an optional dry run; `REGISTRY` holds all 111. The parameter schema is read from the signature
-by FastMCP's own parser. `STAGES` is the pipeline order used for the canvas tie-break. It lives
+by FastMCP's own parser. `STAGES` is the stage order a pipeline's ties break on. It lives
 outside `core/` because it imports FastMCP. Each declaration wraps its function (`_logged`,
 `functools.wraps`, so the MCP schema is unchanged): every call appends to
 `state.operation_log` (actor, operation, effect, parameters with `secret_parameters`
 redacted, code version, data version before and after, status), and a successful change
 saves the project. The actor comes from the `ACTOR` context variable that each surface sets
-(`acting_as`): `user` (generated routes), `assistant:<provider>/<model>` (chat), `canvas`
-(executor), `mcp` (the MCP mount and stdio server); otherwise `direct`. Hand-written session
+(`acting_as`): `user` (generated routes), `assistant:<provider>/<model>` (chat), `mcp` (the
+MCP mount and stdio server); otherwise `direct` (entries the retired Canvas logged say `canvas`). Hand-written session
 routes bypass the operations, so a middleware in `server/api/main.py` logs and saves after a
 successful change through one (`record_route_change`, route template only, never the body)
 until Phases 2-3 move the interface onto the generated routes. A declaration with `selectable=True` (reads only; 25 statistics, charts, the series window and the channel summary, pinned in `tests/test_selection_operations.py`) gains a keyword-only `selection` parameter in the published signature (`_selectable_signature`), so MCP, the generated routes, the canvas and chat all offer it; given a saved selection's name or an inline JSON definition (`server/tools/selections.py` `is_inline`, `selection_mask`), the wrapper runs the function on a copy of the session whose working frame and `PER_RECORD_FRAMES` (raw, shear and roughness timeseries) are blank outside the selection (`selection_view`) and adds a `selection` block to the result. A read on an inline definition is not written to the operation log (decisions/0014.6). The chat route's two tiers and callables, the
-executor's canvas dispatch (`_tool_registry`) and its stage tie-break are all read from it;
+operations a pipeline may hold (`canvas`) and its stage tie-break are all read from it;
 `tests/test_operations.py` pins the tiers, the non-canvas set and the stage order by name.
 Each declaration also names the artifacts it `reads` and `writes` (decisions/0015.2), from
-`server/state/artifacts.py`: the canvas's typed ports and the dependencies staleness follows,
+`server/state/artifacts.py`: the pipeline's typed ports and the dependencies staleness follows,
 published by `GET /operations`. `tests/test_artifacts.py` holds them to the code on every call
 the operation samples make: what a call changes is among its declared writes, its first call
 answers the same with every undeclared artifact removed, and a declared write no sample makes
@@ -262,7 +261,6 @@ logic as the MCP tools, and shape the response with the Pydantic models in `sche
 | Route file | Endpoints | Area |
 |------------|:--------:|------|
 | `analysis.py` | 37 | Workflow analysis (statistics, shear, extrapolation, ERA5, ensemble, clipping, homogeneity, uncertainty, scenarios). |
-| `workflow_execution.py` | 14 | Phase-3 Canvas DAG execution, snapshots, run comparison, branching. |
 | `brighthub.py` | 8 | BrightHub login/logout/status, location browsing, reanalysis, import. |
 | `sweep.py` | 8 | Scenario-sweep engine surface (axes, estimate with the duplicates and refusals the run will make (`core/sweep.py` `estimate_sweep`, P3-8), run, **run/stream** SSE, list, get, runconfig, **spread**). |
 | `datasets.py` | 6 | Shared dataset-pool CRUD + load-into-session. |
@@ -313,7 +311,7 @@ remaining changes, the dry runs, and the network operations against fakes).
 ## 5. The analysis pipeline (data flow)
 
 A campaign flows through these stages; each is exposed as both MCP tools and HTTP endpoints,
-and rendered as a node on the frontend Canvas and a step in the Stepper:
+and is a step a pipeline in the Model phase can hold:
 
 ```
 ingest ─▶ clean ─▶ statistics ─▶ shear / vertical profile ─▶ hub extrapolation
@@ -628,6 +626,19 @@ See the README's "Known limitations" section for the full list and rationale.
   packages only it imported (the AI SDKs, the MCP SDK, Leaflet, Plotly, zod, clsx); no
   remaining package changed version. The Copilot and the Results report return in Phases 4
   and 7; sessions made before projects are not reachable from the screens (decisions/0015).
+
+**2026-11-26 — the Canvas executor retired (P3-17d, decisions/0015.1)**
+
+- Deleted `server/core/executor.py` and `server/api/routes/workflow_execution.py` (14 routes:
+  execute, step, stream, status, runs, compare, snapshots, branches, capabilities), their 21
+  request and response models, the session's `executed_nodes`, `workflow_execution` and
+  `workflow_runs`, and the tests that pinned the executor (`test_workflow_contract.py`'s
+  ordering and F-10 cases, `test_executor_concurrency.py`, `test_api_workflow_execution.py`).
+  A pipeline in the Model phase replaces the Canvas: ordered by the server from what each step
+  reads and writes, run one step at a time through the generated routes. The three staleness
+  tests moved to `tests/test_cleaning_staleness.py` and the sensors-route tests to
+  `tests/test_api_sensors.py`. A saved project's stored copy of a retired field is left on disk
+  and not restored.
 
 **Candidates for a future pass** (larger modules with a plausible seam, left intact here
 because the risk/benefit did not clearly favor churn):

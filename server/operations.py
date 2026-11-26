@@ -38,8 +38,8 @@ Effect = Literal["read", "change"]
 EFFECTS: tuple[str, ...] = ("read", "change")
 
 #: Who is calling, for the operation log: "user" (HTTP), "assistant:<provider>/<model>"
-#: (chat), "canvas" (the workflow executor), "mcp" (an MCP client). A call none of those
-#: surfaces wrapped, such as a test or a script, is "direct".
+#: (chat), "mcp" (an MCP client). A call none of those surfaces wrapped, such as a test or a
+#: script, is "direct". Entries logged by the retired Canvas say "canvas".
 ACTOR: ContextVar[str] = ContextVar("gokaatru_actor", default="direct")
 REDACTED = "[redacted]"
 #: Undo and redo walk the history; every other successful change starts a new branch of it,

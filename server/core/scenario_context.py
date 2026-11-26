@@ -67,7 +67,6 @@ SHARED_FIELDS: tuple[str, ...] = (
     "reanalysis_cache_identity",
     "timezone",
     "scenarios",
-    "workflow_runs",
     "data_version",
 )
 
@@ -97,8 +96,6 @@ RESET_FIELDS: tuple[str, ...] = (
     "artifact_clock",
     "artifact_versions",
     "derived_inputs",
-    "executed_nodes",
-    "workflow_execution",
     "operation_log",
     "undo_stack",
 )

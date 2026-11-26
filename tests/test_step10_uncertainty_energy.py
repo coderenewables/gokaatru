@@ -174,10 +174,10 @@ def test_no_aep_or_power_curve_exists_anywhere_in_the_pipeline():
     publishing P50/P75/P90/P99 — quantities that in wind resource assessment name
     energy exceedances. The gap is what F-28 measures.
     """
-    from server.core.executor import _tool_registry
+    from server.operations import REGISTRY
     from server.tools.advanced_analysis import _compute_energy_metrics
 
-    registry = _tool_registry()
+    registry = REGISTRY.names()
     energy_tools = [
         name
         for name in registry

@@ -51,7 +51,6 @@ def _rich_state(workspace: Path) -> SessionState:
             "persisted": False,
         }
     }
-    state.executed_nodes = {"node-a", "node-b"}
     state.data_version = 4
     state.derived_versions = {"shear_table": 3, "ltc:variance_ratio": 4}
     state.scenarios = [{"name": "base", "hub_height_m": 120.0}]
@@ -106,6 +105,19 @@ def test_an_unchanged_frame_is_not_written_again(tmp_path: Path) -> None:
 
     state.timeseries_df.iloc[0, 0] = 99.0
     assert store.save(state)["frames_written"] == 1
+
+
+def test_a_field_the_session_no_longer_has_is_not_restored(tmp_path: Path) -> None:
+    """Projects saved before P3-17d hold the retired Canvas's run state; it is left on disk."""
+    state = _rich_state(tmp_path)
+    state.workflow_runs = [{"run_id": "old"}]
+    ProjectStore(tmp_path).save(state)
+
+    restored = SessionState()
+    assert ProjectStore(tmp_path).load(restored) is True
+    assert not hasattr(restored, "workflow_runs")
+    del state.workflow_runs
+    _assert_same(state, restored)
 
 
 def test_credentials_are_never_written(tmp_path: Path) -> None:

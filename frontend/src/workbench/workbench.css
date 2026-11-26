@@ -1,0 +1,415 @@
+/* The shell's own styles, from the tokens only. Each view keeps its styles beside it. */
+
+.gk-app,
+.gk-start {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+}
+
+.gk-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 8px 16px;
+  background: var(--gk-header-bg);
+  color: var(--gk-header-text);
+}
+
+.gk-brand {
+  color: var(--gk-header-text);
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.gk-crumbs {
+  display: flex;
+  gap: 6px;
+  color: var(--gk-header-muted);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.gk-phases {
+  display: flex;
+  gap: 4px;
+}
+
+.gk-phase {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--gk-header-muted);
+  text-decoration: none;
+}
+
+.gk-phase[aria-current="page"] {
+  background: var(--gk-header-text);
+  color: var(--gk-header-bg);
+  font-weight: 600;
+}
+
+.gk-phase-link:hover {
+  color: var(--gk-header-text);
+}
+
+.gk-header-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.gk-header-button {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 4px;
+  border: 1px solid var(--gk-header-border);
+  background: transparent;
+  color: var(--gk-header-text);
+  font-size: 13px;
+}
+
+.gk-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+
+.gk-main > .dv-dockview,
+.gk-main > div {
+  height: 100%;
+}
+
+.gk-status {
+  display: flex;
+  gap: 16px;
+  padding: 4px 16px;
+  border-top: 1px solid var(--gk-border);
+  background: var(--gk-surface);
+  color: var(--gk-muted);
+  font-size: 12px;
+}
+
+.gk-tab-title {
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.gk-group-actions {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 4px;
+}
+
+.gk-icon-button {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--gk-muted);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.gk-icon-button:hover {
+  background: var(--gk-surface-2);
+  color: var(--gk-text);
+}
+
+.gk-panel {
+  height: 100%;
+  overflow: auto;
+  padding: 12px 14px;
+  background: var(--gk-surface);
+  color: var(--gk-text);
+}
+
+.gk-panel-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gk-muted);
+  text-align: center;
+}
+
+.gk-panel-empty p {
+  max-width: 28em;
+  margin: 0;
+}
+
+.gk-muted {
+  color: var(--gk-muted);
+}
+
+.gk-start-main {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 24px 16px;
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.gk-start-main h1 {
+  font-size: 20px;
+  margin: 0 0 16px;
+}
+
+.gk-project-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.gk-project {
+  background: var(--gk-surface);
+  border: 1px solid var(--gk-border);
+  border-radius: 6px;
+  padding: 12px 16px;
+}
+
+.gk-project h2 {
+  font-size: 15px;
+  margin: 0 0 4px;
+}
+
+.gk-project ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.gk-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.gk-inspector-section h2 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.gk-selection-count {
+  margin: 0 0 8px;
+}
+
+.gk-selection-count strong {
+  font-size: 24px;
+  color: var(--gk-accent);
+}
+
+.gk-terms {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.gk-term {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 8px;
+  border: 1px solid var(--gk-border);
+  border-radius: 4px;
+  background: var(--gk-select-soft);
+  font-size: 12px;
+}
+
+.gk-term-label {
+  font-weight: 600;
+}
+
+.gk-term-text {
+  overflow-wrap: anywhere;
+}
+
+.gk-button {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 4px;
+  border: 1px solid var(--gk-border-strong);
+  background: var(--gk-surface);
+  color: var(--gk-text);
+  font-size: 13px;
+}
+
+.gk-button-primary {
+  border-color: var(--gk-accent);
+  background: var(--gk-accent);
+  color: var(--gk-accent-text);
+  font-weight: 600;
+}
+
+.gk-compare {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.gk-compare caption {
+  text-align: left;
+  font-size: 12px;
+  padding-bottom: 4px;
+}
+
+.gk-compare th,
+.gk-compare td {
+  padding: 3px 4px;
+  border-top: 1px solid var(--gk-border);
+  text-align: right;
+}
+
+.gk-compare th[scope="row"],
+.gk-compare th[scope="col"]:first-child {
+  text-align: left;
+  font-weight: 500;
+}
+
+.gk-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.gk-field {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.gk-field input,
+.gk-field select,
+.gk-switcher {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--gk-border-strong);
+  border-radius: 4px;
+  background: var(--gk-surface);
+  color: var(--gk-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.gk-switcher {
+  max-width: 220px;
+}
+
+.gk-form-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--gk-danger);
+  font-size: 13px;
+}
+
+.gk-new-project {
+  margin-bottom: 16px;
+}
+
+.gk-notice {
+  margin: 8px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--gk-flag);
+  border-left-width: 4px;
+  border-radius: 4px;
+  background: var(--gk-flag-soft);
+  font-size: 13px;
+}
+
+.gk-project ul.gk-campaigns {
+  list-style: none;
+  padding-left: 0;
+}
+
+.gk-campaigns > li {
+  margin-bottom: 8px;
+}
+
+.gk-campaign-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.gk-campaign-site {
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+
+.gk-stale {
+  color: var(--gk-flag);
+  font-weight: 600;
+}
+
+.gk-status-said {
+  margin-left: auto;
+  color: var(--gk-text);
+}
+
+.gk-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.gk-palette {
+  width: min(520px, calc(100vw - 32px));
+  border: 1px solid var(--gk-border-strong);
+  border-radius: 8px;
+  background: var(--gk-surface);
+  color: var(--gk-text);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.gk-palette input {
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-bottom: 1px solid var(--gk-border);
+  background: var(--gk-surface);
+  color: var(--gk-text);
+  font: inherit;
+  font-size: 15px;
+}
+
+.gk-palette ul {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.gk-command {
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.gk-command[aria-disabled="true"] {
+  color: var(--gk-muted);
+  cursor: not-allowed;
+}
+
+.gk-command-active {
+  background: var(--gk-accent-soft);
+}

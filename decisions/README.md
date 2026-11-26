@@ -32,3 +32,4 @@ gets a new record that supersedes the old one.
 | [0011](0011-selections-on-the-server.md) | Selections are server objects resolved from drawn bounds | Accepted (owner), 2026-11-19 |
 | [0012](0012-frontend-stack.md) | Frontend stack for the new shell | Accepted (owner), 2026-11-19 |
 | [0013](0013-long-term-direction-and-temperature.md) | Long-term direction, temperature and air density in the dataset; methods chosen by measurement; not swept, and said so | Accepted (owner), 2026-11-19 |
+| [0014](0014-workbench-prepare.md) | The workbench's Prepare: flags from selections, linked views, projects of campaigns | Accepted (owner), 2026-11-25 |

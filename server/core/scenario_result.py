@@ -78,10 +78,10 @@ def _stable_hash(payload: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()[:16]
 
 
-#: Cleaning-log fields that record when a rule ran, not what it decided. Hashing them made
-#: the same cleaning applied a minute apart a different prefix, so no two sessions were
-#: ever comparable.
-CLEANING_LOG_UNHASHED_KEYS: frozenset[str] = frozenset({"applied_at"})
+#: Cleaning-log fields that record when and by whom a rule ran, not what it decided. Hashing
+#: them made the same cleaning applied a minute apart, or by another analyst, a different
+#: prefix, so no two sessions were ever comparable.
+CLEANING_LOG_UNHASHED_KEYS: frozenset[str] = frozenset({"applied_at", "actor"})
 
 
 def fixed_prefix_hash(state: Any) -> str:

@@ -152,6 +152,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Projects
+         * @description Every project, most recently changed first.
+         */
+        get: operations["list_projects_api_projects_get"];
+        put?: never;
+        /**
+         * Create Project
+         * @description A new project with no campaigns yet.
+         */
+        post: operations["create_project_api_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Project
+         * @description The project, each campaign with its own coordinate and timezone.
+         */
+        get: operations["get_project_api_projects__project_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Project
+         * @description Rename the project or its site.
+         */
+        patch: operations["update_project_api_projects__project_id__patch"];
+        trace?: never;
+    };
+    "/api/projects/{project_id}/campaigns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Campaign
+         * @description A new campaign in the project: a new session, sharing the project's reanalysis cache.
+         */
+        post: operations["add_campaign_api_projects__project_id__campaigns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/campaigns/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Rename Campaign
+         * @description Rename one of the project's campaigns.
+         */
+        patch: operations["rename_campaign_api_projects__project_id__campaigns__session_id__patch"];
+        trace?: never;
+    };
     "/api/sessions": {
         parameters: {
             query?: never;
@@ -1360,6 +1448,9 @@ export interface paths {
         /**
          * build_data_model
          * @description Build a minimal IEA Task 43 data model from declared columns and load it.
+         *
+         *     Refused while the campaign's own uploaded data model is in use. Undoable, except the
+         *     build that first puts the records into UTC.
          */
         post: operations["operation_build_data_model_api_sessions__session_id__operations_build_data_model_post"];
         delete?: never;
@@ -2019,7 +2110,7 @@ export interface paths {
         /**
          * define_selection
          * @description Define or replace a named selection of records: time ranges, direction sectors, value
-         *     bands or record sets, combined by union and intersection.
+         *     bands, polygons over two channels or record sets, combined by union and intersection.
          */
         post: operations["operation_define_selection_api_sessions__session_id__operations_define_selection_post"];
         delete?: never;
@@ -2059,7 +2150,9 @@ export interface paths {
         put?: never;
         /**
          * draft_data_model
-         * @description Draft a Task 43 reading of the loaded timeseries columns for review.
+         * @description Draft a Task 43 reading of the loaded timeseries columns for review, with the data
+         *     model in use: its file, whether it was built here (only then can it be edited) and the
+         *     spec it was built from.
          */
         post: operations["operation_draft_data_model_api_sessions__session_id__operations_draft_data_model_post"];
         delete?: never;
@@ -2312,6 +2405,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/get_flag_intervals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * get_flag_intervals
+         * @description Cleaning flags of measured channels over a half-open window, as intervals of consecutive
+         *     records flagged by one rule, with the rule, reason, actor and time of each.
+         *
+         *     ``channels`` is comma-separated; ``start`` and ``end`` are timestamps with a UTC offset,
+         *     empty for the whole record. ``next`` is the record after an interval, where its band ends.
+         */
+        post: operations["operation_get_flag_intervals_api_sessions__session_id__operations_get_flag_intervals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/get_mast_marker": {
         parameters: {
             query?: never;
@@ -2343,7 +2460,8 @@ export interface paths {
         put?: never;
         /**
          * get_operation_log
-         * @description Return the most recent operation calls: who, what, with which parameters, and the undo state.
+         * @description Return the most recent operation calls: who, what, with which parameters, the undo state,
+         *     and which derived results are stale.
          */
         post: operations["operation_get_operation_log_api_sessions__session_id__operations_get_operation_log_post"];
         delete?: never;
@@ -2386,6 +2504,30 @@ export interface paths {
          * @description Return the active run configuration dictionary defined by the GoKaatru Phase 1 config spec.
          */
         post: operations["operation_get_run_config_api_sessions__session_id__operations_get_run_config_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/operations/get_scatter_pairs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * get_scatter_pairs
+         * @description Every record of a half-open window where both channels are valid, as time, x and y.
+         *
+         *     ``highlight`` is a selection, a saved name or an inline definition, whose records are
+         *     marked in ``highlighted`` rather than removed. Refused past MAX_JSON_PAIRS pairs: narrow
+         *     the window, or read the same pairs as Arrow from ``/sessions/{id}/pairs``.
+         */
+        post: operations["operation_get_scatter_pairs_api_sessions__session_id__operations_get_scatter_pairs_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2500,6 +2642,27 @@ export interface paths {
          * @description List supported cleaning rules and default parameters for the GoKaatru Phase 2 cleaning workflow.
          */
         post: operations["operation_list_cleaning_rules_api_sessions__session_id__operations_list_cleaning_rules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/operations/list_instruments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * list_instruments
+         * @description The campaign's instruments by height (highest first), each with its type, boom, mapped
+         *     role and the statistic columns it logs, and every other channel of the data.
+         */
+        post: operations["operation_list_instruments_api_sessions__session_id__operations_list_instruments_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2866,6 +3029,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/remove_sensors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * remove_sensors
+         * @description Remove sensors from the analysis: inventory, height mapping, working and raw data.
+         *
+         *     The removal is recorded in the run configuration's excluded_sensors, so a datamodel
+         *     re-import keeps them out; loading a new timeseries brings every sensor back. Undoable.
+         */
+        post: operations["operation_remove_sensors_api_sessions__session_id__operations_remove_sensors_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/operations/remove_sensors/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * remove_sensors (dry run)
+         * @description Remove sensors from the analysis: inventory, height mapping, working and raw data.
+         *
+         *     The removal is recorded in the run configuration's excluded_sensors, so a datamodel
+         *     re-import keeps them out; loading a new timeseries brings every sensor back. Undoable.
+         */
+        post: operations["operation_remove_sensors_preview_api_sessions__session_id__operations_remove_sensors_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/resolve_selection": {
         parameters: {
             query?: never;
@@ -3072,6 +3281,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/summarise_channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * summarise_channels
+         * @description Valid records, mean, minimum and maximum of measured channels (comma-separated); with a
+         *     selection, of its records only, which is how a selection is compared with every record.
+         */
+        post: operations["operation_summarise_channels_api_sessions__session_id__operations_summarise_channels_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/undo_cleaning_rule": {
         parameters: {
             query?: never;
@@ -3123,7 +3353,7 @@ export interface paths {
         put?: never;
         /**
          * undo_last_change
-         * @description Undo the last cleaning rule or configuration change still in the history.
+         * @description Undo the last cleaning rule, configuration change, sensor removal or data model build still in the history.
          */
         post: operations["operation_undo_last_change_api_sessions__session_id__operations_undo_last_change_post"];
         delete?: never;
@@ -3166,6 +3396,30 @@ export interface paths {
         get: operations["get_overview_summary_api_sessions__session_id__overview_summary_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/pairs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Pairs
+         * @description Every record of [start, end) where both channels are valid, as Arrow, for a scatter.
+         */
+        get: operations["get_pairs_api_sessions__session_id__pairs_get"];
+        put?: never;
+        /**
+         * Post Pairs
+         * @description The same pairs as the GET route, the query sent as a JSON body.
+         */
+        post: operations["post_pairs_api_sessions__session_id__pairs_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3469,14 +3723,9 @@ export interface paths {
          * Delete Sensors
          * @description Remove unwanted sensors from the session inventory, mapping, and data.
          *
-         *     Removes the named sensors from ``sensor_inventory``, clears their column
-         *     slot from ``sensor_mapping`` (by height), and drops their columns from both
-         *     the working and raw timeseries dataframes. If a height entry in the mapping
-         *     becomes entirely ``None`` after removal, the height is dropped from the
-         *     mapping. The exclusion is persisted to ``excluded_sensors`` in the
-         *     runconfig so the selection is authoritative and survives config saves and
-         *     datamodel-only re-imports. Loading the timeseries again or re-importing
-         *     from BrightHub clears the exclusion and restores the full dataset.
+         *     The same logic as the ``remove_sensors`` operation (``server/tools/sensors.py``), which
+         *     the workbench calls through the generated route so the removal can be undone; this route
+         *     stays for the current interface until Phase 3 retires it.
          */
         post: operations["delete_sensors_api_sessions__session_id__sensors_delete_post"];
         delete?: never;
@@ -3498,7 +3747,11 @@ export interface paths {
          */
         get: operations["get_series_api_sessions__session_id__series_get"];
         put?: never;
-        post?: never;
+        /**
+         * Post Series
+         * @description The same window as the GET route, its query sent as a JSON body.
+         */
+        post: operations["post_series_api_sessions__session_id__series_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4163,6 +4416,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AddCampaign */
+        AddCampaign: {
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+        };
         /** AirDensitySummary */
         AirDensitySummary: {
             /** Density Correction Factor */
@@ -4279,6 +4539,10 @@ export interface components {
         };
         /** ApplyCleaningRulePreview */
         ApplyCleaningRulePreview: {
+            /** Affected By Sensor */
+            affected_by_sensor?: {
+                [key: string]: number;
+            } | null;
             /** Applied */
             applied: boolean;
             /** Boom Orientation Deg */
@@ -4296,6 +4560,8 @@ export interface components {
             consecutive_count?: number | null;
             /** Corroborating Sensors */
             corroborating_sensors?: string[] | null;
+            /** Description */
+            description?: string | null;
             /** Direction Basis */
             direction_basis?: string | null;
             /** Direction Sensor */
@@ -4313,6 +4579,8 @@ export interface components {
             /** Note */
             note?: string | null;
             order_dependence: components["schemas"]["OrderDependence"];
+            /** Reason */
+            reason?: string | null;
             /** Records Affected */
             records_affected: number;
             /** Retained By Direction Test */
@@ -4325,6 +4593,8 @@ export interface components {
             sector_basis?: string | null;
             /** Sector Width Deg */
             sector_width_deg?: number | null;
+            /** Selected Records */
+            selected_records?: number | null;
             /** Sensor */
             sensor: string;
             /** Sensor Type */
@@ -4365,6 +4635,10 @@ export interface components {
         };
         /** ApplyCleaningRuleResult */
         ApplyCleaningRuleResult: {
+            /** Affected By Sensor */
+            affected_by_sensor?: {
+                [key: string]: number;
+            } | null;
             /** Boom Orientation Deg */
             boom_orientation_deg?: number | null;
             /** Bounds Source */
@@ -4379,6 +4653,8 @@ export interface components {
             consecutive_count?: number | null;
             /** Corroborating Sensors */
             corroborating_sensors?: string[] | null;
+            /** Description */
+            description?: string | null;
             /** Direction Basis */
             direction_basis?: string | null;
             /** Direction Sensor */
@@ -4396,6 +4672,8 @@ export interface components {
             /** Note */
             note?: string | null;
             order_dependence: components["schemas"]["OrderDependence"];
+            /** Reason */
+            reason?: string | null;
             /** Records Affected */
             records_affected: number;
             /** Retained By Direction Test */
@@ -4408,6 +4686,8 @@ export interface components {
             sector_basis?: string | null;
             /** Sector Width Deg */
             sector_width_deg?: number | null;
+            /** Selected Records */
+            selected_records?: number | null;
             /** Sensor */
             sensor: string;
             /** Sensor Type */
@@ -5151,6 +5431,39 @@ export interface components {
             /** Warning */
             warning?: string | null;
         };
+        /** Campaign */
+        Campaign: {
+            /** Added At */
+            added_at: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Session Id */
+            session_id: string;
+        };
+        /**
+         * CampaignSite
+         * @description A campaign with its site as its own data model and configuration declare it.
+         */
+        CampaignSite: {
+            /** Added At */
+            added_at: string;
+            /** Elevation M */
+            elevation_m?: number | null;
+            /** Kind */
+            kind: string;
+            /** Latitude */
+            latitude?: number | null;
+            /** Longitude */
+            longitude?: number | null;
+            /** Name */
+            name: string;
+            /** Session Id */
+            session_id: string;
+            /** Timezone */
+            timezone?: string | null;
+        };
         /** CandidateWindow */
         CandidateWindow: {
             /** Climate Uncertainty */
@@ -5180,6 +5493,24 @@ export interface components {
             max: (number | null)[];
             /** Min */
             min: (number | null)[];
+        };
+        /** ChannelFlags */
+        ChannelFlags: {
+            /** Flagged Records */
+            flagged_records: number;
+            /** Intervals */
+            intervals: components["schemas"]["FlagInterval"][];
+        };
+        /** ChannelSummary */
+        ChannelSummary: {
+            /** Max */
+            max: number | null;
+            /** Mean */
+            mean: number | null;
+            /** Min */
+            min: number | null;
+            /** Valid */
+            valid: number;
         };
         /** ChatMessage */
         ChatMessage: {
@@ -5224,6 +5555,12 @@ export interface components {
          *     non-undoable entry of its own (``source``, ``upstream``, ``undoable``).
          */
         CleaningLogEntry: {
+            /** Actor */
+            actor?: string | null;
+            /** Affected By Sensor */
+            affected_by_sensor?: {
+                [key: string]: number;
+            } | null;
             /** Applied At */
             applied_at: string;
             /** Boom Orientation Deg */
@@ -5242,6 +5579,8 @@ export interface components {
             consecutive_count?: number | null;
             /** Corroborating Sensors */
             corroborating_sensors?: string[] | null;
+            /** Description */
+            description?: string | null;
             /** Direction Basis */
             direction_basis?: string | null;
             /** Direction Sensor */
@@ -5264,6 +5603,8 @@ export interface components {
             params: {
                 [key: string]: unknown;
             };
+            /** Reason */
+            reason?: string | null;
             /** Records Affected */
             records_affected: number | null;
             /** Retained By Direction Test */
@@ -5276,6 +5617,8 @@ export interface components {
             sector_basis?: string | null;
             /** Sector Width Deg */
             sector_width_deg?: number | null;
+            /** Selected Records */
+            selected_records?: number | null;
             /** Sensor */
             sensor: string;
             /** Sensor Type */
@@ -6294,6 +6637,16 @@ export interface components {
             /** Longitude */
             longitude: number | null;
         };
+        /** CreateProject */
+        CreateProject: {
+            /** Name */
+            name: string;
+            /**
+             * Site Name
+             * @default
+             */
+            site_name?: string;
+        };
         /**
          * CreateSessionResponse
          * @description Return the identifier and workspace metadata for a new browser session.
@@ -6331,6 +6684,17 @@ export interface components {
             rmse: number | null;
             /** Start */
             start: string;
+        };
+        /** DataModelInUse */
+        DataModelInUse: {
+            /** Built */
+            built: boolean;
+            /** File */
+            file: string;
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            } | null;
         };
         /** DataModelResponse */
         DataModelResponse: {
@@ -6453,6 +6817,10 @@ export interface components {
         };
         /** DownloadedNode */
         DownloadedNode: {
+            /** Cache */
+            cache?: string | null;
+            /** Cached Through */
+            cached_through?: string | null;
             /** Latitude */
             latitude: number | null;
             /** Longitude */
@@ -6472,6 +6840,7 @@ export interface components {
             columns_needing_a_height: string[];
             /** Detected Heights M */
             detected_heights_m: (number | null)[];
+            in_use?: components["schemas"]["DataModelInUse"] | null;
             /** Note */
             note: string;
         };
@@ -6818,6 +7187,30 @@ export interface components {
             /** Nodes */
             nodes: components["schemas"]["Era5Node"][];
         };
+        /**
+         * FlagInterval
+         * @description Consecutive working records of one channel flagged by one rule application.
+         */
+        FlagInterval: {
+            /** Actor */
+            actor: string;
+            /** First */
+            first: string;
+            /** Flagged At */
+            flagged_at: string;
+            /** Last */
+            last: string;
+            /** Next */
+            next: string | null;
+            /** Reason */
+            reason: string;
+            /** Records */
+            records: number;
+            /** Rule Sequence */
+            rule_sequence: number;
+            /** Rule Type */
+            rule_type: string;
+        };
         /** FlagSummary */
         FlagSummary: {
             /** By Rule */
@@ -6950,6 +7343,38 @@ export interface components {
             /** Reanalysis Sources */
             reanalysis_sources: string[];
         };
+        /** GetFlagIntervalsParameters */
+        GetFlagIntervalsParameters: {
+            /** Channels */
+            channels: string;
+            /**
+             * End
+             * @default
+             */
+            end?: string;
+            /**
+             * Start
+             * @default
+             */
+            start?: string;
+        };
+        /** GetFlagIntervalsResult */
+        GetFlagIntervalsResult: {
+            /** Channels */
+            channels: {
+                [key: string]: components["schemas"]["ChannelFlags"];
+            };
+            /** Interval Count */
+            interval_count: number;
+            /** Interval Limit */
+            interval_limit: number;
+            /** Records */
+            records: number;
+            /** Truncated */
+            truncated: boolean;
+            /** Unplaced Flags */
+            unplaced_flags: number;
+        };
         /** GetMastMarkerParameters */
         GetMastMarkerParameters: Record<string, never>;
         /** GetMastMarkerResult */
@@ -6973,12 +7398,22 @@ export interface components {
             can_redo: boolean;
             /** Can Undo */
             can_undo: boolean;
+            /** Data Version */
+            data_version: number;
             /** Entries */
             entries: components["schemas"]["OperationLogEntry"][];
+            /** Stale Artifacts */
+            stale_artifacts: string[];
+            /** Stale Reasons */
+            stale_reasons?: {
+                [key: string]: string | null;
+            } | null;
             /** Total */
             total: number;
             /** Undo Stack */
             undo_stack: number[];
+            /** Warning */
+            warning?: string | null;
         };
         /** GetPeriodOfRecordParameters */
         GetPeriodOfRecordParameters: Record<string, never>;
@@ -7026,6 +7461,52 @@ export interface components {
             } | null;
         } & {
             [key: string]: unknown;
+        };
+        /** GetScatterPairsParameters */
+        GetScatterPairsParameters: {
+            /**
+             * End
+             * @default
+             */
+            end?: string;
+            /**
+             * Highlight
+             * @default
+             */
+            highlight?: string;
+            /**
+             * Start
+             * @default
+             */
+            start?: string;
+            /** X Channel */
+            x_channel: string;
+            /** Y Channel */
+            y_channel: string;
+        };
+        /** GetScatterPairsResult */
+        GetScatterPairsResult: {
+            /** End Ms */
+            end_ms: number;
+            highlight: components["schemas"]["SelectionUsed"] | null;
+            /** Highlighted */
+            highlighted: boolean[] | null;
+            /** Records */
+            records: number;
+            /** Start Ms */
+            start_ms: number;
+            /** Time Ms */
+            time_ms: number[];
+            /** Window Records */
+            window_records: number;
+            /** X */
+            x: number[];
+            /** X Channel */
+            x_channel: string;
+            /** Y */
+            y: number[];
+            /** Y Channel */
+            y_channel: string;
         };
         /** GetSeriesWindowParameters */
         GetSeriesWindowParameters: {
@@ -7280,6 +7761,23 @@ export interface components {
             /** Year */
             year: number;
         };
+        /** Instrument */
+        Instrument: {
+            /** Boom Orientation Deg */
+            boom_orientation_deg?: number | null;
+            /** Height M */
+            height_m: number | null;
+            /** In Data */
+            in_data: boolean;
+            /** Mapped As */
+            mapped_as: string | null;
+            /** Name */
+            name: string;
+            /** Sensor Type */
+            sensor_type: string | null;
+            /** Statistics */
+            statistics: string[];
+        };
         /**
          * InterpolateEra5Request
          * @description Select which downloaded reanalysis becomes the interpolated long-term reference.
@@ -7432,6 +7930,8 @@ export interface components {
         ListCleaningRulesParameters: Record<string, never>;
         /** ListCleaningRulesResult */
         ListCleaningRulesResult: {
+            /** Manual Flag Reasons */
+            manual_flag_reasons: string[];
             /** Order Is Material */
             order_is_material: boolean;
             /** Order Note */
@@ -7442,6 +7942,17 @@ export interface components {
             outlier_note: string;
             /** Rules */
             rules: components["schemas"]["CleaningRule"][];
+        };
+        /** ListInstrumentsParameters */
+        ListInstrumentsParameters: Record<string, never>;
+        /** ListInstrumentsResult */
+        ListInstrumentsResult: {
+            /** Heights */
+            heights: (number | null)[];
+            /** Instruments */
+            instruments: components["schemas"]["Instrument"][];
+            /** Other Channels */
+            other_channels: components["schemas"]["OtherChannel"][];
         };
         /** ListSelectionsParameters */
         ListSelectionsParameters: Record<string, never>;
@@ -7659,6 +8170,18 @@ export interface components {
             sequence: number;
             /** Warning */
             warning?: string | null;
+        };
+        /**
+         * OtherChannel
+         * @description A column of the data that belongs to no instrument, with how its header reads.
+         */
+        OtherChannel: {
+            /** Name */
+            name: string;
+            /** Reason */
+            reason: string | null;
+            /** Role */
+            role: string;
         };
         /** OverlapMetrics */
         OverlapMetrics: {
@@ -8141,6 +8664,43 @@ export interface components {
             /** Mean Speed */
             mean_speed: number | null;
         };
+        /** Project */
+        Project: {
+            /** Campaigns */
+            campaigns: components["schemas"]["Campaign"][];
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Site Name */
+            site_name: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** ProjectDetail */
+        ProjectDetail: {
+            /** Campaigns */
+            campaigns: components["schemas"]["CampaignSite"][];
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Site Name */
+            site_name: string;
+            /** Timezones Differ */
+            timezones_differ: boolean;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** ProjectList */
+        ProjectList: {
+            /** Projects */
+            projects: components["schemas"]["Project"][];
+        };
         /** QcSensor */
         QcSensor: {
             /** Flatline Records */
@@ -8167,6 +8727,10 @@ export interface components {
         };
         /** ReanalysisDataItem */
         ReanalysisDataItem: {
+            /** Cache */
+            cache?: string | null;
+            /** Cached Through */
+            cached_through?: string | null;
             /** Latitude */
             latitude: number;
             /** Longitude */
@@ -8270,7 +8834,7 @@ export interface components {
             /** Data Version */
             data_version: number;
             /** Detail */
-            detail: components["schemas"]["ApplyCleaningRuleResult"] | components["schemas"]["RunConfig"];
+            detail: components["schemas"]["ApplyCleaningRuleResult"] | components["schemas"]["RemoveSensorsResult"] | components["schemas"]["BuildDataModelResult"] | components["schemas"]["RunConfig"];
             redone: components["schemas"]["LoggedCall"];
             /** Stale Artifacts */
             stale_artifacts: string[];
@@ -8295,6 +8859,49 @@ export interface components {
             record_counts: {
                 [key: string]: number;
             };
+        };
+        /** RemoveSensorsParameters */
+        RemoveSensorsParameters: {
+            /** Sensor Names */
+            sensor_names: string[];
+        };
+        /** RemoveSensorsPreview */
+        RemoveSensorsPreview: {
+            /** Applied */
+            applied: boolean;
+            changes: components["schemas"]["FrameChange"];
+            /** Columns Dropped */
+            columns_dropped: {
+                [key: string]: string[];
+            };
+            /** Not Found */
+            not_found: string[];
+            /** Remaining Count */
+            remaining_count: number;
+            /** Removed */
+            removed: string[];
+            /** Status */
+            status: string;
+        };
+        /** RemoveSensorsResult */
+        RemoveSensorsResult: {
+            /** Columns Dropped */
+            columns_dropped: {
+                [key: string]: string[];
+            };
+            /** Not Found */
+            not_found: string[];
+            /** Remaining Count */
+            remaining_count: number;
+            /** Removed */
+            removed: string[];
+            /** Status */
+            status: string;
+        };
+        /** RenameCampaign */
+        RenameCampaign: {
+            /** Name */
+            name: string;
         };
         /** Residual */
         Residual: {
@@ -8325,12 +8932,31 @@ export interface components {
             records: number;
         };
         /**
+         * RestoredDataModel
+         * @description Undoing a data model build: the earlier mapping, inventory, timezone and document back,
+         *     and the run-configuration paths the build had set.
+         */
+        RestoredDataModel: {
+            /** Data Model */
+            data_model: string;
+            /** Restored Paths */
+            restored_paths: string[];
+        };
+        /**
          * RestoredPaths
          * @description Undoing a configuration change: the run-configuration paths put back.
          */
         RestoredPaths: {
             /** Restored Paths */
             restored_paths: string[];
+        };
+        /**
+         * RestoredSensors
+         * @description Undoing a sensor removal: the sensors put back.
+         */
+        RestoredSensors: {
+            /** Restored */
+            restored: string[];
         };
         /**
          * RoughnessClipping
@@ -8706,6 +9332,31 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * ScatterPairsRequest
+         * @description The pairs route's query as a body, for a highlight too long for a URL.
+         */
+        ScatterPairsRequest: {
+            /**
+             * End
+             * @default
+             */
+            end?: string;
+            /**
+             * Highlight
+             * @default
+             */
+            highlight?: string;
+            /**
+             * Start
+             * @default
+             */
+            start?: string;
+            /** X Channel */
+            x_channel: string;
+            /** Y Channel */
+            y_channel: string;
+        };
         /** SectorModel */
         SectorModel: {
             /** Count */
@@ -8745,6 +9396,12 @@ export interface components {
             timestamps?: string[] | null;
             /** To Deg */
             to_deg?: number | null;
+            /** Vertices */
+            vertices?: (number | null)[][] | null;
+            /** X Channel */
+            x_channel?: string | null;
+            /** Y Channel */
+            y_channel?: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -8755,8 +9412,10 @@ export interface components {
         SelectionUsed: {
             /** Basis */
             basis: string;
+            /** Inline */
+            inline: boolean;
             /** Name */
-            name: string;
+            name: string | null;
             /** Of Records */
             of_records: number;
             /** Records */
@@ -8846,6 +9505,34 @@ export interface components {
             record_count: number;
             /** Std */
             std: number | null;
+        };
+        /**
+         * SeriesWindowRequest
+         * @description The GET route's query as a body, for a selection too long for a URL (a lasso).
+         */
+        SeriesWindowRequest: {
+            /**
+             * Buckets
+             * @default 2000
+             */
+            buckets?: number;
+            /** Channels */
+            channels: string;
+            /**
+             * End
+             * @default
+             */
+            end?: string;
+            /**
+             * Selection
+             * @default
+             */
+            selection?: string;
+            /**
+             * Start
+             * @default
+             */
+            start?: string;
         };
         /**
          * SessionSummaryResponse
@@ -9081,6 +9768,26 @@ export interface components {
             /** Scenarios Missing Components */
             scenarios_missing_components: number;
             substituted: components["schemas"]["Distribution"] | null;
+        };
+        /** SummariseChannelsParameters */
+        SummariseChannelsParameters: {
+            /** Channels */
+            channels: string;
+            /**
+             * Selection
+             * @default
+             */
+            selection?: string;
+        };
+        /** SummariseChannelsResult */
+        SummariseChannelsResult: {
+            /** Channels */
+            channels: {
+                [key: string]: components["schemas"]["ChannelSummary"];
+            };
+            /** Records */
+            records: number;
+            selection?: components["schemas"]["SelectionUsed"] | null;
         };
         /**
          * SweepEntry
@@ -9399,7 +10106,7 @@ export interface components {
             /** Data Version */
             data_version: number;
             /** Detail */
-            detail: components["schemas"]["UndoCleaningRuleResult"] | components["schemas"]["RestoredPaths"];
+            detail: components["schemas"]["UndoCleaningRuleResult"] | components["schemas"]["RestoredDataModel"] | components["schemas"]["RestoredPaths"] | components["schemas"]["RestoredSensors"];
             /** Stale Artifacts */
             stale_artifacts: string[];
             /** Stale Reasons */
@@ -9411,6 +10118,13 @@ export interface components {
             undone: components["schemas"]["LoggedCall"];
             /** Warning */
             warning?: string | null;
+        };
+        /** UpdateProject */
+        UpdateProject: {
+            /** Name */
+            name?: string | null;
+            /** Site Name */
+            site_name?: string | null;
         };
         /** UpdateRunConfigParameters */
         UpdateRunConfigParameters: {
@@ -10329,6 +11043,286 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     }[];
+                };
+            };
+        };
+    };
+    list_projects_api_projects_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectList"];
+                };
+            };
+        };
+    };
+    create_project_api_projects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProject"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_project_api_projects__project_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_project_api_projects__project_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProject"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_campaign_api_projects__project_id__campaigns_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddCampaign"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Campaign"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_campaign_api_projects__project_id__campaigns__session_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameCampaign"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -15312,6 +16306,61 @@ export interface operations {
             };
         };
     };
+    operation_get_flag_intervals_api_sessions__session_id__operations_get_flag_intervals_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["GetFlagIntervalsParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetFlagIntervalsResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
     operation_get_mast_marker_api_sessions__session_id__operations_get_mast_marker_post: {
         parameters: {
             query?: never;
@@ -15501,6 +16550,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GetRunConfigResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
+    operation_get_scatter_pairs_api_sessions__session_id__operations_get_scatter_pairs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["GetScatterPairsParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetScatterPairsResult"];
                 };
             };
             /** @description Refused: the request cannot be answered as asked */
@@ -15776,6 +16880,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ListCleaningRulesResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
+    operation_list_instruments_api_sessions__session_id__operations_list_instruments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ListInstrumentsParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListInstrumentsResult"];
                 };
             };
             /** @description Refused: the request cannot be answered as asked */
@@ -16797,6 +17956,116 @@ export interface operations {
             };
         };
     };
+    operation_remove_sensors_api_sessions__session_id__operations_remove_sensors_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RemoveSensorsParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoveSensorsResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
+    operation_remove_sensors_preview_api_sessions__session_id__operations_remove_sensors_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RemoveSensorsParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoveSensorsPreview"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
     operation_resolve_selection_api_sessions__session_id__operations_resolve_selection_post: {
         parameters: {
             query?: never;
@@ -17292,6 +18561,61 @@ export interface operations {
             };
         };
     };
+    operation_summarise_channels_api_sessions__session_id__operations_summarise_channels_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SummariseChannelsParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SummariseChannelsResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
     operation_undo_cleaning_rule_api_sessions__session_id__operations_undo_cleaning_rule_post: {
         parameters: {
             query?: never;
@@ -17537,6 +18861,100 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_pairs_api_sessions__session_id__pairs_get: {
+        parameters: {
+            query: {
+                x_channel: string;
+                y_channel: string;
+                start?: string;
+                end?: string;
+                highlight?: string;
+            };
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The window as an Arrow IPC stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.apache.arrow.stream": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_pairs_api_sessions__session_id__pairs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScatterPairsRequest"];
+            };
+        };
+        responses: {
+            /** @description The window as an Arrow IPC stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.apache.arrow.stream": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
                 };
             };
             /** @description Validation Error */
@@ -18153,13 +19571,68 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The window as an Arrow IPC stream */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/vnd.apache.arrow.stream": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_series_api_sessions__session_id__series_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeriesWindowRequest"];
+            };
+        };
+        responses: {
+            /** @description The window as an Arrow IPC stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.apache.arrow.stream": unknown;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
                 };
             };
             /** @description Validation Error */

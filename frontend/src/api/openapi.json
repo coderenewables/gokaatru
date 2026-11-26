@@ -1,6 +1,25 @@
 {
  "components": {
   "schemas": {
+   "AddCampaign": {
+    "additionalProperties": false,
+    "properties": {
+     "kind": {
+      "title": "Kind",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "kind"
+    ],
+    "title": "AddCampaign",
+    "type": "object"
+   },
    "AirDensitySummary": {
     "additionalProperties": false,
     "properties": {
@@ -384,6 +403,20 @@
    "ApplyCleaningRulePreview": {
     "additionalProperties": false,
     "properties": {
+     "affected_by_sensor": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "type": "integer"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Affected By Sensor"
+     },
      "applied": {
       "title": "Applied",
       "type": "boolean"
@@ -470,6 +503,17 @@
        }
       ],
       "title": "Corroborating Sensors"
+     },
+     "description": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Description"
      },
      "direction_basis": {
       "anyOf": [
@@ -572,6 +616,17 @@
      "order_dependence": {
       "$ref": "#/components/schemas/OrderDependence"
      },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
      "records_affected": {
       "title": "Records Affected",
       "type": "integer"
@@ -623,6 +678,17 @@
        }
       ],
       "title": "Sector Width Deg"
+     },
+     "selected_records": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Selected Records"
      },
      "sensor": {
       "title": "Sensor",
@@ -717,6 +783,20 @@
    "ApplyCleaningRuleResult": {
     "additionalProperties": false,
     "properties": {
+     "affected_by_sensor": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "type": "integer"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Affected By Sensor"
+     },
      "boom_orientation_deg": {
       "anyOf": [
        {
@@ -796,6 +876,17 @@
        }
       ],
       "title": "Corroborating Sensors"
+     },
+     "description": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Description"
      },
      "direction_basis": {
       "anyOf": [
@@ -898,6 +989,17 @@
      "order_dependence": {
       "$ref": "#/components/schemas/OrderDependence"
      },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
      "records_affected": {
       "title": "Records Affected",
       "type": "integer"
@@ -949,6 +1051,17 @@
        }
       ],
       "title": "Sector Width Deg"
+     },
+     "selected_records": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Selected Records"
      },
      "sensor": {
       "title": "Sensor",
@@ -3030,6 +3143,109 @@
     "title": "CalculateUncertaintyResult",
     "type": "object"
    },
+   "Campaign": {
+    "additionalProperties": false,
+    "properties": {
+     "added_at": {
+      "title": "Added At",
+      "type": "string"
+     },
+     "kind": {
+      "title": "Kind",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "session_id": {
+      "title": "Session Id",
+      "type": "string"
+     }
+    },
+    "required": [
+     "session_id",
+     "name",
+     "kind",
+     "added_at"
+    ],
+    "title": "Campaign",
+    "type": "object"
+   },
+   "CampaignSite": {
+    "additionalProperties": false,
+    "description": "A campaign with its site as its own data model and configuration declare it.",
+    "properties": {
+     "added_at": {
+      "title": "Added At",
+      "type": "string"
+     },
+     "elevation_m": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Elevation M"
+     },
+     "kind": {
+      "title": "Kind",
+      "type": "string"
+     },
+     "latitude": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Latitude"
+     },
+     "longitude": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Longitude"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "session_id": {
+      "title": "Session Id",
+      "type": "string"
+     },
+     "timezone": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Timezone"
+     }
+    },
+    "required": [
+     "session_id",
+     "name",
+     "kind",
+     "added_at"
+    ],
+    "title": "CampaignSite",
+    "type": "object"
+   },
    "CandidateWindow": {
     "additionalProperties": false,
     "properties": {
@@ -3180,6 +3396,78 @@
     "title": "ChannelBuckets",
     "type": "object"
    },
+   "ChannelFlags": {
+    "additionalProperties": false,
+    "properties": {
+     "flagged_records": {
+      "title": "Flagged Records",
+      "type": "integer"
+     },
+     "intervals": {
+      "items": {
+       "$ref": "#/components/schemas/FlagInterval"
+      },
+      "title": "Intervals",
+      "type": "array"
+     }
+    },
+    "required": [
+     "flagged_records",
+     "intervals"
+    ],
+    "title": "ChannelFlags",
+    "type": "object"
+   },
+   "ChannelSummary": {
+    "additionalProperties": false,
+    "properties": {
+     "max": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max"
+     },
+     "mean": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mean"
+     },
+     "min": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min"
+     },
+     "valid": {
+      "title": "Valid",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "valid",
+     "mean",
+     "min",
+     "max"
+    ],
+    "title": "ChannelSummary",
+    "type": "object"
+   },
    "ChatMessage": {
     "properties": {
      "content": {
@@ -3262,6 +3550,31 @@
     "additionalProperties": false,
     "description": "One entry of ``state.cleaning_log``. BrightHub's upstream processing is recorded as a\nnon-undoable entry of its own (``source``, ``upstream``, ``undoable``).",
     "properties": {
+     "actor": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Actor"
+     },
+     "affected_by_sensor": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "type": "integer"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Affected By Sensor"
+     },
      "applied_at": {
       "title": "Applied At",
       "type": "string"
@@ -3356,6 +3669,17 @@
        }
       ],
       "title": "Corroborating Sensors"
+     },
+     "description": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Description"
      },
      "direction_basis": {
       "anyOf": [
@@ -3471,6 +3795,17 @@
       "title": "Params",
       "type": "object"
      },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
      "records_affected": {
       "anyOf": [
        {
@@ -3529,6 +3864,17 @@
        }
       ],
       "title": "Sector Width Deg"
+     },
+     "selected_records": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Selected Records"
      },
      "sensor": {
       "title": "Sensor",
@@ -6982,6 +7328,25 @@
     "title": "Coordinate",
     "type": "object"
    },
+   "CreateProject": {
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "site_name": {
+      "default": "",
+      "title": "Site Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "CreateProject",
+    "type": "object"
+   },
    "CreateSessionResponse": {
     "description": "Return the identifier and workspace metadata for a new browser session.",
     "properties": {
@@ -7097,6 +7462,38 @@
      "r_squared"
     ],
     "title": "CrossValidationFold",
+    "type": "object"
+   },
+   "DataModelInUse": {
+    "additionalProperties": false,
+    "properties": {
+     "built": {
+      "title": "Built",
+      "type": "boolean"
+     },
+     "file": {
+      "title": "File",
+      "type": "string"
+     },
+     "spec": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Spec"
+     }
+    },
+    "required": [
+     "file",
+     "built",
+     "spec"
+    ],
+    "title": "DataModelInUse",
     "type": "object"
    },
    "DataModelResponse": {
@@ -7510,6 +7907,28 @@
    "DownloadedNode": {
     "additionalProperties": false,
     "properties": {
+     "cache": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cache"
+     },
+     "cached_through": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cached Through"
+     },
      "latitude": {
       "anyOf": [
        {
@@ -7592,6 +8011,16 @@
       },
       "title": "Detected Heights M",
       "type": "array"
+     },
+     "in_use": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/DataModelInUse"
+       },
+       {
+        "type": "null"
+       }
+      ]
      },
      "note": {
       "title": "Note",
@@ -8809,6 +9238,68 @@
     "title": "FindEra5NodesResult",
     "type": "object"
    },
+   "FlagInterval": {
+    "additionalProperties": false,
+    "description": "Consecutive working records of one channel flagged by one rule application.",
+    "properties": {
+     "actor": {
+      "title": "Actor",
+      "type": "string"
+     },
+     "first": {
+      "title": "First",
+      "type": "string"
+     },
+     "flagged_at": {
+      "title": "Flagged At",
+      "type": "string"
+     },
+     "last": {
+      "title": "Last",
+      "type": "string"
+     },
+     "next": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Next"
+     },
+     "reason": {
+      "title": "Reason",
+      "type": "string"
+     },
+     "records": {
+      "title": "Records",
+      "type": "integer"
+     },
+     "rule_sequence": {
+      "title": "Rule Sequence",
+      "type": "integer"
+     },
+     "rule_type": {
+      "title": "Rule Type",
+      "type": "string"
+     }
+    },
+    "required": [
+     "first",
+     "last",
+     "next",
+     "records",
+     "rule_sequence",
+     "rule_type",
+     "reason",
+     "actor",
+     "flagged_at"
+    ],
+    "title": "FlagInterval",
+    "type": "object"
+   },
    "FlagSummary": {
     "additionalProperties": false,
     "properties": {
@@ -9207,6 +9698,72 @@
     "title": "GetFixedPrefixHashResult",
     "type": "object"
    },
+   "GetFlagIntervalsParameters": {
+    "additionalProperties": false,
+    "properties": {
+     "channels": {
+      "title": "Channels",
+      "type": "string"
+     },
+     "end": {
+      "default": "",
+      "title": "End",
+      "type": "string"
+     },
+     "start": {
+      "default": "",
+      "title": "Start",
+      "type": "string"
+     }
+    },
+    "required": [
+     "channels"
+    ],
+    "title": "GetFlagIntervalsParameters",
+    "type": "object"
+   },
+   "GetFlagIntervalsResult": {
+    "additionalProperties": false,
+    "properties": {
+     "channels": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/ChannelFlags"
+      },
+      "title": "Channels",
+      "type": "object"
+     },
+     "interval_count": {
+      "title": "Interval Count",
+      "type": "integer"
+     },
+     "interval_limit": {
+      "title": "Interval Limit",
+      "type": "integer"
+     },
+     "records": {
+      "title": "Records",
+      "type": "integer"
+     },
+     "truncated": {
+      "title": "Truncated",
+      "type": "boolean"
+     },
+     "unplaced_flags": {
+      "title": "Unplaced Flags",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "records",
+     "channels",
+     "interval_count",
+     "truncated",
+     "interval_limit",
+     "unplaced_flags"
+    ],
+    "title": "GetFlagIntervalsResult",
+    "type": "object"
+   },
    "GetMastMarkerParameters": {
     "additionalProperties": false,
     "properties": {},
@@ -9258,12 +9815,44 @@
       "title": "Can Undo",
       "type": "boolean"
      },
+     "data_version": {
+      "title": "Data Version",
+      "type": "integer"
+     },
      "entries": {
       "items": {
        "$ref": "#/components/schemas/OperationLogEntry"
       },
       "title": "Entries",
       "type": "array"
+     },
+     "stale_artifacts": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Stale Artifacts",
+      "type": "array"
+     },
+     "stale_reasons": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stale Reasons"
      },
      "total": {
       "title": "Total",
@@ -9275,9 +9864,22 @@
       },
       "title": "Undo Stack",
       "type": "array"
+     },
+     "warning": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Warning"
      }
     },
     "required": [
+     "data_version",
+     "stale_artifacts",
      "total",
      "entries",
      "undo_stack",
@@ -9474,6 +10076,129 @@
      }
     },
     "title": "GetRunConfigResult",
+    "type": "object"
+   },
+   "GetScatterPairsParameters": {
+    "additionalProperties": false,
+    "properties": {
+     "end": {
+      "default": "",
+      "title": "End",
+      "type": "string"
+     },
+     "highlight": {
+      "default": "",
+      "title": "Highlight",
+      "type": "string"
+     },
+     "start": {
+      "default": "",
+      "title": "Start",
+      "type": "string"
+     },
+     "x_channel": {
+      "title": "X Channel",
+      "type": "string"
+     },
+     "y_channel": {
+      "title": "Y Channel",
+      "type": "string"
+     }
+    },
+    "required": [
+     "x_channel",
+     "y_channel"
+    ],
+    "title": "GetScatterPairsParameters",
+    "type": "object"
+   },
+   "GetScatterPairsResult": {
+    "additionalProperties": false,
+    "properties": {
+     "end_ms": {
+      "title": "End Ms",
+      "type": "integer"
+     },
+     "highlight": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/SelectionUsed"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "highlighted": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "boolean"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Highlighted"
+     },
+     "records": {
+      "title": "Records",
+      "type": "integer"
+     },
+     "start_ms": {
+      "title": "Start Ms",
+      "type": "integer"
+     },
+     "time_ms": {
+      "items": {
+       "type": "integer"
+      },
+      "title": "Time Ms",
+      "type": "array"
+     },
+     "window_records": {
+      "title": "Window Records",
+      "type": "integer"
+     },
+     "x": {
+      "items": {
+       "type": "number"
+      },
+      "title": "X",
+      "type": "array"
+     },
+     "x_channel": {
+      "title": "X Channel",
+      "type": "string"
+     },
+     "y": {
+      "items": {
+       "type": "number"
+      },
+      "title": "Y",
+      "type": "array"
+     },
+     "y_channel": {
+      "title": "Y Channel",
+      "type": "string"
+     }
+    },
+    "required": [
+     "x_channel",
+     "y_channel",
+     "start_ms",
+     "end_ms",
+     "window_records",
+     "records",
+     "time_ms",
+     "x",
+     "y",
+     "highlighted",
+     "highlight"
+    ],
+    "title": "GetScatterPairsResult",
     "type": "object"
    },
    "GetSeriesWindowParameters": {
@@ -10144,6 +10869,80 @@
     "title": "IncompleteYear",
     "type": "object"
    },
+   "Instrument": {
+    "additionalProperties": false,
+    "properties": {
+     "boom_orientation_deg": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Boom Orientation Deg"
+     },
+     "height_m": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Height M"
+     },
+     "in_data": {
+      "title": "In Data",
+      "type": "boolean"
+     },
+     "mapped_as": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mapped As"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "sensor_type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sensor Type"
+     },
+     "statistics": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Statistics",
+      "type": "array"
+     }
+    },
+    "required": [
+     "name",
+     "height_m",
+     "sensor_type",
+     "in_data",
+     "mapped_as",
+     "statistics"
+    ],
+    "title": "Instrument",
+    "type": "object"
+   },
    "InterpolateEra5Request": {
     "description": "Select which downloaded reanalysis becomes the interpolated long-term reference.\n\nPreviously ``source`` was a bare ``str = \"era5\"`` function parameter with no ``Body()``\nannotation, so FastAPI bound it as a *query* parameter - every caller (including this\nproject's own frontend) sent it in the JSON body instead, which FastAPI silently ignored,\nalways falling back to the ``\"era5\"`` default. The MERRA-2 interpolation call added to fix\nF-58/the \"MERRA-2 stays unavailable\" report therefore never actually interpolated MERRA-2\nat all; it silently re-interpolated ERA5 a second time. A request body model is the fix.",
     "properties": {
@@ -10704,6 +11503,13 @@
    "ListCleaningRulesResult": {
     "additionalProperties": false,
     "properties": {
+     "manual_flag_reasons": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Manual Flag Reasons",
+      "type": "array"
+     },
      "order_is_material": {
       "title": "Order Is Material",
       "type": "boolean"
@@ -10730,12 +11536,59 @@
     },
     "required": [
      "rules",
+     "manual_flag_reasons",
      "order_is_material",
      "order_note",
      "outlier_detection",
      "outlier_note"
     ],
     "title": "ListCleaningRulesResult",
+    "type": "object"
+   },
+   "ListInstrumentsParameters": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "ListInstrumentsParameters",
+    "type": "object"
+   },
+   "ListInstrumentsResult": {
+    "additionalProperties": false,
+    "properties": {
+     "heights": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "title": "Heights",
+      "type": "array"
+     },
+     "instruments": {
+      "items": {
+       "$ref": "#/components/schemas/Instrument"
+      },
+      "title": "Instruments",
+      "type": "array"
+     },
+     "other_channels": {
+      "items": {
+       "$ref": "#/components/schemas/OtherChannel"
+      },
+      "title": "Other Channels",
+      "type": "array"
+     }
+    },
+    "required": [
+     "heights",
+     "instruments",
+     "other_channels"
+    ],
+    "title": "ListInstrumentsResult",
     "type": "object"
    },
    "ListSelectionsParameters": {
@@ -11493,6 +12346,38 @@
      "applied_before_on_this_sensor"
     ],
     "title": "OrderDependence",
+    "type": "object"
+   },
+   "OtherChannel": {
+    "additionalProperties": false,
+    "description": "A column of the data that belongs to no instrument, with how its header reads.",
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
+     "role": {
+      "title": "Role",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "role",
+     "reason"
+    ],
+    "title": "OtherChannel",
     "type": "object"
    },
    "OverlapMetrics": {
@@ -13050,6 +13935,112 @@
     "title": "ProfilePoint",
     "type": "object"
    },
+   "Project": {
+    "additionalProperties": false,
+    "properties": {
+     "campaigns": {
+      "items": {
+       "$ref": "#/components/schemas/Campaign"
+      },
+      "title": "Campaigns",
+      "type": "array"
+     },
+     "created_at": {
+      "title": "Created At",
+      "type": "string"
+     },
+     "id": {
+      "title": "Id",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "site_name": {
+      "title": "Site Name",
+      "type": "string"
+     },
+     "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "site_name",
+     "created_at",
+     "updated_at",
+     "campaigns"
+    ],
+    "title": "Project",
+    "type": "object"
+   },
+   "ProjectDetail": {
+    "additionalProperties": false,
+    "properties": {
+     "campaigns": {
+      "items": {
+       "$ref": "#/components/schemas/CampaignSite"
+      },
+      "title": "Campaigns",
+      "type": "array"
+     },
+     "created_at": {
+      "title": "Created At",
+      "type": "string"
+     },
+     "id": {
+      "title": "Id",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "site_name": {
+      "title": "Site Name",
+      "type": "string"
+     },
+     "timezones_differ": {
+      "title": "Timezones Differ",
+      "type": "boolean"
+     },
+     "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "site_name",
+     "created_at",
+     "updated_at",
+     "campaigns",
+     "timezones_differ"
+    ],
+    "title": "ProjectDetail",
+    "type": "object"
+   },
+   "ProjectList": {
+    "additionalProperties": false,
+    "properties": {
+     "projects": {
+      "items": {
+       "$ref": "#/components/schemas/Project"
+      },
+      "title": "Projects",
+      "type": "array"
+     }
+    },
+    "required": [
+     "projects"
+    ],
+    "title": "ProjectList",
+    "type": "object"
+   },
    "QcSensor": {
     "additionalProperties": false,
     "properties": {
@@ -13137,6 +14128,28 @@
    "ReanalysisDataItem": {
     "additionalProperties": true,
     "properties": {
+     "cache": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cache"
+     },
+     "cached_through": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cached Through"
+     },
      "latitude": {
       "title": "Latitude",
       "type": "number"
@@ -13474,6 +14487,12 @@
         "$ref": "#/components/schemas/ApplyCleaningRuleResult"
        },
        {
+        "$ref": "#/components/schemas/RemoveSensorsResult"
+       },
+       {
+        "$ref": "#/components/schemas/BuildDataModelResult"
+       },
+       {
         "$ref": "#/components/schemas/RunConfig"
        }
       ],
@@ -13591,6 +14610,138 @@
     "title": "ReferenceHeights",
     "type": "object"
    },
+   "RemoveSensorsParameters": {
+    "additionalProperties": false,
+    "properties": {
+     "sensor_names": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Sensor Names",
+      "type": "array"
+     }
+    },
+    "required": [
+     "sensor_names"
+    ],
+    "title": "RemoveSensorsParameters",
+    "type": "object"
+   },
+   "RemoveSensorsPreview": {
+    "additionalProperties": false,
+    "properties": {
+     "applied": {
+      "title": "Applied",
+      "type": "boolean"
+     },
+     "changes": {
+      "$ref": "#/components/schemas/FrameChange"
+     },
+     "columns_dropped": {
+      "additionalProperties": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "title": "Columns Dropped",
+      "type": "object"
+     },
+     "not_found": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Not Found",
+      "type": "array"
+     },
+     "remaining_count": {
+      "title": "Remaining Count",
+      "type": "integer"
+     },
+     "removed": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Removed",
+      "type": "array"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "removed",
+     "not_found",
+     "remaining_count",
+     "columns_dropped",
+     "applied",
+     "changes"
+    ],
+    "title": "RemoveSensorsPreview",
+    "type": "object"
+   },
+   "RemoveSensorsResult": {
+    "additionalProperties": false,
+    "properties": {
+     "columns_dropped": {
+      "additionalProperties": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "title": "Columns Dropped",
+      "type": "object"
+     },
+     "not_found": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Not Found",
+      "type": "array"
+     },
+     "remaining_count": {
+      "title": "Remaining Count",
+      "type": "integer"
+     },
+     "removed": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Removed",
+      "type": "array"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "removed",
+     "not_found",
+     "remaining_count",
+     "columns_dropped"
+    ],
+    "title": "RemoveSensorsResult",
+    "type": "object"
+   },
+   "RenameCampaign": {
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "RenameCampaign",
+    "type": "object"
+   },
    "Residual": {
     "additionalProperties": false,
     "properties": {
@@ -13680,6 +14831,29 @@
     "title": "ResolveSelectionResult",
     "type": "object"
    },
+   "RestoredDataModel": {
+    "additionalProperties": false,
+    "description": "Undoing a data model build: the earlier mapping, inventory, timezone and document back,\nand the run-configuration paths the build had set.",
+    "properties": {
+     "data_model": {
+      "title": "Data Model",
+      "type": "string"
+     },
+     "restored_paths": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Restored Paths",
+      "type": "array"
+     }
+    },
+    "required": [
+     "restored_paths",
+     "data_model"
+    ],
+    "title": "RestoredDataModel",
+    "type": "object"
+   },
    "RestoredPaths": {
     "additionalProperties": false,
     "description": "Undoing a configuration change: the run-configuration paths put back.",
@@ -13696,6 +14870,24 @@
      "restored_paths"
     ],
     "title": "RestoredPaths",
+    "type": "object"
+   },
+   "RestoredSensors": {
+    "additionalProperties": false,
+    "description": "Undoing a sensor removal: the sensors put back.",
+    "properties": {
+     "restored": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Restored",
+      "type": "array"
+     }
+    },
+    "required": [
+     "restored"
+    ],
+    "title": "RestoredSensors",
     "type": "object"
    },
    "RoughnessClipping": {
@@ -14852,6 +16044,41 @@
     "title": "SaveScenarioRequest",
     "type": "object"
    },
+   "ScatterPairsRequest": {
+    "additionalProperties": false,
+    "description": "The pairs route's query as a body, for a highlight too long for a URL.",
+    "properties": {
+     "end": {
+      "default": "",
+      "title": "End",
+      "type": "string"
+     },
+     "highlight": {
+      "default": "",
+      "title": "Highlight",
+      "type": "string"
+     },
+     "start": {
+      "default": "",
+      "title": "Start",
+      "type": "string"
+     },
+     "x_channel": {
+      "title": "X Channel",
+      "type": "string"
+     },
+     "y_channel": {
+      "title": "Y Channel",
+      "type": "string"
+     }
+    },
+    "required": [
+     "x_channel",
+     "y_channel"
+    ],
+    "title": "ScatterPairsRequest",
+    "type": "object"
+   },
    "SectorModel": {
     "additionalProperties": false,
     "properties": {
@@ -15033,6 +16260,52 @@
        }
       ],
       "title": "To Deg"
+     },
+     "vertices": {
+      "anyOf": [
+       {
+        "items": {
+         "items": {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "type": "array"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Vertices"
+     },
+     "x_channel": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "X Channel"
+     },
+     "y_channel": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Y Channel"
      }
     },
     "required": [
@@ -15049,9 +16322,20 @@
       "title": "Basis",
       "type": "string"
      },
+     "inline": {
+      "title": "Inline",
+      "type": "boolean"
+     },
      "name": {
-      "title": "Name",
-      "type": "string"
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
      },
      "of_records": {
       "title": "Of Records",
@@ -15064,6 +16348,7 @@
     },
     "required": [
      "name",
+     "inline",
      "records",
      "of_records",
      "basis"
@@ -15384,6 +16669,41 @@
      "diurnal_means"
     ],
     "title": "SeriesSummary",
+    "type": "object"
+   },
+   "SeriesWindowRequest": {
+    "additionalProperties": false,
+    "description": "The GET route's query as a body, for a selection too long for a URL (a lasso).",
+    "properties": {
+     "buckets": {
+      "default": 2000,
+      "title": "Buckets",
+      "type": "integer"
+     },
+     "channels": {
+      "title": "Channels",
+      "type": "string"
+     },
+     "end": {
+      "default": "",
+      "title": "End",
+      "type": "string"
+     },
+     "selection": {
+      "default": "",
+      "title": "Selection",
+      "type": "string"
+     },
+     "start": {
+      "default": "",
+      "title": "Start",
+      "type": "string"
+     }
+    },
+    "required": [
+     "channels"
+    ],
+    "title": "SeriesWindowRequest",
     "type": "object"
    },
    "SessionSummaryResponse": {
@@ -16402,6 +17722,57 @@
      "combination"
     ],
     "title": "SubstitutionTotals",
+    "type": "object"
+   },
+   "SummariseChannelsParameters": {
+    "additionalProperties": false,
+    "properties": {
+     "channels": {
+      "title": "Channels",
+      "type": "string"
+     },
+     "selection": {
+      "default": "",
+      "title": "Selection",
+      "type": "string"
+     }
+    },
+    "required": [
+     "channels"
+    ],
+    "title": "SummariseChannelsParameters",
+    "type": "object"
+   },
+   "SummariseChannelsResult": {
+    "additionalProperties": false,
+    "properties": {
+     "channels": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/ChannelSummary"
+      },
+      "title": "Channels",
+      "type": "object"
+     },
+     "records": {
+      "title": "Records",
+      "type": "integer"
+     },
+     "selection": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/SelectionUsed"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "records",
+     "channels"
+    ],
+    "title": "SummariseChannelsResult",
     "type": "object"
    },
    "SweepEntry": {
@@ -17650,7 +19021,13 @@
         "$ref": "#/components/schemas/UndoCleaningRuleResult"
        },
        {
+        "$ref": "#/components/schemas/RestoredDataModel"
+       },
+       {
         "$ref": "#/components/schemas/RestoredPaths"
+       },
+       {
+        "$ref": "#/components/schemas/RestoredSensors"
        }
       ],
       "title": "Detail"
@@ -17712,6 +19089,35 @@
      "can_redo"
     ],
     "title": "UndoLastChangeResult",
+    "type": "object"
+   },
+   "UpdateProject": {
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "site_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Site Name"
+     }
+    },
+    "title": "UpdateProject",
     "type": "object"
    },
    "UpdateRunConfigParameters": {
@@ -20141,6 +21547,377 @@
     "summary": "List Operations",
     "tags": [
      "operations"
+    ]
+   }
+  },
+  "/api/projects": {
+   "get": {
+    "description": "Every project, most recently changed first.",
+    "operationId": "list_projects_api_projects_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProjectList"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "List Projects",
+    "tags": [
+     "projects"
+    ]
+   },
+   "post": {
+    "description": "A new project with no campaigns yet.",
+    "operationId": "create_project_api_projects_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CreateProject"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Project"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Create Project",
+    "tags": [
+     "projects"
+    ]
+   }
+  },
+  "/api/projects/{project_id}": {
+   "get": {
+    "description": "The project, each campaign with its own coordinate and timezone.",
+    "operationId": "get_project_api_projects__project_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "project_id",
+      "required": true,
+      "schema": {
+       "title": "Project Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProjectDetail"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Project",
+    "tags": [
+     "projects"
+    ]
+   },
+   "patch": {
+    "description": "Rename the project or its site.",
+    "operationId": "update_project_api_projects__project_id__patch",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "project_id",
+      "required": true,
+      "schema": {
+       "title": "Project Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UpdateProject"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Project"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Update Project",
+    "tags": [
+     "projects"
+    ]
+   }
+  },
+  "/api/projects/{project_id}/campaigns": {
+   "post": {
+    "description": "A new campaign in the project: a new session, sharing the project's reanalysis cache.",
+    "operationId": "add_campaign_api_projects__project_id__campaigns_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "project_id",
+      "required": true,
+      "schema": {
+       "title": "Project Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AddCampaign"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Campaign"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Add Campaign",
+    "tags": [
+     "projects"
+    ]
+   }
+  },
+  "/api/projects/{project_id}/campaigns/{session_id}": {
+   "patch": {
+    "description": "Rename one of the project's campaigns.",
+    "operationId": "rename_campaign_api_projects__project_id__campaigns__session_id__patch",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "project_id",
+      "required": true,
+      "schema": {
+       "title": "Project Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RenameCampaign"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Project"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Not Found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Rename Campaign",
+    "tags": [
+     "projects"
     ]
    }
   },
@@ -24755,7 +26532,7 @@
   },
   "/api/sessions/{session_id}/operations/build_data_model": {
    "post": {
-    "description": "Build a minimal IEA Task 43 data model from declared columns and load it.",
+    "description": "Build a minimal IEA Task 43 data model from declared columns and load it.\n\nRefused while the campaign's own uploaded data model is in use. Undoable, except the\nbuild that first puts the records into UTC.",
     "operationId": "operation_build_data_model_api_sessions__session_id__operations_build_data_model_post",
     "parameters": [
      {
@@ -27665,7 +29442,7 @@
   },
   "/api/sessions/{session_id}/operations/define_selection": {
    "post": {
-    "description": "Define or replace a named selection of records: time ranges, direction sectors, value\nbands or record sets, combined by union and intersection.",
+    "description": "Define or replace a named selection of records: time ranges, direction sectors, value\nbands, polygons over two channels or record sets, combined by union and intersection.",
     "operationId": "operation_define_selection_api_sessions__session_id__operations_define_selection_post",
     "parameters": [
      {
@@ -27859,7 +29636,7 @@
   },
   "/api/sessions/{session_id}/operations/draft_data_model": {
    "post": {
-    "description": "Draft a Task 43 reading of the loaded timeseries columns for review.",
+    "description": "Draft a Task 43 reading of the loaded timeseries columns for review, with the data\nmodel in use: its file, whether it was built here (only then can it be edited) and the\nspec it was built from.",
     "operationId": "operation_draft_data_model_api_sessions__session_id__operations_draft_data_model_post",
     "parameters": [
      {
@@ -29118,6 +30895,103 @@
     ]
    }
   },
+  "/api/sessions/{session_id}/operations/get_flag_intervals": {
+   "post": {
+    "description": "Cleaning flags of measured channels over a half-open window, as intervals of consecutive\nrecords flagged by one rule, with the rule, reason, actor and time of each.\n\n``channels`` is comma-separated; ``start`` and ``end`` are timestamps with a UTC offset,\nempty for the whole record. ``next`` is the record after an interval, where its band ends.",
+    "operationId": "operation_get_flag_intervals_api_sessions__session_id__operations_get_flag_intervals_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/GetFlagIntervalsParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GetFlagIntervalsResult",
+         "title": "Response Operation Get Flag Intervals Api Sessions  Session Id  Operations Get Flag Intervals Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "get_flag_intervals",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
   "/api/sessions/{session_id}/operations/get_mast_marker": {
    "post": {
     "description": "Return the site measurement mast as a GeoJSON feature for site overview mapping.",
@@ -29217,7 +31091,7 @@
   },
   "/api/sessions/{session_id}/operations/get_operation_log": {
    "post": {
-    "description": "Return the most recent operation calls: who, what, with which parameters, and the undo state.",
+    "description": "Return the most recent operation calls: who, what, with which parameters, the undo state,\nand which derived results are stale.",
     "operationId": "operation_get_operation_log_api_sessions__session_id__operations_get_operation_log_post",
     "parameters": [
      {
@@ -29501,6 +31375,103 @@
      }
     },
     "summary": "get_run_config",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
+  "/api/sessions/{session_id}/operations/get_scatter_pairs": {
+   "post": {
+    "description": "Every record of a half-open window where both channels are valid, as time, x and y.\n\n``highlight`` is a selection, a saved name or an inline definition, whose records are\nmarked in ``highlighted`` rather than removed. Refused past MAX_JSON_PAIRS pairs: narrow\nthe window, or read the same pairs as Arrow from ``/sessions/{id}/pairs``.",
+    "operationId": "operation_get_scatter_pairs_api_sessions__session_id__operations_get_scatter_pairs_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/GetScatterPairsParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GetScatterPairsResult",
+         "title": "Response Operation Get Scatter Pairs Api Sessions  Session Id  Operations Get Scatter Pairs Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "get_scatter_pairs",
     "tags": [
      "operations"
     ]
@@ -29986,6 +31957,103 @@
      }
     },
     "summary": "list_cleaning_rules",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
+  "/api/sessions/{session_id}/operations/list_instruments": {
+   "post": {
+    "description": "The campaign's instruments by height (highest first), each with its type, boom, mapped\nrole and the statistic columns it logs, and every other channel of the data.",
+    "operationId": "operation_list_instruments_api_sessions__session_id__operations_list_instruments_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/ListInstrumentsParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ListInstrumentsResult",
+         "title": "Response Operation List Instruments Api Sessions  Session Id  Operations List Instruments Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "list_instruments",
     "tags": [
      "operations"
     ]
@@ -31737,6 +33805,200 @@
     ]
    }
   },
+  "/api/sessions/{session_id}/operations/remove_sensors": {
+   "post": {
+    "description": "Remove sensors from the analysis: inventory, height mapping, working and raw data.\n\nThe removal is recorded in the run configuration's excluded_sensors, so a datamodel\nre-import keeps them out; loading a new timeseries brings every sensor back. Undoable.",
+    "operationId": "operation_remove_sensors_api_sessions__session_id__operations_remove_sensors_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/RemoveSensorsParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RemoveSensorsResult",
+         "title": "Response Operation Remove Sensors Api Sessions  Session Id  Operations Remove Sensors Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "remove_sensors",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
+  "/api/sessions/{session_id}/operations/remove_sensors/preview": {
+   "post": {
+    "description": "Remove sensors from the analysis: inventory, height mapping, working and raw data.\n\nThe removal is recorded in the run configuration's excluded_sensors, so a datamodel\nre-import keeps them out; loading a new timeseries brings every sensor back. Undoable.",
+    "operationId": "operation_remove_sensors_preview_api_sessions__session_id__operations_remove_sensors_preview_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/RemoveSensorsParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RemoveSensorsPreview",
+         "title": "Response Operation Remove Sensors Preview Api Sessions  Session Id  Operations Remove Sensors Preview Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "remove_sensors (dry run)",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
   "/api/sessions/{session_id}/operations/resolve_selection": {
    "post": {
     "description": "Resolve a named selection against the working data: how many records, and where.",
@@ -32610,6 +34872,103 @@
     ]
    }
   },
+  "/api/sessions/{session_id}/operations/summarise_channels": {
+   "post": {
+    "description": "Valid records, mean, minimum and maximum of measured channels (comma-separated); with a\nselection, of its records only, which is how a selection is compared with every record.",
+    "operationId": "operation_summarise_channels_api_sessions__session_id__operations_summarise_channels_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/SummariseChannelsParameters"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Body"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SummariseChannelsResult",
+         "title": "Response Operation Summarise Channels Api Sessions  Session Id  Operations Summarise Channels Post"
+        }
+       }
+      },
+      "description": "The operation's result"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Refused: the request cannot be answered as asked"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "502": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "An upstream service failed"
+     }
+    },
+    "summary": "summarise_channels",
+    "tags": [
+     "operations"
+    ]
+   }
+  },
   "/api/sessions/{session_id}/operations/undo_cleaning_rule": {
    "post": {
     "description": "Restore raw data and replay all cleaning steps except the selected log entry.",
@@ -32806,7 +35165,7 @@
   },
   "/api/sessions/{session_id}/operations/undo_last_change": {
    "post": {
-    "description": "Undo the last cleaning rule or configuration change still in the history.",
+    "description": "Undo the last cleaning rule, configuration change, sensor removal or data model build still in the history.",
     "operationId": "operation_undo_last_change_api_sessions__session_id__operations_undo_last_change_post",
     "parameters": [
      {
@@ -33076,6 +35435,192 @@
     "summary": "Get Overview Summary",
     "tags": [
      "analysis"
+    ]
+   }
+  },
+  "/api/sessions/{session_id}/pairs": {
+   "get": {
+    "description": "Every record of [start, end) where both channels are valid, as Arrow, for a scatter.",
+    "operationId": "get_pairs_api_sessions__session_id__pairs_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "x_channel",
+      "required": true,
+      "schema": {
+       "title": "X Channel",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "y_channel",
+      "required": true,
+      "schema": {
+       "title": "Y Channel",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "start",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Start",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "end",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "End",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "highlight",
+      "required": false,
+      "schema": {
+       "default": "",
+       "title": "Highlight",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/vnd.apache.arrow.stream": {}
+      },
+      "description": "The window as an Arrow IPC stream"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Get Pairs",
+    "tags": [
+     "series"
+    ]
+   },
+   "post": {
+    "description": "The same pairs as the GET route, the query sent as a JSON body.",
+    "operationId": "post_pairs_api_sessions__session_id__pairs_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ScatterPairsRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/vnd.apache.arrow.stream": {}
+      },
+      "description": "The window as an Arrow IPC stream"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Post Pairs",
+    "tags": [
+     "series"
     ]
    }
   },
@@ -34076,7 +36621,7 @@
   },
   "/api/sessions/{session_id}/sensors/delete": {
    "post": {
-    "description": "Remove unwanted sensors from the session inventory, mapping, and data.\n\nRemoves the named sensors from ``sensor_inventory``, clears their column\nslot from ``sensor_mapping`` (by height), and drops their columns from both\nthe working and raw timeseries dataframes. If a height entry in the mapping\nbecomes entirely ``None`` after removal, the height is dropped from the\nmapping. The exclusion is persisted to ``excluded_sensors`` in the\nrunconfig so the selection is authoritative and survives config saves and\ndatamodel-only re-imports. Loading the timeseries again or re-importing\nfrom BrightHub clears the exclusion and restores the full dataset.",
+    "description": "Remove unwanted sensors from the session inventory, mapping, and data.\n\nThe same logic as the ``remove_sensors`` operation (``server/tools/sensors.py``), which\nthe workbench calls through the generated route so the removal can be undone; this route\nstays for the current interface until Phase 3 retires it.",
     "operationId": "delete_sensors_api_sessions__session_id__sensors_delete_post",
     "parameters": [
      {
@@ -34228,11 +36773,19 @@
     "responses": {
      "200": {
       "content": {
+       "application/vnd.apache.arrow.stream": {}
+      },
+      "description": "The window as an Arrow IPC stream"
+     },
+     "400": {
+      "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
        }
       },
-      "description": "Successful Response"
+      "description": "Bad Request"
      },
      "422": {
       "content": {
@@ -34246,6 +36799,79 @@
      }
     },
     "summary": "Get Series",
+    "tags": [
+     "series"
+    ]
+   },
+   "post": {
+    "description": "The same window as the GET route, its query sent as a JSON body.",
+    "operationId": "post_series_api_sessions__session_id__series_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "session_id",
+      "required": true,
+      "schema": {
+       "title": "Session Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "X-GoKaatru-Session",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "X-Gokaatru-Session"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SeriesWindowRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/vnd.apache.arrow.stream": {}
+      },
+      "description": "The window as an Arrow IPC stream"
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorDetail"
+        }
+       }
+      },
+      "description": "Bad Request"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Post Series",
     "tags": [
      "series"
     ]

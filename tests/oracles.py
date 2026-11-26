@@ -376,12 +376,13 @@ def fixed_prefix_hash_oracle(
 
     Reimplements the sha256-of-sorted-JSON scheme by hand rather than importing
     ``server.core.scenario_result._stable_hash`` — an oracle that shares the hashing
-    code with the thing it verifies could not catch a change to that code itself. The
-    time each cleaning rule ran is not part of the prefix.
+    code with the thing it verifies could not catch a change to that code itself. When
+    each cleaning rule ran, and who ran it, is not part of the prefix.
     """
     payload = {
         "cleaning_log": [
-            {key: value for key, value in dict(entry).items() if key != "applied_at"} for entry in cleaning_log
+            {key: value for key, value in dict(entry).items() if key not in ("applied_at", "actor")}
+            for entry in cleaning_log
         ],
         "reanalysis_identity": reanalysis_identity,
         "reanalysis_sources": sorted(reanalysis_sources),
@@ -419,6 +420,19 @@ def selection_mask_oracle(definition: dict, timestamps: list, channels: dict) ->
             return True
         if kind == "records":
             return any(stamp == pd.Timestamp(value).tz_convert("UTC") for value in node["timestamps"])
+        if kind == "polygon":
+            px, py = channels[node["x_channel"]][row], channels[node["y_channel"]][row]
+            if px is None or py is None or math.isnan(px) or math.isnan(py):
+                return False
+            # Even-odd rule: count the edges a ray towards +x crosses.
+            corners = node["vertices"]
+            crossings = 0
+            for k in range(len(corners)):
+                ax, ay = corners[k]
+                bx, by = corners[k - 1]
+                if (ay > py) != (by > py) and px < (bx - ax) * (py - ay) / (by - ay) + ax:
+                    crossings += 1
+            return crossings % 2 == 1
         value = channels[node["channel"]][row]
         if value is None or math.isnan(value):
             return False

@@ -1,0 +1,46 @@
+.gk-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.gk-profile-chart {
+  width: 100%;
+  max-width: 300px;
+}
+
+.gk-profile-grid {
+  stroke: var(--gk-border);
+  stroke-width: 1;
+}
+
+.gk-profile-tick {
+  fill: var(--gk-muted);
+  font-size: 10px;
+  text-anchor: middle;
+}
+
+.gk-profile-tick-y {
+  text-anchor: end;
+}
+
+.gk-profile-all {
+  fill: none;
+  stroke: var(--gk-series-4);
+  stroke-width: 1.5;
+}
+
+.gk-profile-all-point {
+  fill: var(--gk-series-4);
+}
+
+.gk-profile-selected {
+  fill: none;
+  stroke: var(--gk-accent);
+  stroke-width: 2;
+}
+
+.gk-profile-selected-point {
+  fill: var(--gk-accent);
+}

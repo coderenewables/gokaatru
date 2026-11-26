@@ -37,7 +37,9 @@ class ErrorDetail(Result):
 class SelectionUsed(Result):
     """The selection a result was computed on (``server.operations.SELECTION_BASIS``)."""
 
-    name: str
+    #: The saved selection's name; ``None`` for a definition sent inline.
+    name: str | None
+    inline: bool
     records: int
     of_records: int
     basis: str
@@ -94,6 +96,14 @@ class CleaningDetail(Result):
     sector_width_deg: Number = None
     exclude_sectors: list[Number] | None = None
     warning: str | None = None
+    # exclude_selection
+    reason: str | None = None
+    #: The frozen definition in words.
+    description: str | None = None
+    #: Records the definition held when the rule ran, before any column's own gaps.
+    selected_records: int | None = None
+    #: Values set missing, by column; ``records_affected`` is their sum.
+    affected_by_sensor: dict[str, int] | None = None
 
 
 class CleaningLogEntry(CleaningDetail):
@@ -105,6 +115,8 @@ class CleaningLogEntry(CleaningDetail):
     sequence: int | None = None
     records_affected: int | None
     applied_at: str
+    #: Who applied the rule; absent on upstream processing and on entries saved before it.
+    actor: str | None = None
     params: dict[str, Any]
     start_date: str | None
     end_date: str | None

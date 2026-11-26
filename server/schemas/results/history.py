@@ -5,6 +5,8 @@ from typing import Any
 
 from server.schemas.results._base import Result, RunConfig, Staleness
 from server.schemas.results.cleaning import ApplyCleaningRuleResult, UndoCleaningRuleResult
+from server.schemas.results.datamodel_builder import BuildDataModelResult
+from server.schemas.results.sensors import RemoveSensorsResult, RestoredSensors
 
 
 class LoggedCall(Result):
@@ -20,12 +22,19 @@ class RestoredPaths(Result):
     restored_paths: list[str]
 
 
+class RestoredDataModel(RestoredPaths):
+    """Undoing a data model build: the earlier mapping, inventory, timezone and document back,
+    and the run-configuration paths the build had set."""
+
+    data_model: str
+
+
 class UndoLastChangeResult(Staleness):
     status: str
     undone: LoggedCall
     #: A cleaning rule's undo is a replay from raw data; a configuration change's names the
-    #: paths restored.
-    detail: UndoCleaningRuleResult | RestoredPaths
+    #: paths restored; a sensor removal's names the sensors put back.
+    detail: UndoCleaningRuleResult | RestoredDataModel | RestoredPaths | RestoredSensors
     can_undo: bool
     can_redo: bool
 
@@ -34,7 +43,7 @@ class RedoLastChangeResult(Staleness):
     status: str
     redone: LoggedCall
     #: What the change returned when it was made again.
-    detail: ApplyCleaningRuleResult | RunConfig
+    detail: ApplyCleaningRuleResult | RemoveSensorsResult | BuildDataModelResult | RunConfig
     can_undo: bool
     can_redo: bool
 
@@ -56,7 +65,7 @@ class OperationLogEntry(Result):
     undo: dict[str, Any] | None = None
 
 
-class GetOperationLogResult(Result):
+class GetOperationLogResult(Staleness):
     total: int
     entries: list[OperationLogEntry]
     #: Log sequence numbers of undone changes that can be redone, newest last.

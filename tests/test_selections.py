@@ -107,6 +107,119 @@ def test_a_definition_that_describes_nothing_is_refused(definition: dict, messag
         resolve(definition, _frame())
 
 
+def _pairs(rows: int = 3000, seed: int = 11) -> pd.DataFrame:
+    """Two speeds on a 0.25 m/s grid, so many records sit exactly on a polygon's edge or vertex."""
+    rng = np.random.default_rng(seed)
+    index = pd.date_range("2023-03-01", periods=rows, freq="10min", tz="UTC")
+    low = np.round(rng.weibull(2.0, rows) * 7.0 * 4) / 4
+    high = np.round((low * 1.1 + rng.normal(0, 1.0, rows)) * 4) / 4
+    low[::29] = np.nan
+    high[5::31] = np.nan
+    return pd.DataFrame({"Spd_80m": low, "Spd_100m": high, "Dir_100m": rng.uniform(0, 360, rows)}, index=index)
+
+
+def _random_polygon(rng: np.random.Generator) -> dict:
+    corners = rng.integers(3, 13)
+    # Vertices on a 0.5 grid, in random order: concave and self-crossing lassos included.
+    vertices = [[float(rng.integers(0, 41) / 2), float(rng.integers(0, 41) / 2)] for _ in range(corners)]
+    xs, ys = np.array(vertices).T
+    if np.dot(xs, np.roll(ys, -1)) - np.dot(ys, np.roll(xs, -1)) == 0.0:
+        vertices = [[0.0, 0.0], [10.0, 0.0], [5.0, 10.0]]
+    return {"kind": "polygon", "x_channel": "Spd_80m", "y_channel": "Spd_100m", "vertices": vertices}
+
+
+def test_three_hundred_random_polygons_agree_with_the_oracle() -> None:
+    frame = _pairs()
+    rng = np.random.default_rng(23)
+    for _ in range(300):
+        definition = _random_polygon(rng)
+        if rng.random() < 0.3:
+            definition = {
+                "kind": rng.choice(["union", "intersection"]),
+                "of": [definition, {"kind": "sector", "channel": "Dir_100m", "from_deg": 300.0, "to_deg": 60.0}],
+            }
+        assert np.array_equal(resolve(definition, frame), _oracle(definition, frame)), definition
+
+
+def test_a_rectangle_holds_exactly_what_its_two_half_open_bands_hold() -> None:
+    frame = _pairs()
+    rectangle = {
+        "kind": "polygon",
+        "x_channel": "Spd_80m",
+        "y_channel": "Spd_100m",
+        "vertices": [[4.0, 5.0], [9.5, 5.0], [9.5, 11.0], [4.0, 11.0]],
+    }
+    bands = {
+        "kind": "intersection",
+        "of": [
+            {"kind": "band", "channel": "Spd_80m", "min": 4.0, "max": 9.5},
+            {"kind": "band", "channel": "Spd_100m", "min": 5.0, "max": 11.0},
+        ],
+    }
+    on_edges = frame["Spd_80m"].isin([4.0, 9.5]) | frame["Spd_100m"].isin([5.0, 11.0])
+    assert on_edges.sum() > 50
+    assert np.array_equal(resolve(rectangle, frame), resolve(bands, frame))
+
+
+def test_polygons_sharing_an_edge_share_no_record() -> None:
+    frame = _pairs()
+    left = {"kind": "polygon", "x_channel": "Spd_80m", "y_channel": "Spd_100m",
+            "vertices": [[0.0, 0.0], [6.0, 2.0], [7.0, 14.0], [0.0, 14.0]]}
+    right = {"kind": "polygon", "x_channel": "Spd_80m", "y_channel": "Spd_100m",
+             "vertices": [[6.0, 2.0], [20.0, 0.0], [20.0, 14.0], [7.0, 14.0]]}
+    whole = {"kind": "polygon", "x_channel": "Spd_80m", "y_channel": "Spd_100m",
+             "vertices": [[0.0, 0.0], [6.0, 2.0], [20.0, 0.0], [20.0, 14.0], [0.0, 14.0]]}
+    first, second = resolve(left, frame), resolve(right, frame)
+    assert not (first & second).any()
+    assert np.array_equal(first | second, resolve(whole, frame))
+
+
+@pytest.mark.parametrize(
+    ("vertices", "x_channel", "message"),
+    [
+        ([[0, 0], [1, 1]], "Spd_80m", "at least three vertices"),
+        ([[0, 0], [1, 1], [2, 2]], "Spd_80m", "no area"),
+        ([[0, 0], [1, 0], [1]], "Spd_80m", r"pair \[x, y\]"),
+        ([[0, 0], [1, 0], [1, "a"]], "Spd_80m", "must be a number"),
+        ([[0, 0], [1, 0], [1, 1]], "Spd_100m", "two different channels"),
+        ([[0, 0], [1, 0], [1, 1]], "Nope", "not in the loaded data"),
+        ([[float(i % 2), float(i)] for i in range(1001)], "Spd_80m", "at most 1000 vertices"),
+    ],
+)
+def test_a_polygon_that_describes_nothing_is_refused(vertices: list, x_channel: str, message: str) -> None:
+    definition = {"kind": "polygon", "x_channel": x_channel, "y_channel": "Spd_100m", "vertices": vertices}
+    with pytest.raises(SelectionError, match=message):
+        resolve(definition, _pairs())
+
+
+def test_a_definition_is_described_in_words() -> None:
+    from server.core.selection import describe
+
+    definition = {
+        "kind": "union",
+        "of": [
+            {"kind": "sector", "channel": "Dir_100m", "from_deg": 300.0, "to_deg": 60.0},
+            {
+                "kind": "intersection",
+                "of": [
+                    {"kind": "time_range", "start": "2023-02-01T00:00Z", "end": "2023-03-01T00:00Z"},
+                    {"kind": "band", "channel": "Spd_100m", "min": 4.0, "max": 12.5},
+                    {"kind": "band", "channel": "Spd_80m", "max": 20},
+                ],
+            },
+            {"kind": "polygon", "x_channel": "Spd_80m", "y_channel": "Spd_100m", "vertices": [[0, 0], [1, 0], [1, 1]]},
+            {"kind": "records", "timestamps": ["2023-03-01T00:00Z", "2023-03-01T00:10Z"]},
+            {"kind": "time_range", "start": "2023-04-01T00:00Z"},
+            {"kind": "band", "channel": "Spd_80m", "min": 3},
+        ],
+    }
+    assert describe(definition) == (
+        "Dir_100m from 300° to before 60° or (from 2023-02-01T00:00Z to before 2023-03-01T00:00Z and "
+        "Spd_100m from 4 to below 12.5 and Spd_80m below 20) or Spd_80m against Spd_100m inside a "
+        "3-vertex polygon or 2 listed records or from 2023-04-01T00:00Z on or Spd_80m at least 3"
+    )
+
+
 def _state() -> SessionState:
     state = SessionState()
     state.reset()

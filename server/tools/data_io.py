@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from server.core.datamodel_builder import is_built_document
 from server.core.validators import (
     SENSOR_FIELDS,
     TIMESTAMP_LABEL_CONVENTION,
@@ -997,6 +998,22 @@ def _apply_sensor_exclusions(state: SessionState) -> None:
                 setattr(state, frame_attr, frame.drop(columns=drop_cols))
 
 
+def _refuse_a_different_timezone(state: SessionState, tz: object) -> None:
+    """Refuse a data model whose timezone differs from the one the records were put into UTC
+    with. ``_apply_timezone_to_index`` leaves an index that is already in UTC alone, so the
+    session would record the new timezone for records converted with the old one, and every
+    local-time figure (the diurnal hours) would be read with the wrong offset."""
+    converted = any(
+        frame is not None and isinstance(frame.index, pd.DatetimeIndex) and frame.index.tz is not None
+        for frame in (state.timeseries_df, state.raw_timeseries_df)
+    )
+    if converted and state.timezone is not None and str(state.timezone) != str(tz):
+        raise ValueError(
+            f"The records were put into UTC with the timezone {state.timezone}; this data model declares {tz}. "
+            "Load the timeseries again to apply a different timezone."
+        )
+
+
 def _parse_datamodel(state: SessionState, file_path: str) -> dict:
     """Parse an IEA Task 43 datamodel JSON file into the Phase 1 height-to-sensor mapping."""
     try:
@@ -1009,6 +1026,10 @@ def _parse_datamodel(state: SessionState, file_path: str) -> dict:
     site_metadata = _extract_site_metadata(payload)
     # Extract and apply campaign timezone (D8)
     tz_source, tz_obj = _extract_timezone(payload)
+    _refuse_a_different_timezone(state, tz_obj)
+    # Which document the mapping comes from: a built one may be edited, a campaign's own
+    # never is (decisions/0014.8).
+    state.datamodel_origin = {"file": path.name, "built": is_built_document(payload), "spec": None}
     state.timezone = tz_obj
     state.runconfig.setdefault("site", {})["timezone"] = str(tz_obj)
     state.runconfig["site"]["timezone_source"] = tz_source

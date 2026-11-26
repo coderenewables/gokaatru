@@ -45,6 +45,7 @@ SELECTABLE = {
     "compute_wind_ramps",
     "compute_windrose_data",
     "get_series_window",
+    "summarise_channels",
     "plot_diurnal",
     "plot_monthly_means",
     "plot_scatter",
@@ -76,6 +77,8 @@ NOT_SELECTABLE = {
     "get_data_coverage": _INVENTORY,
     "get_era5_node_markers": _STORED,
     "get_fixed_prefix_hash": _STORED,
+    "get_scatter_pairs": "marks a selection's records with its highlight instead, so the scatter still draws the rest",
+    "get_flag_intervals": "draws the flag table, which records what cleaning removed from every record",
     "get_mast_marker": _STORED,
     "get_operation_log": _STORED,
     "get_period_of_record": _INVENTORY,
@@ -84,6 +87,7 @@ NOT_SELECTABLE = {
     "get_sweep_summary": _STORED,
     "list_cleaning_rules": _STORED,
     "list_selections": _STORED,
+    "list_instruments": _INVENTORY,
     "list_sensors": _INVENTORY,
     "list_sweeps": _STORED,
     "plot_annual_means": _LONG_TERM,
@@ -209,11 +213,42 @@ def test_on_a_selection_equals_the_pre_filtered_session(name: str, selected) -> 
     disclosure = result.pop("selection")
     assert disclosure == {
         "name": "north_or_feb",
+        "inline": False,
         "records": int(mask.sum()),
         "of_records": int(mask.size),
         "basis": SELECTION_BASIS,
     }
     assert _wire(result) == _wire(expected)
+
+
+@pytest.mark.parametrize("name", sorted(SELECTABLE))
+def test_an_inline_definition_equals_the_same_one_saved(name: str, selected) -> None:
+    state, mask = selected
+    saved = _outcome(state, name, selection="north_or_feb")
+    logged = len(state.operation_log)
+    inline = _outcome(state, name, selection=json.dumps(DEFINITION))
+    assert len(state.operation_log) == logged, "a read on an inline definition is not logged"
+    assert saved[0] == inline[0] == "ok", inline
+    saved_disclosure, inline_disclosure = saved[1].pop("selection"), inline[1].pop("selection")
+    assert inline_disclosure == {**saved_disclosure, "name": None, "inline": True}
+    assert inline_disclosure["records"] == int(mask.sum())
+    assert _wire(inline[1]) == _wire(saved[1])
+
+
+def test_an_inline_definition_that_is_not_an_object_is_refused(selected) -> None:
+    state, _ = selected
+    with bind_session(state):
+        weibull = REGISTRY.get("compute_weibull_params").fn
+        with pytest.raises(ValueError, match="must be a JSON object: Expecting"):
+            weibull(sensor_name="Spd_100m", selection="{kind: band}")
+        with pytest.raises(ValueError, match="Inline selection: Channel 'Nope'"):
+            weibull(sensor_name="Spd_100m", selection='{"kind": "band", "channel": "Nope", "min": 1}')
+
+
+def test_a_saved_selection_cannot_be_named_like_a_definition(selected) -> None:
+    state, _ = selected
+    with bind_session(state), pytest.raises(ValueError, match="cannot start with"):
+        REGISTRY.get("define_selection").fn(name=" {x", definition={"kind": "band", "channel": "Spd_100m", "min": 1})
 
 
 def test_without_a_selection_nothing_changes(selected) -> None:
@@ -291,6 +326,10 @@ def test_the_generated_route_takes_a_selection(tmp_path: Path) -> None:
             response = post("compute_weibull_params", {"sensor_name": "Spd_100m", "selection": "s"})
             assert response.status_code == 200, response.text
             assert response.json()["selection"]["records"] == int(_oracle_mask(state.timeseries_df).sum())
+            inline = post("compute_weibull_params", {"sensor_name": "Spd_100m", "selection": json.dumps(DEFINITION)})
+            assert inline.status_code == 200, inline.text
+            assert {**inline.json(), "selection": None} == {**response.json(), "selection": None}
+            assert inline.json()["selection"]["inline"] is True
             assert post("compute_weibull_params", {"sensor_name": "Spd_100m", "selection": "x"}).status_code == 400
             listed = {row["name"]: row for row in client.get("/api/operations").json()}
             assert {name for name, row in listed.items() if row["selectable"]} == SELECTABLE

@@ -86,6 +86,8 @@ class CleaningRule(Result):
 
 class ListCleaningRulesResult(Result):
     rules: list[CleaningRule]
+    #: The reason codes ``exclude_selection`` accepts (``MANUAL_FLAG_REASONS``).
+    manual_flag_reasons: list[str]
     order_is_material: bool
     order_note: str
     outlier_detection: str

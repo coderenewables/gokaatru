@@ -226,6 +226,18 @@ def test_the_arrow_route_serves_the_operation_s_window(tmp_path: Path) -> None:
 
             assert client.get(url, headers=headers, params={**query, "selection": "nowhere"}).status_code == 400
             assert client.get(url, headers=headers, params={"channels": "Nope"}).status_code == 400
+
+            # The same window POSTed, with the selection inline: equal, and neither logged
+            # as a change nor saved.
+            logged = len(state.operation_log)
+            inline = {**query, **zoom, "selection": json.dumps(definition)}
+            posted, posted_meta = _as_payload(_table(client.post(url, headers=headers, json=inline)))
+            assert posted == zoomed
+            assert posted_meta["selection"]["inline"] is True and posted_meta["selection"]["name"] is None
+            assert len(state.operation_log) == logged
+            refused = client.post(url, headers=headers, json={**query, "selection": "{"})
+            assert refused.status_code == 400 and "JSON object" in refused.json()["detail"]
+            assert client.post(url, headers=headers, json={**query, "extra": 1}).status_code == 422
     finally:
         app.dependency_overrides.clear()
 

@@ -33,6 +33,17 @@ ROLE_MEASUREMENT = "measurement"
 ROLE_STATISTIC = "statistic"
 ROLE_IGNORED = "ignored"
 
+#: The ``author`` of every document the builder writes; what tells a drafted data model,
+#: which the workbench may edit, from a campaign's own, which it never changes.
+BUILDER_AUTHOR = "GoKaatru data model builder"
+
+
+def is_built_document(payload: object) -> bool:
+    """Whether a Task 43 document was written by this builder rather than delivered with
+    the campaign."""
+    return isinstance(payload, dict) and payload.get("author") == BUILDER_AUTHOR
+
+
 BUILDER_PROVENANCE_NOTE = (
     "Built by the GoKaatru data model builder from timeseries column headers. "
     "Column roles and heights were drafted by header inference and declared by the "
@@ -412,7 +423,7 @@ def build_datamodel(spec: dict[str, object], available_columns: Iterable[str]) -
         emitted_location["logger_main_config"] = [{"offset_from_utc_hrs": offset}]
 
     return {
-        "author": "GoKaatru data model builder",
+        "author": BUILDER_AUTHOR,
         "date": datetime.now(timezone.utc).isoformat(),
         "version": "1.3.0-gokaatru-subset",
         "measurement_location": [emitted_location],

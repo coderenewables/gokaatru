@@ -1,7 +1,7 @@
 """Results of the selection operations (P1-19)."""
 from __future__ import annotations
 
-from server.schemas.results._base import Number, OpenResult, Result
+from server.schemas.results._base import Number, OpenResult, Result, SelectionUsed
 
 
 class SelectionDefinition(OpenResult):
@@ -17,6 +17,9 @@ class SelectionDefinition(OpenResult):
     start: str | None = None
     end: str | None = None
     timestamps: list[str] | None = None
+    x_channel: str | None = None
+    y_channel: str | None = None
+    vertices: list[list[Number]] | None = None
     of: list[SelectionDefinition] | None = None
 
 
@@ -57,3 +60,18 @@ class ListSelectionsResult(Result):
 
 class ResolveSelectionResult(SelectionSummary):
     pass
+
+
+class ChannelSummary(Result):
+    valid: int
+    #: Null when the channel has no valid record (on the selection).
+    mean: Number
+    min: Number
+    max: Number
+
+
+class SummariseChannelsResult(Result):
+    #: Working records; with a selection, those outside it count but are blank.
+    records: int
+    channels: dict[str, ChannelSummary]
+    selection: SelectionUsed | None = None

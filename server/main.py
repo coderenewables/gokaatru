@@ -30,6 +30,7 @@ import server.tools.datamodel_builder  # noqa: F401,E402
 import server.tools.ensemble  # noqa: F401,E402
 import server.tools.era5  # noqa: F401,E402
 import server.tools.extrapolation  # noqa: F401,E402
+import server.tools.flags  # noqa: F401,E402
 import server.tools.history  # noqa: F401,E402
 import server.tools.homogeneity  # noqa: F401,E402
 import server.tools.ltc  # noqa: F401,E402
@@ -37,6 +38,7 @@ import server.tools.ltc_ml  # noqa: F401,E402
 import server.tools.map  # noqa: F401,E402
 import server.tools.scenario_result  # noqa: F401,E402
 import server.tools.selections  # noqa: F401,E402
+import server.tools.sensors  # noqa: F401,E402
 import server.tools.series  # noqa: F401,E402
 import server.tools.shear  # noqa: F401,E402
 import server.tools.statistics  # noqa: F401,E402

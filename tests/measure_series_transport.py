@@ -82,6 +82,24 @@ def main() -> int:
             f"{label:<38}{rows:>7}{len(arrow_payload) / 1e3:>10.1f}{arrow_ms:>10.1f}"
             f"{len(json_payload) / 1e3:>10.1f}{json_ms:>9.1f}"
         )
+
+    # A scatter's points (P2-5): every valid pair of two channels, Arrow only, since the JSON
+    # form refuses more than a year.
+    from server.api.routes.series import arrow_stream, pairs_table
+    from server.tools.series import _scatter_pairs
+
+    lasso = json.dumps({
+        "kind": "polygon", "x_channel": "Spd_00", "y_channel": "Spd_01",
+        "vertices": [[2.0 + 6.0 * np.cos(a), 8.0 + 6.0 * np.sin(a)] for a in np.linspace(0, 2 * np.pi, 200)[:-1]],
+    })
+    print(f"\n{'scatter pairs, whole record':<38}{'pairs':>8}{'Arrow KB':>10}{'Arrow ms':>10}")
+    for label, highlight in (("no highlight", ""), ("199-vertex lasso highlighted", lasso)):
+        pairs_ms, payload = _median_ms(
+            lambda highlight=highlight: arrow_stream(pairs_table(_scatter_pairs(state, "Spd_00", "Spd_01", "", "",
+                                                                                highlight)))
+        )
+        count = len(_scatter_pairs(state, "Spd_00", "Spd_01").time_ms)
+        print(f"{label:<38}{count:>8}{len(payload) / 1e3:>10.1f}{pairs_ms:>10.1f}")
     return 0
 
 

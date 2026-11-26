@@ -997,7 +997,7 @@
  },
  {
   "annotations": null,
-  "description": "Draft a Task 43 reading of the loaded timeseries columns for review.",
+  "description": "Draft a Task 43 reading of the loaded timeseries columns for review, with the data\nmodel in use: its file, whether it was built here (only then can it be edited) and the\nspec it was built from.",
   "execution": null,
   "icons": null,
   "inputSchema": {
@@ -1019,7 +1019,7 @@
  },
  {
   "annotations": null,
-  "description": "Build a minimal IEA Task 43 data model from declared columns and load it.",
+  "description": "Build a minimal IEA Task 43 data model from declared columns and load it.\n\nRefused while the campaign's own uploaded data model is in use. Undoable, except the\nbuild that first puts the records into UTC.",
   "execution": null,
   "icons": null,
   "inputSchema": {
@@ -1170,7 +1170,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensors": {
@@ -1278,7 +1278,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     }
    },
@@ -1414,7 +1414,98 @@
  },
  {
   "annotations": null,
-  "description": "Undo the last cleaning rule or configuration change still in the history.",
+  "description": "Cleaning flags of measured channels over a half-open window, as intervals of consecutive\nrecords flagged by one rule, with the rule, reason, actor and time of each.\n\n``channels`` is comma-separated; ``start`` and ``end`` are timestamps with a UTC offset,\nempty for the whole record. ``next`` is the record after an interval, where its band ends.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "channels": {
+     "type": "string"
+    },
+    "end": {
+     "default": "",
+     "type": "string"
+    },
+    "start": {
+     "default": "",
+     "type": "string"
+    }
+   },
+   "required": [
+    "channels"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_flag_intervals",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "The campaign's instruments by height (highest first), each with its type, boom, mapped\nrole and the statistic columns it logs, and every other channel of the data.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "list_instruments",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Remove sensors from the analysis: inventory, height mapping, working and raw data.\n\nThe removal is recorded in the run configuration's excluded_sensors, so a datamodel\nre-import keeps them out; loading a new timeseries brings every sensor back. Undoable.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "sensor_names": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "sensor_names"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "remove_sensors",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Undo the last cleaning rule, configuration change, sensor removal or data model build still in the history.",
   "execution": null,
   "icons": null,
   "inputSchema": {
@@ -1458,7 +1549,7 @@
  },
  {
   "annotations": null,
-  "description": "Return the most recent operation calls: who, what, with which parameters, and the undo state.",
+  "description": "Return the most recent operation calls: who, what, with which parameters, the undo state,\nand which derived results are stale.",
   "execution": null,
   "icons": null,
   "inputSchema": {
@@ -1810,7 +1901,41 @@
  },
  {
   "annotations": null,
-  "description": "Define or replace a named selection of records: time ranges, direction sectors, value\nbands or record sets, combined by union and intersection.",
+  "description": "Valid records, mean, minimum and maximum of measured channels (comma-separated); with a\nselection, of its records only, which is how a selection is compared with every record.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "channels": {
+     "type": "string"
+    },
+    "selection": {
+     "default": "",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "channels"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "summarise_channels",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Define or replace a named selection of records: time ranges, direction sectors, value\nbands, polygons over two channels or record sets, combined by union and intersection.",
   "execution": null,
   "icons": null,
   "inputSchema": {
@@ -1943,7 +2068,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "start": {
@@ -1970,6 +2095,51 @@
  },
  {
   "annotations": null,
+  "description": "Every record of a half-open window where both channels are valid, as time, x and y.\n\n``highlight`` is a selection, a saved name or an inline definition, whose records are\nmarked in ``highlighted`` rather than removed. Refused past MAX_JSON_PAIRS pairs: narrow\nthe window, or read the same pairs as Arrow from ``/sessions/{id}/pairs``.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "end": {
+     "default": "",
+     "type": "string"
+    },
+    "highlight": {
+     "default": "",
+     "type": "string"
+    },
+    "start": {
+     "default": "",
+     "type": "string"
+    },
+    "x_channel": {
+     "type": "string"
+    },
+    "y_channel": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "x_channel",
+    "y_channel"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "get_scatter_pairs",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
   "description": "Fit Weibull A and k using WAsP m1/m3 moment method (default) or scipy MLE.",
   "execution": null,
   "icons": null,
@@ -1982,7 +2152,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_name": {
@@ -2020,7 +2190,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2058,7 +2228,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2099,7 +2269,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2134,7 +2304,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_name": {
@@ -2168,7 +2338,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_name": {
@@ -2209,7 +2379,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2244,7 +2414,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_name": {
@@ -2278,7 +2448,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_a": {
@@ -2543,7 +2713,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2618,7 +2788,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2660,7 +2830,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2694,7 +2864,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_a": {
@@ -2742,7 +2912,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_a": {
@@ -2778,7 +2948,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     }
    },
@@ -2842,7 +3012,7 @@
     },
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "speed_sensor": {
@@ -2877,7 +3047,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_name": {
@@ -2911,7 +3081,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_names": {
@@ -2945,7 +3115,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_a": {
@@ -2983,7 +3153,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_names": {
@@ -3066,7 +3236,7 @@
    "properties": {
     "selection": {
      "default": "",
-     "description": "Name of a stored selection; when given, only its records are used.",
+     "description": "A stored selection's name, or a selection definition as a JSON object (the shape define_selection takes); when given, only its records are used. A read on an inline definition is not written to the operation log.",
      "type": "string"
     },
     "sensor_names": {

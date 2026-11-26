@@ -1,0 +1,66 @@
+.gk-timeline {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 6px;
+  padding: 8px;
+  box-sizing: border-box;
+}
+.gk-timeline-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.gk-timeline-bar select {
+  background: var(--gk-surface);
+  color: var(--gk-text);
+  border: 1px solid var(--gk-border-strong);
+  border-radius: 4px;
+  padding: 3px 6px;
+}
+.gk-timeline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gk-timeline-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.gk-swatch {
+  width: 14px;
+  height: 4px;
+  border-radius: 2px;
+}
+.gk-timeline-plot {
+  position: relative;
+  flex: 1;
+  min-height: 80px;
+  border: 1px solid var(--gk-border);
+  border-radius: 4px;
+  background: var(--gk-surface);
+}
+.gk-timeline-plot.gk-over {
+  outline: 2px dashed var(--gk-accent);
+}
+.gk-timeline-plot:focus-visible {
+  outline: 2px solid var(--gk-accent);
+}
+.gk-timeline-plot .u-over {
+  cursor: crosshair;
+}
+.gk-timeline-plot .u-select {
+  background: var(--gk-select-soft);
+}
+.gk-timeline-status {
+  margin: 0;
+  min-height: 1.2em;
+  color: var(--gk-muted);
+  font-size: 0.85em;
+}

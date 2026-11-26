@@ -4,7 +4,7 @@
 
 GoKaatru ships as two parts that work together:
 
-- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **98 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
+- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **103 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
 - **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison.
 
 State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The frontend's convenience fields are **derived mirrors** of canonical backend keys, not independent state — the mapping is defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
@@ -118,6 +118,14 @@ npm install
 npm run dev                          # http://127.0.0.1:5173 (proxies /api → :8000)
 ```
 
+The workbench is served beside the current interface at `/workbench/` (decisions/0014.9): its
+start screen lists the projects, and `/workbench/?project=<id>&campaign=<session id>` opens the
+shell on a campaign. Both talk to the same server, so a change made in one shows in the other;
+the current interface at `/` is retired at the Phase 3 gate.
+
+The server keeps its sessions and projects under `data/`, or under `GOKAATRU_DATA_DIR` when it
+is set (the Playwright backend sets it to `frontend/.e2e-data`).
+
 Production build:
 
 ```bash
@@ -150,6 +158,10 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
+| `/projects` | GET, POST | List projects, most recently changed first; create one (`name`, `site_name`). A project holds the campaigns measured at one site and one reanalysis node cache they share (decisions/0014.11) |
+| `/projects/{id}` | GET, PATCH | One project with each campaign's own coordinate and timezone (read from its configuration) and `timezones_differ`, shown and never reconciled; rename it or its site |
+| `/projects/{id}/campaigns` | POST | Add a campaign (`name`, `kind`: `mast`, `lidar` or `floating_lidar`): a new session, reopened by its own id after a restart, whose reanalysis nodes are cached in the project |
+| `/projects/{id}/campaigns/{session_id}` | PATCH | Rename a campaign |
 | `/sessions` | POST | Create a new browser session |
 | `/sessions/{id}` | GET | Session summary + `completed_steps` |
 | `/sessions/{id}/config` | GET/PUT | Read or update runconfig |
@@ -160,7 +172,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/sessions/{id}/datamodel/draft` | GET | Draft a Task 43 reading of the loaded timeseries columns (header inference, for review) |
 | `/sessions/{id}/datamodel/build` | POST | Build a minimal Task 43 data model from declared columns, persist it, and load it |
 | `/sessions/{id}/sensors` | GET | Sensor inventory |
-| `/sessions/{id}/sensors/delete` | POST | Remove sensors from the session (drops their columns; persists `excluded_sensors`) |
+| `/sessions/{id}/sensors/delete` | POST | Remove sensors from the session (drops their columns; persists `excluded_sensors`). The same logic as `remove_sensors`, which is undoable through the generated route; this one, for the current interface, is not |
 | `/sessions/{id}/coverage/{sensor}` | GET | Per-sensor coverage/gap stats |
 | `/sessions/{id}/statistics/{sensor}` | GET | Weibull, monthly/diurnal, percentiles |
 | `/sessions/{id}/era5/{nodes\|extract\|interpolate}` | POST | ERA5 node discovery, extraction, interpolation |
@@ -186,8 +198,9 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/mcp/catalog` | GET | MCP tool/resource catalog for discovery |
 | `/operations` | GET | Every declared operation: effect, stage, canvas, assistant, network, parameters |
 | `/sessions/{id}/operations/{name}` | POST | Run one operation; JSON body of its parameters (generated, one route per operation). The OpenAPI schema types every request and result (`<Name>Parameters`, `<Name>Result`), and 400 and 502 as `ErrorDetail`; a float in a result may be null, which is how NaN and infinity are sent |
-| `/sessions/{id}/series` | GET | A window of measured channels as an Arrow stream (`application/vnd.apache.arrow.stream`): per-bucket `<channel>.min`, `.max` and `.count` beside `time`, the window described in the schema metadata (`gokaatru`). Query: `channels`, `start`, `end` (UTC offset required), `buckets`, `selection`. The same window as `get_series_window` |
-| `/sessions/{id}/operations/{name}/preview` | POST | Dry run with the same body: what the operation would return and change, nothing applied (`apply_cleaning_rule`, `undo_cleaning_rule`) |
+| `/sessions/{id}/pairs` | GET, POST | A scatter's points as an Arrow stream: `time`, `x`, `y` and, with a `highlight` selection, `highlighted`, described in the schema metadata. Query or body: `x_channel`, `y_channel`, `start`, `end`, `highlight`. The same pairs as `get_scatter_pairs`; not logged as a change. Five years of 10-minute records, 262,800 pairs: 6.3 MB in 14 ms, 59 ms with a 199-vertex lasso highlighted (`python -m tests.measure_series_transport`) |
+| `/sessions/{id}/series` | GET, POST | A window of measured channels as an Arrow stream (`application/vnd.apache.arrow.stream`): per-bucket `<channel>.min`, `.max` and `.count` beside `time`, the window described in the schema metadata (`gokaatru`). Query: `channels`, `start`, `end` (UTC offset required), `buckets`, `selection` (a name or an inline definition); POST takes the same fields as a JSON body, for a lasso too long for a URL, and is not logged as a change. The same window as `get_series_window` |
+| `/sessions/{id}/operations/{name}/preview` | POST | Dry run with the same body: what the operation would return and change, nothing applied (`apply_cleaning_rule`, `undo_cleaning_rule`, `remove_sensors`) |
 
 ## Tool inventory
 
@@ -199,6 +212,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 
 ### Cleaning
 - `list_cleaning_rules`, `apply_cleaning_rule`, `get_cleaning_log`, `undo_cleaning_rule`
+- `exclude_selection` is the rule a flag drawn on a chart applies (decisions/0014.1): `params` carries the selection's `definition` frozen as an object (never a saved selection's name, which can change), the other columns of the instrument in `sensors` (the drawn column is `sensor`), a `reason` from `icing`, `maintenance`, `instrument_fault`, `mast_or_boom_effect`, `logger_or_transfer_fault`, `suspect`, `other` (`MANUAL_FLAG_REASONS`), and a `note`, required for `other`. One application is one log entry and one undo step whatever the number of columns; the entry adds the definition in words (`description`), the records it held (`selected_records`) and the values set missing by column (`affected_by_sensor`, summed in `records_affected`), and every flag carries the analyst's reason. The period comes from the definition, so `start_date` and `end_date` are refused. Like every rule it re-resolves on replay, against the data as the earlier rules leave it. Where an older rule describes the same records the flags are identical (`tests/test_exclude_selection.py`): a period and `custom_period_exclude` ending on the last record before the drawn end, a box and the same comparisons in `expression_filter`; sectors on the paired vane and `tower_shadow` agree except on the closing edge, which `tower_shadow` includes and a sector does not.
 
 ### Clipping And Ensemble
 - `run_clipping_analysis`, `run_ensemble`
@@ -207,12 +221,14 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 - `get_run_config`, `update_run_config`, `save_run_config`, `load_run_config`, `get_analysis_summary`
 
 ### History
-- `undo_last_change`, `redo_last_change` — undo the last cleaning rule or configuration change still in the history, or redo what was undone. Undo refuses when a later change has moved what it would restore; any other change clears what can be redone.
-- `get_operation_log` — the most recent operation calls (actor, operation, parameters with credentials redacted, data versions) and the undo state.
+- `list_instruments` — the campaign's instruments by height (highest first), each with its type, boom orientation, the mapping slot it fills, whether the data holds it, and the statistic columns it logs (standard deviation, minimum, maximum: the columns the data model builder's header inference pairs with it, plus the mapping's `sd_col`), and every other channel with how its header reads. The workbench's data tree draws it, and a flag covers a whole instrument by default (decisions/0014.2).
+- `remove_sensors` — take sensors out of the analysis: inventory, height mapping (a speed sensor's standard deviation slot goes with it) and the working and raw data, recorded in the run configuration's `excluded_sensors` so a datamodel re-import keeps them out; a new timeseries brings every sensor back. It marks derived results stale. A dry run shows the columns it would drop; the removed columns are kept aside (`removed_sensors`, saved with the project) so undo puts back every field exactly.
+- `undo_last_change`, `redo_last_change` — undo the last cleaning rule, configuration change, sensor removal or data model build still in the history, or redo what was undone. Undo refuses when a later change has moved what it would restore; any other change clears what can be redone.
+- `get_operation_log` — the most recent operation calls (actor, operation, parameters with credentials redacted, data versions), the undo state, and the staleness report (data version, stale artifacts and why), which the workbench's status bar reads in one call.
 
 ### Selections
-- `define_selection`, `delete_selection`, `list_selections`, `resolve_selection` — named record selections: time ranges, direction sectors (wrapping through north), value bands on a channel, or explicit record sets, combined by union and intersection. Bounds are half-open and a missing value is never selected. The server resolves a selection against the working data each time it is used, so every view counts the same records.
-- 23 statistics and charts that read the measured records take a `selection` parameter naming one (`selectable: true` in `GET /operations`): the Weibull, wind-climate, turbulence, windrose, diurnal, monthly, MoMM and scatter statistics, energy metrics, ramps, persistence, sensor comparison, mast effects, QC diagnostics, vertical structure and sector shear tables, and the windrose, Weibull, diurnal, scatter, time-series and monthly-mean charts. The operation then runs with every record outside the selection missing, and its result carries a `selection` block (below). Reads of stored results, the long-term series, the reanalysis or the data inventory take none; `tests/test_selection_operations.py` lists each with the reason.
+- `define_selection`, `delete_selection`, `list_selections`, `resolve_selection` — named record selections: time ranges, direction sectors (wrapping through north), value bands on a channel, polygons over two channels (a lasso on a scatter: even-odd rule, at most 1,000 vertices, more is refused), or explicit record sets, combined by union and intersection. Bounds are half-open (a point on a polygon's left or lower edge is inside, on its right or upper edge outside) and a missing value is never selected. The server resolves a selection against the working data each time it is used, so every view counts the same records.
+- 25 statistics, charts, the series window and the channel summary, all reading the measured records, take a `selection` parameter (`selectable: true` in `GET /operations`): the Weibull, wind-climate, turbulence, windrose, diurnal, monthly, MoMM and scatter statistics, energy metrics, ramps, persistence, sensor comparison, mast effects, QC diagnostics, vertical structure and sector shear tables, the windrose, Weibull, diurnal, scatter, time-series and monthly-mean charts, `get_series_window`, and `summarise_channels` (the valid records, mean, minimum and maximum of named channels, which is how the workbench's inspector compares a selection with every record). It is a saved selection's name, or a definition sent inline as a JSON object (the browser's live brushing): a read on an inline definition is not written to the operation log, because it is view state with nothing to trace, and a saved selection's name cannot start with `{`. The operation then runs with every record outside the selection missing, and its result carries a `selection` block (below). Reads of stored results, the long-term series, the reanalysis or the data inventory take none; `tests/test_selection_operations.py` lists each with the reason.
 
 ### Scenario sweep (Analysis Engine)
 - `get_fixed_prefix_hash`, `list_sweeps`, `get_sweep_summary`, `analyze_sweep_spread`
@@ -222,7 +238,7 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 ### Data I/O
 - `parse_timeseries`, `parse_datamodel`, `list_sensors`, `get_period_of_record`, `get_data_coverage`
 - Data model builder, for a campaign delivered as a bare CSV with no IEA Task 43 JSON:
-  `draft_data_model`, `build_data_model`
+  `draft_data_model`, `build_data_model`. The draft also reports the data model in use (`in_use`: its file, whether the builder wrote it, and the spec it was built from). Building again from an edited spec is how the workbench's mast diagram edits a data model: it marks derived results stale, and `undo_last_change` puts back the mapping, inventory, timezone, document and run-configuration paths. Two builds are refused: any build while the campaign's own uploaded data model is in use (decisions/0014.8: shown, never changed), and undo of the build that first puts the records into UTC, which would move every timestamp. A data model of any origin whose timezone differs from the one the records were put into UTC with is refused; load the timeseries again to apply another. A refused build leaves the document on disk as it was.
 
 ### ERA5 And Reanalysis
 - `find_era5_nodes`, `extract_era5_data`, `compute_era5_wind_speed`, `interpolate_era5_to_site`, `extrapolate_reanalysis_to_hub`, `analyze_homogeneity`, `apply_homogeneity_cutoff`
@@ -249,6 +265,8 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 ### Visualization
 - `plot_windrose`, `plot_weibull`, `plot_diurnal`, `plot_scatter`, `plot_timeseries`, `plot_data_coverage`, `plot_shear_table`, `plot_monthly_means`, `plot_ltc_comparison`, `plot_annual_means`, `plot_uncertainty_breakdown`
 - `get_series_window` — measured channels over a half-open window, reduced on the server to at most `buckets` equal-width time buckets (default 2000), each with every channel's minimum, maximum and valid count, so the band a chart draws is the data's exact envelope. A window of no more records than buckets is returned record by record; zoom by asking for a narrower window. The interface reads the same window as Arrow from `GET /sessions/{id}/series`.
+- `get_scatter_pairs` — every record of a half-open window where two channels are both valid, as time, x and y, for a scatter. `highlight` is a selection (a saved name or an inline definition) whose records are marked in `highlighted` rather than removed, so the scatter still draws every point. The JSON form is refused past a leap year of 10-minute records (`MAX_JSON_PAIRS` = 52,704); the interface reads the same pairs as Arrow from `/sessions/{id}/pairs`, which has no limit.
+- `get_flag_intervals` — the cleaning flags of measured channels over a half-open window, as intervals of consecutive working records flagged by one rule application, each with its rule, reason, actor and time and `next`, the record where its band ends. Per channel `flagged_records` counts every flag in the window. Expanding the intervals gives the flag table back exactly.
 
 Additional figures are reachable through `POST /sessions/{id}/plots/{name}` without being MCP tools in their own right — including `shear_profile`, `shear_timeseries`, `era5_scatter`, `mast_shadow`, `qc_flags`, `ltc_scatter`, `ltc_residuals`, `ltc_monthly`, `ltc_convergence`, and `uncertainty_tornado`.
 
@@ -301,6 +319,7 @@ invites use:
 | Weibull fit | **WAsP m1/m3** moment method | Matches the 1st and 3rd moments so mean *and* energy content are preserved — the wind-industry convention, and what WAsP/Windographer report. Moments are taken over the **full** series including calms. MLE remains available via `method="mle"`, which must exclude zeros. Expect roughly **k −0.1 and A −0.25** versus MLE on typical data. |
 | Shear valid-record gate | **3.0 m/s** (`min_speed_mps`) | Persisted to `runconfig.shear.minSpeedMps`. Raising it from the old 0.1 m/s removes near-calm records whose `ln(v₂/v₁)` is noise; on a real two-year lidar campaign this dropped 5% of records and cut shear σ from 0.168 to 0.149. The gate governs the **fit** only. `extrapolate_to_hub_height` still extrapolates a record below it with the table's exponent, because leaving it out truncated the hub series (Launakalana at 120 m: 25% of records lost, long-term mean +5.8% to +12.8%). Such records are counted in `method_counts.below_shear_gate` and `records_below_extrapolation_gate`, and reported in `extrapolation_gate_warning`. Held-out check on real campaigns with the sub-gate records kept: Launakalana 80 m from 40/60 m -0.43%, Boxkite 250 m from 180/200 m -0.40% (`tests/test_heldout_height.py`). |
 | Clipping year completeness | **0.9** (`min_year_completeness`) | Leap-aware, measured against the series' own cadence. |
+| Reusing a cached BrightHub node | **Reused when its series reaches the campaign's last measured record** | A node is cached by dataset and coordinate, in the project's shared cache for a campaign in one (decisions/0014.11), in the session's own otherwise. The long-term correction needs the reference over the concurrent period, so a cached node that ends before the campaign's last record, or any node before a record is loaded, is downloaded again. A cached node is otherwise never refreshed: values still preliminary (ERA5T) when it was downloaded are not revised. Each node reports `cache` (`hit`, `downloaded`, `empty`) and `cached_through`. A full hit needs no BrightHub login. |
 | SpeedSort binning | **12 sectors × 30°**, min **200** records/sector | Sparse sectors fall back to the all-sector fit; `independent_sectors` and the per-sector `sector_models` report where the fit is thin. |
 | Mast-shadow speed gate | **4.0 m/s**, min **50** records/sector | Detection is two-sided: a low ratio means `sensor_b` is shadowed, a high ratio means `sensor_a` is. Sparse sectors are reported but not flagged. |
 | MCP readiness thresholds | **4,380 concurrent hours** (`MIN_CONCURRENT_HOURS`, the correction's own floor), **R² ≥ 0.5** (`READINESS_MIN_R_SQUARED`) | `compute_mcp_readiness` used a 720-hour floor, so it could report `ready` for a series long-term correction then refused. It now imports the correction's floor. The R² threshold is a diagnostic cue only: the sweep's R² admissibility gate was removed as biased against non-least-squares methods. |
@@ -387,8 +406,9 @@ in its operation's response.
 | `uncertainty_substitution` | `analyze_sweep_spread` / `POST .../spread` | Per component: the parametric mean, the sweep's empirical term, the value applied and its `basis` (`empirical`, `parametric`, `added`, `not_resolved`), and which axes were used, under-resolved (two levels) or not varied. Per sweep: the distribution of scenario totals with and without the substitution, how many it raised, and how many lacked a parametric component and were left out. Computed over the caller's row selection. The scenario rows' own `total_uncertainty_pct` is unchanged. |
 | `is_interpolation` (`inputs`, `provenance.is_interpolation`) | `derive_uncertainty_inputs` | Whether hub height sits inside the profile the scenario extrapolated from: its own reference heights (axis A2) when given, otherwise every mapped height. A scenario restricted to sensors below hub is extrapolating even when another sensor sits above hub, so it takes the extrapolated vertical term rather than the 1% interpolated one. |
 | `extrapolate_reanalysis`, `reanalysis_status` | `extrapolate_to_hub_height` (sweep stage detail) | Sweep leaves pass `extrapolate_reanalysis=False`: the eight reanalysis node frames are not carried to hub height and the stage reports `reanalysis_status: "not_run"`. The reanalysis response reads `{"status": "skipped", "reason": "not_requested", "wrote_hub_column": false}`. The sweep's LTC reads the native `Spd_100m` / `Spd_50m` columns, so no reported number changes (68 rows identical before and after, 2026-11-14). The MCP tool and HTTP route still default to extrapolating. |
-| `selection` | every selectable operation, when a selection is named | Its `name`, how many of the working records it holds (`records` of `of_records`), and the `basis`: records outside it are **blanked, not dropped**. Their timestamps stay, so a ramp, calm spell or flat line never joins records the selection separates and the measurement interval is still inferred from the full record (dropped instead, every other record of a 10-minute series reads as a 20-minute cadence, which the timestep check refuses). A coverage or availability figure in such a result is the share of records both selected and valid. The shear and roughness timeseries and the raw data are blanked with the working data. |
+| `selection` | every selectable operation, when a selection is given | Its `name` (`null` with `inline: true` for a definition sent inline), how many of the working records it holds (`records` of `of_records`), and the `basis`: records outside it are **blanked, not dropped**. Their timestamps stay, so a ramp, calm spell or flat line never joins records the selection separates and the measurement interval is still inferred from the full record (dropped instead, every other record of a 10-minute series reads as a 20-minute cadence, which the timestep check refuses). A coverage or availability figure in such a result is the share of records both selected and valid. The shear and roughness timeseries and the raw data are blanked with the working data. |
 | `decimated`, `bucket_ms` | `get_series_window`, `GET /sessions/{id}/series` (schema metadata) | Whether the window was reduced to buckets and how wide each is, in whole milliseconds (the width is rounded up, so there are at most `buckets`; `DEFAULT_SERIES_BUCKETS` = 2000). A bucket's bounds are the exact minimum and maximum of its records, not a sample, and `count` says how many valid records it holds: 0 marks a gap, with null bounds. `decimated: false` means every record is its own bucket and `bucket_ms` is null. |
+| `truncated` | `get_flag_intervals` | Whether the response stopped at `MAX_FLAG_INTERVALS` (20,000) intervals. Past it the remaining intervals are left out, never merged or sampled, while each channel's `flagged_records` stays complete; the interface asks again for a narrower window. `interval_count` and `interval_limit` are beside it. |
 | `in_progress` | sweep `manifest.json` (`list_sweeps`) | `true` on a checkpoint written while a sweep runs, or left by one that died part-way; absent on a finished sweep. The rows and runconfigs present are the shear-prefix groups completed so far. `finished_at` is the checkpoint time. `get_sweep_summary` and `analyze_sweep_spread` do not flag it yet. |
 
 ### Uncertainty is reported on a wind-speed basis — converting it to energy
@@ -558,8 +578,8 @@ with `assistant=False` is not exposed at all.
 
 | Tier | Count | Exposed when |
 |---|---|---|
-| Read-only — query, compute, plot, series windows, the operation log, listing and resolving selections | 53 | always |
-| Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty, the atmospheric diagnostic (it records the density the energy sensitivity uses), the clipping analysis (it records the inter-annual variability the uncertainty model uses), undo and redo, defining and deleting selections | 33 | only with `allow_mutating_tools: true` |
+| Read-only — query, compute, plot, series windows, scatter pairs, flag intervals, channel summaries, the instrument list, the operation log, listing and resolving selections | 57 | always |
+| Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty, the atmospheric diagnostic (it records the density the energy sensitivity uses), the clipping analysis (it records the inter-annual variability the uncertainty model uses), undo and redo, defining and deleting selections, removing sensors | 34 | only with `allow_mutating_tools: true` |
 
 The remaining 12 of the 98 registered tools are declared `assistant=False` and
 therefore unreachable from chat: every BrightHub / EarthDataHub tool — the read-only

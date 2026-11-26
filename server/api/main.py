@@ -24,6 +24,7 @@ from server.api.routes.exports import router as exports_router
 from server.api.routes.health import router as health_router
 from server.api.routes.mcp import router as mcp_router
 from server.api.routes.operations import router as operations_router
+from server.api.routes.projects import router as projects_router
 from server.api.routes.results import router as results_router
 from server.api.routes.series import router as series_router
 from server.api.routes.sessions import router as sessions_router
@@ -34,6 +35,9 @@ from server.operations import record_route_change
 
 _SESSION_PATH = re.compile(r"^/api/sessions/([^/]+)/")
 _CHANGING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+#: Hand-written routes that read although they are POSTed to, because their query does not
+#: fit a URL. They are neither logged as changes nor saved.
+_READING_POST_ROUTES = frozenset({"/api/sessions/{session_id}/series", "/api/sessions/{session_id}/pairs"})
 
 
 def _get_allowed_origins() -> list[str]:
@@ -88,6 +92,7 @@ def create_app() -> FastAPI:
     app.include_router(chat_router, prefix="/api")
     app.include_router(operations_router, prefix="/api")
     app.include_router(series_router, prefix="/api")
+    app.include_router(projects_router, prefix="/api")
 
     def _session_manager_provider():
         override = app.dependency_overrides.get(get_session_manager)
@@ -116,9 +121,11 @@ def create_app() -> FastAPI:
             or path.endswith("/stream")
         ):
             return response
+        route = getattr(request.scope.get("route"), "path", path)
+        if route in _READING_POST_ROUTES:
+            return response
         state = _session_manager_provider().loaded(match.group(1))
         if state is not None:
-            route = getattr(request.scope.get("route"), "path", path)
             await run_in_threadpool(record_route_change, state, request.method, route)
         return response
 

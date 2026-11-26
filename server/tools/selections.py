@@ -6,6 +6,7 @@ cleaning rather than freezing a list of rows.
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -54,19 +55,46 @@ def _summary(name: str, definition: dict[str, Any], frame: pd.DataFrame) -> dict
     }
 
 
-def selection_mask(state: SessionState, name: str) -> np.ndarray:
-    """The records the named selection holds in the session's working data."""
-    if name not in state.selections:
-        raise ValueError(f"No selection named '{name}'")
+def is_inline(selection: str) -> bool:
+    """Whether a ``selection`` argument is a definition rather than a saved selection's name.
+
+    A name never starts with ``{`` (``define_selection`` refuses one), so the two cannot be
+    confused.
+    """
+    return selection.lstrip().startswith("{")
+
+
+def inline_definition(selection: str) -> dict[str, Any]:
     try:
-        return resolve(state.selections[name]["definition"], _frame(state))
+        definition = json.loads(selection)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"An inline selection must be a JSON object: {exc.msg} at character {exc.pos}") from exc
+    if not isinstance(definition, dict):
+        raise ValueError("An inline selection must be a JSON object")
+    return definition
+
+
+def selection_mask(state: SessionState, selection: str) -> np.ndarray:
+    """The records a selection holds in the session's working data: a saved selection named,
+    or a definition sent inline as JSON (the browser's live brushing, decisions/0014.6)."""
+    if is_inline(selection):
+        try:
+            return resolve(inline_definition(selection), _frame(state))
+        except SelectionError as exc:
+            raise ValueError(f"Inline selection: {exc}") from exc
+    if selection not in state.selections:
+        raise ValueError(f"No selection named '{selection}'")
+    try:
+        return resolve(state.selections[selection]["definition"], _frame(state))
     except SelectionError as exc:
-        raise ValueError(f"Selection '{name}': {exc}") from exc
+        raise ValueError(f"Selection '{selection}': {exc}") from exc
 
 
 def _define_selection(state: SessionState, name: str, definition: dict[str, Any]) -> dict[str, Any]:
     if not name.strip():
         raise ValueError("A selection needs a name")
+    if is_inline(name):
+        raise ValueError("A selection's name cannot start with '{', which marks an inline definition")
     frame = _frame(state)
     try:
         validate(definition, frame.columns)
@@ -110,10 +138,40 @@ def _resolve_selection(state: SessionState, name: str) -> dict[str, Any]:
     return _summary(name, state.selections[name]["definition"], _frame(state))
 
 
+def _summarise_channels(state: SessionState, channels: str) -> dict[str, Any]:
+    frame = _frame(state)
+    names = [name.strip() for name in channels.split(",") if name.strip()]
+    if not names:
+        raise ValueError("Name at least one channel")
+    missing = [name for name in names if name not in frame.columns]
+    if missing:
+        raise ValueError(f"No channel named {', '.join(missing)}")
+    summary: dict[str, dict[str, Any]] = {}
+    for name in names:
+        values = pd.to_numeric(frame[name], errors="coerce").dropna()
+        summary[name] = {
+            "valid": int(len(values)),
+            "mean": float(values.mean()) if len(values) else None,
+            "min": float(values.min()) if len(values) else None,
+            "max": float(values.max()) if len(values) else None,
+        }
+    return {"records": int(len(frame)), "channels": summary}
+
+
+@operation(
+    effect="read", stage="selection", canvas=False, selectable=True,
+    result=result_models.SummariseChannelsResult,
+)
+def summarise_channels(channels: str) -> dict:
+    """Valid records, mean, minimum and maximum of measured channels (comma-separated); with a
+    selection, of its records only, which is how a selection is compared with every record."""
+    return _summarise_channels(session, channels)
+
+
 @operation(effect="change", stage="selection", canvas=False, result=result_models.DefineSelectionResult)
 def define_selection(name: str, definition: dict) -> dict:
     """Define or replace a named selection of records: time ranges, direction sectors, value
-    bands or record sets, combined by union and intersection."""
+    bands, polygons over two channels or record sets, combined by union and intersection."""
     return _define_selection(session, name, definition)
 
 

@@ -233,11 +233,10 @@ def _era5_cache_path(state: SessionState, latitude: float, longitude: float) -> 
     Lives under ``earthdatahub_cache/``, mirroring ``brighthub_cache/``'s per-provider
     naming and treatment: a session-scoped parquet-per-node cache, keyed by coordinate,
     that a cache hit always trusts (see ``_load_cached_era5`` / ``_cache_covers_period`` -
-    no TTL or invalidation, same as BrightHub's cache).
+    no TTL or invalidation, same as BrightHub's cache). A campaign in a project shares the
+    project's cache (``SessionState.reanalysis_cache_dir``).
     """
-    cache_dir = Path(state.get_data_dir()) / "earthdatahub_cache"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir / f"ERA5_{latitude}_{longitude}.parquet"
+    return state.reanalysis_cache_dir("earthdatahub") / f"ERA5_{latitude}_{longitude}.parquet"
 
 
 def _align_tz(timestamp: pd.Timestamp, index: pd.DatetimeIndex) -> pd.Timestamp:

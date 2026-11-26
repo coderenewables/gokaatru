@@ -5,6 +5,7 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import copy
+import os
 import shutil
 from pathlib import Path
 from uuid import uuid4
@@ -21,8 +22,14 @@ class SessionManager:
     """Manage workspace-scoped SessionState instances for browser clients."""
 
     def __init__(self, base_dir: Path | None = None) -> None:
-        """Initialize the session registry rooted at the configured sessions directory."""
-        self.base_dir = Path("data") / "sessions" if base_dir is None else Path(base_dir)
+        """Initialize the session registry rooted at the configured sessions directory.
+
+        By default the sessions (and the projects beside them) live under ``data/``, or under
+        ``GOKAATRU_DATA_DIR`` when it is set, so a test server can keep its own.
+        """
+        if base_dir is None:
+            base_dir = Path(os.getenv("GOKAATRU_DATA_DIR") or "data") / "sessions"
+        self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self._sessions: dict[str, SessionState] = {}
 
@@ -117,6 +124,9 @@ class SessionManager:
         target.operation_log = copy.deepcopy(source.operation_log)
         target.undo_stack = list(source.undo_stack)
         target.selections = copy.deepcopy(source.selections)
+        target.removed_sensors = copy.deepcopy(source.removed_sensors)
+        target.datamodel_origin = copy.deepcopy(source.datamodel_origin)
+        target.project = copy.deepcopy(source.project)
 
         target.timezone = source.timezone
         target.clipping_result = copy.deepcopy(source.clipping_result)

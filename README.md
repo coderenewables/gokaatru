@@ -33,7 +33,9 @@ Prepare ──► Model ──► Run ──► Interrogate
 ### Prepare
 
 - **Data**: the data tree (instruments by height, statistics, other channels, reanalysis,
-  saved selections, flags), loading by drop or chooser, and the mast diagram. A data model
+  saved selections, flags), loading by drop or chooser or by importing a BrightHub location
+  (its records and data model; what BrightHub applies before sending them is chosen and recorded
+  on the cleaning log as upstream processing), and the mast diagram. A data model
   drafted from the CSV headers is edited by dragging a sensor to its height; an uploaded Task
   43 model is shown read-only. Columns the draft could not read are listed with the reason.
   Sensors are taken out of the analysis here too: their columns leave the working data and the

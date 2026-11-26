@@ -387,7 +387,10 @@ frontend/src/
 │   ├── datatree/         # DataPanel: the data tree (list_instruments by height, statistics,
 │   │                     #   other channels, reanalysis, saved selections, flags); every
 │   │                     #   channel a dnd-kit draggable onto a chart; Removal.tsx takes
-│   │                     #   sensors out of the analysis (remove_sensors, previewed) (P3-12a)
+│   │                     #   sensors out of the analysis (remove_sensors, previewed) (P3-12a);
+│   │                     #   BrightHubImport.tsx loads an empty campaign from a BrightHub
+│   │                     #   location (brighthub_import_location) (P3-12b)
+│   ├── reanalysis/BrightHubCredentials.tsx  # the BrightHub sign-in both panels show
 │   ├── timeline/         # uPlot over Arrow series windows (POST /series), refetched on
 │   │                     #   zoom; brush = the period term; flag bands (get_flag_intervals),
 │   │                     #   clicked or stepped with the arrow keys; drop a channel to add it

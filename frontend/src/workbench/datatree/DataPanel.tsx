@@ -6,6 +6,8 @@ import { api, unwrap } from "../api";
 import type { ChannelDrag } from "../dnd";
 import { DataModelSection, DropArea } from "../datamodel/DataModel";
 import { useCampaign } from "../shell/context";
+import { BrightHubImport } from "./BrightHubImport";
+import { RemovalSection } from "./Removal";
 import "./data.css";
 
 type Instrument = Schemas["Instrument"];
@@ -116,7 +118,12 @@ export function DataPanel() {
       {instruments.data && listed.length === 0 && other.length === 0 && (
         <p className="gk-muted">No data yet. Load the campaign's files to see its channels here.</p>
       )}
-      {summary.data && !summary.data.timeseries_loaded && <DropArea />}
+      {summary.data && !summary.data.timeseries_loaded && (
+        <>
+          <DropArea />
+          <BrightHubImport />
+        </>
+      )}
       {summary.data?.timeseries_loaded && <DataModelSection instruments={instruments.data} />}
       {heights.map((height) => (
         <section key={height} aria-labelledby={`gk-height-${height}`} className="gk-data-group">
@@ -130,6 +137,7 @@ export function DataPanel() {
           </ul>
         </section>
       ))}
+      <RemovalSection instruments={listed} />
       {other.length > 0 && (
         <section aria-labelledby="gk-other-channels" className="gk-data-group">
           <h2 id="gk-other-channels">Other channels</h2>

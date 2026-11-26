@@ -1,9 +1,8 @@
-"""test_stage_tokens — cross-stack contract: backend completed_steps must emit
-every token the frontend stepper requires to mark a stage "done".
+"""test_stage_tokens — the session summary's completed_steps emits every stage token.
 
-The frontend (frontend/src/lib/stages.ts STAGE_META.requiredSteps) treats these
-tokens as the gating signal. If the backend ever stops emitting one of them, a
-stage would stay permanently locked. This test pins the contract.
+``GET /sessions/{id}`` reports them. The retired interface's stepper gated each stage on
+them (its stages.ts was deleted in P3-16); a client reading the summary still relies on
+each token appearing once its stage's artifact exists, so this pins the contract.
 """
 from __future__ import annotations
 

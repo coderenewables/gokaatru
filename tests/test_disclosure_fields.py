@@ -14,7 +14,8 @@ from typing import Any
 import pytest
 
 from server.operations import REGISTRY
-from tests.synthetic_pipeline import run_pipeline
+from server.state.session import bind_session
+from tests.synthetic_pipeline import read_arguments, run_pipeline
 
 README = Path(__file__).resolve().parents[1] / "README.md"
 
@@ -90,10 +91,29 @@ def _carries(response: Any, field: str) -> bool:
     return any(path == field or path.endswith(f".{field}") for path in _paths(response))
 
 
+#: Operations the pipeline does not run, called after it on its analysed session: a sweep
+#: scenario's steps (P3-7b), which would replace the pipeline's own table and uncertainty.
+AFTER_THE_PIPELINE: dict[str, dict[str, Any]] = {
+    "calculate_scenario_uncertainty": {
+        "algorithm": "variance_ratio", "shear_model": "power_law_mean", "reference_heights": [80.0, 100.0],
+    },
+    "build_constant_shear_table": {"alpha": 0.2},
+}
+
+
 @pytest.fixture(scope="module")
 def responses(tmp_path_factory) -> dict[str, Any]:
-    _, calls = run_pipeline(tmp_path_factory.mktemp("disclosure"))
-    return {name: result for name, _, result in calls}
+    state, calls = run_pipeline(tmp_path_factory.mktemp("disclosure"))
+    found = {name: result for name, _, result in calls}
+    values = read_arguments(state)
+    reads = {
+        "pipeline_from_scenario": {"sweep_id": values["sweep_id"], "config_hash": values["config_hash"]},
+        "sweep_spec_from_pipeline": {"steps": values["steps"]},
+    }
+    with bind_session(state):
+        for name, arguments in {**reads, **AFTER_THE_PIPELINE}.items():
+            found[name] = REGISTRY.get(name).fn(**arguments)
+    return found
 
 
 @pytest.mark.parametrize(

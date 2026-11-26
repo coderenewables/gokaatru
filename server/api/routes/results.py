@@ -14,7 +14,6 @@ from server.api.schemas import PlotRequest
 from server.schemas.common import PlotResult
 from server.state.session import SessionState
 from server.tools.config import _get_run_config, _save_run_config
-from server.tools.map import _get_site_overview_map
 from server.tools.visualization import (
     _plot_air_density,
     _plot_annual_means,
@@ -210,19 +209,6 @@ def get_plot(
         raise to_bad_request(ValueError(f"Unknown plot_name '{plot_name}'"))
     try:
         return PlotResult(**plot_builder())
-    except ValueError as exc:
-        raise to_bad_request(exc) from exc
-
-
-@router.get("/map/site")
-def get_site_map(
-    session_id: str,
-    state: Annotated[SessionState, Depends(get_session_state)],
-) -> dict:
-    """Return the site overview GeoJSON map for the current session."""
-    del session_id
-    try:
-        return _get_site_overview_map(state)
     except ValueError as exc:
         raise to_bad_request(exc) from exc
 

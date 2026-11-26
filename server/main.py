@@ -36,6 +36,7 @@ import server.tools.homogeneity  # noqa: F401,E402
 import server.tools.ltc  # noqa: F401,E402
 import server.tools.ltc_ml  # noqa: F401,E402
 import server.tools.map  # noqa: F401,E402
+import server.tools.pipelines  # noqa: F401,E402
 import server.tools.scenario_result  # noqa: F401,E402
 import server.tools.selections  # noqa: F401,E402
 import server.tools.sensors  # noqa: F401,E402

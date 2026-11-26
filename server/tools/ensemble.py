@@ -302,6 +302,11 @@ def _run_ensemble(state: SessionState, measured_col: str) -> dict:
 @operation(
     effect="change", stage="ensemble", disclosure=("weights", "weight_basis", "component_spread",),
     result=result_models.RunEnsembleResult,
+    reads=(
+        "ltc:linear_least_squares", "ltc:total_least_squares", "ltc:variance_ratio", "ltc:speedsort", "ltc:xgboost",
+        "hub_height_series", "measured_data",
+    ),
+    writes=("ensemble",),
 )
 def run_ensemble(measured_col: str) -> dict:
     """Blend LTC algorithms using inverse-RMSE weights and overlap-period bias correction per MCP ensemble practice."""

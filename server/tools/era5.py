@@ -5,6 +5,7 @@ Part of GoKaatru MCP Server.
 from __future__ import annotations
 
 import time
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
 
@@ -365,8 +366,43 @@ def _store_coordinate(state: SessionState, latitude: float, longitude: float) ->
     state.set_coordinate(Coordinate(latitude=latitude, longitude=longitude, elevation_m=elevation))
 
 
+# The longest period one extraction may ask for (D35). The store is read node by node, so a
+# longer request is a cost a caller rarely means; a reversed one returned an empty frame.
+ERA5_MAX_SPAN_YEARS = 30
+
+
+def check_coordinate(latitude: float, longitude: float) -> None:
+    """Refuse a coordinate off the globe rather than let a grid lookup clamp it."""
+    if not -90.0 <= latitude <= 90.0:
+        raise ValueError(f"latitude {latitude} is outside -90 to 90")
+    if not -180.0 <= longitude <= 180.0:
+        raise ValueError(f"longitude {longitude} is outside -180 to 180")
+
+
+def _check_period(start_date: str, end_date: str) -> None:
+    """An ISO date or date-time each, the end on or after the start, at most
+    ``ERA5_MAX_SPAN_YEARS`` apart. These lived in the hand-written route's request model only,
+    so the operation took a reversed range and returned nothing (P3-17b)."""
+    parsed = []
+    for name, value in (("start_date", start_date), ("end_date", end_date)):
+        try:
+            parsed.append(datetime.fromisoformat(str(value)))
+        except ValueError as exc:
+            raise ValueError(f"{name} {value!r} is not an ISO date (YYYY-MM-DD)") from exc
+    start, end = (moment.replace(tzinfo=None) for moment in parsed)
+    if end < start:
+        raise ValueError(f"end_date ({end_date}) must be on or after start_date ({start_date})")
+    span_days = (end - start).days
+    max_days = ERA5_MAX_SPAN_YEARS * 365
+    if span_days > max_days:
+        raise ValueError(
+            f"Requested span of {span_days} days exceeds maximum of {ERA5_MAX_SPAN_YEARS} years ({max_days} days)"
+        )
+
+
 def _find_era5_nodes(state: SessionState, latitude: float, longitude: float) -> dict:
     """Find the four surrounding ERA5 grid nodes using 0.25° bounds and haversine distance."""
+    check_coordinate(latitude, longitude)
     dataset: xr.Dataset | None = None
     try:
         dataset = _open_era5_dataset(state)
@@ -426,6 +462,8 @@ def _extract_era5_data(
     "site" silently became that node's own coordinate - interpolation then degenerated to
     exactly one corner's value instead of a genuine blend, with no error raised.
     """
+    check_coordinate(latitude, longitude)
+    _check_period(start_date, end_date)
     try:
         cache_path = _era5_cache_path(state, latitude, longitude)
     except TypeError:
@@ -622,6 +660,7 @@ def _interpolate_era5_to_site(state: SessionState, source: str = "era5") -> dict
 @operation(
     effect="change", stage="reanalysis", assistant=False, secret_parameters=("pat",),
     result=result_models.EarthdatahubSetCredentialResult,
+    writes=("credentials",),
 )
 def earthdatahub_set_credential(pat: str) -> dict:
     """Store an EarthDataHub PAT in the session for the direct-ERA5 (non-BrightHub) path.
@@ -633,25 +672,39 @@ def earthdatahub_set_credential(pat: str) -> dict:
     return _set_earthdatahub_credential(session, pat)
 
 
-@operation(effect="change", stage="reanalysis", assistant=False, result=result_models.EarthdatahubClearCredentialResult)
+@operation(
+    effect="change", stage="reanalysis", assistant=False, result=result_models.EarthdatahubClearCredentialResult,
+    writes=("credentials",),
+)
 def earthdatahub_clear_credential() -> dict:
     """Remove the session's stored EarthDataHub PAT."""
     return _clear_earthdatahub_credential(session)
 
 
-@operation(effect="read", stage="reanalysis", assistant=False, result=result_models.EarthdatahubStatusResult)
+@operation(
+    effect="read", stage="reanalysis", assistant=False, result=result_models.EarthdatahubStatusResult,
+    reads=("credentials",),
+)
 def earthdatahub_status() -> dict:
     """Check whether the session has an EarthDataHub PAT configured."""
     return _earthdatahub_status(session)
 
 
-@operation(effect="change", stage="reanalysis", network=True, result=result_models.FindEra5NodesResult)
+@operation(
+    effect="change", stage="reanalysis", network=True, result=result_models.FindEra5NodesResult,
+    reads=("credentials",),
+    writes=("reanalysis_nodes", "site"),
+)
 def find_era5_nodes(latitude: float, longitude: float) -> dict:
     """Find the four surrounding ERA5 grid nodes using 0.25° bounds and haversine distance."""
     return _find_era5_nodes(session, latitude, longitude)
 
 
-@operation(effect="change", stage="reanalysis", network=True, result=result_models.ExtractEra5DataResult)
+@operation(
+    effect="change", stage="reanalysis", network=True, result=result_models.ExtractEra5DataResult,
+    reads=("credentials",),
+    writes=("reanalysis_nodes",),
+)
 def extract_era5_data(
     latitude: float,
     longitude: float,
@@ -662,7 +715,11 @@ def extract_era5_data(
     return _extract_era5_data(session, latitude, longitude, start_date, end_date)
 
 
-@operation(effect="change", stage="reanalysis", result=result_models.ComputeEra5WindSpeedResult)
+@operation(
+    effect="change", stage="reanalysis", result=result_models.ComputeEra5WindSpeedResult,
+    reads=("reanalysis_nodes",),
+    writes=("reanalysis_nodes",),
+)
 def compute_era5_wind_speed(latitude: float, longitude: float) -> dict:
     """Compute 100 m wind speed and meteorological direction from ERA5 u and v components."""
     return _compute_era5_wind_speed(session, latitude, longitude)
@@ -671,6 +728,8 @@ def compute_era5_wind_speed(latitude: float, longitude: float) -> dict:
 @operation(
     effect="change", stage="reanalysis", disclosure=("method_by_variable", "skipped_variables",),
     result=result_models.InterpolateEra5ToSiteResult,
+    reads=("reanalysis_nodes", "site"),
+    writes=("reference_series", "reference_choice"),
 )
 def interpolate_era5_to_site(source: str = "era5") -> dict:
     """Spatially interpolate reanalysis node data to the site with linear interpolation and IDW fallback.

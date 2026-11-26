@@ -9,20 +9,15 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from pydantic import BaseModel, Field
 
 from server.api.deps import get_session_state, to_bad_request
 from server.state.session import SessionState
-from server.tools.config import _persist_runconfig
 from server.tools.data_io import (
     _build_sensor_rows,
-    _get_data_coverage,
     _list_sensors,
     _parse_datamodel,
     _parse_timeseries,
 )
-from server.tools.datamodel_builder import _build_data_model, _draft_data_model
-from server.tools.sensors import _remove_sensors
 
 router = APIRouter(prefix="/sessions/{session_id}", tags=["uploads"])
 
@@ -126,47 +121,6 @@ def upload_datamodel(
     return {**result, "file_path": str(saved_path)}
 
 
-class BuildDataModelRequest(BaseModel):
-    """Request body for POST /datamodel/build — the analyst's declaration of the columns.
-
-    Deliberately permissive at the schema layer: ``server.core.datamodel_builder`` owns
-    every refusal so the MCP tool and this route reject exactly the same specs, with the
-    same message naming the same column.
-    """
-
-    location: dict = Field(default_factory=dict)
-    points: list[dict] = Field(default_factory=list)
-
-
-@router.get("/datamodel/draft")
-def draft_data_model(
-    session_id: str,
-    state: Annotated[SessionState, Depends(get_session_state)],
-) -> dict:
-    """Draft a Task 43 reading of the loaded timeseries columns for review."""
-    del session_id
-    try:
-        return _draft_data_model(state)
-    except ValueError as exc:
-        raise to_bad_request(exc) from exc
-
-
-@router.post("/datamodel/build")
-def build_data_model(
-    session_id: str,
-    body: BuildDataModelRequest,
-    state: Annotated[SessionState, Depends(get_session_state)],
-) -> dict:
-    """Build a minimal IEA Task 43 data model from declared columns and load it."""
-    del session_id
-    try:
-        result = _build_data_model(state, {"location": body.location, "points": body.points})
-    except ValueError as exc:
-        raise to_bad_request(exc) from exc
-    state.touch()
-    return result
-
-
 @router.get("/sensors")
 def get_sensors(
     session_id: str,
@@ -183,49 +137,3 @@ def get_sensors(
         if "Sensor mapping is not loaded" in str(exc):
             return {"sensors": _build_sensor_rows(state, require_mapping=False)}
         raise to_bad_request(exc) from exc
-
-
-@router.get("/coverage/{sensor_name}")
-def get_sensor_coverage(
-    session_id: str,
-    sensor_name: str,
-    state: Annotated[SessionState, Depends(get_session_state)],
-) -> dict:
-    """Return coverage and gap statistics for one sensor in the current session."""
-    del session_id
-    try:
-        return _get_data_coverage(state, sensor_name)
-    except ValueError as exc:
-        raise to_bad_request(exc) from exc
-
-
-# ---------------------------------------------------------------------------
-# Sensor selection / removal
-# ---------------------------------------------------------------------------
-
-class DeleteSensorsRequest(BaseModel):
-    """Request body for POST /sensors/delete — a list of sensor names to remove."""
-
-    sensor_names: list[str] = Field(..., min_length=1)
-
-
-@router.post("/sensors/delete")
-def delete_sensors(
-    session_id: str,
-    body: DeleteSensorsRequest,
-    state: Annotated[SessionState, Depends(get_session_state)],
-) -> dict:
-    """Remove unwanted sensors from the session inventory, mapping, and data.
-
-    The same logic as the ``remove_sensors`` operation (``server/tools/sensors.py``), which
-    the workbench calls through the generated route so the removal can be undone; this route
-    stays for the current interface until Phase 3 retires it.
-    """
-    del session_id
-    try:
-        result = _remove_sensors(state, body.sensor_names)
-    except ValueError as exc:
-        raise to_bad_request(exc) from exc
-    if result["removed"]:
-        _persist_runconfig(state)
-    return result

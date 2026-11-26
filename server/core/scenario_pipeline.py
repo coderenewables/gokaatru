@@ -27,11 +27,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-import numpy as np
-import pandas as pd
-
 from server.core.sensor_selection import SensorSelection, resolve_policy
-from server.core.uncertainty_inputs import derive_uncertainty_inputs, uncertainty_call_args
 
 #: Axis B levels that map onto the existing shear tooling.
 POWER_LAW_AGGREGATIONS = ("mean", "median", "momm")
@@ -145,26 +141,12 @@ def resolve_sensors(state: Any, spec: ScenarioSpec) -> tuple[SensorSelection, Se
     return resolve_fit(state, spec), resolve_reference(state, spec)
 
 
-def _constant_shear_table(alpha: float) -> pd.DataFrame:
-    """Return a 12x24 lookup filled with one exponent, for the constant-alpha levels."""
-    return pd.DataFrame(np.full((12, 24), float(alpha)), index=range(1, 13), columns=range(24))
+# The refusals a stage makes before it computes anything, one function each, so the sweep
+# estimate predicts them with the code that makes them (P3-8, decisions/0015.6).
 
 
-def build_shear(state: Any, spec: ScenarioSpec, fit: SensorSelection) -> StageResult:
-    """Build the scenario's vertical-profile table (axis B).
-
-    An analyst-supplied exponent short-circuits the fit entirely and writes a constant
-    table, which is the honest representation of "we assumed this" — the extrapolation
-    then reads it exactly as it reads a fitted one, and the *provenance* rather than the
-    mechanism is what marks the difference (design doc §3.A.1).
-    """
-    from server.tools.shear import (
-        _build_roughness_table,
-        _build_shear_table,
-        _calculate_roughness_timeseries,
-        _calculate_shear_timeseries,
-    )
-
+def check_shear_model(spec: ScenarioSpec) -> None:
+    """Refuse a shear model the extrapolation cannot consume, or one that does not exist."""
     if spec.shear_model in UNIMPLEMENTED_SHEAR_MODELS:
         raise ScenarioError(
             "build_shear",
@@ -177,11 +159,61 @@ def build_shear(state: Any, spec: ScenarioSpec, fit: SensorSelection) -> StageRe
             f"shear model must be one of {', '.join(SHEAR_MODELS)}, got '{spec.shear_model}'",
         )
 
+
+def check_hub(state: Any, spec: ScenarioSpec) -> float:
+    """The hub height the scenario extrapolates to, or a refusal when none is set."""
+    hub = spec.hub_height_m if spec.hub_height_m is not None else state.get_hub_height_m()
+    if hub is None:
+        raise ScenarioError("extrapolate", "hub height is not set")
+    return float(hub)
+
+
+def check_ltc(state: Any, spec: ScenarioSpec) -> Any:
+    """The scenario's correction, or a refusal naming an unknown algorithm or a reference
+    source the session has no series for. The missing source used to fail inside the
+    correction and be recorded as an unexpected error."""
+    from server.core.reanalysis import reference_source_names
+    from server.tools.ltc_runs import LTC_ALGORITHMS
+
+    runner = LTC_ALGORITHMS.get(spec.ltc_algorithm)
+    if runner is None:
+        raise ScenarioError(
+            "run_ltc", f"unknown LTC algorithm '{spec.ltc_algorithm}'; expected one of {sorted(LTC_ALGORITHMS)}"
+        )
+    if spec.reference_source not in reference_source_names():
+        raise ScenarioError(
+            "run_ltc",
+            f"unknown reference source '{spec.reference_source}'; expected one of {list(reference_source_names())}",
+        )
+    if not state.has_reference_series(spec.reference_source):
+        raise ScenarioError(
+            "run_ltc",
+            f"no {spec.reference_source} series is interpolated to the site, so it cannot be corrected against",
+        )
+    return runner
+
+
+def build_shear(state: Any, spec: ScenarioSpec, fit: SensorSelection) -> StageResult:
+    """Build the scenario's vertical-profile table (axis B).
+
+    An analyst-supplied exponent short-circuits the fit entirely and writes a constant
+    table, which is the honest representation of "we assumed this" — the extrapolation
+    then reads it exactly as it reads a fitted one, and the *provenance* rather than the
+    mechanism is what marks the difference (design doc §3.A.1).
+    """
+    from server.tools.shear import (
+        _build_constant_shear_table,
+        _build_roughness_table,
+        _build_shear_table,
+        _calculate_roughness_timeseries,
+        _calculate_shear_timeseries,
+    )
+
+    check_shear_model(spec)
     height_sensors = _height_sensors_json(fit)
 
     if spec.analyst_shear_alpha is not None:
-        state.shear_table = _constant_shear_table(spec.analyst_shear_alpha)
-        state.stamp_derived("shear_table")
+        _build_constant_shear_table(state, spec.analyst_shear_alpha)
         return StageResult(
             "build_shear",
             True,
@@ -210,12 +242,10 @@ def build_shear(state: Any, spec: ScenarioSpec, fit: SensorSelection) -> StageRe
     _calculate_shear_timeseries(state, height_sensors)
     if spec.shear_model == "power_law_constant":
         # One site-wide exponent: the mean of the scenario's own series, not a default.
-        series = state.shear_timeseries_df["shear_coefficient"].dropna()
-        if series.empty:
-            raise ScenarioError("build_shear", "shear series is empty, so no site-wide alpha exists")
-        alpha = float(series.mean())
-        state.shear_table = _constant_shear_table(alpha)
-        state.stamp_derived("shear_table")
+        try:
+            alpha = _build_constant_shear_table(state)["alpha"]
+        except ValueError as exc:
+            raise ScenarioError("build_shear", "shear series is empty, so no site-wide alpha exists") from exc
         return StageResult(
             "build_shear",
             True,
@@ -252,9 +282,7 @@ def extrapolate(state: Any, spec: ScenarioSpec, reference: SensorSelection) -> S
     """
     from server.tools.extrapolation import _extrapolate_to_hub_height
 
-    hub = spec.hub_height_m if spec.hub_height_m is not None else state.get_hub_height_m()
-    if hub is None:
-        raise ScenarioError("extrapolate", "hub height is not set")
+    hub = check_hub(state, spec)
     shear_model = "log_law" if spec.shear_model.startswith("log_law") else "power_law"
     measured = _extrapolate_to_hub_height(
         state,
@@ -280,16 +308,12 @@ def extrapolate(state: Any, spec: ScenarioSpec, reference: SensorSelection) -> S
 
 def run_ltc(state: Any, spec: ScenarioSpec) -> StageResult:
     """Run the scenario's long-term correction against its chosen reference (axes C, D)."""
-    from server.api.routes.analysis import LTC_ALGORITHMS, _resolve_ltc_columns, run_ltc_algorithm
+    from server.tools.ltc_runs import resolve_ltc_columns, run_ltc_algorithm
 
+    runner = check_ltc(state, spec)
     state.set_active_reference_source(spec.reference_source)
     algorithm = spec.ltc_algorithm
-    runner = LTC_ALGORITHMS.get(algorithm)
-    if runner is None:
-        raise ScenarioError(
-            "run_ltc", f"unknown LTC algorithm '{algorithm}'; expected one of {sorted(LTC_ALGORITHMS)}"
-        )
-    short_col, long_col, short_dir_col, long_dir_col = _resolve_ltc_columns(state)
+    short_col, long_col, short_dir_col, long_dir_col = resolve_ltc_columns(state)
     result = run_ltc_algorithm(
         state, algorithm, runner, short_col, long_col, short_dir_col, long_dir_col
     )
@@ -309,25 +333,26 @@ def run_ltc(state: Any, spec: ScenarioSpec) -> StageResult:
 
 
 def run_uncertainty(state: Any, spec: ScenarioSpec, reference: SensorSelection) -> StageResult:
-    """Compute uncertainty from this scenario's own fit, series and geometry (§7.5)."""
-    from server.tools.uncertainty import _calculate_uncertainty
+    """Compute uncertainty from this scenario's own fit, series and geometry (§7.5), as the
+    canvas's ``calculate_scenario_uncertainty`` step does."""
+    from server.tools.uncertainty import _scenario_uncertainty
 
     shear_source = "analyst_supplied" if spec.analyst_shear_alpha is not None else "fitted"
-    inputs = derive_uncertainty_inputs(
+    result = _scenario_uncertainty(
         state,
         spec.ltc_algorithm,
-        hub_height_m=spec.hub_height_m,
+        spec.shear_model,
         reference_heights=list(reference.heights_m),
+        hub_height_m=spec.hub_height_m,
         shear_source=shear_source,
     )
-    result = _calculate_uncertainty(state, **uncertainty_call_args(inputs))
     return StageResult(
         "run_uncertainty",
         True,
         {
             "total_uncertainty_pct": result.get("total_uncertainty_pct"),
             "components": result.get("components"),
-            "provenance": inputs["provenance"],
+            "provenance": result["derived_inputs"],
         },
     )
 

@@ -768,6 +768,8 @@ def _build_aggr_momm_shear_table(
 @operation(
     effect="change", stage="shear", disclosure=("records_clamped", "clamped_fraction",),
     result=result_models.CalculateShearTimeseriesResult,
+    reads=("measured_data", "data_model", "shear_settings"),
+    writes=("shear_timeseries", "shear_settings"),
 )
 def calculate_shear_timeseries(height_sensors: str, min_speed_mps: float | None = None) -> dict:
     """Calculate timestamp-wise power-law shear coefficients traced to IEC 61400-12-1 Section B.2.
@@ -779,13 +781,20 @@ def calculate_shear_timeseries(height_sensors: str, min_speed_mps: float | None 
     return _calculate_shear_timeseries(session, height_sensors, min_speed_mps)
 
 
-@operation(effect="change", stage="shear", result=result_models.CalculateRoughnessTimeseriesResult)
+@operation(
+    effect="change", stage="shear", result=result_models.CalculateRoughnessTimeseriesResult,
+    reads=("measured_data", "data_model", "shear_settings"),
+    writes=("roughness_timeseries",),
+)
 def calculate_roughness_timeseries(height_sensors: str) -> dict:
     """Calculate timestamp-wise roughness lengths from U versus ln(z) fits traced to IEC 61400-12-1 Section B.3."""
     return _calculate_roughness_timeseries(session, height_sensors)
 
 
-@operation(effect="read", stage="shear", selectable=True, result=result_models.ComputeVerticalStructureResult)
+@operation(
+    effect="read", stage="shear", selectable=True, result=result_models.ComputeVerticalStructureResult,
+    reads=("data_model", "measured_data"),
+)
 def compute_vertical_structure(
     speed_sensors: str = "",
     direction_sensors: str = "",
@@ -805,10 +814,50 @@ def compute_vertical_structure(
         "site_utc_offset_hours",
     ),
     result=result_models.BuildShearTableResult,
+    reads=("shear_timeseries", "shear_settings"),
+    writes=("shear_table",),
 )
 def build_shear_table(aggregation: str = "mean") -> dict:
     """Build a 12x24 power-law shear lookup table using mean, median, or Windographer MoMM aggregation."""
     return _build_shear_table(session, aggregation)
+
+
+def _build_constant_shear_table(state: SessionState, alpha: float | None = None) -> dict:
+    """Fill the 12x24 table with one exponent: the analyst's, or the mean of the shear series.
+
+    The sweep's ``power_law_constant`` level and an analyst-supplied exponent both build their
+    table here (P3-7b), so the canvas step and the sweep stage are one implementation.
+    """
+    if alpha is None:
+        frame = state.shear_timeseries_df
+        series = (
+            frame["shear_coefficient"].dropna()
+            if frame is not None and "shear_coefficient" in frame.columns
+            else pd.Series(dtype=float)
+        )
+        if series.empty:
+            raise ValueError(
+                "The shear series is empty, so no site-wide exponent exists: calculate the shear "
+                "timeseries first, or give the exponent"
+            )
+        value, source, aggregation = float(series.mean()), "fitted", "site_constant"
+    else:
+        value, source, aggregation = float(alpha), "analyst_supplied", "analyst_supplied"
+    state.shear_table = pd.DataFrame(np.full((12, 24), value), index=range(1, 13), columns=range(24))
+    state.stamp_derived("shear_table")
+    return {"status": "ok", "alpha": value, "shear_source": source, "aggregation": aggregation}
+
+
+@operation(
+    effect="change", stage="shear", disclosure=("shear_source",),
+    result=result_models.BuildConstantShearTableResult,
+    reads=("shear_timeseries",),
+    writes=("shear_table",),
+)
+def build_constant_shear_table(alpha: float | None = None) -> dict:
+    """Fill the 12x24 shear table with one exponent: the given one (analyst-supplied), or,
+    without one, the mean of the shear timeseries (one site-wide exponent)."""
+    return _build_constant_shear_table(session, alpha)
 
 
 @operation(
@@ -821,6 +870,8 @@ def build_shear_table(aggregation: str = "mean") -> dict:
         "site_utc_offset_hours",
     ),
     result=result_models.BuildRoughnessTableResult,
+    reads=("roughness_timeseries", "shear_settings"),
+    writes=("roughness_table",),
 )
 def build_roughness_table(aggregation: str = "mean") -> dict:
     """Build a 12x24 roughness lookup table in log-space traced to IEC logarithmic profile practice."""
@@ -830,6 +881,7 @@ def build_roughness_table(aggregation: str = "mean") -> dict:
 @operation(
     effect="read", stage="shear", disclosure=("hour_basis", "site_utc_offset_hours",), selectable=True,
     result=result_models.BuildSectorShearTablesResult,
+    reads=("measured_data", "data_model", "shear_timeseries"),
 )
 def build_sector_shear_tables(
     direction_sensor: str,
@@ -853,6 +905,8 @@ def build_sector_shear_tables(
         "table_coverage",
     ),
     result=result_models.BuildAggrMommShearTableResult,
+    reads=("measured_data", "data_model", "shear_settings"),
+    writes=("shear_table", "shear_timeseries", "shear_settings"),
 )
 def build_aggr_momm_shear_table(height_sensors: str, min_speed_mps: float | None = None) -> dict:
     """Build an aggregate MoMM shear table by deriving alpha from per-height Windographer MoMM wind tables."""

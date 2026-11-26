@@ -496,7 +496,10 @@ def _compute_persistence(
     }
 
 
-@operation(effect="read", stage="analysis", selectable=True, result=result_models.ComputeEnergyMetricsResult)
+@operation(
+    effect="read", stage="analysis", selectable=True, result=result_models.ComputeEnergyMetricsResult,
+    reads=("data_model", "measured_data", "settings"),
+)
 def compute_energy_metrics(speed_sensor: str, direction_sensor: str = "") -> dict:
     """Compute measured wind-power density, cube-mean speed, and optional sector energy contribution."""
     return _compute_energy_metrics(session, speed_sensor, direction_sensor)
@@ -512,6 +515,10 @@ def compute_energy_metrics(speed_sensor: str, direction_sensor: str = "") -> dic
         "min_year_coverage",
     ),
     result=result_models.ComputeExtremeWindsResult,
+    reads=(
+        "ensemble", "ltc:linear_least_squares", "ltc:total_least_squares", "ltc:variance_ratio", "ltc:speedsort",
+        "ltc:xgboost", "hub_height_series",
+    ),
 )
 def compute_extreme_winds(
     speed_sensor: str,
@@ -537,13 +544,19 @@ def compute_extreme_winds(
     return _compute_extremes(session, speed_sensor, source, min_year_coverage)
 
 
-@operation(effect="read", stage="analysis", selectable=True, result=result_models.ComputeWindRampsResult)
+@operation(
+    effect="read", stage="analysis", selectable=True, result=result_models.ComputeWindRampsResult,
+    reads=("measured_data",),
+)
 def compute_wind_ramps(speed_sensor: str, event_threshold_m_s: float = 3.0) -> dict:
     """Summarize consecutive wind-speed ramp magnitudes and threshold events."""
     return _compute_ramps(session, speed_sensor, event_threshold_m_s)
 
 
-@operation(effect="read", stage="analysis", selectable=True, result=result_models.ComputeWindPersistenceResult)
+@operation(
+    effect="read", stage="analysis", selectable=True, result=result_models.ComputeWindPersistenceResult,
+    reads=("measured_data",),
+)
 def compute_wind_persistence(
     speed_sensor: str,
     calm_threshold_m_s: float = 3.0,

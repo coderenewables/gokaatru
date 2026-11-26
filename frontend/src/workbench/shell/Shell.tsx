@@ -6,6 +6,9 @@ import { api, unwrap } from "../api";
 import { dropOnChart, useCharts } from "../charts/store";
 import { WindowDrop } from "../datamodel/WindowDrop";
 import { WorkbenchDnd } from "../dnd";
+import { usePipeline } from "../model/store";
+import { resetRunPhase } from "../run/store";
+import { useInterrogate } from "../interrogate/store";
 import { useSelection } from "../selection/store";
 import { useTheme } from "../theme/theme";
 import { useHistory } from "../history/useHistory";
@@ -13,8 +16,19 @@ import { CampaignSwitcher } from "./CampaignSwitcher";
 import { type Command, CommandPalette } from "./CommandPalette";
 import { Campaign } from "./context";
 import { keyCommand } from "./keys";
-import { PANELS, type PanelId, addDefaultLayout, forgetLayout, saveLayout, storedLayout } from "./layout";
+import {
+  PANEL_TITLES,
+  PHASES,
+  PHASE_PANELS,
+  type PanelId,
+  type PhaseId,
+  addDefaultLayout,
+  forgetLayout,
+  saveLayout,
+  storedLayout,
+} from "./layout";
 import { panelComponents } from "./panels";
+import { usePhase } from "./phase";
 import { GroupActions, TabTitle } from "./tabs";
 
 export interface ShellProps {
@@ -22,10 +36,12 @@ export interface ShellProps {
   projectId: string | null;
 }
 
-/** The workbench shell for one open campaign: header, docked panels, status bar. */
+/** The workbench shell for one open campaign: header, the phase's docked panels, status bar. */
 export function Shell({ sessionId, projectId }: ShellProps) {
   const [theme, toggleTheme] = useTheme();
   const dockview = useRef<DockviewApi | null>(null);
+  const phase = usePhase((state) => state.phase);
+  const choosePhase = usePhase((state) => state.goTo);
 
   const summary = useQuery({
     queryKey: ["session", sessionId],
@@ -40,38 +56,40 @@ export function Shell({ sessionId, projectId }: ShellProps) {
   });
   const campaign = project.data?.campaigns.find((item) => item.session_id === sessionId);
 
-  const components = useMemo(panelComponents, []);
+  const components = useMemo(() => panelComponents(phase), [phase]);
   const open = useMemo(() => ({ sessionId, projectId }), [sessionId, projectId]);
 
   // A selection and the charts' channels belong to one campaign: opening another starts clean.
   useEffect(() => {
     useSelection.getState().clearAll();
     useCharts.getState().reset();
+    resetRunPhase();
+    useInterrogate.getState().reset();
   }, [sessionId]);
 
   const onReady = useCallback((event: DockviewReadyEvent) => {
     dockview.current = event.api;
-    const saved = storedLayout();
+    const saved = storedLayout(phase);
     let restored = false;
     if (saved) {
       try {
         event.api.fromJSON(saved);
         restored = true;
       } catch {
-        forgetLayout();
+        forgetLayout(phase);
       }
     }
-    if (!restored) addDefaultLayout(event.api);
-    event.api.onDidLayoutChange(() => saveLayout(event.api));
-  }, []);
+    if (!restored) addDefaultLayout(event.api, phase);
+    event.api.onDidLayoutChange(() => saveLayout(event.api, phase));
+  }, [phase]);
 
   const resetLayout = useCallback(() => {
     const current = dockview.current;
     if (!current) return;
-    forgetLayout();
-    addDefaultLayout(current);
-    saveLayout(current);
-  }, []);
+    forgetLayout(phase);
+    addDefaultLayout(current, phase);
+    saveLayout(current, phase);
+  }, [phase]);
 
   const history = useHistory(sessionId);
   const [palette, setPalette] = useState(false);
@@ -92,7 +110,7 @@ export function Shell({ sessionId, projectId }: ShellProps) {
   const showPanel = useCallback((id: PanelId) => {
     const current = dockview.current;
     if (!current) return;
-    const panel = current.getPanel(id) ?? current.addPanel({ id, component: id, title: PANELS[id] });
+    const panel = current.getPanel(id) ?? current.addPanel({ id, component: id, title: PANEL_TITLES[id] });
     panel.api.setActive();
   }, []);
 
@@ -100,9 +118,12 @@ export function Shell({ sessionId, projectId }: ShellProps) {
     { id: "undo", label: "Undo the last change", run: undo, disabled: !history.canUndo },
     { id: "redo", label: "Redo", run: redo, disabled: !history.canRedo },
     { id: "clear", label: "Clear the selection", run: () => useSelection.getState().clearAll() },
-    ...(Object.keys(PANELS) as PanelId[]).map((id) => ({
+    ...(Object.keys(PHASES) as PhaseId[])
+      .filter((id) => id !== phase)
+      .map((id) => ({ id: `phase-${id}`, label: `Go to ${PHASES[id]}`, run: () => choosePhase(id) })),
+    ...(Object.keys(PHASE_PANELS[phase]) as PanelId[]).map((id) => ({
       id: `show-${id}`,
-      label: `Show the ${PANELS[id]} panel`,
+      label: `Show the ${PANEL_TITLES[id]} panel`,
       run: () => showPanel(id),
     })),
     { id: "reset", label: "Reset the layout", run: resetLayout },
@@ -114,7 +135,7 @@ export function Shell({ sessionId, projectId }: ShellProps) {
   return (
     <div className="gk-app">
       <header className="gk-header">
-        <a className="gk-brand" href="/workbench/">GoKaatru Workbench</a>
+        <a className="gk-brand" href="/">GoKaatru</a>
         <nav aria-label="Where you are" className="gk-crumbs">
           <span>{project.data?.name ?? "No project"}</span>
           <span aria-hidden="true">›</span>
@@ -125,10 +146,17 @@ export function Shell({ sessionId, projectId }: ShellProps) {
           )}
         </nav>
         <nav aria-label="Phases" className="gk-phases">
-          <span className="gk-phase" aria-current="page">Prepare</span>
-          <a className="gk-phase gk-phase-link" href="/" title="Model, Run and Interrogate stay in the current interface until Phase 3">
-            Model, Run, Interrogate
-          </a>
+          {(Object.keys(PHASES) as PhaseId[]).map((id) => (
+            <button
+              key={id}
+              type="button"
+              className="gk-phase"
+              aria-current={id === phase ? "page" : undefined}
+              onClick={() => choosePhase(id)}
+            >
+              {PHASES[id]}
+            </button>
+          ))}
         </nav>
         <div className="gk-header-actions">
           <button
@@ -170,8 +198,9 @@ export function Shell({ sessionId, projectId }: ShellProps) {
       </header>
       <main className="gk-main">
         <Campaign.Provider value={open}>
-          <WorkbenchDnd onDrop={dropOnChart}>
+          <WorkbenchDnd onDrop={dropOnChart} onMethodDrop={(operation) => usePipeline.getState().add(operation)}>
             <DockviewReact
+              key={phase}
               className="dockview-theme-light gk-dockview"
               components={components}
               defaultTabComponent={TabTitle}

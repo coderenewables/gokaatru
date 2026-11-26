@@ -20,6 +20,7 @@ from server.state.manager import SessionManager
 from server.state.projects import ProjectRegistry
 from server.tools.config import _persist_runconfig
 from server.tools.era5 import _era5_cache_path, _load_cached_era5
+from tests.http_operations import operation
 
 
 @pytest.fixture
@@ -56,7 +57,7 @@ def test_a_project_is_created_listed_renamed_and_holds_its_campaigns(client) -> 
     # Each campaign is a session the session routes serve by its id.
     state = manager.get_session(mast)
     assert state.project["id"] == project_id
-    summary = test_client.get(f"/api/sessions/{mast}/summary", headers={"X-GoKaatru-Session": mast})
+    summary = operation(test_client, mast, "get_analysis_summary")
     assert summary.status_code == 200, summary.text
 
 

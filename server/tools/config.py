@@ -204,7 +204,13 @@ def _get_analysis_summary(state: SessionState) -> dict:
     }
 
 
-@operation(effect="read", stage="config", result=result_models.GetRunConfigResult)
+@operation(
+    effect="read", stage="config", result=result_models.GetRunConfigResult,
+    reads=(
+        "data_model", "measured_data", "site", "label", "settings", "reference_choice", "shear_settings", "shear_table",
+        "roughness_table",
+    ),
+)
 def get_run_config() -> dict:
     """Return the active run configuration dictionary defined by the GoKaatru Phase 1 config spec."""
     return _get_run_config(session)
@@ -229,7 +235,11 @@ def config_snapshot(state: SessionState) -> dict[str, object]:
     }
 
 
-@operation(effect="change", stage="config", result=result_models.UpdateRunConfigResult)
+@operation(
+    effect="change", stage="config", result=result_models.UpdateRunConfigResult,
+    reads=("data_model", "settings", "reference_choice", "shear_settings", "site"),
+    writes=("label", "settings", "reference_choice", "shear_settings", "site", "data_model"),
+)
 def update_run_config(key: str, value: str) -> dict:
     """Update a dotted runconfig key using JSON parsing rules from the Phase 1 config manager spec."""
     before = config_snapshot(get_active_session())
@@ -238,19 +248,32 @@ def update_run_config(key: str, value: str) -> dict:
     return result
 
 
-@operation(effect="change", stage="config", result=result_models.SaveRunConfigResult)
+@operation(
+    effect="change", stage="config", result=result_models.SaveRunConfigResult,
+    reads=("label", "settings", "reference_choice", "shear_settings", "site", "data_model", "measured_data"),
+)
 def save_run_config() -> dict:
     """Write the current run configuration to data/runconfig.json per the Phase 1 persistence spec."""
     return _save_run_config(session)
 
 
-@operation(effect="change", stage="config", result=result_models.LoadRunConfigResult)
+@operation(
+    effect="change", stage="config", result=result_models.LoadRunConfigResult,
+    writes=("settings", "reference_choice", "shear_settings", "site", "label"),
+)
 def load_run_config() -> dict:
     """Load data/runconfig.json into session state following the Phase 1 configuration workflow."""
     return _load_run_config(session)
 
 
-@operation(effect="read", stage="config", result=result_models.GetAnalysisSummaryResult)
+@operation(
+    effect="read", stage="config", result=result_models.GetAnalysisSummaryResult,
+    reads=(
+        "data_model", "measured_data", "site", "label", "reanalysis_nodes", "reference_series", "shear_table",
+        "roughness_table", "ensemble", "ltc_scenarios", "ltc:linear_least_squares", "ltc:total_least_squares",
+        "ltc:variance_ratio", "ltc:speedsort", "ltc:xgboost",
+    ),
+)
 def get_analysis_summary() -> dict:
     """Report Phase 1 analysis readiness flags based on populated session-state fields."""
     return _get_analysis_summary(session)

@@ -141,7 +141,8 @@ export interface paths {
         };
         /**
          * List Operations
-         * @description Every declared operation: what it does to data, where it sits, and its parameters.
+         * @description Every declared operation: what it does to data, where it sits, what it reads and writes,
+         *     and its parameters.
          */
         get: operations["list_operations_api_operations_get"];
         put?: never;
@@ -284,192 +285,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{session_id}/atmosphere": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Atmospheric Conditions
-         * @description Return measured atmospheric and air-density summaries for the selected sensors.
-         */
-        get: operations["get_atmospheric_conditions_api_sessions__session_id__atmosphere_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/brighthub/import": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Brighthub Import Location
-         * @description Fetch timeseries and datamodel from BrightHub and load them into the session.
-         *
-         *     This replicates the Flask app flow: fetch datamodel → build sensor mapping,
-         *     fetch timeseries via presigned URL → parse into session state.
-         */
-        post: operations["brighthub_import_location_api_sessions__session_id__brighthub_import_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/brighthub/locations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Brighthub Locations
-         * @description List measurement locations available to the authenticated BrightHub user.
-         */
-        get: operations["brighthub_locations_api_sessions__session_id__brighthub_locations_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/brighthub/locations/{uuid}/datamodel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Brighthub Datamodel
-         * @description Fetch the data model for one BrightHub measurement location.
-         */
-        get: operations["brighthub_datamodel_api_sessions__session_id__brighthub_locations__uuid__datamodel_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/brighthub/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Brighthub Login
-         * @description Authenticate with BrightHub and store the token in the session.
-         */
-        post: operations["brighthub_login_api_sessions__session_id__brighthub_login_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/brighthub/logout": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Brighthub Logout
-         * @description Clear the stored BrightHub token.
-         */
-        post: operations["brighthub_logout_api_sessions__session_id__brighthub_logout_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/brighthub/reanalysis/download": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Brighthub Reanalysis Download
-         * @description Download reanalysis timeseries data for specified nodes.
-         *
-         *     For ERA5 data, the ``source`` field selects either BrightHub or the
-         *     EarthDataHub Zarr store.  MERRA-2 always uses BrightHub.
-         */
-        post: operations["brighthub_reanalysis_download_api_sessions__session_id__brighthub_reanalysis_download_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/brighthub/reanalysis/nodes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Brighthub Reanalysis Nodes
-         * @description Find nearest ERA5 and MERRA-2 reanalysis nodes for a coordinate.
-         */
-        post: operations["brighthub_reanalysis_nodes_api_sessions__session_id__brighthub_reanalysis_nodes_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/brighthub/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Brighthub Status
-         * @description Check whether the session holds a valid BrightHub token.
-         */
-        get: operations["brighthub_status_api_sessions__session_id__brighthub_status_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/sessions/{session_id}/chat": {
         parameters: {
             query?: never;
@@ -490,86 +305,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{session_id}/cleaning/apply": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Apply Cleaning
-         * @description Apply one cleaning rule to the session timeseries through the shared cleaning helper.
-         */
-        post: operations["apply_cleaning_api_sessions__session_id__cleaning_apply_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/cleaning/log": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Cleaning Log
-         * @description Return the applied cleaning log for the current session.
-         */
-        get: operations["get_cleaning_log_api_sessions__session_id__cleaning_log_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/cleaning/undo": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Undo Cleaning
-         * @description Undo one cleaning log entry and replay the remaining rules on the session timeseries.
-         */
-        post: operations["undo_cleaning_api_sessions__session_id__cleaning_undo_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/clipping": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run Clipping
-         * @description Run clipping analysis for one corrected source series in the current session.
-         */
-        post: operations["run_clipping_api_sessions__session_id__clipping_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/sessions/{session_id}/clipping/columns": {
         parameters: {
             query?: never;
@@ -583,50 +318,6 @@ export interface paths {
          */
         get: operations["get_clipping_columns_api_sessions__session_id__clipping_columns_get"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/comparison": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Sensor Comparison
-         * @description Return concurrent correlation and residual metrics for a selected speed-sensor pair.
-         */
-        get: operations["get_sensor_comparison_api_sessions__session_id__comparison_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/config": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Config
-         * @description Return the current session run configuration for the workflow UI.
-         */
-        get: operations["get_config_api_sessions__session_id__config_get"];
-        /**
-         * Update Config
-         * @description Apply batched dotted-path runconfig updates and persist the session runconfig file.
-         */
-        put: operations["update_config_api_sessions__session_id__config_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -654,66 +345,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{session_id}/coverage/{sensor_name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Sensor Coverage
-         * @description Return coverage and gap statistics for one sensor in the current session.
-         */
-        get: operations["get_sensor_coverage_api_sessions__session_id__coverage__sensor_name__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/datamodel/build": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Build Data Model
-         * @description Build a minimal IEA Task 43 data model from declared columns and load it.
-         */
-        post: operations["build_data_model_api_sessions__session_id__datamodel_build_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/datamodel/draft": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Draft Data Model
-         * @description Draft a Task 43 reading of the loaded timeseries columns for review.
-         */
-        get: operations["draft_data_model_api_sessions__session_id__datamodel_draft_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/sessions/{session_id}/datasets/{dataset_id}/load": {
         parameters: {
             query?: never;
@@ -728,153 +359,6 @@ export interface paths {
          * @description Load a shared dataset into one workflow session's in-memory state.
          */
         post: operations["load_dataset_into_session_api_sessions__session_id__datasets__dataset_id__load_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/energy/{speed_sensor}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Energy Metrics
-         * @description Return measured wind-power density and optional directional energy metrics.
-         */
-        get: operations["get_energy_metrics_api_sessions__session_id__energy__speed_sensor__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/ensemble": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run Ensemble
-         * @description Blend available LTC algorithms into one ensemble result for the session.
-         */
-        post: operations["run_ensemble_api_sessions__session_id__ensemble_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/era5/credential": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Set Earthdatahub Credential
-         * @description Store this session's EarthDataHub PAT for the direct-ERA5 (non-BrightHub) path.
-         */
-        post: operations["set_earthdatahub_credential_api_sessions__session_id__era5_credential_post"];
-        /**
-         * Clear Earthdatahub Credential
-         * @description Remove this session's stored EarthDataHub PAT.
-         */
-        delete: operations["clear_earthdatahub_credential_api_sessions__session_id__era5_credential_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/era5/credential/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Earthdatahub Credential Status
-         * @description Check whether this session has an EarthDataHub PAT configured.
-         */
-        get: operations["get_earthdatahub_credential_status_api_sessions__session_id__era5_credential_status_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/era5/extract": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Extract Era5
-         * @description Extract ERA5 node data and compute wind speed components required for interpolation.
-         */
-        post: operations["extract_era5_api_sessions__session_id__era5_extract_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/era5/interpolate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Interpolate Era5
-         * @description Interpolate loaded reanalysis node datasets to the site location for the current session.
-         *
-         *     ``source`` is ``"era5"`` (default) or ``"merra2"`` and selects which downloaded
-         *     reanalysis becomes the long-term reference (F-58).
-         */
-        post: operations["interpolate_era5_api_sessions__session_id__era5_interpolate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/era5/nodes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Find Era5 Nodes
-         * @description Find surrounding ERA5 grid nodes for the session site coordinate.
-         */
-        post: operations["find_era5_nodes_api_sessions__session_id__era5_nodes_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -953,174 +437,6 @@ export interface paths {
          * @description Export the current cleaned timeseries dataframe as a CSV attachment.
          */
         get: operations["export_timeseries_csv_api_sessions__session_id__exports_timeseries_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/extrapolation/hub": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Extrapolate Hub
-         * @description Extrapolate measured wind speed to hub height for the current session.
-         *
-         *     Also copies the shear timeseries into the measured dataset and
-         *     extrapolates every ERA5, MERRA-2, and interpolated reanalysis node
-         *     to hub height using the 12x24 shear lookup table.
-         */
-        post: operations["extrapolate_hub_api_sessions__session_id__extrapolation_hub_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/extremes/{speed_sensor}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Extreme Winds
-         * @description Return annual-maxima Gumbel/GEV extreme-wind estimates for one speed sensor.
-         *
-         *     ``source`` defaults to ``"auto"``, preferring the long-term corrected series over the
-         *     measured campaign (F-79); ``min_year_completeness`` drops calendar years too sparse to
-         *     hold an annual maximum (F-78).
-         */
-        get: operations["get_extreme_winds_api_sessions__session_id__extremes__speed_sensor__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/homogeneity/analyze": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Analyze Homogeneity
-         * @description Run Pettitt homogeneity analysis on loaded ERA5 node data for the session.
-         */
-        post: operations["analyze_homogeneity_api_sessions__session_id__homogeneity_analyze_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/homogeneity/apply": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Apply Homogeneity
-         * @description Trim interpolated ERA5 data to a homogeneous start year for the current session.
-         */
-        post: operations["apply_homogeneity_api_sessions__session_id__homogeneity_apply_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/ltc/{algorithm}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run Ltc
-         * @description Run one LTC algorithm through the shared helper registry for the current session.
-         */
-        post: operations["run_ltc_api_sessions__session_id__ltc__algorithm__post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/map/site": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Site Map
-         * @description Return the site overview GeoJSON map for the current session.
-         */
-        get: operations["get_site_map_api_sessions__session_id__map_site_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/mast-effects": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Mast Effects
-         * @description Return directional speed-ratio diagnostics for potential mast-shadow review.
-         */
-        get: operations["get_mast_effects_api_sessions__session_id__mast_effects_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/mcp-readiness/{speed_sensor}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Mcp Readiness
-         * @description Return concurrent ERA5 correlation metrics used to assess MCP readiness.
-         */
-        get: operations["get_mcp_readiness_api_sessions__session_id__mcp_readiness__speed_sensor__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1264,7 +580,7 @@ export interface paths {
         put?: never;
         /**
          * brighthub_find_reanalysis_nodes
-         * @description Find nearest ERA5 and MERRA-2 reanalysis nodes via BrightHub for a coordinate.
+         * @description Find the nearest ERA5 and MERRA-2 reanalysis nodes via BrightHub and record them with the site, nearest first.
          */
         post: operations["operation_brighthub_find_reanalysis_nodes_api_sessions__session_id__operations_brighthub_find_reanalysis_nodes_post"];
         delete?: never;
@@ -1436,6 +752,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/build_constant_shear_table": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * build_constant_shear_table
+         * @description Fill the 12x24 shear table with one exponent: the given one (analyst-supplied), or,
+         *     without one, the mean of the shear timeseries (one site-wide exponent).
+         */
+        post: operations["operation_build_constant_shear_table_api_sessions__session_id__operations_build_constant_shear_table_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/build_data_model": {
         parameters: {
             query?: never;
@@ -1533,6 +870,29 @@ export interface paths {
          * @description Calculate timestamp-wise roughness lengths from U versus ln(z) fits traced to IEC 61400-12-1 Section B.3.
          */
         post: operations["operation_calculate_roughness_timeseries_api_sessions__session_id__operations_calculate_roughness_timeseries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/operations/calculate_scenario_uncertainty": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * calculate_scenario_uncertainty
+         * @description Calculate a sweep scenario's uncertainty with every input derived from its own results:
+         *     the correction's fit and concurrent period, the shear series' dispersion for a fitted
+         *     power law, the reference heights it was carried from, and its shear model's constant.
+         *     Nothing else the session holds is read, so it answers as the scenario's sweep row did.
+         */
+        post: operations["operation_calculate_scenario_uncertainty_api_sessions__session_id__operations_calculate_scenario_uncertainty_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2119,6 +1479,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/delete_pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * delete_pipeline
+         * @description Delete a named pipeline.
+         */
+        post: operations["operation_delete_pipeline_api_sessions__session_id__operations_delete_pipeline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/delete_selection": {
         parameters: {
             query?: never;
@@ -2277,6 +1657,10 @@ export interface paths {
         /**
          * extrapolate_to_hub_height
          * @description Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B.
+         *
+         *     ``reference_columns`` limits the measured heights carried up to those sensors (a sweep's
+         *     extrapolation-reference policy); without it every mapped speed sensor is used.
+         *     ``extrapolate_reanalysis`` false leaves the reanalysis frames as they are, as a sweep does.
          */
         post: operations["operation_extrapolate_to_hub_height_api_sessions__session_id__operations_extrapolate_to_hub_height_post"];
         delete?: never;
@@ -2669,6 +2053,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/list_pipelines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * list_pipelines
+         * @description List the campaign's named pipelines with their steps, who saved each and when.
+         */
+        post: operations["operation_list_pipelines_api_sessions__session_id__operations_list_pipelines_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/list_selections": {
         parameters: {
             query?: never;
@@ -2749,6 +2153,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/order_pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * order_pipeline
+         * @description Order a pipeline's steps by what each reads and writes, and say for each whether the
+         *     session holds the result it would build: current, changed, stale, not run, waiting on a
+         *     step upstream, or invalid. Refuses two steps building one result, and a cycle.
+         */
+        post: operations["operation_order_pipeline_api_sessions__session_id__operations_order_pipeline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/parse_datamodel": {
         parameters: {
             query?: never;
@@ -2783,6 +2209,29 @@ export interface paths {
          * @description Parse a wind timeseries file into session state following the GoKaatru Phase 1 ingest spec.
          */
         post: operations["operation_parse_timeseries_api_sessions__session_id__operations_parse_timeseries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/operations/pipeline_from_scenario": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * pipeline_from_scenario
+         * @description The pipeline that computes one sweep scenario: its shear steps, the extrapolation from
+         *     its reference sensors, its correction against its reference source and its own
+         *     uncertainty, each the operation the sweep's stage shares. Says when the campaign has
+         *     changed since the sweep, as the steps then will not reproduce the row.
+         */
+        post: operations["operation_pipeline_from_scenario_api_sessions__session_id__operations_pipeline_from_scenario_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3261,6 +2710,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/operations/save_pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * save_pipeline
+         * @description Save or replace a named pipeline in the campaign; refused when its steps cannot be ordered.
+         */
+        post: operations["operation_save_pipeline_api_sessions__session_id__operations_save_pipeline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/operations/save_run_config": {
         parameters: {
             query?: never;
@@ -3296,6 +2765,28 @@ export interface paths {
          *     selection, of its records only, which is how a selection is compared with every record.
          */
         post: operations["operation_summarise_channels_api_sessions__session_id__operations_summarise_channels_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/operations/sweep_spec_from_pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * sweep_spec_from_pipeline
+         * @description The sweep specification whose levels are a pipeline's own choices (its sensor policies,
+         *     shear model, reference sources, corrections and hub height): the matrix "Sweep around this"
+         *     starts from. A choice no sweep level expresses is listed in unmatched, with why.
+         */
+        post: operations["operation_sweep_spec_from_pipeline_api_sessions__session_id__operations_sweep_spec_from_pipeline_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3353,7 +2844,8 @@ export interface paths {
         put?: never;
         /**
          * undo_last_change
-         * @description Undo the last cleaning rule, configuration change, sensor removal or data model build still in the history.
+         * @description Undo the last cleaning rule, configuration change, sensor removal, data model build, saved
+         *     selection or saved pipeline still in the history.
          */
         post: operations["operation_undo_last_change_api_sessions__session_id__operations_undo_last_change_post"];
         delete?: never;
@@ -3426,26 +2918,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{session_id}/persistence/{speed_sensor}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Wind Persistence
-         * @description Return calm and high-wind duration metrics for the selected speed sensor.
-         */
-        get: operations["get_wind_persistence_api_sessions__session_id__persistence__speed_sensor__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/sessions/{session_id}/plots/{plot_name}": {
         parameters: {
             query?: never;
@@ -3460,46 +2932,6 @@ export interface paths {
          * @description Dispatch one supported Plotly result endpoint to the shared visualization helpers.
          */
         post: operations["get_plot_api_sessions__session_id__plots__plot_name__post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/qc-diagnostics": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Qc Diagnostics
-         * @description Return non-mutating QC diagnostic counts for the loaded wind-speed sensors.
-         */
-        get: operations["get_qc_diagnostics_api_sessions__session_id__qc_diagnostics_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/ramps/{speed_sensor}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Wind Ramps
-         * @description Return consecutive-record wind-speed ramp metrics for the selected sensor.
-         */
-        get: operations["get_wind_ramps_api_sessions__session_id__ramps__speed_sensor__get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3560,46 +2992,6 @@ export interface paths {
         get: operations["get_ltc_results_api_sessions__session_id__results_ltc_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/roughness/calculate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Calculate Roughness
-         * @description Calculate roughness timeseries values using the shared state-aware helper.
-         */
-        post: operations["calculate_roughness_api_sessions__session_id__roughness_calculate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/roughness/table": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Build Roughness Table
-         * @description Build the month-hour roughness lookup table for the current session.
-         */
-        post: operations["build_roughness_table_api_sessions__session_id__roughness_table_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3710,30 +3102,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{session_id}/sensors/delete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Delete Sensors
-         * @description Remove unwanted sensors from the session inventory, mapping, and data.
-         *
-         *     The same logic as the ``remove_sensors`` operation (``server/tools/sensors.py``), which
-         *     the workbench calls through the generated route so the removal can be undone; this route
-         *     stays for the current interface until Phase 3 retires it.
-         */
-        post: operations["delete_sensors_api_sessions__session_id__sensors_delete_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/sessions/{session_id}/series": {
         parameters: {
             query?: never;
@@ -3758,46 +3126,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{session_id}/shear/calculate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Calculate Shear
-         * @description Calculate shear timeseries values using the shared state-aware helper.
-         */
-        post: operations["calculate_shear_api_sessions__session_id__shear_calculate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/shear/table": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Build Shear Table
-         * @description Build the month-hour shear lookup table for the current session.
-         */
-        post: operations["build_shear_table_api_sessions__session_id__shear_table_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/sessions/{session_id}/statistics/{sensor_name}": {
         parameters: {
             query?: never;
@@ -3810,26 +3138,6 @@ export interface paths {
          * @description Return descriptive statistics, Weibull parameters, and seasonal profiles for one sensor.
          */
         get: operations["get_sensor_statistics_api_sessions__session_id__statistics__sensor_name__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/summary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Summary
-         * @description Return an analysis-oriented workflow summary for the current session.
-         */
-        get: operations["get_summary_api_sessions__session_id__summary_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3894,7 +3202,8 @@ export interface paths {
         put?: never;
         /**
          * Estimate Sweep
-         * @description Price a specification without running it — the designer's cost counter (§9.1).
+         * @description Price a specification without running it — the designer's cost counter (§9.1) — and
+         *     say which leaves the run will skip as duplicates and which it will refuse, and why.
          */
         post: operations["estimate_sweep_api_sessions__session_id__sweep_estimate_post"];
         delete?: never;
@@ -4028,46 +3337,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{session_id}/turbulence/{speed_sensor}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Turbulence Analysis
-         * @description Return IEC-style turbulence metrics when a matching standard-deviation channel is present.
-         */
-        get: operations["get_turbulence_analysis_api_sessions__session_id__turbulence__speed_sensor__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/uncertainty": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Calculate Uncertainty
-         * @description Calculate total uncertainty using the shared Phase 4 uncertainty helper.
-         */
-        post: operations["calculate_uncertainty_api_sessions__session_id__uncertainty_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/sessions/{session_id}/uploads/datamodel": {
         parameters: {
             query?: never;
@@ -4102,310 +3371,6 @@ export interface paths {
          * @description Save an uploaded timeseries file into the session workspace and parse it into session state.
          */
         post: operations["upload_timeseries_api_sessions__session_id__uploads_timeseries_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/vertical-structure": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Vertical Structure
-         * @description Return measured profile, shear alpha, roughness, and optional wind-veer statistics.
-         */
-        get: operations["get_vertical_structure_api_sessions__session_id__vertical_structure_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/wind-climate/{speed_sensor}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Wind Climate
-         * @description Return bankable wind-climate summary statistics for the selected measurement pair.
-         */
-        get: operations["get_wind_climate_api_sessions__session_id__wind_climate__speed_sensor__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/workflow/branches/fork": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Fork Workflow Branch
-         * @description Fork a branch by cloning session state into a new isolated branch session.
-         */
-        post: operations["fork_workflow_branch_api_sessions__session_id__workflow_branches_fork_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/workflow/capabilities": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Workflow Dispatch Capabilities
-         * @description Return executor dispatch capability details for frontend parameter hint rendering.
-         */
-        get: operations["get_workflow_dispatch_capabilities_api_sessions__session_id__workflow_capabilities_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/workflow/compare": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Compare Workflow Branches
-         * @description Compare selected branch sessions against the current parent session.
-         */
-        post: operations["compare_workflow_branches_api_sessions__session_id__workflow_compare_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/workflow/execute": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Execute Workflow
-         * @description Execute all pending workflow nodes and return collected execution events.
-         */
-        post: operations["execute_workflow_api_sessions__session_id__workflow_execute_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/workflow/execute/step": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Execute Workflow Step
-         * @description Execute only the next pending node and return execution events for that step.
-         */
-        post: operations["execute_workflow_step_api_sessions__session_id__workflow_execute_step_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/workflow/execute/stream": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Execute Workflow Stream
-         * @description Execute all pending workflow nodes and stream lifecycle updates via SSE.
-         */
-        post: operations["execute_workflow_stream_api_sessions__session_id__workflow_execute_stream_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/workflow/run-config": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Replace Workflow Run Config
-         * @description Replace the active canvas configuration before creating a distinct execution run.
-         */
-        put: operations["replace_workflow_run_config_api_sessions__session_id__workflow_run_config_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/workflow/runs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Workflow Runs
-         * @description List immutable canvas executions available for same-session comparison.
-         */
-        get: operations["list_workflow_runs_api_sessions__session_id__workflow_runs_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/workflow/runs/compare": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Compare Workflow Runs
-         * @description Compare selected archived runs without changing the active analysis state.
-         */
-        post: operations["compare_workflow_runs_api_sessions__session_id__workflow_runs_compare_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/workflow/snapshots": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Workflow Snapshots
-         * @description List workflow snapshots saved in the active session workspace.
-         */
-        get: operations["list_workflow_snapshots_api_sessions__session_id__workflow_snapshots_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/workflow/snapshots/{snapshot_name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Load Workflow Snapshot
-         * @description Load one persisted workflow snapshot payload from session workspace storage.
-         */
-        get: operations["load_workflow_snapshot_api_sessions__session_id__workflow_snapshots__snapshot_name__get"];
-        /**
-         * Save Workflow Snapshot
-         * @description Persist one workflow snapshot payload to session-scoped workspace storage.
-         */
-        put: operations["save_workflow_snapshot_api_sessions__session_id__workflow_snapshots__snapshot_name__put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/workflow/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Workflow Execution Status
-         * @description Return current workflow execution status for the active browser session.
-         */
-        get: operations["get_workflow_execution_status_api_sessions__session_id__workflow_status_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/workflow/stop": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Stop Workflow Execution
-         * @description Request cancellation of the active workflow execution run.
-         */
-        post: operations["stop_workflow_execution_api_sessions__session_id__workflow_stop_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4500,6 +3465,12 @@ export interface components {
             duplicate_note: string;
             /** Metric */
             metric: string;
+            /** Not Swept */
+            not_swept: string[];
+            /** Not Swept Recorded In Manifest */
+            not_swept_recorded_in_manifest: boolean;
+            /** Not Swept Statement */
+            not_swept_statement: string;
             /** Scenarios Analysed */
             scenarios_analysed: number;
             /** Single Level Axes */
@@ -4605,33 +3576,6 @@ export interface components {
             temp_threshold_c?: number | null;
             /** Warning */
             warning?: string | null;
-        };
-        /**
-         * ApplyCleaningRuleRequest
-         * @description Describe a cleaning rule request for the workflow API.
-         */
-        ApplyCleaningRuleRequest: {
-            /**
-             * End Date
-             * @default
-             */
-            end_date?: string;
-            /** Params */
-            params?: {
-                [key: string]: components["schemas"]["JsonValue"];
-            };
-            /** Rule Type */
-            rule_type: string;
-            /**
-             * Sensor
-             * @default
-             */
-            sensor?: string;
-            /**
-             * Start Date
-             * @default
-             */
-            start_date?: string;
         };
         /** ApplyCleaningRuleResult */
         ApplyCleaningRuleResult: {
@@ -4770,36 +3714,6 @@ export interface components {
         Body_upload_timeseries_api_sessions__session_id__uploads_timeseries_post: {
             /** File */
             file: string;
-        };
-        /**
-         * BrightHubLoginRequest
-         * @description Credentials for BrightHub API-key authentication.
-         */
-        BrightHubLoginRequest: {
-            /** Client Id */
-            client_id: string;
-            /** Client Secret */
-            client_secret: string;
-        };
-        /** BrightHubLoginResponse */
-        BrightHubLoginResponse: {
-            /**
-             * Authenticated
-             * @default true
-             */
-            authenticated?: boolean;
-            /**
-             * Status
-             * @default ok
-             */
-            status?: string;
-        };
-        /** BrightHubStatusResponse */
-        BrightHubStatusResponse: {
-            /** Authenticated */
-            authenticated: boolean;
-            /** Has Token */
-            has_token: boolean;
         };
         /** BrighthubDownloadReanalysisParameters */
         BrighthubDownloadReanalysisParameters: {
@@ -5036,30 +3950,28 @@ export interface components {
             /** Warning */
             warning?: string | null;
         };
+        /** BuildConstantShearTableParameters */
+        BuildConstantShearTableParameters: {
+            /** Alpha */
+            alpha?: number | null;
+        };
+        /** BuildConstantShearTableResult */
+        BuildConstantShearTableResult: {
+            /** Aggregation */
+            aggregation: string;
+            /** Alpha */
+            alpha: number | null;
+            /** Shear Source */
+            shear_source: string;
+            /** Status */
+            status: string;
+        };
         /** BuildDataModelParameters */
         BuildDataModelParameters: {
             /** Spec */
             spec: {
                 [key: string]: unknown;
             };
-        };
-        /**
-         * BuildDataModelRequest
-         * @description Request body for POST /datamodel/build — the analyst's declaration of the columns.
-         *
-         *     Deliberately permissive at the schema layer: ``server.core.datamodel_builder`` owns
-         *     every refusal so the MCP tool and this route reject exactly the same specs, with the
-         *     same message naming the same column.
-         */
-        BuildDataModelRequest: {
-            /** Location */
-            location?: {
-                [key: string]: unknown;
-            };
-            /** Points */
-            points?: {
-                [key: string]: unknown;
-            }[];
         };
         /** BuildDataModelResult */
         BuildDataModelResult: {
@@ -5219,17 +4131,6 @@ export interface components {
             warning?: string | null;
         };
         /**
-         * BuildTableRequest
-         * @description Request a 12x24 aggregation table with a selected aggregation statistic.
-         */
-        BuildTableRequest: {
-            /**
-             * Aggregation
-             * @default mean
-             */
-            aggregation?: string;
-        };
-        /**
          * CachedInterpolation
          * @description A source whose site series was already interpolated for this site and was reused.
          */
@@ -5264,13 +4165,51 @@ export interface components {
             /** Warning */
             warning?: string | null;
         };
+        /** CalculateScenarioUncertaintyParameters */
+        CalculateScenarioUncertaintyParameters: {
+            /** Algorithm */
+            algorithm: string;
+            /** Hub Height M */
+            hub_height_m?: number | null;
+            /** Reference Heights */
+            reference_heights?: number[] | null;
+            /** Shear Model */
+            shear_model: string;
+            /**
+             * Shear Source
+             * @default fitted
+             */
+            shear_source?: string;
+        };
         /**
-         * CalculateShearRequest
-         * @description Request shear or roughness calculations using one or more speed sensors.
+         * CalculateScenarioUncertaintyResult
+         * @description A sweep scenario's uncertainty (P3-7b): the same result, with where each input came from.
          */
-        CalculateShearRequest: {
-            /** Height Sensors */
-            height_sensors: string;
+        CalculateScenarioUncertaintyResult: {
+            /** Basis */
+            basis: string;
+            combination: components["schemas"]["Combination"];
+            components: components["schemas"]["Components"];
+            /** Data Version */
+            data_version: number;
+            /** Derived Inputs */
+            derived_inputs: {
+                [key: string]: unknown;
+            };
+            energy_sensitivity: components["schemas"]["EnergySensitivity"];
+            inputs: components["schemas"]["UncertaintyInputs"];
+            mcp_sampling_cap: components["schemas"]["McpSamplingCap"];
+            p_factors: components["schemas"]["PFactors"];
+            /** Stale Artifacts */
+            stale_artifacts: string[];
+            /** Stale Reasons */
+            stale_reasons?: {
+                [key: string]: string | null;
+            } | null;
+            /** Total Uncertainty Pct */
+            total_uncertainty_pct: number | null;
+            /** Warning */
+            warning?: string | null;
         };
         /** CalculateShearTimeseriesParameters */
         CalculateShearTimeseriesParameters: {
@@ -5661,29 +4600,6 @@ export interface components {
             mean_speed: number | null;
             /** Occurrence Pct */
             occurrence_pct: number | null;
-        };
-        /**
-         * ClippingRequest
-         * @description Request clipping analysis for one corrected wind-speed column and source.
-         */
-        ClippingRequest: {
-            /**
-             * Climate Deviation Exponent
-             * @default 5
-             */
-            climate_deviation_exponent?: number;
-            /**
-             * Min Window Years
-             * @default 10
-             */
-            min_window_years?: number;
-            /**
-             * Source
-             * @default ensemble
-             */
-            source?: string;
-            /** Speed Col */
-            speed_col: string;
         };
         /** ColumnChange */
         ColumnChange: {
@@ -6696,15 +5612,6 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
-        /** DataModelResponse */
-        DataModelResponse: {
-            /** Data Model */
-            data_model: {
-                [key: string]: unknown;
-            };
-            /** Uuid */
-            uuid: string;
-        };
         /** DatasetHomogeneity */
         DatasetHomogeneity: {
             /** Name */
@@ -6745,6 +5652,18 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** DeletePipelineParameters */
+        DeletePipelineParameters: {
+            /** Name */
+            name: string;
+        };
+        /** DeletePipelineResult */
+        DeletePipelineResult: {
+            /** Deleted */
+            deleted: string;
+            /** Status */
+            status: string;
+        };
         /** DeleteSelectionParameters */
         DeleteSelectionParameters: {
             /** Name */
@@ -6757,22 +5676,22 @@ export interface components {
             /** Status */
             status: string;
         };
-        /**
-         * DeleteSensorsRequest
-         * @description Request body for POST /sensors/delete — a list of sensor names to remove.
-         */
-        DeleteSensorsRequest: {
-            /** Sensor Names */
-            sensor_names: string[];
-        };
         /** DensityNormalisation */
         DensityNormalisation: {
             /** Applied */
             applied: boolean;
+            /** Density Records */
+            density_records?: number | null;
+            /** Height Basis */
+            height_basis?: string | null;
+            /** Humidity Sensor */
+            humidity_sensor?: string | null;
             /** Method */
             method?: string | null;
             /** Note */
             note?: string | null;
+            /** Pressure Sensor */
+            pressure_sensor?: string | null;
             /** Reason */
             reason?: string | null;
             /** Reference Density Kgm3 */
@@ -6781,6 +5700,8 @@ export interface components {
             site_density_kgm3?: number | null;
             /** Speed Factor */
             speed_factor?: number | null;
+            /** Temperature Sensor */
+            temperature_sensor?: string | null;
             /** Turbine Regulation */
             turbine_regulation?: string | null;
         };
@@ -6936,14 +5857,6 @@ export interface components {
             /** Records */
             records?: number | null;
         };
-        /**
-         * EnsembleRequest
-         * @description Request multi-algorithm ensemble blending using one measured reference column.
-         */
-        EnsembleRequest: {
-            /** Measured Col */
-            measured_col: string;
-        };
         /** Era5Node */
         Era5Node: {
             /** Bearing */
@@ -7033,41 +5946,6 @@ export interface components {
             /** Variables */
             variables: string[];
         };
-        /**
-         * ExtractEra5Request
-         * @description Request ERA5 extraction over a date range for one node.
-         */
-        ExtractEra5Request: {
-            /**
-             * End Date
-             * Format: date
-             * @default 2025-12-31
-             */
-            end_date?: string;
-            /** Latitude */
-            latitude: number;
-            /** Longitude */
-            longitude: number;
-            /**
-             * Start Date
-             * Format: date
-             * @default 2000-01-01
-             */
-            start_date?: string;
-        };
-        /**
-         * ExtrapolateHubRequest
-         * @description Request hub-height extrapolation from loaded shear or roughness inputs.
-         */
-        ExtrapolateHubRequest: {
-            /** Hub Height M */
-            hub_height_m: number;
-            /**
-             * Shear Model
-             * @default power_law
-             */
-            shear_model?: string;
-        };
         /** ExtrapolateReanalysisToHubParameters */
         ExtrapolateReanalysisToHubParameters: {
             /** Hub Height M */
@@ -7088,8 +5966,15 @@ export interface components {
         };
         /** ExtrapolateToHubHeightParameters */
         ExtrapolateToHubHeightParameters: {
+            /**
+             * Extrapolate Reanalysis
+             * @default true
+             */
+            extrapolate_reanalysis?: boolean;
             /** Hub Height M */
             hub_height_m: number;
+            /** Reference Columns */
+            reference_columns?: string[] | null;
             /**
              * Shear Model
              * @default power_law
@@ -7165,16 +6050,6 @@ export interface components {
         };
         /** FindEra5NodesParameters */
         FindEra5NodesParameters: {
-            /** Latitude */
-            latitude: number;
-            /** Longitude */
-            longitude: number;
-        };
-        /**
-         * FindEra5NodesRequest
-         * @description Request ERA5 node lookup for a site coordinate.
-         */
-        FindEra5NodesRequest: {
             /** Latitude */
             latitude: number;
             /** Longitude */
@@ -7585,6 +6460,12 @@ export interface components {
             gate_failures: {
                 [key: string]: number;
             };
+            /** Not Swept */
+            not_swept: string[];
+            /** Not Swept Recorded In Manifest */
+            not_swept_recorded_in_manifest: boolean;
+            /** Not Swept Statement */
+            not_swept_statement: string;
             /** Note */
             note: string;
             /** Scenarios Admissible */
@@ -7643,104 +6524,6 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
-         * HomogeneityAnalyzeRequest
-         * @description Request Pettitt homogeneity analysis using annual or monthly aggregation.
-         */
-        HomogeneityAnalyzeRequest: {
-            /**
-             * Method
-             * @default annual
-             */
-            method?: string;
-        };
-        /**
-         * HomogeneityApplyRequest
-         * @description Request trimming ERA5 interpolated data to a selected homogeneous start year.
-         */
-        HomogeneityApplyRequest: {
-            /** Cutoff Year */
-            cutoff_year: number;
-        };
-        /**
-         * ImportLocationRequest
-         * @description Select a BrightHub measurement location to import into the session.
-         */
-        ImportLocationRequest: {
-            /**
-             * Apply Calibration
-             * @default false
-             */
-            apply_calibration?: boolean;
-            /**
-             * Apply Cleaning Log
-             * @default true
-             */
-            apply_cleaning_log?: boolean;
-            /**
-             * Apply Cleaning Rules
-             * @default false
-             */
-            apply_cleaning_rules?: boolean;
-            /**
-             * Apply Deadband Offset
-             * @default false
-             */
-            apply_deadband_offset?: boolean;
-            /**
-             * Apply Orientation Offset
-             * @default false
-             */
-            apply_orientation_offset?: boolean;
-            /** Latitude Ddeg */
-            latitude_ddeg?: number | null;
-            /** Longitude Ddeg */
-            longitude_ddeg?: number | null;
-            /**
-             * Name
-             * @default
-             */
-            name?: string;
-            /** Uuid */
-            uuid: string;
-        };
-        /** ImportLocationResponse */
-        ImportLocationResponse: {
-            /**
-             * Datamodel Heights
-             * @default []
-             */
-            datamodel_heights?: number[];
-            /** Location */
-            location?: {
-                [key: string]: unknown;
-            } | null;
-            /** Measurement Type */
-            measurement_type?: string | null;
-            /** Project Name */
-            project_name?: string | null;
-            /**
-             * Status
-             * @default ok
-             */
-            status?: string;
-            /**
-             * Timeseries Columns
-             * @default []
-             */
-            timeseries_columns?: string[];
-            /** Timeseries End */
-            timeseries_end?: string | null;
-            /**
-             * Timeseries Rows
-             * @default 0
-             */
-            timeseries_rows?: number;
-            /** Timeseries Start */
-            timeseries_start?: string | null;
-            /** Uuid */
-            uuid: string;
-        };
-        /**
          * ImportRunconfigRequest
          * @description Import a complete runconfig JSON payload into the current session.
          */
@@ -7777,24 +6560,6 @@ export interface components {
             sensor_type: string | null;
             /** Statistics */
             statistics: string[];
-        };
-        /**
-         * InterpolateEra5Request
-         * @description Select which downloaded reanalysis becomes the interpolated long-term reference.
-         *
-         *     Previously ``source`` was a bare ``str = "era5"`` function parameter with no ``Body()``
-         *     annotation, so FastAPI bound it as a *query* parameter - every caller (including this
-         *     project's own frontend) sent it in the JSON body instead, which FastAPI silently ignored,
-         *     always falling back to the ``"era5"`` default. The MERRA-2 interpolation call added to fix
-         *     F-58/the "MERRA-2 stays unavailable" report therefore never actually interpolated MERRA-2
-         *     at all; it silently re-interpolated ERA5 a second time. A request body model is the fix.
-         */
-        InterpolateEra5Request: {
-            /**
-             * Source
-             * @default era5
-             */
-            source?: string;
         };
         /** InterpolateEra5ToSiteParameters */
         InterpolateEra5ToSiteParameters: {
@@ -7954,6 +6719,13 @@ export interface components {
             /** Other Channels */
             other_channels: components["schemas"]["OtherChannel"][];
         };
+        /** ListPipelinesParameters */
+        ListPipelinesParameters: Record<string, never>;
+        /** ListPipelinesResult */
+        ListPipelinesResult: {
+            /** Pipelines */
+            pipelines: components["schemas"]["SavedPipeline"][];
+        };
         /** ListSelectionsParameters */
         ListSelectionsParameters: Record<string, never>;
         /** ListSelectionsResult */
@@ -8068,32 +6840,6 @@ export interface components {
             /** Warning */
             warning?: string | null;
         };
-        /** MeasurementLocation */
-        MeasurementLocation: {
-            /** Latitude Ddeg */
-            latitude_ddeg?: number | null;
-            /** Longitude Ddeg */
-            longitude_ddeg?: number | null;
-            /** Measurement Station Type Id */
-            measurement_station_type_id?: string | number | null;
-            /**
-             * Name
-             * @default
-             */
-            name?: string;
-            /**
-             * Uuid
-             * @default
-             */
-            uuid?: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /** MeasurementLocationsResponse */
-        MeasurementLocationsResponse: {
-            /** Locations */
-            locations: components["schemas"]["MeasurementLocation"][];
-        };
         /** MethodCounts */
         MethodCounts: {
             /** Below Shear Gate */
@@ -8170,6 +6916,26 @@ export interface components {
             sequence: number;
             /** Warning */
             warning?: string | null;
+        };
+        /** OrderPipelineParameters */
+        OrderPipelineParameters: {
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** OrderPipelineResult */
+        OrderPipelineResult: {
+            /** Edges */
+            edges: components["schemas"]["PipelineEdge"][];
+            /** Order */
+            order: string[];
+            /** Steps */
+            steps: {
+                [key: string]: components["schemas"]["StepReport"];
+            };
+            /** To Run */
+            to_run: string[];
         };
         /**
          * OtherChannel
@@ -8298,6 +7064,38 @@ export interface components {
             records: number;
             /** Year */
             year: number;
+        };
+        /** PipelineEdge */
+        PipelineEdge: {
+            /** Artifact */
+            artifact: string;
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+        };
+        /** PipelineFromScenarioParameters */
+        PipelineFromScenarioParameters: {
+            /** Config Hash */
+            config_hash: string;
+            /** Sweep Id */
+            sweep_id: string;
+        };
+        /** PipelineFromScenarioResult */
+        PipelineFromScenarioResult: {
+            /** Config Hash */
+            config_hash: string;
+            /** Prefix Matches */
+            prefix_matches: boolean;
+            /** Prefix Note */
+            prefix_note?: string | null;
+            scenario: components["schemas"]["ScenarioAxes"];
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+            /** Sweep Id */
+            sweep_id: string;
         };
         /** PlotAnnualMeansParameters */
         PlotAnnualMeansParameters: Record<string, never>;
@@ -8725,45 +7523,6 @@ export interface components {
             /** Timestamp */
             timestamp: string;
         };
-        /** ReanalysisDataItem */
-        ReanalysisDataItem: {
-            /** Cache */
-            cache?: string | null;
-            /** Cached Through */
-            cached_through?: string | null;
-            /** Latitude */
-            latitude: number;
-            /** Longitude */
-            longitude: number;
-            /** Rows */
-            rows?: number | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /** ReanalysisDownloadRequest */
-        ReanalysisDownloadRequest: {
-            /** Dataset */
-            dataset: string;
-            /** Nodes */
-            nodes: components["schemas"]["ReanalysisNode"][];
-            /**
-             * Source
-             * @default brighthub
-             */
-            source?: string;
-        };
-        /** ReanalysisDownloadResponse */
-        ReanalysisDownloadResponse: {
-            /** Dataset */
-            dataset: string;
-            /** Items */
-            items: components["schemas"]["ReanalysisDataItem"][];
-            /**
-             * Source
-             * @default brighthub
-             */
-            source?: string;
-        };
         /**
          * ReanalysisExtrapolation
          * @description The reanalysis leg: ``ok``, ``no_op``, ``skipped`` (with the reason) or ``failed``.
@@ -8794,35 +7553,6 @@ export interface components {
             /** Wrote Hub Column */
             wrote_hub_column: boolean;
         };
-        /** ReanalysisNode */
-        ReanalysisNode: {
-            /** Bearing */
-            bearing?: string | null;
-            /** Distance Km */
-            distance_km?: number | null;
-            /** Distance Sq */
-            distance_sq?: number | null;
-            /** Latitude Ddeg */
-            latitude_ddeg: number;
-            /** Longitude Ddeg */
-            longitude_ddeg: number;
-        } & {
-            [key: string]: unknown;
-        };
-        /** ReanalysisNodesRequest */
-        ReanalysisNodesRequest: {
-            /** Latitude */
-            latitude: number;
-            /** Longitude */
-            longitude: number;
-        };
-        /** ReanalysisNodesResponse */
-        ReanalysisNodesResponse: {
-            /** Era5 Nodes */
-            era5_nodes: components["schemas"]["ReanalysisNode"][];
-            /** Merra2 Nodes */
-            merra2_nodes: components["schemas"]["ReanalysisNode"][];
-        };
         /** RedoLastChangeParameters */
         RedoLastChangeParameters: Record<string, never>;
         /** RedoLastChangeResult */
@@ -8834,7 +7564,7 @@ export interface components {
             /** Data Version */
             data_version: number;
             /** Detail */
-            detail: components["schemas"]["ApplyCleaningRuleResult"] | components["schemas"]["RemoveSensorsResult"] | components["schemas"]["BuildDataModelResult"] | components["schemas"]["RunConfig"];
+            detail: components["schemas"]["ApplyCleaningRuleResult"] | components["schemas"]["RemoveSensorsResult"] | components["schemas"]["BuildDataModelResult"] | components["schemas"]["RestoredEntry"] | components["schemas"]["RunConfig"];
             redone: components["schemas"]["LoggedCall"];
             /** Stale Artifacts */
             stale_artifacts: string[];
@@ -8941,6 +7671,19 @@ export interface components {
             data_model: string;
             /** Restored Paths */
             restored_paths: string[];
+        };
+        /**
+         * RestoredEntry
+         * @description Undoing or redoing a saved selection or pipeline: which one, and whether it is now
+         *     defined or absent.
+         */
+        RestoredEntry: {
+            /** Pipeline */
+            pipeline?: string | null;
+            /** Restored */
+            restored: string;
+            /** Selection */
+            selection?: string | null;
         };
         /**
          * RestoredPaths
@@ -9119,15 +7862,6 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * RunConfigUpdate
-         * @description Represent one dotted-key runconfig mutation in a batched config update request.
-         */
-        RunConfigUpdate: {
-            /** Key */
-            key: string;
-            value: components["schemas"]["JsonValue"];
-        };
         /** RunEnsembleParameters */
         RunEnsembleParameters: {
             /** Measured Col */
@@ -9177,6 +7911,11 @@ export interface components {
         RunLtcLinearLeastSquaresParameters: {
             /** Long Col */
             long_col: string;
+            /**
+             * Reference Source
+             * @default
+             */
+            reference_source?: string;
             /** Short Col */
             short_col: string;
         };
@@ -9190,26 +7929,6 @@ export interface components {
             /** Status */
             status: string;
         };
-        /**
-         * RunLtcRequest
-         * @description Request a long-term correction run using the selected measured and reference columns.
-         */
-        RunLtcRequest: {
-            /** Long Col */
-            long_col: string;
-            /**
-             * Long Dir Col
-             * @default
-             */
-            long_dir_col?: string;
-            /** Short Col */
-            short_col: string;
-            /**
-             * Short Dir Col
-             * @default
-             */
-            short_dir_col?: string;
-        };
         /** RunLtcSpeedsortParameters */
         RunLtcSpeedsortParameters: {
             /** Long Col */
@@ -9219,6 +7938,11 @@ export interface components {
              * @default
              */
             long_dir_col?: string;
+            /**
+             * Reference Source
+             * @default
+             */
+            reference_source?: string;
             /** Short Col */
             short_col: string;
             /**
@@ -9241,6 +7965,11 @@ export interface components {
         RunLtcTotalLeastSquaresParameters: {
             /** Long Col */
             long_col: string;
+            /**
+             * Reference Source
+             * @default
+             */
+            reference_source?: string;
             /** Short Col */
             short_col: string;
         };
@@ -9258,6 +7987,11 @@ export interface components {
         RunLtcVarianceRatioParameters: {
             /** Long Col */
             long_col: string;
+            /**
+             * Reference Source
+             * @default
+             */
+            reference_source?: string;
             /** Short Col */
             short_col: string;
         };
@@ -9280,6 +8014,11 @@ export interface components {
              * @default
              */
             long_dir_col?: string;
+            /**
+             * Reference Source
+             * @default
+             */
+            reference_source?: string;
             /** Short Col */
             short_col: string;
             /**
@@ -9313,6 +8052,32 @@ export interface components {
             };
             uncertainty?: components["schemas"]["CalculateUncertaintyRequest"] | null;
         };
+        /** SavePipelineParameters */
+        SavePipelineParameters: {
+            /** Name */
+            name: string;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** SavePipelineResult */
+        SavePipelineResult: {
+            /** Actor */
+            actor: string | null;
+            /** Name */
+            name: string;
+            /** Replaced */
+            replaced: boolean;
+            /** Saved At */
+            saved_at: string | null;
+            /** Status */
+            status: string;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+        };
         /** SaveRunConfigParameters */
         SaveRunConfigParameters: Record<string, never>;
         /** SaveRunConfigResult */
@@ -9331,6 +8096,19 @@ export interface components {
         SaveScenarioRequest: {
             /** Name */
             name: string;
+        };
+        /** SavedPipeline */
+        SavedPipeline: {
+            /** Actor */
+            actor: string | null;
+            /** Name */
+            name: string;
+            /** Saved At */
+            saved_at: string | null;
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
         };
         /**
          * ScatterPairsRequest
@@ -9356,6 +8134,23 @@ export interface components {
             x_channel: string;
             /** Y Channel */
             y_channel: string;
+        };
+        /** ScenarioAxes */
+        ScenarioAxes: {
+            /** Analyst Shear Alpha */
+            analyst_shear_alpha: number | null;
+            /** Hub Height M */
+            hub_height_m: number | null;
+            /** Ltc Algorithm */
+            ltc_algorithm: string;
+            /** Reference Policy */
+            reference_policy: string | null;
+            /** Reference Source */
+            reference_source: string;
+            /** Shear Fit Policy */
+            shear_fit_policy: string | null;
+            /** Shear Model */
+            shear_model: string;
         };
         /** SectorModel */
         SectorModel: {
@@ -9567,14 +8362,6 @@ export interface components {
             workspace_dir: string | null;
         };
         /**
-         * SetEarthDataHubCredentialRequest
-         * @description Store the session's EarthDataHub PAT for the direct-ERA5 path.
-         */
-        SetEarthDataHubCredentialRequest: {
-            /** Pat */
-            pat: string;
-        };
-        /**
          * ShearClamping
          * @description How often the shear exponent hit the backstop. Empty when a table is built before any
          *     shear timeseries carried the statistics.
@@ -9721,6 +8508,29 @@ export interface components {
             /** Std */
             std?: number | null;
         };
+        /** StepReport */
+        StepReport: {
+            /** Errors */
+            errors?: string[] | null;
+            /** Inputs */
+            inputs: {
+                [key: string]: string[];
+            };
+            /** Operation */
+            operation: string;
+            /** Outputs */
+            outputs: string[];
+            /** Parameters */
+            parameters?: {
+                [key: string]: unknown;
+            } | null;
+            /** Reason */
+            reason?: string | null;
+            /** Status */
+            status: string;
+            /** Waiting On */
+            waiting_on?: string[] | null;
+        };
         /** StoredSelection */
         StoredSelection: {
             /** Actor */
@@ -9834,6 +8644,36 @@ export interface components {
             thresholds?: {
                 [key: string]: number;
             } | null;
+        };
+        /** SweepSpecFromPipelineParameters */
+        SweepSpecFromPipelineParameters: {
+            /** Steps */
+            steps: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** SweepSpecFromPipelineResult */
+        SweepSpecFromPipelineResult: {
+            spec: components["schemas"]["SweepSpecLevels"];
+            /** Unmatched */
+            unmatched: components["schemas"]["UnmatchedChoice"][];
+        };
+        /** SweepSpecLevels */
+        SweepSpecLevels: {
+            /** Analyst Shear Alpha */
+            analyst_shear_alpha: number | null;
+            /** Hub Height M */
+            hub_height_m: number | null;
+            /** Ltc Algorithms */
+            ltc_algorithms: string[];
+            /** Reference Policies */
+            reference_policies: string[];
+            /** Reference Sources */
+            reference_sources: string[];
+            /** Shear Fit Policies */
+            shear_fit_policies: string[];
+            /** Shear Models */
+            shear_models: string[];
         };
         /**
          * SweepSpreadRequest
@@ -10068,14 +8908,6 @@ export interface components {
             /** Warning */
             warning?: string | null;
         };
-        /**
-         * UndoCleaningRuleRequest
-         * @description Select one cleaning log entry to remove and replay around.
-         */
-        UndoCleaningRuleRequest: {
-            /** Entry Index */
-            entry_index: number;
-        };
         /** UndoCleaningRuleResult */
         UndoCleaningRuleResult: {
             /** Data Version */
@@ -10106,7 +8938,7 @@ export interface components {
             /** Data Version */
             data_version: number;
             /** Detail */
-            detail: components["schemas"]["UndoCleaningRuleResult"] | components["schemas"]["RestoredDataModel"] | components["schemas"]["RestoredPaths"] | components["schemas"]["RestoredSensors"];
+            detail: components["schemas"]["UndoCleaningRuleResult"] | components["schemas"]["RestoredDataModel"] | components["schemas"]["RestoredPaths"] | components["schemas"]["RestoredSensors"] | components["schemas"]["RestoredEntry"];
             /** Stale Artifacts */
             stale_artifacts: string[];
             /** Stale Reasons */
@@ -10118,6 +8950,13 @@ export interface components {
             undone: components["schemas"]["LoggedCall"];
             /** Warning */
             warning?: string | null;
+        };
+        /** UnmatchedChoice */
+        UnmatchedChoice: {
+            /** Axis */
+            axis: string;
+            /** Why */
+            why: string;
         };
         /** UpdateProject */
         UpdateProject: {
@@ -10132,14 +8971,6 @@ export interface components {
             key: string;
             /** Value */
             value: string;
-        };
-        /**
-         * UpdateRunConfigRequest
-         * @description Submit a partial run configuration payload for a session.
-         */
-        UpdateRunConfigRequest: {
-            /** Updates */
-            updates?: components["schemas"]["RunConfigUpdate"][];
         };
         /** UpdateRunConfigResult */
         UpdateRunConfigResult: {
@@ -10304,386 +9135,6 @@ export interface components {
             label: string;
             /** Mean Speed */
             mean_speed: number | null;
-        };
-        /**
-         * WorkflowCompareDiffEntry
-         * @description Represent one runconfig difference between two compared sessions.
-         */
-        WorkflowCompareDiffEntry: {
-            a: components["schemas"]["JsonValue"];
-            b: components["schemas"]["JsonValue"];
-            /** Key */
-            key: string;
-        };
-        /**
-         * WorkflowCompareMetric
-         * @description Represent one comparison metric row across selected sessions.
-         */
-        WorkflowCompareMetric: {
-            /** Name */
-            name: string;
-            /** Unit */
-            unit: string;
-            /** Values */
-            values?: {
-                [key: string]: number | null;
-            };
-        };
-        /**
-         * WorkflowComparePlot
-         * @description Represent one Plotly figure payload serialized for dashboard rendering.
-         */
-        WorkflowComparePlot: {
-            /** Plotly Json */
-            plotly_json: string;
-            /** Title */
-            title: string;
-        };
-        /**
-         * WorkflowComparePlots
-         * @description Group all comparison dashboard figures returned from the backend.
-         */
-        WorkflowComparePlots: {
-            ltc_scatter?: components["schemas"]["WorkflowComparePlot"] | null;
-            uncertainty_tornado?: components["schemas"]["WorkflowComparePlot"] | null;
-            weibull?: components["schemas"]["WorkflowComparePlot"] | null;
-            /** Windrose */
-            windrose?: components["schemas"]["WorkflowComparePlot"][];
-        };
-        /**
-         * WorkflowCompareRequest
-         * @description Request comparing one parent session against selected branch sessions.
-         */
-        WorkflowCompareRequest: {
-            /** Branch Session Ids */
-            branch_session_ids?: string[];
-        };
-        /**
-         * WorkflowCompareResponse
-         * @description Return branch comparison metrics, config diffs, and plot payloads.
-         */
-        WorkflowCompareResponse: {
-            /** Config Diff */
-            config_diff?: {
-                [key: string]: components["schemas"]["WorkflowCompareDiffEntry"][];
-            };
-            /** Metrics */
-            metrics?: components["schemas"]["WorkflowCompareMetric"][];
-            plots?: components["schemas"]["WorkflowComparePlots"];
-            /** Session Ids */
-            session_ids?: string[];
-            /**
-             * Status
-             * @default ok
-             */
-            status?: string;
-        };
-        /**
-         * WorkflowDispatchCapabilitiesResponse
-         * @description Return dispatch-capability metadata used by frontend parameter hinting.
-         */
-        WorkflowDispatchCapabilitiesResponse: {
-            /** Capabilities */
-            capabilities?: components["schemas"]["WorkflowDispatchCapability"][];
-        };
-        /**
-         * WorkflowDispatchCapability
-         * @description Describe dispatch signature hints for one workflow template id.
-         */
-        WorkflowDispatchCapability: {
-            /** Optional Params */
-            optional_params?: string[];
-            /** Required Params */
-            required_params?: string[];
-            /** Template Id */
-            template_id: string;
-        };
-        /**
-         * WorkflowExecuteRequest
-         * @description Submit an in-memory workflow graph for auto or manual execution.
-         */
-        WorkflowExecuteRequest: {
-            /** Edges */
-            edges?: components["schemas"]["WorkflowExecutionEdgeRequest"][];
-            /**
-             * Mode
-             * @default auto
-             * @enum {string}
-             */
-            mode?: "auto" | "manual";
-            /** Nodes */
-            nodes?: components["schemas"]["WorkflowExecutionNodeRequest"][];
-        };
-        /**
-         * WorkflowExecutionEdgeRequest
-         * @description Represent one directed dependency edge between workflow nodes.
-         */
-        WorkflowExecutionEdgeRequest: {
-            /** Source */
-            source: string;
-            /** Target */
-            target: string;
-        };
-        /**
-         * WorkflowExecutionEvent
-         * @description Emit one execution lifecycle event for status views and live streaming.
-         */
-        WorkflowExecutionEvent: {
-            /** Event Type */
-            event_type: string;
-            /** Message */
-            message?: string | null;
-            /** Node Id */
-            node_id?: string | null;
-            /** Run Id */
-            run_id: string;
-            /** Status */
-            status?: string | null;
-            /**
-             * Timestamp
-             * Format: date-time
-             */
-            timestamp: string;
-        };
-        /**
-         * WorkflowExecutionNodeRequest
-         * @description Represent one workflow node payload sent by the canvas execution client.
-         */
-        WorkflowExecutionNodeRequest: {
-            /** Config */
-            config?: {
-                [key: string]: components["schemas"]["JsonValue"];
-            };
-            /** Id */
-            id: string;
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "group" | "operation" | "dataset" | "fork";
-            /**
-             * Label
-             * @default
-             */
-            label?: string;
-            /** Status */
-            status?: string | null;
-            /** Template Id */
-            template_id?: string | null;
-        };
-        /**
-         * WorkflowExecutionResponse
-         * @description Return aggregated execution result details for one run or step call.
-         */
-        WorkflowExecutionResponse: {
-            /** Events */
-            events?: components["schemas"]["WorkflowExecutionEvent"][];
-            /** Node Statuses */
-            node_statuses?: {
-                [key: string]: string;
-            };
-            /** Run Id */
-            run_id: string;
-            /** Status */
-            status: string;
-        };
-        /**
-         * WorkflowExecutionStatusResponse
-         * @description Return the session-scoped execution status snapshot.
-         */
-        WorkflowExecutionStatusResponse: {
-            /** Cancelled */
-            cancelled: boolean;
-            /** Events */
-            events?: components["schemas"]["WorkflowExecutionEvent"][];
-            /** Is Running */
-            is_running: boolean;
-            /** Node Statuses */
-            node_statuses?: {
-                [key: string]: string;
-            };
-            /** Run Id */
-            run_id: string | null;
-        };
-        /**
-         * WorkflowForkBranchRequest
-         * @description Request forking a new workflow branch session from the current session.
-         */
-        WorkflowForkBranchRequest: {
-            /** From Node Id */
-            from_node_id?: string | null;
-            /** Name */
-            name?: string | null;
-        };
-        /**
-         * WorkflowForkBranchResponse
-         * @description Return forked branch session metadata for frontend branch creation.
-         */
-        WorkflowForkBranchResponse: {
-            /** Branch Name */
-            branch_name: string;
-            /** Branch Session Id */
-            branch_session_id: string;
-            /** From Node Id */
-            from_node_id?: string | null;
-            /** Parent Session Id */
-            parent_session_id: string;
-            /**
-             * Status
-             * @default ok
-             */
-            status?: string;
-        };
-        /**
-         * WorkflowLoadSnapshotResponse
-         * @description Return one saved workflow snapshot payload.
-         */
-        WorkflowLoadSnapshotResponse: {
-            /** Name */
-            name: string;
-            /**
-             * Saved At
-             * Format: date-time
-             */
-            saved_at: string;
-            snapshot: components["schemas"]["JsonValue"];
-        };
-        /**
-         * WorkflowReplaceRunConfigRequest
-         * @description Replace the active canvas run configuration before executing a new run.
-         */
-        WorkflowReplaceRunConfigRequest: {
-            /** Config */
-            config?: {
-                [key: string]: components["schemas"]["JsonValue"];
-            };
-        };
-        /**
-         * WorkflowRunCompareRequest
-         * @description Select two to four archived runs from one session for comparison.
-         */
-        WorkflowRunCompareRequest: {
-            /** Run Ids */
-            run_ids?: string[];
-        };
-        /**
-         * WorkflowRunCompareResponse
-         * @description Return metrics, config diffs, and step-wise results for archived runs.
-         */
-        WorkflowRunCompareResponse: {
-            /** Config Diff */
-            config_diff?: {
-                [key: string]: components["schemas"]["WorkflowCompareDiffEntry"][];
-            };
-            /** Metrics */
-            metrics?: components["schemas"]["WorkflowCompareMetric"][];
-            /** Run Ids */
-            run_ids?: string[];
-            /**
-             * Status
-             * @default ok
-             */
-            status?: string;
-            /** Steps */
-            steps?: components["schemas"]["WorkflowRunStepComparison"][];
-        };
-        /**
-         * WorkflowRunListResponse
-         * @description Return all archived workflow executions for the active session.
-         */
-        WorkflowRunListResponse: {
-            /** Runs */
-            runs?: components["schemas"]["WorkflowRunSummary"][];
-        };
-        /**
-         * WorkflowRunStepComparison
-         * @description Compare the persisted outcome of one canvas node across selected runs.
-         */
-        WorkflowRunStepComparison: {
-            /** Label */
-            label: string;
-            /** Node Id */
-            node_id: string;
-            /** Results */
-            results?: {
-                [key: string]: string | null;
-            };
-            /** Statuses */
-            statuses?: {
-                [key: string]: string;
-            };
-            /** Template Id */
-            template_id?: string | null;
-        };
-        /**
-         * WorkflowRunSummary
-         * @description Describe one immutable canvas execution saved for later comparison.
-         */
-        WorkflowRunSummary: {
-            /**
-             * Completed Node Count
-             * @default 0
-             */
-            completed_node_count?: number;
-            /** Finished At */
-            finished_at?: string | null;
-            /**
-             * Node Count
-             * @default 0
-             */
-            node_count?: number;
-            /** Run Id */
-            run_id: string;
-            /** Started At */
-            started_at?: string | null;
-            /** Status */
-            status: string;
-        };
-        /**
-         * WorkflowSaveSnapshotRequest
-         * @description Persist one workflow designer snapshot payload for the active session.
-         */
-        WorkflowSaveSnapshotRequest: {
-            snapshot: components["schemas"]["JsonValue"];
-        };
-        /**
-         * WorkflowSaveSnapshotResponse
-         * @description Return metadata for a snapshot persisted to session workspace storage.
-         */
-        WorkflowSaveSnapshotResponse: {
-            /** Name */
-            name: string;
-            /**
-             * Saved At
-             * Format: date-time
-             */
-            saved_at: string;
-            /**
-             * Status
-             * @default ok
-             */
-            status?: string;
-        };
-        /**
-         * WorkflowSnapshotListResponse
-         * @description Return all workflow snapshots available for the active session.
-         */
-        WorkflowSnapshotListResponse: {
-            /** Snapshots */
-            snapshots?: components["schemas"]["WorkflowSnapshotSummary"][];
-        };
-        /**
-         * WorkflowSnapshotSummary
-         * @description Describe one saved snapshot available for a session.
-         */
-        WorkflowSnapshotSummary: {
-            /** Name */
-            name: string;
-            /**
-             * Saved At
-             * Format: date-time
-             */
-            saved_at: string;
         };
         /** XgboostMetrics */
         XgboostMetrics: {
@@ -11415,328 +9866,6 @@ export interface operations {
             };
         };
     };
-    get_atmospheric_conditions_api_sessions__session_id__atmosphere_get: {
-        parameters: {
-            query?: {
-                temperature_sensor?: string;
-                pressure_sensor?: string;
-                humidity_sensor?: string;
-            };
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    brighthub_import_location_api_sessions__session_id__brighthub_import_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ImportLocationRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportLocationResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    brighthub_locations_api_sessions__session_id__brighthub_locations_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MeasurementLocationsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    brighthub_datamodel_api_sessions__session_id__brighthub_locations__uuid__datamodel_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                uuid: string;
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DataModelResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    brighthub_login_api_sessions__session_id__brighthub_login_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BrightHubLoginRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BrightHubLoginResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    brighthub_logout_api_sessions__session_id__brighthub_logout_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    brighthub_reanalysis_download_api_sessions__session_id__brighthub_reanalysis_download_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReanalysisDownloadRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReanalysisDownloadResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    brighthub_reanalysis_nodes_api_sessions__session_id__brighthub_reanalysis_nodes_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReanalysisNodesRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReanalysisNodesResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    brighthub_status_api_sessions__session_id__brighthub_status_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BrightHubStatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     chat_api_sessions__session_id__chat_post: {
         parameters: {
             query?: never;
@@ -11774,158 +9903,6 @@ export interface operations {
             };
         };
     };
-    apply_cleaning_api_sessions__session_id__cleaning_apply_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ApplyCleaningRuleRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_cleaning_log_api_sessions__session_id__cleaning_log_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    undo_cleaning_api_sessions__session_id__cleaning_undo_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UndoCleaningRuleRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    run_clipping_api_sessions__session_id__clipping_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ClippingRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_clipping_columns_api_sessions__session_id__clipping_columns_get: {
         parameters: {
             query: {
@@ -11940,118 +9917,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_sensor_comparison_api_sessions__session_id__comparison_get: {
-        parameters: {
-            query?: {
-                sensor_a?: string;
-                sensor_b?: string;
-            };
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_config_api_sessions__session_id__config_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_config_api_sessions__session_id__config_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateRunConfigRequest"];
-            };
-        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -12114,116 +9979,6 @@ export interface operations {
             };
         };
     };
-    get_sensor_coverage_api_sessions__session_id__coverage__sensor_name__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-                sensor_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    build_data_model_api_sessions__session_id__datamodel_build_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BuildDataModelRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    draft_data_model_api_sessions__session_id__datamodel_draft_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     load_dataset_into_session_api_sessions__session_id__datasets__dataset_id__load_post: {
         parameters: {
             query?: never;
@@ -12237,309 +9992,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_energy_metrics_api_sessions__session_id__energy__speed_sensor__get: {
-        parameters: {
-            query?: {
-                direction_sensor?: string;
-            };
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-                speed_sensor: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    run_ensemble_api_sessions__session_id__ensemble_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EnsembleRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_earthdatahub_credential_api_sessions__session_id__era5_credential_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetEarthDataHubCredentialRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    clear_earthdatahub_credential_api_sessions__session_id__era5_credential_delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_earthdatahub_credential_status_api_sessions__session_id__era5_credential_status_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    extract_era5_api_sessions__session_id__era5_extract_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ExtractEra5Request"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    interpolate_era5_api_sessions__session_id__era5_interpolate_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["InterpolateEra5Request"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    find_era5_nodes_api_sessions__session_id__era5_nodes_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FindEra5NodesRequest"];
-            };
-        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -12683,316 +10135,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    extrapolate_hub_api_sessions__session_id__extrapolation_hub_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ExtrapolateHubRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_extreme_winds_api_sessions__session_id__extremes__speed_sensor__get: {
-        parameters: {
-            query?: {
-                source?: string;
-                min_year_coverage?: number;
-            };
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-                speed_sensor: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    analyze_homogeneity_api_sessions__session_id__homogeneity_analyze_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["HomogeneityAnalyzeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    apply_homogeneity_api_sessions__session_id__homogeneity_apply_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["HomogeneityApplyRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    run_ltc_api_sessions__session_id__ltc__algorithm__post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-                algorithm: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RunLtcRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_site_map_api_sessions__session_id__map_site_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_mast_effects_api_sessions__session_id__mast_effects_get: {
-        parameters: {
-            query?: {
-                sensor_a?: string;
-                sensor_b?: string;
-                direction_sensor?: string;
-                min_speed_mps?: number;
-                min_sector_records?: number;
-            };
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_mcp_readiness_api_sessions__session_id__mcp_readiness__speed_sensor__get: {
-        parameters: {
-            query?: {
-                reference_sensor?: string;
-            };
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-                speed_sensor: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
                 };
             };
             /** @description Validation Error */
@@ -13831,6 +10973,61 @@ export interface operations {
             };
         };
     };
+    operation_build_constant_shear_table_api_sessions__session_id__operations_build_constant_shear_table_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["BuildConstantShearTableParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuildConstantShearTableResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
     operation_build_data_model_api_sessions__session_id__operations_build_data_model_post: {
         parameters: {
             query?: never;
@@ -14075,6 +11272,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CalculateRoughnessTimeseriesResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
+    operation_calculate_scenario_uncertainty_api_sessions__session_id__operations_calculate_scenario_uncertainty_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CalculateScenarioUncertaintyParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalculateScenarioUncertaintyResult"];
                 };
             };
             /** @description Refused: the request cannot be answered as asked */
@@ -15536,6 +12788,61 @@ export interface operations {
             };
         };
     };
+    operation_delete_pipeline_api_sessions__session_id__operations_delete_pipeline_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeletePipelineParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletePipelineResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
     operation_delete_selection_api_sessions__session_id__operations_delete_selection_post: {
         parameters: {
             query?: never;
@@ -16966,6 +14273,61 @@ export interface operations {
             };
         };
     };
+    operation_list_pipelines_api_sessions__session_id__operations_list_pipelines_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ListPipelinesParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListPipelinesResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
     operation_list_selections_api_sessions__session_id__operations_list_selections_post: {
         parameters: {
             query?: never;
@@ -17186,6 +14548,61 @@ export interface operations {
             };
         };
     };
+    operation_order_pipeline_api_sessions__session_id__operations_order_pipeline_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OrderPipelineParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderPipelineResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
     operation_parse_datamodel_api_sessions__session_id__operations_parse_datamodel_post: {
         parameters: {
             query?: never;
@@ -17265,6 +14682,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ParseTimeseriesResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
+    operation_pipeline_from_scenario_api_sessions__session_id__operations_pipeline_from_scenario_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PipelineFromScenarioParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineFromScenarioResult"];
                 };
             };
             /** @description Refused: the request cannot be answered as asked */
@@ -18506,6 +15978,61 @@ export interface operations {
             };
         };
     };
+    operation_save_pipeline_api_sessions__session_id__operations_save_pipeline_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SavePipelineParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavePipelineResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
     operation_save_run_config_api_sessions__session_id__operations_save_run_config_post: {
         parameters: {
             query?: never;
@@ -18585,6 +16112,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SummariseChannelsResult"];
+                };
+            };
+            /** @description Refused: the request cannot be answered as asked */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description An upstream service failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+        };
+    };
+    operation_sweep_spec_from_pipeline_api_sessions__session_id__operations_sweep_spec_from_pipeline_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-GoKaatru-Session"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SweepSpecFromPipelineParameters"] | null;
+            };
+        };
+        responses: {
+            /** @description The operation's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SweepSpecFromPipelineResult"];
                 };
             };
             /** @description Refused: the request cannot be answered as asked */
@@ -18968,42 +16550,6 @@ export interface operations {
             };
         };
     };
-    get_wind_persistence_api_sessions__session_id__persistence__speed_sensor__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-                speed_sensor: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_plot_api_sessions__session_id__plots__plot_name__post: {
         parameters: {
             query?: never;
@@ -19029,77 +16575,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlotResult"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_qc_diagnostics_api_sessions__session_id__qc_diagnostics_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_wind_ramps_api_sessions__session_id__ramps__speed_sensor__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-                speed_sensor: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
                 };
             };
             /** @description Validation Error */
@@ -19193,84 +16668,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    calculate_roughness_api_sessions__session_id__roughness_calculate_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CalculateShearRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    build_roughness_table_api_sessions__session_id__roughness_table_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BuildTableRequest"];
-            };
-        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -19513,45 +16910,6 @@ export interface operations {
             };
         };
     };
-    delete_sensors_api_sessions__session_id__sensors_delete_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DeleteSensorsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_series_api_sessions__session_id__series_get: {
         parameters: {
             query: {
@@ -19646,84 +17004,6 @@ export interface operations {
             };
         };
     };
-    calculate_shear_api_sessions__session_id__shear_calculate_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CalculateShearRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    build_shear_table_api_sessions__session_id__shear_table_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BuildTableRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_sensor_statistics_api_sessions__session_id__statistics__sensor_name__get: {
         parameters: {
             query?: never;
@@ -19745,41 +17025,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SensorStatisticsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_summary_api_sessions__session_id__summary_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
                 };
             };
             /** @description Validation Error */
@@ -20126,81 +17371,6 @@ export interface operations {
             };
         };
     };
-    get_turbulence_analysis_api_sessions__session_id__turbulence__speed_sensor__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-                speed_sensor: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    calculate_uncertainty_api_sessions__session_id__uncertainty_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CalculateUncertaintyRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     upload_datamodel_api_sessions__session_id__uploads_datamodel_post: {
         parameters: {
             query?: never;
@@ -20265,582 +17435,6 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_vertical_structure_api_sessions__session_id__vertical_structure_get: {
-        parameters: {
-            query?: {
-                speed_sensors?: string;
-                direction_sensors?: string;
-            };
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_wind_climate_api_sessions__session_id__wind_climate__speed_sensor__get: {
-        parameters: {
-            query?: {
-                direction_sensor?: string;
-            };
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-                speed_sensor: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    fork_workflow_branch_api_sessions__session_id__workflow_branches_fork_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowForkBranchRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkflowForkBranchResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_workflow_dispatch_capabilities_api_sessions__session_id__workflow_capabilities_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkflowDispatchCapabilitiesResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    compare_workflow_branches_api_sessions__session_id__workflow_compare_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowCompareRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkflowCompareResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    execute_workflow_api_sessions__session_id__workflow_execute_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowExecuteRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkflowExecutionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    execute_workflow_step_api_sessions__session_id__workflow_execute_step_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowExecuteRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkflowExecutionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    execute_workflow_stream_api_sessions__session_id__workflow_execute_stream_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowExecuteRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    replace_workflow_run_config_api_sessions__session_id__workflow_run_config_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowReplaceRunConfigRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_workflow_runs_api_sessions__session_id__workflow_runs_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkflowRunListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    compare_workflow_runs_api_sessions__session_id__workflow_runs_compare_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowRunCompareRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkflowRunCompareResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_workflow_snapshots_api_sessions__session_id__workflow_snapshots_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkflowSnapshotListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    load_workflow_snapshot_api_sessions__session_id__workflow_snapshots__snapshot_name__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-                snapshot_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkflowLoadSnapshotResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    save_workflow_snapshot_api_sessions__session_id__workflow_snapshots__snapshot_name__put: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-                snapshot_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowSaveSnapshotRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkflowSaveSnapshotResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_workflow_execution_status_api_sessions__session_id__workflow_status_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkflowExecutionStatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    stop_workflow_execution_api_sessions__session_id__workflow_stop_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-GoKaatru-Session"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: string | boolean | null;
                     };
                 };
             };

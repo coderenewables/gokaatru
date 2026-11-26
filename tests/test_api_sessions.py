@@ -15,6 +15,7 @@ from server.api.main import create_app
 from server.schemas.common import Coordinate
 from server.state.manager import SessionManager
 from server.tools.era5 import Era5UpstreamError
+from tests.http_operations import operation
 
 
 @pytest.fixture
@@ -86,28 +87,15 @@ def test_config_step_requires_saved_hub_height(client: TestClient) -> None:
     session_id = create_response.json()["session_id"]
     headers = {"X-GoKaatru-Session": session_id}
 
-    without_hub = client.put(
-        f"/api/sessions/{session_id}/config",
-        headers=headers,
-        json={
-            "updates": [
-                {"key": "project_name", "value": "North Ridge"},
-                {"key": "location.latitude", "value": 52.4},
-                {"key": "location.longitude", "value": 4.8},
-            ]
-        },
-    )
-    assert without_hub.status_code == 200
+    for key, value in [("project_name", '"North Ridge"'), ("location.latitude", "52.4"), ("location.longitude", "4.8")]:
+        without_hub = operation(client, session_id, "update_run_config", key=key, value=value)
+        assert without_hub.status_code == 200, without_hub.text
 
     summary_without_hub = client.get(f"/api/sessions/{session_id}", headers=headers)
     assert summary_without_hub.status_code == 200
     assert "config" not in summary_without_hub.json()["completed_steps"]
 
-    with_hub = client.put(
-        f"/api/sessions/{session_id}/config",
-        headers=headers,
-        json={"updates": [{"key": "hub_height_m", "value": 150}]},
-    )
+    with_hub = operation(client, session_id, "update_run_config", key="hub_height_m", value="150")
     assert with_hub.status_code == 200
 
     summary_with_hub = client.get(f"/api/sessions/{session_id}", headers=headers)
@@ -119,7 +107,6 @@ def test_era5_extract_upstream_failure_returns_502(client: TestClient, monkeypat
     """Verify transient EarthDataHub failures are surfaced as 502 instead of uncaught 500 responses."""
     create_response = client.post("/api/sessions")
     session_id = create_response.json()["session_id"]
-    headers = {"X-GoKaatru-Session": session_id}
 
     def fail_extract(*args: object, **kwargs: object) -> dict:
         del args, kwargs
@@ -127,17 +114,11 @@ def test_era5_extract_upstream_failure_returns_502(client: TestClient, monkeypat
             "ERA5 download failed while reading the remote EarthDataHub payload. Please retry the request."
         )
 
-    monkeypatch.setattr("server.api.routes.analysis._extract_era5_data", fail_extract)
+    monkeypatch.setattr("server.tools.era5._extract_era5_data", fail_extract)
 
-    response = client.post(
-        f"/api/sessions/{session_id}/era5/extract",
-        headers=headers,
-        json={
-            "latitude": 52.4,
-            "longitude": 4.8,
-            "start_date": "2024-01-01",
-            "end_date": "2024-01-02",
-        },
+    response = operation(
+        client, session_id, "extract_era5_data",
+        latitude=52.4, longitude=4.8, start_date="2024-01-01", end_date="2024-01-02",
     )
 
     assert response.status_code == 502
@@ -145,7 +126,10 @@ def test_era5_extract_upstream_failure_returns_502(client: TestClient, monkeypat
 
 
 def test_era5_interpolate_reads_source_from_the_request_body(tmp_path: Path) -> None:
-    """Verify `POST /era5/interpolate` reads `source` from the JSON body, not a query string.
+    """Verify interpolation over HTTP reads `source` from the JSON body, not a query string.
+
+    The hand-written `POST /era5/interpolate` this was written against was retired (P3-17e);
+    the generated route takes the same body, and this holds it to the same answer.
 
     Regression: `source` used to be a bare `str = "era5"` function parameter with no
     `Body()` annotation, so FastAPI bound it as a *query* parameter. Every real caller
@@ -164,7 +148,6 @@ def test_era5_interpolate_reads_source_from_the_request_body(tmp_path: Path) -> 
         with TestClient(app) as client:
             create_response = client.post("/api/sessions")
             session_id = create_response.json()["session_id"]
-            headers = {"X-GoKaatru-Session": session_id}
 
             state = manager.get_session(session_id)
             state.set_coordinate(Coordinate(latitude=10.0, longitude=20.0, elevation_m=0.0))
@@ -178,11 +161,7 @@ def test_era5_interpolate_reads_source_from_the_request_body(tmp_path: Path) -> 
                     {"Spd_50m": [5.0] * 5, "Dir_50m": [180.0] * 5}, index=index
                 )
 
-            response = client.post(
-                f"/api/sessions/{session_id}/era5/interpolate",
-                headers=headers,
-                json={"source": "merra2"},
-            )
+            response = operation(client, session_id, "interpolate_era5_to_site", source="merra2")
     finally:
         app.dependency_overrides.clear()
 
@@ -194,34 +173,30 @@ def test_era5_interpolate_reads_source_from_the_request_body(tmp_path: Path) -> 
 
 
 def test_earthdatahub_credential_lifecycle(client: TestClient) -> None:
-    """The EarthDataHub PAT is set/cleared per session via the HTTP route, not an env file.
+    """The EarthDataHub PAT is set/cleared per session over HTTP, not an env file.
 
-    Mirrors BrightHub's login/logout/status shape (`/brighthub/login`, `/brighthub/logout`,
-    `/brighthub/status`), just without an OAuth round trip — EarthDataHub's PAT is a static
-    credential, stored as entered.
+    Mirrors BrightHub's login/logout/status operations, just without an OAuth round trip —
+    EarthDataHub's PAT is a static credential, stored as entered.
     """
     create_response = client.post("/api/sessions")
     session_id = create_response.json()["session_id"]
-    headers = {"X-GoKaatru-Session": session_id}
 
-    status_before = client.get(f"/api/sessions/{session_id}/era5/credential/status", headers=headers)
+    status_before = operation(client, session_id, "earthdatahub_status")
     assert status_before.status_code == 200
     assert status_before.json() == {"configured": False}
 
-    set_response = client.post(
-        f"/api/sessions/{session_id}/era5/credential", headers=headers, json={"pat": "test-pat"}
-    )
+    set_response = operation(client, session_id, "earthdatahub_set_credential", pat="test-pat")
     assert set_response.status_code == 200
     assert set_response.json() == {"status": "ok", "configured": True}
 
-    status_after_set = client.get(f"/api/sessions/{session_id}/era5/credential/status", headers=headers)
+    status_after_set = operation(client, session_id, "earthdatahub_status")
     assert status_after_set.json() == {"configured": True}
 
-    clear_response = client.delete(f"/api/sessions/{session_id}/era5/credential", headers=headers)
+    clear_response = operation(client, session_id, "earthdatahub_clear_credential")
     assert clear_response.status_code == 200
     assert clear_response.json() == {"status": "ok", "configured": False}
 
-    status_after_clear = client.get(f"/api/sessions/{session_id}/era5/credential/status", headers=headers)
+    status_after_clear = operation(client, session_id, "earthdatahub_status")
     assert status_after_clear.json() == {"configured": False}
 
 
@@ -229,9 +204,8 @@ def test_earthdatahub_credential_rejects_blank_pat(client: TestClient) -> None:
     """A blank PAT is a 400, not a silently-accepted empty credential."""
     create_response = client.post("/api/sessions")
     session_id = create_response.json()["session_id"]
-    headers = {"X-GoKaatru-Session": session_id}
 
-    response = client.post(f"/api/sessions/{session_id}/era5/credential", headers=headers, json={"pat": "  "})
+    response = operation(client, session_id, "earthdatahub_set_credential", pat="  ")
     assert response.status_code == 400
 
 
@@ -240,13 +214,7 @@ def test_earthdatahub_credential_is_session_scoped(client: TestClient) -> None:
     session_a = client.post("/api/sessions").json()["session_id"]
     session_b = client.post("/api/sessions").json()["session_id"]
 
-    client.post(
-        f"/api/sessions/{session_a}/era5/credential",
-        headers={"X-GoKaatru-Session": session_a},
-        json={"pat": "only-for-a"},
-    )
+    operation(client, session_a, "earthdatahub_set_credential", pat="only-for-a")
 
-    status_b = client.get(
-        f"/api/sessions/{session_b}/era5/credential/status", headers={"X-GoKaatru-Session": session_b}
-    )
+    status_b = operation(client, session_b, "earthdatahub_status")
     assert status_b.json() == {"configured": False}

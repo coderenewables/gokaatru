@@ -46,7 +46,6 @@ EXCLUDED_FIELDS: dict[str, str] = {
     "updated_at": "bookkeeping, set again on every change",
     "brighthub_token": "a credential, held in memory only",
     "earthdatahub_pat": "a credential, held in memory only",
-    "workflow_execution": "the status of a run in flight, meaningless after a restart",
     "persist_result_files": "a per-run switch a sweep sets on its forks, not project state",
 }
 
@@ -350,5 +349,8 @@ class ProjectStore:
             frame.columns = pd.Index(_decode(meta["labels"], {}), name=meta["name"])
             frames[path] = frame
         for name, value in fields.items():
-            setattr(state, name, _decode(json.loads(value), frames))
+            # A field the session no longer has (the retired Canvas's run state, P3-17d) stays
+            # on disk and is not restored, or every save would carry it on.
+            if hasattr(state, name):
+                setattr(state, name, _decode(json.loads(value), frames))
         return True

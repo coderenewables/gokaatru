@@ -50,6 +50,7 @@ ARGUMENT_VALUES: dict[str, object] = {
     "x_channel": "Spd_80m",
     "y_channel": "Spd_100m",
     "sweep_id": "no-such-sweep",
+    "config_hash": "no-such-scenario",
     "name": "no-such-selection",
     "pressure_pa": 101325.0,
     "temperature_k": 288.15,
@@ -62,6 +63,7 @@ ARGUMENT_VALUES: dict[str, object] = {
     "vertical_pct": 3.0,
     "mcp_pct": 4.0,
     "future_pct": 5.0,
+    "steps": [{"id": "weibull", "operation": "compute_weibull_params", "parameters": {"sensor_name": "Spd_100m"}}],
 }
 
 

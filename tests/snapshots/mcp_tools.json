@@ -475,7 +475,7 @@
  },
  {
   "annotations": null,
-  "description": "Find nearest ERA5 and MERRA-2 reanalysis nodes via BrightHub for a coordinate.",
+  "description": "Find the nearest ERA5 and MERRA-2 reanalysis nodes via BrightHub and record them with the site, nearest first.",
   "execution": null,
   "icons": null,
   "inputSchema": {
@@ -1221,6 +1221,40 @@
  },
  {
   "annotations": null,
+  "description": "Fill the 12x24 shear table with one exponent: the given one (analyst-supplied), or,\nwithout one, the mean of the shear timeseries (one site-wide exponent).",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "alpha": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    }
+   },
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "build_constant_shear_table",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
   "description": "Build a 12x24 roughness lookup table in log-space traced to IEC logarithmic profile practice.",
   "execution": null,
   "icons": null,
@@ -1341,14 +1375,32 @@
  },
  {
   "annotations": null,
-  "description": "Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B.",
+  "description": "Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B.\n\n``reference_columns`` limits the measured heights carried up to those sensors (a sweep's\nextrapolation-reference policy); without it every mapped speed sensor is used.\n``extrapolate_reanalysis`` false leaves the reanalysis frames as they are, as a sweep does.",
   "execution": null,
   "icons": null,
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
+    "extrapolate_reanalysis": {
+     "default": true,
+     "type": "boolean"
+    },
     "hub_height_m": {
      "type": "number"
+    },
+    "reference_columns": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
     },
     "shear_model": {
      "default": "power_law",
@@ -1505,7 +1557,7 @@
  },
  {
   "annotations": null,
-  "description": "Undo the last cleaning rule, configuration change, sensor removal or data model build still in the history.",
+  "description": "Undo the last cleaning rule, configuration change, sensor removal, data model build, saved\nselection or saved pipeline still in the history.",
   "execution": null,
   "icons": null,
   "inputSchema": {
@@ -1641,6 +1693,10 @@
     "long_col": {
      "type": "string"
     },
+    "reference_source": {
+     "default": "",
+     "type": "string"
+    },
     "short_col": {
      "type": "string"
     }
@@ -1672,6 +1728,10 @@
    "additionalProperties": false,
    "properties": {
     "long_col": {
+     "type": "string"
+    },
+    "reference_source": {
+     "default": "",
      "type": "string"
     },
     "short_col": {
@@ -1708,6 +1768,10 @@
      "type": "string"
     },
     "long_dir_col": {
+     "default": "",
+     "type": "string"
+    },
+    "reference_source": {
      "default": "",
      "type": "string"
     },
@@ -1748,6 +1812,10 @@
     "long_col": {
      "type": "string"
     },
+    "reference_source": {
+     "default": "",
+     "type": "string"
+    },
     "short_col": {
      "type": "string"
     }
@@ -1782,6 +1850,10 @@
      "type": "string"
     },
     "long_dir_col": {
+     "default": "",
+     "type": "string"
+    },
+    "reference_source": {
      "default": "",
      "type": "string"
     },
@@ -1871,6 +1943,193 @@
    }
   },
   "name": "get_site_overview_map",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Order a pipeline's steps by what each reads and writes, and say for each whether the\nsession holds the result it would build: current, changed, stale, not run, waiting on a\nstep upstream, or invalid. Refuses two steps building one result, and a cycle.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "steps": {
+     "items": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "steps"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "order_pipeline",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Save or replace a named pipeline in the campaign; refused when its steps cannot be ordered.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "type": "string"
+    },
+    "steps": {
+     "items": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "name",
+    "steps"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "save_pipeline",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Delete a named pipeline.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "name"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "delete_pipeline",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "List the campaign's named pipelines with their steps, who saved each and when.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {},
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "list_pipelines",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "The pipeline that computes one sweep scenario: its shear steps, the extrapolation from\nits reference sensors, its correction against its reference source and its own\nuncertainty, each the operation the sweep's stage shares. Says when the campaign has\nchanged since the sweep, as the steps then will not reproduce the row.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "config_hash": {
+     "type": "string"
+    },
+    "sweep_id": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "sweep_id",
+    "config_hash"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "pipeline_from_scenario",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "The sweep specification whose levels are a pipeline's own choices (its sensor policies,\nshear model, reference sources, corrections and hub height): the matrix \"Sweep around this\"\nstarts from. A choice no sweep level expresses is listed in unmatched, with why.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "steps": {
+     "items": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "steps"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "sweep_spec_from_pipeline",
   "outputSchema": {
    "additionalProperties": true,
    "type": "object"
@@ -2631,6 +2890,68 @@
    }
   },
   "name": "calculate_uncertainty",
+  "outputSchema": {
+   "additionalProperties": true,
+   "type": "object"
+  },
+  "title": null
+ },
+ {
+  "annotations": null,
+  "description": "Calculate a sweep scenario's uncertainty with every input derived from its own results:\nthe correction's fit and concurrent period, the shear series' dispersion for a fitted\npower law, the reference heights it was carried from, and its shear model's constant.\nNothing else the session holds is read, so it answers as the scenario's sweep row did.",
+  "execution": null,
+  "icons": null,
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "algorithm": {
+     "type": "string"
+    },
+    "hub_height_m": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    },
+    "reference_heights": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "number"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    },
+    "shear_model": {
+     "type": "string"
+    },
+    "shear_source": {
+     "default": "fitted",
+     "type": "string"
+    }
+   },
+   "required": [
+    "algorithm",
+    "shear_model"
+   ],
+   "type": "object"
+  },
+  "meta": {
+   "fastmcp": {
+    "tags": []
+   }
+  },
+  "name": "calculate_scenario_uncertainty",
   "outputSchema": {
    "additionalProperties": true,
    "type": "object"

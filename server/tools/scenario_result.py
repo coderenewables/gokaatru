@@ -16,7 +16,10 @@ from server.schemas.results import scenario_result as result_models
 from server.state.session import session
 
 
-@operation(effect="read", stage="sweep", canvas=False, result=result_models.GetFixedPrefixHashResult)
+@operation(
+    effect="read", stage="sweep", canvas=False, result=result_models.GetFixedPrefixHashResult,
+    reads=("data_model", "measured_data", "site", "reanalysis_nodes", "reference_series", "settings"),
+)
 def get_fixed_prefix_hash() -> dict:
     """Return the fixed-prefix hash for the current session, stamped before any sweep runs."""
     return {

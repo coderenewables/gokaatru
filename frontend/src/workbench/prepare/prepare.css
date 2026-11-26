@@ -1,0 +1,60 @@
+.gk-rules,
+.gk-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+}
+
+.gk-rules-form,
+.gk-overview-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gk-overview-section + .gk-overview-section {
+  padding-top: 12px;
+  border-top: 1px solid var(--gk-border);
+}
+
+.gk-rules h2,
+.gk-overview h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.gk-rules .gk-field select,
+.gk-rules .gk-field input[type="date"] {
+  font: inherit;
+  padding: 4px 6px;
+  border: 1px solid var(--gk-border-strong);
+  border-radius: 4px;
+  background: var(--gk-surface);
+  color: var(--gk-text);
+}
+
+.gk-rules-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gk-table {
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gk-table th,
+.gk-table td {
+  padding: 3px 10px 3px 0;
+  text-align: left;
+  border-bottom: 1px solid var(--gk-border);
+}
+
+.gk-refusal {
+  margin: 0;
+  color: var(--gk-danger);
+  font-size: 13px;
+}

@@ -51,6 +51,27 @@ from server.core.scenario_result import (
 )
 from server.core.sensor_selection import resolve_policy
 
+#: What no sweep varies (decisions/0013.6): direction, temperature and air density are
+#: computed once, for the scenario the analyst exports. Written into every manifest and read
+#: back by the summary, the spread and the Interrogate page, worded as decisions/0015.8 says.
+NOT_SWEPT: tuple[str, ...] = ("wind_direction", "temperature", "air_density")
+NOT_SWEPT_STATEMENT = (
+    "Not swept: wind direction, temperature and air density. Every scenario in this sweep uses "
+    "the same ones, so the spread covers the wind-speed chain only: sensor choice, shear, "
+    "reference source and long-term method."
+)
+
+
+def not_swept(manifest: dict[str, Any]) -> dict[str, Any]:
+    """The manifest's statement of what was not swept. A manifest written before the field
+    existed gets the same statement, which holds for every sweep ever run, and says so."""
+    recorded = "not_swept" in manifest
+    return {
+        "not_swept": list(manifest.get("not_swept") or NOT_SWEPT),
+        "not_swept_statement": str(manifest.get("not_swept_statement") or NOT_SWEPT_STATEMENT),
+        "not_swept_recorded_in_manifest": recorded,
+    }
+
 
 @dataclass(frozen=True)
 class SweepSpec:
@@ -295,6 +316,84 @@ def run_sweep(
     return {"manifest": manifest, "results": [result.as_row() for result in results]}
 
 
+#: What the estimate's duplicates and refusals can and cannot know before anything runs.
+DUPLICATES_BASIS = (
+    "assuming the first leaf of each computation completes: the run skips a leaf only once an "
+    "identical one has completed"
+)
+REFUSALS_BASIS = (
+    "the refusals a scenario's stages make before they compute anything; a leaf can still fail "
+    "while it runs"
+)
+
+
+def _leaf_axes(leaf: ScenarioSpec) -> dict[str, Any]:
+    return {
+        "shear_fit_policy": leaf.shear_fit_policy,
+        "reference_policy": leaf.reference_policy,
+        "shear_model": leaf.shear_model,
+        "reference_source": leaf.reference_source,
+        "ltc_algorithm": leaf.ltc_algorithm,
+    }
+
+
+def estimate_sweep(state: Any, spec: SweepSpec) -> dict[str, Any]:
+    """Price a specification without running it, and say which of its leaves the run will
+    skip as duplicates and which it will refuse, and why (decisions/0015.6).
+
+    Walks the leaves in the order ``run_sweep`` does and asks the same questions with the
+    same code: the shear-fit policy and shear model for each prefix group, then for each leaf
+    its computation key (``_execution_key``), its reference policy, its hub height and its
+    correction. The matrix designer shows it live, so it has to agree with the run.
+    """
+    from server.core.scenario_pipeline import check_hub, check_ltc, check_shear_model, resolve_reference
+
+    leaves = spec.leaves()
+    duplicates: list[dict[str, Any]] = []
+    unavailable: list[dict[str, Any]] = []
+    first: dict[tuple[Any, ...], ScenarioSpec] = {}
+    for group in _by_shear_prefix(leaves).values():
+        try:
+            resolve_fit(state, group[0])
+            check_shear_model(group[0])
+            refused: ScenarioError | None = None
+        except ScenarioError as error:
+            refused = error
+        for leaf in group:
+            if refused is not None:
+                unavailable.append({**_leaf_axes(leaf), "stage": refused.stage, "reason": refused.message})
+                continue
+            key = _execution_key(state, leaf)
+            if key is not None and key in first:
+                duplicates.append({**_leaf_axes(leaf), "same_as": _leaf_axes(first[key])})
+                continue
+            try:
+                resolve_reference(state, leaf)
+                check_hub(state, leaf)
+                check_ltc(state, leaf)
+            except ScenarioError as error:
+                unavailable.append({**_leaf_axes(leaf), "stage": error.stage, "reason": error.message})
+                continue
+            if key is not None:
+                first.setdefault(key, leaf)
+    return {
+        "leaf_count": spec.leaf_count(),
+        "prefix_count": spec.prefix_count(),
+        "spec": spec.as_runconfig(),
+        "counts": {
+            "planned": len(leaves),
+            "prefixes": spec.prefix_count(),
+            "would_run": len(leaves) - len(duplicates) - len(unavailable),
+            "duplicates": len(duplicates),
+            "unavailable": len(unavailable),
+        },
+        "duplicates": duplicates,
+        "unavailable": unavailable,
+        "duplicates_basis": DUPLICATES_BASIS,
+        "refusals_basis": REFUSALS_BASIS,
+    }
+
+
 def _by_shear_prefix(leaves: list[ScenarioSpec]) -> dict[tuple[Any, ...], list[ScenarioSpec]]:
     """Group leaves by the inputs their shear table depends on.
 
@@ -435,6 +534,8 @@ def _manifest(
         "stopped_early": stopped,
         "fixed_prefix_hash": prefix,
         "engine_version": ENGINE_VERSION,
+        "not_swept": list(NOT_SWEPT),
+        "not_swept_statement": NOT_SWEPT_STATEMENT,
         "spec": spec.as_runconfig(),
         "thresholds": thresholds.as_runconfig(),
         "counts": {

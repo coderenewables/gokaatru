@@ -29,9 +29,9 @@ def _state() -> SessionState:
     return state
 
 
-def _call(state: SessionState, name: str, **arguments):
+def _call(state: SessionState, operation: str, /, **arguments):
     with bind_session(state):
-        return REGISTRY.get(name).fn(**arguments)
+        return REGISTRY.get(operation).fn(**arguments)
 
 
 def _same(left: pd.DataFrame, right: pd.DataFrame) -> bool:
@@ -136,6 +136,40 @@ def test_undo_walks_back_through_both_kinds_in_order() -> None:
     log = _call(state, "get_operation_log", limit=10)
     assert log["can_undo"] is False and log["can_redo"] is True
     assert len(log["undo_stack"]) == 2
+
+
+WEST = {"kind": "sector", "channel": "Dir_100m", "from_deg": 225.0, "to_deg": 315.0}
+EAST = {"kind": "sector", "channel": "Dir_100m", "from_deg": 45.0, "to_deg": 135.0}
+
+
+def test_undo_and_redo_of_saved_selections_are_exact() -> None:
+    # decisions/0014.6: saved selections are data changes, so Ctrl+Z covers them.
+    state = _state()
+    _call(state, "define_selection", name="west", definition=WEST)
+    first = copy.deepcopy(state.selections)
+    _call(state, "define_selection", name="west", definition=EAST)
+    replaced = copy.deepcopy(state.selections)
+    _call(state, "delete_selection", name="west")
+    assert state.selections == {}
+
+    assert _call(state, "undo_last_change")["undone"]["operation"] == "delete_selection"
+    assert state.selections == replaced
+    assert _call(state, "undo_last_change")["undone"]["operation"] == "define_selection"
+    assert state.selections == first
+    _call(state, "undo_last_change")
+    assert state.selections == {}
+
+    for expected in (first, replaced, {}):
+        _call(state, "redo_last_change")
+        assert state.selections == expected
+
+
+def test_undo_of_a_selection_refuses_when_a_later_change_moved_it() -> None:
+    state = _state()
+    _call(state, "define_selection", name="west", definition=WEST)
+    state.selections["west"]["definition"] = EAST
+    with pytest.raises(ValueError, match="selection 'west' has changed since"):
+        _call(state, "undo_last_change")
 
 
 def test_undo_and_redo_over_http_and_across_a_restart(tmp_path: Path) -> None:

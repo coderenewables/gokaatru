@@ -17,6 +17,8 @@ from server.core.runconfig import strip_mirrors
 from server.core.scenario_result import ENGINE_VERSION
 from server.schemas.common import Coordinate
 
+_NOT_RECORDED = object()
+
 
 def _utcnow() -> datetime:
     """Return a timezone-aware UTC timestamp for session lifecycle tracking."""
@@ -108,13 +110,18 @@ class SessionState:
     # For each derived artifact stamped during an operation call: which call, with what
     # parameters, under which engine version. An artifact from another engine is stale.
     derived_provenance: dict[str, dict[str, object]]
+    # The version of every artifact other than the measured records (whose version is
+    # ``data_version``), from one session-wide clock, moved when an operation's call changes
+    # what it declares it writes (decisions/0015.3).
+    artifact_clock: int
+    artifact_versions: dict[str, int]
+    # For each derived artifact built in an operation call: the version of every artifact
+    # that operation reads, as it stood when the call finished.
+    derived_inputs: dict[str, dict[str, int]]
     latest_uncertainty: dict[str, object] | None
     scenarios: list[dict[str, object]]
     runconfig: dict[str, object]
     timezone: object | None  # datetime.timezone or ZoneInfo — set from datamodel
-    executed_nodes: set[str]
-    workflow_execution: dict[str, object]
-    workflow_runs: list[dict[str, object]]
     # Every operation called on this session, in order (decisions/0010): who called it,
     # with what, and what it did to the data version. Written by server.operations.
     operation_log: list[dict[str, object]]
@@ -123,6 +130,8 @@ class SessionState:
     # Named record selections (decisions/0011): each a definition from server.core.selection
     # plus who made it and when. Resolved against the data each time they are used.
     selections: dict[str, dict[str, object]]
+    # Named pipelines (decisions/0015.5): each a list of steps, who saved it and when.
+    pipelines: dict[str, dict[str, object]]
     # What each undoable sensor removal took out, keyed by its operation-log sequence, so
     # undo can put it back: the inventory entries, the mapping and exclusion list before and
     # after, and the removed columns of the working and raw frames.
@@ -182,24 +191,17 @@ class SessionState:
         self.data_version = 0
         self.derived_versions = {}
         self.derived_provenance = {}
+        self.artifact_clock = 0
+        self.artifact_versions = {}
+        self.derived_inputs = {}
         self.latest_uncertainty = None
         self.scenarios = []
         self.runconfig = {}
         self.timezone = None
-        # Node ids this session actually executed, so a client-supplied "done" can be
-        # corroborated instead of taken on trust (F-10).
-        self.executed_nodes = set()
-        self.workflow_execution = {
-            "run_id": None,
-            "is_running": False,
-            "cancel_requested": False,
-            "node_statuses": {},
-            "events": [],
-        }
-        self.workflow_runs = []
         self.operation_log = []
         self.undo_stack = []
         self.selections = {}
+        self.pipelines = {}
         self.removed_sensors = {}
         self.datamodel_origin = None
         self.session_id = preserved_session_id
@@ -362,16 +364,37 @@ class SessionState:
 
     def stamp_derived(self, name: str) -> None:
         """Record which version of the measured data a derived artifact was built from, and,
-        inside an operation call, which logged call built it."""
+        inside an operation call, which logged call built it. The operation's wrapper records
+        the call's inputs once it finishes (``record_inputs``); outside one, only the data
+        version is known."""
         self.derived_versions[name] = self.data_version
         call = current_operation.get()
         if call is None:
             self.derived_provenance.pop(name, None)
+            self.derived_inputs.pop(name, None)
         else:
             self.derived_provenance[name] = {**call, "data_version": self.data_version}
 
-    def stale_reason(self, name: str) -> str | None:
-        """Why a derived artifact no longer matches, or None when it still does."""
+    def artifact_version(self, name: str) -> int:
+        """The version of an artifact: the data version for the measured records, else the
+        clock reading of its last change (0 before any)."""
+        return self.data_version if name == "measured_data" else int(self.artifact_versions.get(name, 0))
+
+    def bump_artifact(self, name: str) -> None:
+        self.artifact_clock += 1
+        self.artifact_versions[name] = self.artifact_clock
+
+    def record_inputs(self, seq: object, reads: tuple[str, ...]) -> None:
+        """Record, for every derived artifact the call ``seq`` built, the version of each
+        artifact the call reads, as they stand now that it has finished."""
+        versions = {name: self.artifact_version(name) for name in reads}
+        for name, provenance in self.derived_provenance.items():
+            if provenance.get("seq") == seq:
+                self.derived_inputs[name] = dict(versions)
+
+    def stale_reason(self, name: str, _seen: frozenset[str] = frozenset()) -> str | None:
+        """Why a derived artifact no longer matches, or None when it still does: the data or
+        the engine moved, or a result it was built from changed since or is stale itself."""
         stamped = self.derived_versions.get(name)
         if stamped is None:
             return None
@@ -380,6 +403,14 @@ class SessionState:
         built_by = self.derived_provenance.get(name, {}).get("code_version")
         if built_by is not None and built_by != ENGINE_VERSION:
             return f"built by engine {built_by}; this is engine {ENGINE_VERSION}"
+        seen = _seen | {name}
+        for source, version in sorted(self.derived_inputs.get(name, {}).items()):
+            if source == "measured_data":
+                continue
+            if self.artifact_version(source) != version:
+                return f"built from {source} as it was then; {source} has changed since"
+            if source not in seen and self.stale_reason(source, seen) is not None:
+                return f"built from {source}, which is stale"
         return None
 
     def derived_is_stale(self, name: str) -> bool:
@@ -428,7 +459,29 @@ class SessionState:
                 return float(value)
         return None
 
-    def long_term_speed_series(self) -> tuple["pd.Series | None", str]:
+    @contextmanager
+    def using_reference_source(self, source: str):
+        """Correct against another reanalysis source for one call, leaving the session's own
+        choice as it was. A pipeline step names its source this way (decisions/0015.1); were it
+        to change the session's choice, two corrections in one pipeline would each read what
+        the other wrote, and could not be ordered."""
+        if not source:
+            yield
+            return
+        get_reference_source(source)
+        active = self.active_reference_source
+        recorded = self.runconfig.get("reference_source", _NOT_RECORDED)
+        self.set_active_reference_source(source)
+        try:
+            yield
+        finally:
+            self.active_reference_source = active
+            if recorded is _NOT_RECORDED:
+                self.runconfig.pop("reference_source", None)
+            else:
+                self.runconfig["reference_source"] = recorded
+
+    def long_term_speed_series(self, source: str | None = None) -> tuple["pd.Series | None", str]:
         """Return the best available long-term corrected speed series, and where it came from.
 
         Preference order matches the pipeline: the ensemble blend, then any single LTC
@@ -436,7 +489,21 @@ class SessionState:
         climate — the energy sensitivity factor, the extreme wind — should describe the
         distribution the P-values will actually be quoted against, and every consumer should
         agree about which series that is.
+
+        ``source`` (``"ltc:<algorithm>"``) names one correction's series instead. A sweep
+        scenario's uncertainty reads its own correction this way, so its energy figures do
+        not depend on what else the session holds (decisions/0015.1, P3-7b).
         """
+        if source is not None:
+            algorithm = source.removeprefix("ltc:")
+            payload = self.ltc_results.get(algorithm)
+            if isinstance(payload, dict) and "df" in payload:
+                frame = pd.DataFrame(payload["df"])
+                if "corrected_wind_speed" in frame.columns:
+                    series = frame["corrected_wind_speed"].dropna()
+                    if not series.empty:
+                        return self._timestamped(frame, series), f"ltc:{algorithm}"
+            return None, "unavailable"
         if self.ensemble_df is not None:
             frame = pd.DataFrame(self.ensemble_df)
             if "Ensemble_Speed" in frame.columns:

@@ -7,6 +7,7 @@ before any record is loaded, the node is downloaded. Each node says which.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +20,7 @@ from server.api.main import create_app
 from server.state.manager import SessionManager
 from server.state.projects import ProjectRegistry
 from server.tools.brighthub import BrightHubAuthError, _download_brighthub_nodes
+from tests.http_operations import operation
 
 NODES = [{"latitude_ddeg": 52.0, "longitude_ddeg": 4.0}, {"latitude_ddeg": 52.0, "longitude_ddeg": 5.0}]
 SERIES_END = "2024-03-31T23:00:00"
@@ -97,17 +99,18 @@ def test_without_a_record_or_a_login(tmp_path: Path, downloads) -> None:
         _download_brighthub_nodes(lidar, "ERA5", NODES)
 
 
-def test_the_route_reports_the_cache_and_answers_401_without_a_login(tmp_path: Path, downloads) -> None:
+def test_the_route_reports_the_cache_and_refuses_without_a_login(tmp_path: Path, downloads) -> None:
+    """Through the generated route (P3-17e). The retired hand-written one answered 401 without
+    a login; the operation refuses with a 400 naming the missing login, as every refusal does."""
     manager, (mast, lidar) = _campaigns(tmp_path)
     app = create_app()
     app.dependency_overrides[get_session_manager] = lambda: manager
     try:
         with TestClient(app) as client:
             def download(state, nodes):
-                return client.post(
-                    f"/api/sessions/{state.session_id}/brighthub/reanalysis/download",
-                    headers={"X-GoKaatru-Session": state.session_id},
-                    json={"dataset": "ERA5", "nodes": nodes, "source": "brighthub"},
+                return operation(
+                    client, state.session_id, "brighthub_download_reanalysis",
+                    dataset="ERA5", nodes_json=json.dumps(nodes), source="brighthub",
                 )
 
             downloaded = download(mast, NODES)
@@ -117,6 +120,7 @@ def test_the_route_reports_the_cache_and_answers_401_without_a_login(tmp_path: P
             hit = download(lidar, NODES)
             assert [item["cache"] for item in hit.json()["items"]] == ["hit", "hit"]
             missing = download(lidar, [{"latitude_ddeg": 53.0, "longitude_ddeg": 4.0}])
-            assert missing.status_code == 401
+            assert missing.status_code == 400
+            assert "not authenticated with brighthub" in missing.json()["detail"].lower()
     finally:
         app.dependency_overrides.clear()

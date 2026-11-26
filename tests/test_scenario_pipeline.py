@@ -144,11 +144,11 @@ def test_the_sweep_extrapolate_stage_never_carries_the_reanalysis_to_hub_height(
 
 
 def test_hub_extrapolation_can_skip_the_reanalysis_and_leaves_its_columns_unwritten():
-    from server.core.scenario_pipeline import _constant_shear_table
     from server.tools.extrapolation import _extrapolate_to_hub_height
+    from server.tools.shear import _build_constant_shear_table
 
     skipped = _base_state()
-    skipped.shear_table = _constant_shear_table(ALPHA)
+    _build_constant_shear_table(skipped, ALPHA)
     response = _extrapolate_to_hub_height(skipped, HUB_M, extrapolate_reanalysis=False)
 
     assert response["reanalysis"] == {
@@ -162,7 +162,7 @@ def test_hub_extrapolation_can_skip_the_reanalysis_and_leaves_its_columns_unwrit
         assert "Spd_120m_hub" not in frame.columns, name
 
     default = _base_state()
-    default.shear_table = _constant_shear_table(ALPHA)
+    _build_constant_shear_table(default, ALPHA)
     response = _extrapolate_to_hub_height(default, HUB_M)
 
     assert response["reanalysis"]["status"] == "ok"

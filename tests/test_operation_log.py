@@ -182,38 +182,22 @@ def test_the_assistant_is_recorded_as_the_actor(api, monkeypatch) -> None:
     assert state.operation_log[-1]["actor"] == "assistant:openai/gpt-4o"
 
 
-def test_the_canvas_is_recorded_as_the_actor(api) -> None:
-    client, manager, _ = api
-    session_id, headers, state = _session(client, manager)
-    payload = {
-        "mode": "auto",
-        "nodes": [
-            {"id": "op-1", "kind": "operation", "label": "Config", "template_id": "get_run_config", "config": {}}
-        ],
-        "edges": [],
-    }
-    url = f"/api/sessions/{session_id}/workflow/execute"
-    assert client.post(url, headers=headers, json=payload).status_code == 200
-    node, request = state.operation_log[-2:]
-    assert (node["operation"], node["actor"]) == ("get_run_config", "canvas")
-    # The execute route is hand-written, so the request that ran the canvas is logged too.
-    assert request["operation"] == "http POST /api/sessions/{session_id}/workflow/execute"
-
-
 def test_a_change_through_a_hand_written_route_is_logged_and_saved(api) -> None:
     client, manager, base_dir = api
     session_id, headers, state = _session(client, manager)
 
-    response = client.put(
-        f"/api/sessions/{session_id}/config",
+    # An upload is the change every campaign starts with, and has no operation.
+    csv = "Timestamp,Spd_100m\n2024-01-01 00:00,8.0\n2024-01-01 00:10,8.5\n2024-01-01 00:20,9.0\n"
+    response = client.post(
+        f"/api/sessions/{session_id}/uploads/timeseries",
         headers=headers,
-        json={"updates": [{"key": "hub_height_m", "value": 110}]},
+        files={"file": ("campaign.csv", csv.encode(), "text/csv")},
     )
 
     assert response.status_code == 200, response.text
     entry = state.operation_log[-1]
-    assert entry["operation"] == "http PUT /api/sessions/{session_id}/config"
+    assert entry["operation"] == "http POST /api/sessions/{session_id}/uploads/timeseries"
     assert entry["actor"] == "user" and entry["parameters"] == {}
     reopened = SessionManager(base_dir=base_dir).get_session(session_id)
     assert reopened.operation_log[-1]["operation"] == entry["operation"]
-    assert reopened.hub_height_m == 110
+    assert list(reopened.timeseries_df["Spd_100m"]) == [8.0, 8.5, 9.0]

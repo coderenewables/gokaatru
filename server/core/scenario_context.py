@@ -54,6 +54,7 @@ SHARED_FIELDS: tuple[str, ...] = (
     "cleaning_log",
     "cleaning_flags",
     "selections",
+    "pipelines",
     # What sensor removals kept aside, which data model is in use, and the campaign's project:
     # read by undo and by the reanalysis cache, never written by a scenario.
     "removed_sensors",
@@ -66,7 +67,6 @@ SHARED_FIELDS: tuple[str, ...] = (
     "reanalysis_cache_identity",
     "timezone",
     "scenarios",
-    "workflow_runs",
     "data_version",
 )
 
@@ -93,8 +93,9 @@ RESET_FIELDS: tuple[str, ...] = (
     "latest_uncertainty",
     "derived_versions",
     "derived_provenance",
-    "executed_nodes",
-    "workflow_execution",
+    "artifact_clock",
+    "artifact_versions",
+    "derived_inputs",
     "operation_log",
     "undo_stack",
 )

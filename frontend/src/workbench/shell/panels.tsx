@@ -3,12 +3,25 @@ import type { FunctionComponent } from "react";
 
 import { DataPanel } from "../datatree/DataPanel";
 import { InspectorPanel } from "../inspector/InspectorPanel";
+import { PalettePanel } from "../model/PalettePanel";
+import { PipelinePanel } from "../model/PipelinePanel";
+import { StepPanel } from "../model/StepPanel";
+import { DistributionPanel } from "../interrogate/DistributionPanel";
+import { GatesPanel } from "../interrogate/GatesPanel";
+import { ParallelPanel } from "../interrogate/ParallelPanel";
+import { PinnedPanel } from "../interrogate/PinnedPanel";
+import { ScenariosPanel } from "../interrogate/ScenariosPanel";
+import { SensitivityPanel } from "../interrogate/SensitivityPanel";
 import { ProfilePanel } from "../profile/ProfilePanel";
+import { OverviewPanel } from "../prepare/OverviewPanel";
+import { RulesPanel } from "../prepare/RulesPanel";
 import { ReanalysisPanel } from "../reanalysis/ReanalysisPanel";
 import { RosePanel } from "../rose/RosePanel";
+import { MatrixPanel } from "../run/MatrixPanel";
+import { MonitorPanel } from "../run/MonitorPanel";
 import { ScatterPanel } from "../scatter/ScatterPanel";
 import { TimelinePanel } from "../timeline/TimelinePanel";
-import { PANELS, type PanelId } from "./layout";
+import { PANEL_TITLES, PHASE_PANELS, type PanelId, type PhaseId } from "./layout";
 
 /** What a panel shows before its view is built or before a campaign holds data for it. Not a
  * landmark of its own: dockview's group around it is already the region named after the
@@ -29,31 +42,54 @@ const EMPTY: Record<PanelId, string> = {
   profile: "Mean speed by height for the selection.",
   reanalysis: "Reanalysis nodes around the site, taken one at a time and interpolated to it.",
   inspector: "What is selected, and what can be done with it.",
+  rules: "The cleaning rules, as forms: choose one, preview what it would set missing, apply.",
+  overview: "Quality control, sensor comparison, MCP readiness, mast effects and atmosphere, from the campaign's data.",
+  palette: "The methods, by stage. Drag one onto the pipeline.",
+  pipeline: "The campaign's chain of methods, in the order their inputs require.",
+  step: "The selected step's parameters, status and result.",
+  matrix: "The sweep's axes by their levels. Tick the cells to sweep.",
+  monitor: "The sweep as it runs, scenario by scenario.",
+  scenarios: "Every scenario of the sweep, filtered by the brushes.",
+  distribution: "A metric's distribution across the scenarios. Brush a range to filter.",
+  parallel: "Each scenario across the metrics and axes. Brush an axis to filter.",
+  sensitivity: "How much each axis moves the metric.",
+  gates: "Which scenarios each admissibility gate let through.",
+  pinned: "Two scenarios side by side, configuration and results.",
 };
 
 function emptyPanel(id: PanelId): FunctionComponent<IDockviewPanelProps> {
   function Panel() {
     return <EmptyPanel>{EMPTY[id]}</EmptyPanel>;
   }
-  Panel.displayName = `${PANELS[id].replace(/\s/g, "")}Panel`;
+  Panel.displayName = `${PANEL_TITLES[id].replace(/\s/g, "")}Panel`;
   return Panel;
 }
 
 /** The view each panel id renders; a view not built yet shows what it will hold. */
 const BUILT: Partial<Record<PanelId, FunctionComponent<IDockviewPanelProps>>> = {
   data: DataPanel,
+  scenarios: ScenariosPanel,
+  distribution: DistributionPanel,
+  parallel: ParallelPanel,
+  sensitivity: SensitivityPanel,
+  gates: GatesPanel,
+  pinned: PinnedPanel,
   inspector: InspectorPanel,
+  palette: PalettePanel,
+  pipeline: PipelinePanel,
+  matrix: MatrixPanel,
+  monitor: MonitorPanel,
   profile: ProfilePanel,
+  overview: OverviewPanel,
   reanalysis: ReanalysisPanel,
   rose: RosePanel,
+  rules: RulesPanel,
   scatter: ScatterPanel,
+  step: StepPanel,
   timeline: TimelinePanel,
 };
 
-export function panelComponents(): Record<PanelId, FunctionComponent<IDockviewPanelProps>> {
-  const ids = Object.keys(PANELS) as PanelId[];
-  return Object.fromEntries(ids.map((id) => [id, BUILT[id] ?? emptyPanel(id)])) as Record<
-    PanelId,
-    FunctionComponent<IDockviewPanelProps>
-  >;
+export function panelComponents(phase: PhaseId = "prepare"): Record<string, FunctionComponent<IDockviewPanelProps>> {
+  const ids = Object.keys(PHASE_PANELS[phase]) as PanelId[];
+  return Object.fromEntries(ids.map((id) => [id, BUILT[id] ?? emptyPanel(id)]));
 }

@@ -19,6 +19,7 @@ from server.state.project import (
 )
 from server.state.session import SessionState
 from server.tools.era5 import _store_coordinate
+from tests.http_operations import operation
 
 
 def _rich_state(workspace: Path) -> SessionState:
@@ -51,7 +52,6 @@ def _rich_state(workspace: Path) -> SessionState:
             "persisted": False,
         }
     }
-    state.executed_nodes = {"node-a", "node-b"}
     state.data_version = 4
     state.derived_versions = {"shear_table": 3, "ltc:variance_ratio": 4}
     state.scenarios = [{"name": "base", "hub_height_m": 120.0}]
@@ -106,6 +106,19 @@ def test_an_unchanged_frame_is_not_written_again(tmp_path: Path) -> None:
 
     state.timeseries_df.iloc[0, 0] = 99.0
     assert store.save(state)["frames_written"] == 1
+
+
+def test_a_field_the_session_no_longer_has_is_not_restored(tmp_path: Path) -> None:
+    """Projects saved before P3-17d hold the retired Canvas's run state; it is left on disk."""
+    state = _rich_state(tmp_path)
+    state.workflow_runs = [{"run_id": "old"}]
+    ProjectStore(tmp_path).save(state)
+
+    restored = SessionState()
+    assert ProjectStore(tmp_path).load(restored) is True
+    assert not hasattr(restored, "workflow_runs")
+    del state.workflow_runs
+    _assert_same(state, restored)
 
 
 def test_credentials_are_never_written(tmp_path: Path) -> None:
@@ -218,9 +231,7 @@ def test_the_api_refuses_a_project_whose_raw_input_changed(tmp_path: Path) -> No
     app = create_app()
     app.dependency_overrides[get_session_manager] = lambda: SessionManager(base_dir=tmp_path)
     with TestClient(app) as client:
-        response = client.get(
-            f"/api/sessions/{state.session_id}/config", headers={"X-GoKaatru-Session": state.session_id}
-        )
+        response = operation(client, state.session_id, "get_run_config")
     assert response.status_code == 409
     assert "mast.csv" in response.json()["detail"]
 

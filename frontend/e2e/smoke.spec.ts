@@ -1,15 +1,26 @@
 import { expect, test } from "@playwright/test";
 import type { ConsoleMessage } from "@playwright/test";
 
+import { newCampaign } from "./fixtures";
+
 // Console errors that are expected with no data loaded. Each entry needs a reason. There
 // are none: GET /sensors on an empty session used to answer 400, and now returns an empty
 // inventory (P1-18).
 const ALLOWED_CONSOLE_ERRORS: Array<{ pattern: RegExp; reason: string }> = [];
 
-// HTTP failures an empty session is expected to produce. None.
+// HTTP failures an empty campaign is expected to produce. None.
 const EXPECTED_FAILED_RESPONSES: RegExp[] = [];
 
-test("the app loads, navigates between phases and reaches the backend through /api", async ({ page }, testInfo) => {
+const PHASE_PANELS: Record<string, string> = {
+  Prepare: "Timeline",
+  Model: "Pipeline",
+  Run: "Sweep design",
+  Interrogate: "Scenarios",
+};
+
+test("the app loads at /, opens a campaign, moves between phases and reaches the backend through /api", async ({
+  page,
+}, testInfo) => {
   const pageErrors: Error[] = [];
   const consoleErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error));
@@ -26,29 +37,26 @@ test("the app loads, navigates between phases and reaches the backend through /a
       failedResponses.push(`${response.status()} ${response.request().method()} ${new URL(response.url()).pathname}`);
     }
   });
+
+  const name = `Smoke ${Date.now()}`;
+  await newCampaign(page, name);
   await page.goto("/");
-  // First load is the pre-session landing page; a session is needed for the rail.
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Every defensible scenario");
-  await page.getByRole("button", { name: "Start workspace" }).click();
+  await expect(page).toHaveTitle("GoKaatru — Wind Resource Assessment");
+  await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeVisible();
+  const card = page.getByRole("listitem").filter({ has: page.getByRole("heading", { name, exact: true }) });
+  await card.getByRole("link", { name: "Mast M1" }).click();
 
-  const rail = page.getByRole("navigation", { name: "Primary view" });
-  for (const name of ["Prepare", "Run", "Interrogate", "Canvas", "Copilot"]) {
-    await expect(rail.getByRole("button", { name })).toBeVisible();
+  const phases = page.getByRole("navigation", { name: "Phases" });
+  for (const [phase, panel] of Object.entries(PHASE_PANELS)) {
+    await phases.getByRole("button", { name: phase, exact: true }).click();
+    await expect(phases.getByRole("button", { name: phase, exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(page.locator(".dv-tab", { hasText: new RegExp(`^${panel}$`) })).toBeVisible();
   }
-
-  await expect(page.getByRole("heading", { name: "Everything the scenarios will share" })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("first-load.png"), fullPage: true });
 
-  await rail.getByRole("button", { name: "Run" }).click();
-  await expect(rail.getByRole("button", { name: "Run" })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("button", { name: "Run sweep" })).toBeVisible();
-
-  await rail.getByRole("button", { name: "Interrogate" }).click();
-  await expect(rail.getByRole("button", { name: "Interrogate" })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByText("Run a sweep, or open a saved one, to summarise its spread.")).toBeVisible();
-
-  await rail.getByRole("button", { name: "Prepare" }).click();
-  await expect(page.getByRole("heading", { name: "Everything the scenarios will share" })).toBeVisible();
+  // The brand returns to the start screen.
+  await page.getByRole("link", { name: "GoKaatru" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeVisible();
 
   // Same-origin fetch from the page, so it exercises the Vite proxy, not the backend port directly.
   const health = await page.evaluate(async () => {
@@ -59,7 +67,8 @@ test("the app loads, navigates between phases and reaches the backend through /a
   expect(health.body).toEqual({ status: "ok", service: "gokaatru-web-api" });
 
   expect(pageErrors.map((error) => error.message)).toEqual([]);
-  expect(consoleErrors).toEqual([]);
+  // Responses before console errors: a failed request is echoed to the console without its URL.
   const unexpected = failedResponses.filter((entry) => !EXPECTED_FAILED_RESPONSES.some((pattern) => pattern.test(entry)));
   expect(unexpected).toEqual([]);
+  expect(consoleErrors).toEqual([]);
 });

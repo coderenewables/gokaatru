@@ -865,6 +865,44 @@ def test_a_manifest_without_the_engine_version_loads_unchanged(tmp_path):
     assert loaded["manifest"] == manifest
 
 
+NOT_SWEPT_SENTENCE = (
+    "Not swept: wind direction, temperature and air density. Every scenario in this sweep uses "
+    "the same ones, so the spread covers the wind-speed chain only: sensor choice, shear, "
+    "reference source and long-term method."
+)
+
+
+def test_the_manifest_summary_and_spread_say_what_is_not_swept(tmp_path):
+    """decisions/0013.6, worded by 0015.8: stated wherever a spread could be read as covering them."""
+    from server.tools.sweep_analysis import _sweep_spread, _sweep_summary
+
+    base = _base_state(tmp_path)
+    outcome = run_sweep(base, _small_spec(), sweep_id="stated")
+    manifest = outcome["manifest"]
+    assert manifest["not_swept"] == ["wind_direction", "temperature", "air_density"]
+    assert manifest["not_swept_statement"] == NOT_SWEPT_SENTENCE
+    for reader in (_sweep_summary(base, "stated"), _sweep_spread(base, "stated")):
+        assert reader["not_swept"] == manifest["not_swept"]
+        assert reader["not_swept_statement"] == NOT_SWEPT_SENTENCE
+
+
+def test_a_sweep_stored_before_the_statement_still_says_it(tmp_path):
+    """No sweep has ever varied direction, temperature or air density, so an older manifest
+    gets the same statement, and says where it came from."""
+    from server.tools.sweep_analysis import _sweep_summary
+
+    base = _base_state(tmp_path)
+    run_sweep(base, _small_spec(), sweep_id="older")
+    path = Path(base.get_data_dir()) / "sweeps" / "older" / "manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    del manifest["not_swept"], manifest["not_swept_statement"]
+    path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    summary = _sweep_summary(base, "older")
+    assert summary["not_swept_statement"] == NOT_SWEPT_SENTENCE
+    assert summary["not_swept_recorded_in_manifest"] is False
+
+
 def test_progress_events_report_prefixes_and_scenarios(tmp_path):
     base = _base_state(tmp_path)
     events: list = []

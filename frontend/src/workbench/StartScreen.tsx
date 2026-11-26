@@ -15,7 +15,7 @@ export function StartScreen() {
   return (
     <div className="gk-start">
       <header className="gk-header">
-        <span className="gk-brand">GoKaatru Workbench</span>
+        <span className="gk-brand">GoKaatru</span>
       </header>
       <main className="gk-start-main">
         <h1>Projects</h1>

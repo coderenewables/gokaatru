@@ -89,6 +89,94 @@ test("a channel dragged from the data tree onto the timeline joins it", async ({
   await expect(plot).toHaveAttribute("aria-label", /Tmp_100m/);
 });
 
+test("a sensor is removed from the analysis after a preview, and Undo puts it back", async ({ page }) => {
+  const opened = await campaignWithData(page, `Remove ${Date.now()}`);
+  await page.goto(workbenchUrl(opened));
+  await expect(page.getByRole("region", { name: "60 m" })).toBeVisible();
+
+  const removal = page.locator("details.gk-removal");
+  await removal.getByText("Remove sensors from the analysis").click();
+  const preview = removal.getByRole("button", { name: "Preview" });
+  await expect(preview).toBeDisabled();
+  await removal.getByRole("checkbox", { name: "Spd_60m" }).check();
+  await preview.click();
+  await expect(removal.getByRole("status")).toHaveText(
+    "Would remove Spd_60m, taking out the columns Spd_60m; 4 sensors remain.",
+  );
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations.map((violation) => violation.id)).toEqual([]);
+
+  await removal.getByRole("button", { name: "Remove 1 sensor" }).click();
+  await expect(page.getByRole("region", { name: "60 m" })).toHaveCount(0);
+  const log = await page.request.post(`/api/sessions/${opened.sessionId}/operations/get_operation_log`, {
+    headers: { "X-GoKaatru-Session": opened.sessionId },
+    data: {},
+  });
+  const entries = ((await log.json()) as { entries: Array<{ operation: string; actor: string }> }).entries;
+  // Through the generated route, as the user; the reads the panels make afterwards follow it.
+  expect(entries.filter((entry) => entry.operation === "remove_sensors")).toEqual([
+    expect.objectContaining({ operation: "remove_sensors", actor: "user" }),
+  ]);
+
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.getByRole("region", { name: "60 m" })).toBeVisible();
+});
+
+test("an empty campaign imports a BrightHub location, with what BrightHub applies first chosen and said", async ({ page }) => {
+  // BrightHub is faked in the browser, as in reanalysis.spec.ts; the server's import is held by
+  // pytest against a fake of the BrightHub API.
+  let signedIn = false;
+  const imports: Array<Record<string, unknown>> = [];
+  const json = (body: unknown) => ({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  await page.route("**/operations/brighthub_status", (route) => route.fulfill(json({ authenticated: signedIn, has_token: signedIn })));
+  await page.route("**/operations/brighthub_login", (route) => {
+    signedIn = true;
+    return route.fulfill(json({ status: "ok", authenticated: true }));
+  });
+  await page.route("**/operations/brighthub_list_locations", (route) =>
+    route.fulfill(
+      json({
+        count: 2,
+        locations: [
+          { uuid: "loc-a", name: "North ridge mast", latitude_ddeg: 55.25, longitude_ddeg: 7.75, measurement_station_type_id: "mast" },
+          { uuid: "loc-b", name: "South lidar", latitude_ddeg: 55.1, longitude_ddeg: 7.6, measurement_station_type_id: "lidar" },
+        ],
+      }),
+    ),
+  );
+  await page.route("**/operations/brighthub_import_location", (route) => {
+    imports.push(route.request().postDataJSON() as Record<string, unknown>);
+    return route.fulfill(
+      json({
+        status: "ok", uuid: "loc-a", timeseries_rows: 52560, timeseries_columns: [], timeseries_start: "2023-01-01 00:00",
+        timeseries_end: "2023-12-31 23:50", datamodel_heights: [100, 80], project_name: "North ridge mast", measurement_type: "mast",
+        upstream_processing: {}, upstream_processing_note: "Applied by BrightHub before import.",
+      }),
+    );
+  });
+
+  const opened = await newCampaign(page, `BrightHub ${Date.now()}`);
+  await page.goto(workbenchUrl(opened));
+  const panel = page.locator("details.gk-bh-import");
+  await panel.getByText("Or import a BrightHub location").click();
+  await panel.getByLabel("Client ID").fill("id");
+  await panel.getByLabel("Client secret").fill("secret");
+  await panel.getByRole("button", { name: "Sign in" }).click();
+  await panel.getByLabel("Location").selectOption({ label: "North ridge mast" });
+  await expect(panel.getByRole("checkbox", { name: "BrightHub's cleaning log" })).toBeChecked();
+  await panel.getByRole("checkbox", { name: "Calibration" }).check();
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations.map((violation) => violation.id)).toEqual([]);
+  await panel.getByRole("button", { name: "Import" }).click();
+  await expect(panel.getByRole("status")).toContainText("Imported 52560 records from 2023-01-01 00:00 to 2023-12-31 23:50.");
+  expect(imports).toEqual([
+    {
+      uuid: "loc-a", name: "North ridge mast", latitude_ddeg: 55.25, longitude_ddeg: 7.75, apply_cleaning_log: true,
+      apply_cleaning_rules: false, apply_calibration: true, apply_deadband_offset: false, apply_orientation_offset: false,
+    },
+  ]);
+});
+
 test("an empty campaign says to load its files", async ({ page }) => {
   const opened = await newCampaign(page, `Empty tree ${Date.now()}`);
   await page.goto(workbenchUrl(opened));

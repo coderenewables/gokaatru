@@ -28,9 +28,12 @@ It ships as two cooperating parts over one logic core:
 
 - **`server/`** — a Python backend that exposes the same analysis logic through **two
   interfaces**: a **FastMCP** server (MCP tools, stdio) and a **FastAPI** web API (HTTP).
-- **`frontend/`** — a **React 19 + Vite + TypeScript** app: data import, an editable
-  React-Flow Canvas, a guided Stepper, a read-only Results report, a Sensor Overview
-  dashboard, a BYOK AI Copilot, scenario Compare, and the Analysis Engine (scenario sweep).
+- **`frontend/`** — a **React 19 + Vite + TypeScript** workbench in four phases over projects
+  of campaigns: Prepare (data, reanalysis, linked charts, cleaning rules, sensor overview),
+  Model (one chosen pipeline of operations), Run (the sweep designer and monitor) and
+  Interrogate (the sweep's scenarios, sensitivity, gates, two side by side). The interface it
+  replaced was retired at P3-16; its Copilot and Results report return in Phases 4 and 7
+  (decisions/0015).
 
 **Deployment model:** single trusted user, local deployment. There is no auth layer; the
 session id is the only credential. Do not discuss multi-user hosting without reading the
@@ -41,11 +44,11 @@ README's "Deployment model" section first.
 | Area | Figure |
 |------|--------|
 | Backend Python | ~25.6k LOC across 85 files |
-| Frontend TS/TSX | ~17.6k LOC |
-| MCP tools registered | **103** (the 142 WindKit pass-throughs were removed 2026-11-19, decisions/0009) |
+| Frontend TS/TSX | ~10.9k LOC (without the generated `schema.d.ts`) |
+| MCP tools registered | **111** (the 142 WindKit pass-throughs were removed 2026-11-19, decisions/0009) |
 | FastAPI endpoints | ~100 across 13 route files |
 | Backend tests | 83 pytest files (incl. an independent oracle harness) |
-| Frontend tests | 30 vitest files |
+| Frontend tests | 20 vitest files, 19 Playwright specs |
 
 ---
 
@@ -120,8 +123,11 @@ server/
   Run: `python -m server.main` (MCP over stdio).
 
 - **`server/api/main.py`** — the FastAPI app. `create_app()` includes 13 routers, all under
-  the `/api` prefix, in a fixed order (health, mcp, sessions, datasets, workflow_execution,
-  uploads, config, analysis, brighthub, results, sweep, exports, chat).
+  the `/api` prefix (health, mcp, sessions, datasets, uploads, analysis, results, sweep,
+  exports, chat, operations, series, projects). Every analysis step is reached through the
+  generated operation routes; the hand-written routes that duplicated one were retired in
+  P3-17e, and a middleware logs and saves after a change through one that remains (an
+  upload, a session reset, a dataset load, a sweep).
   Run: `python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000`.
 
 ### 4.2 `server/core/` — pure math + orchestration
@@ -138,19 +144,19 @@ The interface-free heart. Nothing here imports FastAPI or FastMCP.
 | `reanalysis.py` | Per-source descriptors for the long-term reference datasets (ERA5, MERRA-2). |
 | `validators.py` | Shared Phase-1 validation + the timebase helpers `to_utc_index`, `detect_timestep_minutes`, `SENSOR_FIELDS`, and the timestamp-label convention (F-07). |
 | `runconfig.py` | **The canonical/mirror runconfig contract (D20)** — the single source of truth for site metadata; frontend convenience fields are derived mirrors. |
-| `executor.py` | Phase-3 workflow-execution orchestration: runs the Canvas DAG node by node. |
 | `brighthub.py` | BrightHub API auth + data-access client (used by both the MCP tool and the HTTP route layer). |
 | `admissibility.py` | Decides whether a scenario's result may enter the reported sweep spread (the sweep gates). |
 | `sweep.py` | Expands a scenario space, runs each leaf (grouped by prefix to reuse expensive upstream stages), and persists every scenario's record. Checkpoints after every shear-prefix group (`checkpoint`, an `in_progress` manifest via `_persist`); skips a leaf whose computation already ran (`_execution_key`, keyed on resolved columns); replaces every JSON file atomically (`_write_json_atomic`, `_REPLACE_ATTEMPTS` / `_REPLACE_RETRY_DELAY_S`). Manifests carry `engine_version` and `duplicates_skipped`. |
 | `scenario_context.py` | Runs one scenario without disturbing the session it came from (ContextVar-bound isolation). |
-| `scenario_pipeline.py` | One scenario expressed as composable stages, from shear to uncertainty. `resolve_fit` (axis A1) and `resolve_reference` (axis A2) are split so the sweep's shear-prefix step refuses only on the fit policy; `resolve_sensors` calls both. The extrapolate stage carries the measured series only. |
-| `scenario_result.py` | One flat, hashable record per scenario (the sweep table row shape). `ENGINE_VERSION` (`2026.11.2`) is hashed into `fixed_prefix_hash`; cleaning-log entries are hashed without the time they ran (`CLEANING_LOG_UNHASHED_KEYS`). `config_hash` leaves policy names out of the spec. `build_result` takes the sweep's prefix rather than recomputing it. |
+| `pipeline.py` | `order_steps`: a pipeline's steps in the order their reads and writes require, ties broken by stage then by the order given; one step per result (a second producer refused, naming both), a cycle refused (`PipelineError`). Pure: declarations come in as `StepDeclaration` data. |
+| `scenario_pipeline.py` | One scenario expressed as composable stages, from shear to uncertainty, each calling the function its canvas operation calls (P3-7b). `resolve_fit` (axis A1) and `resolve_reference` (axis A2) are split so the sweep's shear-prefix step refuses only on the fit policy; `resolve_sensors` calls both. The extrapolate stage carries the measured series only. |
+| `scenario_result.py` | One flat, hashable record per scenario (the sweep table row shape). `ENGINE_VERSION` (`2026.11.3`) is hashed into `fixed_prefix_hash`; cleaning-log entries are hashed without the time they ran (`CLEANING_LOG_UNHASHED_KEYS`). `config_hash` leaves policy names out of the spec. `build_result` takes the sweep's prefix rather than recomputing it. |
 | `sweep_analysis.py` | Decomposes a sweep metric's variance across the five axes (design doc §7.9). Ported from `frontend/src/lib/sweepAnalysis.ts`, which was deleted — the statistic now has one implementation, reachable from both the Interrogate page and the chat tools. `duplicate_levels(rows, duplicates)` maps each policy level skipped as a duplicate to the level whose rows it shares, so an axis varied between two policies that picked the same sensors does not read as single-level. Also `uncertainty_substitution` (design doc §8.1, F9): folds each axis's level-mean spread of the long-term speed into the MCP and vertical terms by `max()`, adds the reference-source spread, and reports scenario totals with and without it; formerly browser-only. |
 | `sensor_selection.py` | Resolves a sensor-selection *policy* (e.g. `availability_90`, `widest_lever`) to concrete sensors. |
 | `datamodel_builder.py` | Builds a minimal IEA Task 43 data model from CSV column headers alone, for campaigns delivered without one. Header inference (`draft_columns`), spec validation and Task 43 emission (`build_datamodel`); emits a *document*, never session state. Every document it writes has `author` = `BUILDER_AUTHOR`, which is how `is_built_document` tells a drafted data model from a campaign's own. |
 | `decimation.py` | A time window of channels reduced to screen buckets (decisions/0005): `reduce_window` cuts [start, end) into equal-width buckets of whole milliseconds and returns each channel's minimum, maximum and valid count per bucket (`np.fmin/fmax/add.reduceat` over the occupied buckets), or the records themselves when there are no more than buckets; tested against `tests/oracles.py`'s per-record bucketing. |
 | `selection.py` | Record selections (decisions/0011): `validate` and `resolve` a tree of time ranges, direction sectors, value bands, polygons over two channels (a lasso; even-odd crossing rule over records sorted by y, so each edge tests only the records it straddles; at most `MAX_POLYGON_VERTICES` = 1000 vertices) and record sets combined by union and intersection, to a boolean mask over the working frame. Half-open bounds (an axis-aligned rectangle holds exactly what its two bands hold), sectors wrap through north, a missing value is never selected; tested against `tests/oracles.py`'s per-record evaluator. |
-| `uncertainty_inputs.py` | Derives a scenario's uncertainty inputs from its own results. `is_hub_interpolated` takes the scenario's reference heights; `derive_uncertainty_inputs` selects `analyst_supplied` or `log_law` shear methods where the source is an analyst exponent or a roughness-only profile. |
+| `uncertainty_inputs.py` | Derives a scenario's uncertainty inputs from its own results; given `shear_model`, the shear method follows it rather than which tables the session holds (P3-7b). `is_hub_interpolated` takes the scenario's reference heights; `derive_uncertainty_inputs` selects `analyst_supplied` or `log_law` shear methods where the source is an analyst exponent or a roughness-only profile. |
 
 ### 4.2a `server/operations.py` — the operation registry
 
@@ -159,20 +165,26 @@ with `canvas`, `assistant` and `network` where they differ from the defaults. Th
 publishes the MCP tool itself (`_publish_to_mcp`, through `mcp.tool()`); no tool module touches
 `mcp` directly, and `tests/test_mcp_surface.py` compares what clients receive with
 `tests/snapshots/mcp_tools.json` (`python -m tests.mcp_surface --write` to refresh). `Operation` also carries disclosure fields, standards references, a code version and
-an optional dry run; `REGISTRY` holds all 103. The parameter schema is read from the signature
-by FastMCP's own parser. `STAGES` is the pipeline order used for the canvas tie-break. It lives
+an optional dry run; `REGISTRY` holds all 111. The parameter schema is read from the signature
+by FastMCP's own parser. `STAGES` is the stage order a pipeline's ties break on. It lives
 outside `core/` because it imports FastMCP. Each declaration wraps its function (`_logged`,
 `functools.wraps`, so the MCP schema is unchanged): every call appends to
 `state.operation_log` (actor, operation, effect, parameters with `secret_parameters`
 redacted, code version, data version before and after, status), and a successful change
 saves the project. The actor comes from the `ACTOR` context variable that each surface sets
-(`acting_as`): `user` (generated routes), `assistant:<provider>/<model>` (chat), `canvas`
-(executor), `mcp` (the MCP mount and stdio server); otherwise `direct`. Hand-written session
+(`acting_as`): `user` (generated routes), `assistant:<provider>/<model>` (chat), `mcp` (the
+MCP mount and stdio server); otherwise `direct` (entries the retired Canvas logged say `canvas`). Hand-written session
 routes bypass the operations, so a middleware in `server/api/main.py` logs and saves after a
-successful change through one (`record_route_change`, route template only, never the body)
-until Phases 2-3 move the interface onto the generated routes. A declaration with `selectable=True` (reads only; 25 statistics, charts, the series window and the channel summary, pinned in `tests/test_selection_operations.py`) gains a keyword-only `selection` parameter in the published signature (`_selectable_signature`), so MCP, the generated routes, the canvas and chat all offer it; given a saved selection's name or an inline JSON definition (`server/tools/selections.py` `is_inline`, `selection_mask`), the wrapper runs the function on a copy of the session whose working frame and `PER_RECORD_FRAMES` (raw, shear and roughness timeseries) are blank outside the selection (`selection_view`) and adds a `selection` block to the result. A read on an inline definition is not written to the operation log (decisions/0014.6). The chat route's two tiers and callables, the
-executor's canvas dispatch (`_tool_registry`) and its stage tie-break are all read from it;
+successful change through one (`record_route_change`, route template only, never the body); since P3-17e the routes left are uploads, sessions, datasets, the sweep and the
+few kept for the owner. A declaration with `selectable=True` (reads only; 25 statistics, charts, the series window and the channel summary, pinned in `tests/test_selection_operations.py`) gains a keyword-only `selection` parameter in the published signature (`_selectable_signature`), so MCP, the generated routes, the canvas and chat all offer it; given a saved selection's name or an inline JSON definition (`server/tools/selections.py` `is_inline`, `selection_mask`), the wrapper runs the function on a copy of the session whose working frame and `PER_RECORD_FRAMES` (raw, shear and roughness timeseries) are blank outside the selection (`selection_view`) and adds a `selection` block to the result. A read on an inline definition is not written to the operation log (decisions/0014.6). The chat route's two tiers and callables, the
+operations a pipeline may hold (`canvas`) and its stage tie-break are all read from it;
 `tests/test_operations.py` pins the tiers, the non-canvas set and the stage order by name.
+Each declaration also names the artifacts it `reads` and `writes` (decisions/0015.2), from
+`server/state/artifacts.py`: the pipeline's typed ports and the dependencies staleness follows,
+published by `GET /operations`. `tests/test_artifacts.py` holds them to the code on every call
+the operation samples make: what a call changes is among its declared writes, its first call
+answers the same with every undeclared artifact removed, and a declared write no sample makes
+has its reason (`WRITES_NOT_OBSERVED`).
 
 ### 4.3 `server/tools/` — analytics (the MCP tool surface)
 
@@ -188,21 +200,23 @@ private helpers behind them. They total **90**.
 | `series.py` | 2 | `get_series_window` (selectable), the JSON form of `_series_window`, and `get_scatter_pairs`, the JSON form of `_scatter_pairs` (every record of a window where two channels are both valid, a `highlight` selection marked rather than applied; refused past `MAX_JSON_PAIRS`, a leap year of 10-minute records); both cut the window with `_window_rows`; the Arrow route `api/routes/series.py` calls the same function with a selection's mask (`keep`) instead of a blanked copy of the session. `DEFAULT_SERIES_BUCKETS`, `MAX_SERIES_BUCKETS`. |
 | `sensors.py` | 2 | `list_instruments`: the inventory's instruments by height with the statistic columns `draft_columns` pairs with each (and the mapping's `sd_col`), and the other channels. `remove_sensors` (dry run, undoable): inventory, mapping slot (and a speed sensor's `sd_col`), working and raw columns, `excluded_sensors`; bumps the data version. What a removal took out is kept in `state.removed_sensors` under its log sequence (`_remove_sensors(..., stash_key)`), and `_restore_sensors` puts back every field, refusing when a later change moved the mapping, the exclusion list or the records. The hand-written `POST /sensors/delete` calls the same `_remove_sensors` without a stash. |
 | `flags.py` | 1 | `get_flag_intervals`: the cleaning flags of a window run-length encoded per channel (consecutive working records flagged by one rule application, with rule, reason, actor and time, and `next`, the record where a band ends), for the timeline's flag bands; expanding the intervals gives the flag table back exactly (`tests/test_flag_intervals.py`). At most `MAX_FLAG_INTERVALS` (20,000) per response, `truncated` saying so. |
-| `selections.py` | 5 | `define_selection`, `delete_selection`, `list_selections`, `resolve_selection`; named selections live on `state.selections` and are resolved against the working data each time (`selection_mask`, which also takes an inline definition: `is_inline`, `inline_definition`). `summarise_channels` (selectable): valid records, mean, minimum and maximum of named channels. |
-| `history.py` | 3 | `undo_last_change`, `redo_last_change`, `get_operation_log`. Undo inverts the last undoable call (`UNDOABLE_OPERATIONS`): a cleaning rule through the replay undo, a configuration change by restoring exactly the paths and synced fields it changed, a sensor removal from what `sensors.py` kept aside, a data model build from its noted state before and after (`_undo_data_model`) (`_UNDO`, `_REDO`); it refuses when a later change moved them. Redo calls the operation again with its logged parameters. `state.undo_stack` holds what was undone; any other change clears it. |
+| `selections.py` | 5 | `define_selection`, `delete_selection`, `list_selections`, `resolve_selection`; named selections live on `state.selections`, are undoable (`restore_selection`), and are resolved against the working data each time (`selection_mask`, which also takes an inline definition: `is_inline`, `inline_definition`). `summarise_channels` (selectable): valid records, mean, minimum and maximum of named channels. |
+| `pipelines.py` | 6 | The campaign's pipeline (decisions/0015.1, 0015.4, 0015.5): `order_pipeline` orders its steps through `server/core/pipeline.py` from the operations' declared reads and writes and gives each step a status against what built its result (`derived_provenance` for results, the operation log for other artifacts: `current`, `changed`, `stale`, `not_run`, `upstream`, `invalid`, `ready`) with `to_run`; `save_pipeline`, `delete_pipeline`, `list_pipelines` keep named pipelines on `state.pipelines`, undone through `history.py`'s `_named`. Steps must be canvas operations without credentials. `pipeline_from_scenario` rebuilds a sweep scenario's steps from its runconfig (run through the operations they reproduce its row, `tests/test_scenario_reproduction.py`) and `sweep_spec_from_pipeline` maps steps back onto sweep levels (P3-7). |
+| `ltc_runs.py` | 0 | Which long-term correction runs how (`LTC_ALGORITHMS`, `DIRECTIONAL_LTC_ALGORITHMS`, `run_ltc_algorithm`) and on which columns (`resolve_ltc_columns`: the hub series against the active reference), shared by the hand-written routes and the sweep's long-term stage; moved out of `api/routes/analysis.py` so the engine no longer imports a route module (P3-7a). |
+| `history.py` | 3 | `undo_last_change`, `redo_last_change`, `get_operation_log`. Undo inverts the last undoable call (`UNDOABLE_OPERATIONS`): a cleaning rule through the replay undo, a configuration change by restoring exactly the paths and synced fields it changed, a sensor removal from what `sensors.py` kept aside, a data model build from its noted state before and after (`_undo_data_model`), a saved selection by putting back the stored entry the call found (`restore_selection` in `selections.py`) (`_UNDO`, `_REDO`); it refuses when a later change moved them. Redo calls the operation again with its logged parameters, except a selection, which gets its stored entry back with its original author and time. `state.undo_stack` holds what was undone; any other change clears it. |
 | `cleaning.py` | 4 | Rule-based timeseries cleaning (list/apply/log/undo). Every record a rule removes gets a row in `state.cleaning_flags` (timestamp, sensor, rule sequence and type, reason code from `FLAG_REASONS`, or the analyst's `MANUAL_FLAG_REASONS` code for `exclude_selection`, actor, time), found by diffing each column the rule names before and after it (`exclude_selection` names several: `_selection_columns`, `_logged_columns`; it resolves its frozen definition with `server/core/selection.py`); `_clean_series(raw, index, flags)` rebuilds the cleaned series from raw data, bit for bit. Each log entry records its `actor` (unhashed in the prefix, like `applied_at`). Undo replays the remaining rules as before and keeps each one's original actor and time on its flags and its log entry (`_carry_flag_provenance`, `_carry_entry_provenance`), including the flags of a rule that only removes records once an earlier rule is undone. `get_cleaning_log` returns a flag summary. Apply and undo have dry runs (`preview_cleaning_rule`, `preview_undo_cleaning_rule`): the real function runs on a replica of the session (`_replica`) and `_change_summary` reports rows inserted, columns dropped, and per column the records set missing, restored or changed with their runs (at most `PREVIEW_RANGE_LIMIT` listed, `ranges_truncated` saying so). |
 | `statistics.py` | 9 | Weibull, wind climate, turbulence, windrose, diurnal/monthly, MoMM, scatter. |
-| `shear.py` | 7 | Shear/roughness time series and 12×24 lookup tables, sector + aggregated-MoMM tables. |
+| `shear.py` | 8 | Shear/roughness time series and 12×24 lookup tables, sector + aggregated-MoMM tables. `build_constant_shear_table` fills the table with one exponent (given, or the series mean); the sweep's `power_law_constant` level and an analyst exponent use its `_build_constant_shear_table` (P3-7b). |
 | `extrapolation.py` | 2 | Hub-height extrapolation of measured masts and reanalysis. Sub-gate records are extrapolated and counted, not dropped (the gate governs the fit only); `extrapolate_reanalysis=False` skips the reanalysis side effect for sweep leaves. |
 | `air_density.py` | 2 | IEC moist-air density (point + time series). |
 | `atmosphere.py` | 1 | Measured atmospheric-condition summaries (Sensor Overview). |
 | `era5.py` | 7 | ERA5 node discovery, extraction, wind-speed compute, interpolation to site, plus the session-scoped EarthDataHub credential (`earthdatahub_set_credential`/`_clear_credential`/`_status`). |
 | `homogeneity.py` | 2 | Pettitt homogeneity screening of reanalysis + cutoff application. |
-| `ltc.py` | 4 | Deterministic long-term correction: linear LS, total LS, SpeedSort, variance ratio. `_speedsort_fit` is the rank-sorted fit (sort, then threshold) used at every SpeedSort fit site. |
+| `ltc.py` | 4 | Deterministic long-term correction: linear LS, total LS, SpeedSort, variance ratio. `_speedsort_fit` is the rank-sorted fit (sort, then threshold) used at every SpeedSort fit site. Every correction operation takes `reference_source`, used for that call only through `SessionState.using_reference_source` (P3-7b). |
 | `ltc_ml.py` | 1 | XGBoost long-term correction (with truncation disclosure). |
 | `ensemble.py` | 1 | Multi-algorithm LTC blending. |
 | `clipping.py` | 1 | Long-term clipping vs. historic-climate-uncertainty tradeoff. |
-| `uncertainty.py` | 2 | Total uncertainty (RSS) + exceedance factors and energy sensitivity. Interim shear constants `K_SHEAR_ASSUMED_POWER_LAW`, `K_SHEAR_LOG_LAW`, `K_SHEAR_ANALYST_SUPPLIED`; `VALID_SHEAR_METHODS` refuses unknown methods on the MCP path. |
+| `uncertainty.py` | 3 | Total uncertainty (RSS) + exceedance factors and energy sensitivity. `calculate_scenario_uncertainty` (`_scenario_uncertainty`, also the sweep's uncertainty stage) derives every input from the scenario's own results: the shear method from its shear model, the default inter-annual variability (`measured_iav=False`) and the energy figures on its own correction (`long_term_source`), so the session's other results are never read (P3-7b). Interim shear constants `K_SHEAR_ASSUMED_POWER_LAW`, `K_SHEAR_LOG_LAW`, `K_SHEAR_ANALYST_SUPPLIED`; `VALID_SHEAR_METHODS` refuses unknown methods on the MCP path. |
 | `diagnostics.py` | 4 | Sensor comparison, mast effects, QC diagnostics, MCP readiness. |
 | `advanced_analysis.py` | 4 | Energy metrics, extreme winds, ramps, persistence (Sensor Overview). |
 | `overview_summary.py` | — | Consolidated bankable Sensor Overview summary table. |
@@ -249,22 +263,19 @@ logic as the MCP tools, and shape the response with the Pydantic models in `sche
 
 | Route file | Endpoints | Area |
 |------------|:--------:|------|
-| `analysis.py` | 37 | Workflow analysis (statistics, shear, extrapolation, ERA5, ensemble, clipping, homogeneity, uncertainty, scenarios). |
-| `workflow_execution.py` | 14 | Phase-3 Canvas DAG execution, snapshots, run comparison, branching. |
-| `brighthub.py` | 8 | BrightHub login/logout/status, location browsing, reanalysis, import. |
-| `sweep.py` | 8 | Scenario-sweep engine surface (axes, estimate, run, **run/stream** SSE, list, get, runconfig, **spread**). |
+| `analysis.py` | 8 | What the retired interface used and no operation does: sensor statistics, the overview summary, a clipping source's columns, runconfig import, and the named scenarios (save, list, delete, run). No screen calls them; kept until the owner decides (P3-17e). |
+| `sweep.py` | 8 | Scenario-sweep engine surface (axes, estimate with the duplicates and refusals the run will make (`core/sweep.py` `estimate_sweep`, P3-8), run, **run/stream** SSE, list, get, runconfig, **spread**). |
 | `datasets.py` | 6 | Shared dataset-pool CRUD + load-into-session. |
-| `uploads.py` | 7 | Timeseries/datamodel upload, the data model builder (draft/build), sensor inventory + coverage, delete. |
-| `results.py` | 5 | LTC/ensemble results, plots, site map, runconfig export. |
+| `uploads.py` | 3 | Timeseries and data model upload (multipart, so routes and not operations), and the sensor inventory the charts read. |
+| `results.py` | 4 | The retired Results report's summaries of the stored corrections and ensemble, its runconfig export, and `/plots/{name}`, the figures no `plot_*` operation draws. No screen calls them. |
 | `sessions.py` | 4 | Session lifecycle. |
 | `projects.py` | 6 | Projects of campaigns (decisions/0014.11): list, create, read (each campaign's coordinate and timezone, `timezones_differ`), rename, add a campaign (a new session), rename a campaign. Workspace management above the sessions, like `POST /sessions`, so routes and not operations. |
 | `exports.py` | 4 | File downloads (timeseries CSV, LTC CSV, ensemble CSV, runconfig JSON). |
-| `config.py` | 3 | Runconfig get/update + workflow summary. |
-| `mcp.py` | 1 | MCP catalog endpoint. |
+| `mcp.py` | 1 | MCP catalog: the tools and resources, for a browser MCP client (the retired Copilot used it). |
 | `health.py` | 1 | Health check. |
 | `chat.py` | 1 | OpenAI-compatible LLM chat proxy with MCP tool execution (drives the BYOK Copilot). |
 | `series.py` | 4 | `GET` and `POST /sessions/{id}/series`: a series window as an Arrow IPC stream (`series_arrow`, `window_table`), the window's description in the schema metadata; `GET` and `POST /sessions/{id}/pairs`, a scatter's points from `_scatter_pairs` (`pairs_table`); POST takes the query as a body for a selection too long for a URL and is listed in `api/main.py`'s `_READING_POST_ROUTES`, so neither is logged as a change. Hand-written because the generated routes return JSON. |
-| `operations.py` | 107 | Generated from the registry: `POST /sessions/{id}/operations/{name}` for each of the 103 operations, `.../preview` for the three with a dry run, with a body model built from the function signature (`<Name>Parameters`, extra fields refused), and `GET /operations` listing every declaration. Same session binding and error mapping as chat. |
+| `operations.py` | 115 | Generated from the registry: `POST /sessions/{id}/operations/{name}` for each of the 111 operations, `.../preview` for the three with a dry run, with a body model built from the function signature (`<Name>Parameters`, extra fields refused), and `GET /operations` listing every declaration. Same session binding and error mapping as chat. |
 
 `api/mcp.py` additionally mounts a **session-aware MCP transport** into the FastAPI app, so a
 browser session and an MCP client can share the same live session state.
@@ -273,9 +284,10 @@ browser session and an MCP client can share the same live session state.
 
 | Module | Responsibility |
 |--------|----------------|
-| `session.py` | `SessionState` — the mutating singleton holding all working data for one analysis (loaded frames, derived tables, LTC results, runconfig). Bound per-session through a `ContextVar` (`session`). Carries `data_version` stamps: `stamp_derived()` / `staleness_report()` implement the **no-silent-recomputation** rule (derived artifacts are marked stale, never auto-recomputed). |
+| `session.py` | `SessionState` — the mutating singleton holding all working data for one analysis (loaded frames, derived tables, LTC results, runconfig). Bound per-session through a `ContextVar` (`session`). Carries `data_version` stamps: `stamp_derived()` / `staleness_report()` implement the **no-silent-recomputation** rule (derived artifacts are marked stale, never auto-recomputed). Staleness follows the declared dependencies (decisions/0015.3): the operation wrapper moves an artifact's version (`bump_artifact`, `artifact_versions`, from `artifact_clock`) when a call changes what it declares it writes, and records for each result the call built the versions of what it reads (`record_inputs`, `derived_inputs`); `stale_reason` names an input that changed or is stale itself. |
 | `manager.py` | `SessionManager` — the registry of browser workspaces (create / get / fork / delete). `_clone_session_state` copies every `SessionState` field; `_CLONE_EXCLUDED` names the identity fields a fork must not inherit. A coverage test enforces that every attribute is cloned or excluded. |
 | `dataset_pool.py` | Shared dataset-pool storage and metadata, so an ingested dataset can be reused across sessions. |
+| `artifacts.py` | The named results operations read and write (decisions/0015.2): `ARTIFACTS` (25: the measured records, data model, site, label, settings, credentials, selections, reanalysis nodes, reference series, the reanalysis and measured hub series, shear and roughness series and tables, each long-term correction, its alignment, the saved scenarios, ensemble, clipping, uncertainty), each with a `digest` of only its own part of the session and a `clear` that removes only that part. Shared fields are split: hub-height columns (`HUB_COLUMN_SUFFIX`) belong to the hub series, and the run configuration's keys to the artifact that owns them. `ARTIFACT_FIELDS` and `UNTRACKED_FIELDS` together cover every `SessionState` field. |
 | `projects.py` | `ProjectRegistry` (decisions/0014.11): projects beside the session workspaces, `data/projects/<id>/project.json` (name, site name, campaigns) and `reanalysis_cache/`, which every campaign's `SessionState.reanalysis_cache_dir` resolves to (`state.project`), so a node downloaded for one campaign is a cache hit for another. Read from disk on every call; a project id must be 32 hex characters, so it cannot reach outside the folder. Campaign kinds: `CAMPAIGN_KINDS`. |
 | `project.py` | `ProjectStore` (decisions/0010): a session's state on disk. Raw inputs stay in `uploads/`, each with its SHA-256 in `catalogue.sqlite`; opening refuses (`ProjectIntegrityError`, HTTP 409) if one was changed or removed. Every DataFrame is written to `working/<content sha256>.parquet`, so an unchanged frame is not rewritten and identical frames are stored once; every other field is JSON in the catalogue. `EXCLUDED_FIELDS` names what is never written and why (identity, credentials, in-flight run status). `SessionManager.get_session` reopens a saved project after a restart, falling back to `runconfig.json` alone for a workspace without one. |
 
@@ -300,7 +312,7 @@ remaining changes, the dry runs, and the network operations against fakes).
 ## 5. The analysis pipeline (data flow)
 
 A campaign flows through these stages; each is exposed as both MCP tools and HTTP endpoints,
-and rendered as a node on the frontend Canvas and a step in the Stepper:
+and is a step a pipeline in the Model phase can hold:
 
 ```
 ingest ─▶ clean ─▶ statistics ─▶ shear / vertical profile ─▶ hub extrapolation
@@ -349,9 +361,9 @@ defensible choices.
 - **`api/routes/sweep.py`** serves it, including `POST /run/stream`, a Server-Sent-Events
   endpoint that emits one event per scenario as it finishes (its own asyncio-queue +
   `asyncio.to_thread(run_sweep, on_progress=…)` implementation).
-- Frontend: `components/sweep/` (Sweep Designer → Run Monitor → Spread Explorer →
-  Sensitivity → Spread Summary) over `store/useSweepStore.ts` and `lib/sweepApi.ts` /
-  `lib/sweepAnalysis.ts`.
+- Frontend: the Run phase (`workbench/run/`: designer, live estimate, monitor) and the
+  Interrogate phase (`workbench/interrogate/`: scenarios, distribution, parallel coordinates,
+  the server's sensitivity decomposition, gates, two scenarios side by side).
 
 ---
 
@@ -361,8 +373,8 @@ React 19 + Vite + TypeScript. `npm run dev` serves on `:5173` and proxies `/api`
 
 ```
 frontend/src/
-├── workbench/           # the new shell at /workbench/ (decisions/0014.9), entry
-│   │                     #   frontend/workbench/index.html, a second Vite input
+├── workbench/           # the application, served at / (frontend/index.html; it was at
+│   │                     #   /workbench/ beside the old interface until P3-16 retired that)
 │   ├── main.tsx          # React root, TanStack Query client, theme applied before render
 │   ├── Workbench.tsx     # ?campaign= opens the Shell, otherwise the StartScreen
 │   ├── StartScreen.tsx, projects/  # projects of campaigns: new, rename, add a campaign,
@@ -373,7 +385,11 @@ frontend/src/
 │   ├── sensors.ts        # the sensors route's rows, checked (its response is untyped)
 │   ├── datatree/         # DataPanel: the data tree (list_instruments by height, statistics,
 │   │                     #   other channels, reanalysis, saved selections, flags); every
-│   │                     #   channel a dnd-kit draggable onto a chart
+│   │                     #   channel a dnd-kit draggable onto a chart; Removal.tsx takes
+│   │                     #   sensors out of the analysis (remove_sensors, previewed) (P3-12a);
+│   │                     #   BrightHubImport.tsx loads an empty campaign from a BrightHub
+│   │                     #   location (brighthub_import_location) (P3-12b)
+│   ├── reanalysis/BrightHubCredentials.tsx  # the BrightHub sign-in both panels show
 │   ├── timeline/         # uPlot over Arrow series windows (POST /series), refetched on
 │   │                     #   zoom; brush = the period term; flag bands (get_flag_intervals),
 │   │                     #   clicked or stepped with the arrow keys; drop a channel to add it
@@ -385,7 +401,17 @@ frontend/src/
 │   │                     #   tower-shadow rule
 │   ├── profile/          # SVG mean profile (compute_vertical_structure) for every record
 │   │                     #   and the selection, with each power-law exponent
+│   ├── prepare/          # RulesPanel: the cleaning rules as forms from list_cleaning_rules'
+│   │                     #   default parameters, preview (dry run) then apply; OverviewPanel:
+│   │                     #   QC, sensor comparison, MCP readiness, mast effects, atmosphere,
+│   │                     #   each from its operation, a refusal shown as the server's reason;
+│   │                     #   rules.ts: the request a rule's form makes (decisions/0015.13)
 │   ├── reanalysis/       # BrightHub and EarthDataHub acquisition, one node at a time
+│   ├── run/              # the Run phase (decisions/0015.6): design.ts (axes, presets, retain what the
+│   │                     #   campaign can run, the request body), store.ts (design, run and latest-sweep
+│   │                     #   stores per campaign; setDesign takes a request-shaped spec), progress.ts (SSE
+│   │                     #   reducer), stream.ts (fetch reader), MatrixPanel (levels, live /estimate with
+│   │                     #   duplicates and refusals), MonitorPanel (events, outcome, not-swept sentence)
 │   ├── charts/, dnd.tsx  # which channels each chart draws; the drop context resolving a
 │   │                     #   channel dropped on a chart
 │   ├── flags/            # the focused flag band; a rule a view proposes (draft.ts)
@@ -395,103 +421,55 @@ frontend/src/
 │   │                     #   flagging it (instrument columns, reason, note, preview, apply:
 │   │                     #   one exclude_selection rule), a proposed rule, the focused flag
 │   │                     #   (who, when, why; remove its rule)
+│   ├── interrogate/      # store.ts: Interrogate's crossfilter (decisions/0015.7) over a sweep's
+│   │                     #   rows, terms per view (histogram ranges, parallel brushes, level
+│   │                     #   filters), pins (two at most), filtered config hashes; the
+│   │                     #   Scenarios, Distribution and Parallel panels; useSweeps.ts reads
+│   │                     #   GET /sweep and /sweep/{id}. SensitivityPanel (the server's
+│   │                     #   decomposition over the filtered hashes, spread, uncertainty
+│   │                     #   substitution, the not-swept sentence), GatesPanel (over the
+│   │                     #   filtered scenarios, admissible or not: verdicts, each gate's
+│   │                     #   description from GATE_META, thresholds from the manifest,
+│   │                     #   observed range and the scenarios behind each verdict, those that
+│   │                     #   could not run; axes over the sweep from get_sweep_summary), PinnedPanel
+│   │                     #   (two scenarios and where their runconfigs differ; load into
+│   │                     #   Model; download each runconfig) (P3-15); export.ts: the
+│   │                     #   sweep's rows as CSV, every column any row has (P3-14a)
 │   ├── history/          # undo, redo and the status bar's history (get_operation_log,
 │   │                     #   get_fixed_prefix_hash), shared with the assistant and MCP
+│   ├── model/            # the Model phase (P3-10, decisions/0015.1-0015.5): operations.ts
+│   │                     #   (GET /operations, the palette's stages, runOperation through the
+│   │                     #   generated route), store.ts (the campaign's working pipeline,
+│   │                     #   view state in this browser), order.ts (order_pipeline's order
+│   │                     #   and statuses; run steps one at a time, stop at a refusal),
+│   │                     #   graph.ts (layout by dependency depth, ports), PalettePanel,
+│   │                     #   PipelinePanel (React Flow, edges only from the server's order;
+│   │                     #   Run stale; named pipelines), StepPanel (generated form, status,
+│   │                     #   result with its disclosure fields first)
+│   ├── forms/            # schema.ts: an operation's parameter schema (GET /operations) as
+│   │                     #   fields, controls' text as a body and back; OperationForm.tsx
+│   │                     #   renders them, channels and sources offered (P3-9)
 │   ├── theme/            # tokens.css (light and dark design tokens, series colours, the
 │   │                     #   .gk-dockview theme class over dockview's --dv-* variables)
-│   └── shell/            # Shell.tsx (header with undo, redo and commands; DockviewReact;
-│                         #   status bar), layout.ts (the seven panels, default arrangement,
-│                         #   stored layout versioned with them), tabs.tsx (title-only tab;
+│   └── shell/            # Shell.tsx (header with the phases, undo, redo and commands;
+│                         #   one DockviewReact per phase, the phase named in the address;
+│                         #   status bar), layout.ts (PHASES, each phase's panels and default
+│                         #   arrangement, one stored layout per phase, versioned with its
+│                         #   panels; Prepare keeps Phase 2's key, P3-10a), tabs.tsx (title-only tab;
 │                         #   close in the group actions, outside role=tab, decisions/0006),
 │                         #   panels.tsx, context.ts, keys.ts (Ctrl+Z, Ctrl+Shift+Z, Ctrl+K),
 │                         #   CommandPalette.tsx, CampaignSwitcher.tsx
-├── App.tsx              # thin shell; gates on session existence, switches on activePhase
-├── main.tsx             # React entry
-├── components/
-│   ├── PhaseRail.tsx     # primary nav (2026-09 redesign): Prepare / Run / Interrogate /
-│   │                     #   Canvas / Copilot — replaced the old 10-tab PhaseTabs.tsx
-│   ├── CommandPalette.tsx  # ⌘K "Ask or jump" — searches real phases/stages/presets/
-│   │                     #   metrics/gates; free text falls through to Ask Copilot
-│   ├── PrepareView.tsx   # Prepare phase: merges Data import/Cleaning/Reanalysis/Sensor
-│   │                     #   Overview/Stepper/Results into one screen with an internal
-│   │                     #   Data loading|Pipeline|Sensor Overview|Results section switcher,
-│   │                     #   real prefix-stat tiles + stamp banner (server/tools/scenario_result.py)
-│   ├── RunView.tsx       # Run phase: SweepDesigner + SweepMonitor on one screen
-│   ├── InterrogateView.tsx  # Interrogate phase: SpreadSummaryView + SpreadExplorer +
-│   │                     #   SensitivityView + GateReportView stacked under one metric switch
-│   ├── AppHeader.tsx, HomeView.tsx, HowToView.tsx, AssetsDrawer.tsx
-│   │                     #   HowToView is now a header-triggered overlay (howToOpen), not a tab
-│   ├── WorkflowView.tsx  # Canvas: the editable React-Flow DAG. Populated *only* by
-│   │                     #   "Load from sweep" (picks a sweep + scenario, loads that
-│   │                     #   scenario's exact runconfig via loadScenarioIntoCanvas), "Upload
-│   │                     #   config" (reads a local .json file via FileReader into the same
-│   │                     #   Edit config textarea, 2026-09-08), or manual Edit config/
-│   │                     #   Rebuild from config — no auto-built default pipeline
-│   │                     #   (2026-09-07; see CLAUDE.md). Also hosts a "Compare runs" toggle
-│   │                     #   that swaps in CompareView unchanged (Compare's tab was retired —
-│   │                     #   it compares workflow-run executions, not sweep scenarios, so it
-│   │                     #   relocated here rather than into Interrogate)
-│   ├── Stepper.tsx       # guided linear per-stage review — now reached via Prepare's
-│   │                     #   "Pipeline" section (StageShell), not a standalone tab
-│   ├── SensorReviewView.tsx  # Sensor Overview validation dashboard — reached via Prepare's
-│   │                     #   "Sensor Overview" section
-│   ├── CopilotView.tsx   # BYOK AI Copilot (kept as its own PhaseRail entry, alongside ⌘K)
-│   ├── CompareView.tsx   # manual 2–4 workflow-run comparison; mounted inside WorkflowView now
-│   ├── common/           # shared widgets: PlotFrame, MetricsCard, NodeTable, SensorPicker,
-│   │                     #   Disclosure, MiniMap, RunButton, StageHeader
-│   ├── stages/           # one view per pipeline stage (DataLoad, DataModelBuilder,
-│   │                     #   Cleaning, Shear/Extrap, Reanalysis, LTC, Ensemble,
-│   │                     #   Clipping, Explore) — composed by StageShell inside
-│   │                     #   PrepareView; DataModelBuilder is a DataLoad sub-path
-│   ├── results/          # read-only Results report — reached via Prepare's "Results" section
-│   └── sweep/            # the individual sweep views RunView/InterrogateView compose
-│                         #   (Designer, Monitor, Spread/Sensitivity/Summary/GateReport);
-│                         #   AnalysisEngineView.tsx (the old 6-sub-tab shell) was deleted
-├── store/
-│   ├── useWorkspaceStore.ts  # single Zustand store = entire app state (~2,300 LOC).
-│   │                     #   Nav field is `activePhase: PhaseId` (5 values), not the old
-│   │                     #   `activeTab: TabId` (10 values); `prepareSection` picks Prepare's
-│   │                     #   internal section; `prefixHash`/`reanalysisSourcesForPrefix`/
-│   │                     #   `cleaningActionsCount`/`loadPrefixHash()` back Prepare's tiles;
-│   │                     #   `howToOpen`/`paletteOpen` are the two overlay flags;
-│   │                     #   `loadScenarioIntoCanvas(sweepId, configHash)` is Canvas's sole
-│   │                     #   population path (2026-09-07) — sequences the pre-existing
-│   │                     #   `replaceWorkflowRunConfig`+`rebuildWorkflowGraph` pair
-│   └── useSweepStore.ts      # separate sweep store (kept apart from the large workspace
-│                         #   store); `previewSweepScenarios()` peeks a sweep's scenario list
-│                         #   for Canvas's picker without touching manifest/rows/phase, unlike
-│                         #   `openSweep()` which Run/Interrogate read from
 ├── api/                  # generated from the server's OpenAPI schema (P1-20); not edited by hand
 │   ├── openapi.json      # committed schema (python -m tests.openapi_schema --write)
 │   ├── schema.d.ts       # npm run generate:api (openapi-typescript 7.13.0); CI: npm run check:api
 │   └── client.ts         # openapi-fetch client; adds X-GoKaatru-Session from the path
-├── lib/
-│   ├── api.ts            # hand-written HTTP client the current interface uses, until Phase 2
-│   ├── sweepApi.ts       # HTTP client for the sweep engine, incl. getPrefixHash (2026-09)
-│   ├── prepareStats.ts   # pure helpers for Prepare's stat tiles (meanCoverage) — plain
-│   │                     #   arithmetic over already-disclosed numbers, no disclosure entry
-│   ├── workflow.ts       # React-Flow DAG builder for the 8-stage workflow
-│   ├── defaultWorkflowPlan.ts, defaultConfig.ts  # default DAG + config
-│   ├── stages.ts         # maps backend completed_steps → 8-stage status
-│   ├── configSync.ts     # bidirectional sync: typed WindAnalysisConfig ⇄ flat backend runconfig
-│   ├── normalization.ts  # reshape backend responses into uniform NormalizedAsset for the drawer
-│   ├── scenarioCompare.ts, sweepAnalysis.ts       # client-side comparison/analysis helpers
-│   └── copilotAgent.ts   # BYOK copilot agent over the OpenAI-compatible /chat endpoint
 └── types/
-    ├── analysis.ts       # canonical config schema + backend response interfaces
-    └── sweep.ts          # sweep result-row schema, mirroring the backend; PrefixHash added
+    └── sweep.ts          # sweep result-row columns, axis and metric labels, mirroring the backend
 ```
 
-Two design points worth knowing:
-
-- The **Canvas** (React-Flow DAG, editable, live execution) and the **Stepper** (guided
-  linear review) are **not competing models** — Canvas = run the pipeline as a graph,
-  Stepper = inspect one stage in depth. Since the 2026-09 redesign they are reached
-  differently (Canvas is its own `PhaseRail` entry; the Stepper lives inside Prepare's
-  "Pipeline" section) but the underlying distinction is unchanged.
-- `configSync.ts` is the load-bearing bridge: the backend's single source of truth is the
-  flat `runconfig` dict (mirrored from `core/runconfig.py`); the typed `WindAnalysisConfig`
-  the UI edits is kept in sync with it in both directions.
+Each phase docks its own panels and keeps its own arrangement; every panel reads the server
+through the generated client, and a change goes through the generated operation routes, so
+the interface holds no analysis logic of its own (decisions/0015).
 
 ---
 
@@ -545,10 +523,14 @@ python -m pytest tests/ -v
 python -c "import asyncio; from server.main import mcp; print(len(asyncio.run(mcp.list_tools())), 'tools')"
 ```
 
-### Frontend (`frontend/src/test/`, vitest — 45 files)
+### Frontend (`frontend/src/test/`, vitest — 20 files; `frontend/e2e/`, Playwright — 19 specs)
 
-Covers the stores, the workflow/DAG builder, stage-status logic, the sweep lifecycle and
-analysis, disclosure rendering, and the stage/results views.
+Vitest covers the workbench's pure pieces: forms from operation schemas, the crossfilter
+stores, chart geometry, the pipeline graph, the sweep designer (held against the retired
+designer's frozen presets and request bodies, `src/test/fixtures/oldSweepDesigner.json`) and
+the Interrogate tallies. Playwright drives every panel against a real backend, fails on any
+error the page throws and runs axe; `e2e/oldDesignerRuns.json` holds what the old designer
+posted for each preset, recorded by the last live comparison before P3-16.
 
 Run:
 ```bash
@@ -637,6 +619,45 @@ See the README's "Known limitations" section for the full list and rationale.
 - WindKit pinned `>=2.0,<2.1` → `==2.2.0`. `tests/test_windkit_adopted.py` replaces the
   removed smoke test's purpose (catch upstream drift) for the functions actually used.
 
+**2026-11-26 — the old interface retired (P3-16, decisions/0015)**
+
+- The workbench moved from `/workbench/` to `/`. Deleted the interface it replaced:
+  `App.tsx`, the old `main.tsx` and `styles.css`, `components/`, `lib/`, `store/`,
+  `types/analysis.ts`, their 30 vitest files and the second Vite input. Removed the twelve
+  packages only it imported (the AI SDKs, the MCP SDK, Leaflet, Plotly, zod, clsx); no
+  remaining package changed version. The Copilot and the Results report return in Phases 4
+  and 7; sessions made before projects are not reachable from the screens (decisions/0015).
+
+**2026-11-26 — the Canvas executor retired (P3-17d, decisions/0015.1)**
+
+- Deleted `server/core/executor.py` and `server/api/routes/workflow_execution.py` (14 routes:
+  execute, step, stream, status, runs, compare, snapshots, branches, capabilities), their 21
+  request and response models, the session's `executed_nodes`, `workflow_execution` and
+  `workflow_runs`, and the tests that pinned the executor (`test_workflow_contract.py`'s
+  ordering and F-10 cases, `test_executor_concurrency.py`, `test_api_workflow_execution.py`).
+  A pipeline in the Model phase replaces the Canvas: ordered by the server from what each step
+  reads and writes, run one step at a time through the generated routes. The three staleness
+  tests moved to `tests/test_cleaning_staleness.py` and the sensors-route tests to
+  `tests/test_api_sensors.py`. A saved project's stored copy of a retired field is left on disk
+  and not restored.
+
+**2026-11-26 — the duplicated hand-written routes retired (P3-17e, decisions/0015.10)**
+
+- Deleted the hand-written routes an operation replaces: 32 in `analysis.py` (the diagnostics,
+  cleaning, shear and roughness, extrapolation, EarthDataHub and ERA5, the corrections,
+  ensemble, clipping, homogeneity, uncertainty), all of `brighthub.py` (8) and `config.py`
+  (3), `/map/site` from `results.py`, and the data model draft and build, coverage and sensor
+  removal from `uploads.py`. The tests that went through them call the generated routes
+  (`tests/http_operations.py`). Kept, with no operation and no screen, for the owner to
+  decide: sensor statistics, the overview summary, clipping columns, runconfig import, the
+  named scenarios, the Results report's summaries and runconfig export, `/plots/{name}`, the
+  exports, the dataset pool and the MCP catalog.
+- Four differences between a route and its operation were found and closed first: the
+  BrightHub node finder did not record the nodes interpolation reads, and a BrightHub location
+  id reached file names unchecked (P3-17a); an ERA5 extraction's date and coordinate checks
+  lived in the route's request model only (P3-17b); `/extrapolation/hub` also copied the shear
+  coefficients into the working data, which nothing reads from there.
+
 **Candidates for a future pass** (larger modules with a plausible seam, left intact here
 because the risk/benefit did not clearly favor churn):
 
@@ -645,9 +666,6 @@ because the risk/benefit did not clearly favor churn):
   `_list_sensors`, `_get_data_coverage`); a package split is feasible with the same
   re-export approach but needs care.
 - `server/api/routes/analysis.py` (37 endpoints).
-- `frontend/src/store/useWorkspaceStore.ts` (~2k LOC) — the single largest frontend file;
-  the sweep state was already peeled off into `useSweepStore.ts`, and further slicing by
-  concern is possible.
 
 When picking any of these up, keep the public import/HTTP surface identical, and validate
 against the full backend and frontend suites (plus the tool count — 226 as of 2026-09-06)

@@ -117,5 +117,5 @@ export function pageErrors(page: Page): string[] {
 }
 
 export function workbenchUrl({ projectId, sessionId }: Opened): string {
-  return `/workbench/?project=${projectId}&campaign=${sessionId}`;
+  return `/?project=${projectId}&campaign=${sessionId}`;
 }

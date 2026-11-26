@@ -422,8 +422,16 @@ def _run_ltc_xgboost(
         "cv_rmse_spread",
     ),
     result=result_models.RunLtcXgboostResult,
+    reads=("hub_height_series", "measured_data", "reference_series", "reference_choice", "settings"),
+    writes=("ltc:xgboost", "ltc_matching"),
 )
-def run_ltc_xgboost(short_col: str, long_col: str, short_dir_col: str = "", long_dir_col: str = "") -> dict:
+def run_ltc_xgboost(
+    short_col: str,
+    long_col: str,
+    short_dir_col: str = "",
+    long_dir_col: str = "",
+    reference_source: str = "",
+) -> dict:
     """Run XGBoost MCP with temporal, directional, and meteorological features and early stopping.
 
     Tree models cannot extrapolate: long-term speeds above the campaign maximum
@@ -431,4 +439,5 @@ def run_ltc_xgboost(short_col: str, long_col: str, short_dir_col: str = "", long
     alone for extreme-wind estimation. The extent of the truncation is reported
     in the metrics (D11).
     """
-    return _run_ltc_xgboost(session, short_col, long_col, short_dir_col, long_dir_col)
+    with session.using_reference_source(reference_source):
+        return _run_ltc_xgboost(session, short_col, long_col, short_dir_col, long_dir_col)

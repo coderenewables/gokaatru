@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { Schemas } from "../../api/client";
 import { api, unwrap } from "../api";
 import { useSharedSelection } from "../selection/store";
+import { speedChannels, useSensors } from "../sensors";
 import { useCampaign } from "../shell/context";
 import "./profile.css";
 
@@ -48,13 +49,18 @@ const alpha = (value: number | null | undefined) => (value === null || value ===
 export function ProfilePanel() {
   const { sessionId } = useCampaign();
   const selection = useSharedSelection();
-  const all = useQuery({ queryKey: ["profile", sessionId, ""], queryFn: structure(sessionId, "") });
+  const sensors = useSensors(sessionId);
+  const speeds = speedChannels(sensors.data ?? []).length;
+  const all = useQuery({ queryKey: ["profile", sessionId, ""], enabled: speeds > 0, queryFn: structure(sessionId, "") });
   const selected = useQuery({
     queryKey: ["profile", sessionId, selection],
-    enabled: selection !== "",
+    enabled: speeds > 0 && selection !== "",
     queryFn: structure(sessionId, selection),
   });
 
+  if (sensors.data !== undefined && speeds === 0) {
+    return <div className="gk-panel gk-panel-empty"><p>No wind speed channel in the data, so there is no profile to draw.</p></div>;
+  }
   if (all.isError) {
     return (
       <div className="gk-panel gk-panel-empty">

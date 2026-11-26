@@ -61,11 +61,18 @@ _NUMBERS = "takes its inputs as numbers, not records"
 NOT_SELECTABLE = {
     "analyze_homogeneity": "screens the reanalysis series, not the measured records",
     "analyze_sweep_spread": _STORED,
-    "brighthub_find_reanalysis_nodes": _STORED,
     "brighthub_get_data_model": _STORED,
     "brighthub_list_locations": _STORED,
     "brighthub_status": _STORED,
     "compute_air_density": _NUMBERS,
+    "order_pipeline": _STORED,
+    "list_pipelines": _STORED,
+    "pipeline_from_scenario": _STORED,
+    "sweep_spec_from_pipeline": "maps a pipeline's steps onto sweep levels, not records",
+    "compute_atmospheric_conditions": (
+        "its density is the one the energy sensitivity measures over every record (decisions/0015.9); "
+        "a selection's would be another number under the same name"
+    ),
     "compute_air_density_timeseries": "its default source is the reanalysis frame, which a selection does not restrict",
     "compute_energy_sensitivity": _LONG_TERM,
     "compute_extreme_winds": "its default source is the long-term corrected series, which no selection restricts",

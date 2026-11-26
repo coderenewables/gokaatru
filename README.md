@@ -4,85 +4,88 @@
 
 GoKaatru ships as two parts that work together:
 
-- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **103 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
-- **[`frontend/`](./frontend)** — a **workflow-driven web app** (React + Vite + TypeScript) with standalone data import, an editable React-Flow Canvas, a guided post-import Stepper, a read-only **Results** report, a **Sensor Overview** validation dashboard, a BYOK AI copilot, and scenario comparison.
+- **[`server/`](./server)** — a Python **MCP server** (FastAPI + FastMCP) exposing **111 tools** across data ingest, cleaning, statistics, shear/extrapolation, ERA5 & MERRA-2 acquisition, homogeneity, five long-term-correction (MCP) algorithms, ensemble, clipping, uncertainty, mapping, visualization, and BrightHub integration. DTU's WindKit library supplies the WAsP Weibull fit (see [WindKit](#windkit)).
+- **[`frontend/`](./frontend)** — the **workbench** (React + Vite + TypeScript): projects of campaigns, worked in four phases, Prepare, Model, Run and Interrogate (decisions/0014, 0015).
 
-State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The frontend's convenience fields are **derived mirrors** of canonical backend keys, not independent state — the mapping is defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
+State is session-scoped; `runconfig` is the single source of truth for site metadata (project name, location, hub height, sensors, cleaning log, LTC settings). The workbench reads it through `get_run_config` and keeps no copy. The retired interface wrote **derived mirrors** of canonical keys into it; the backend still promotes and strips them from configurations that interface saved, with the mapping defined once in [`server/core/runconfig.py`](./server/core/runconfig.py) and enforced by `tests/test_runconfig_contract.py`.
 
 ## Application workflow
 
-The default application flow is:
+The start screen lists the projects. A project holds the campaigns measured at one site (a
+mast, a lidar or a floating lidar), each with its own coordinate and timezone, and one
+reanalysis node cache they share. Opening a campaign opens the shell on it at
+`/?project=<id>&campaign=<session id>`.
+
+The shell's header names the four phases; each docks its own panels, keeps its own
+arrangement and is named in the address. Undo and redo (Ctrl+Z, Ctrl+Shift+Z) go through the
+server's history, so they undo a change made from any surface. Ctrl+K opens the command
+palette. The status bar shows the actions taken, the data version, the fixed-prefix hash and
+any stale results.
 
 ```
-Data import + hub height + reanalysis provider
-    │
-    ├──► BrightHub sign-in when required
-    │
-    └──► Save config and setup
-           │
-           ├──► ERA5 / MERRA-2 download + interpolation
-           │
-           ▼
-    Data cleaning (fully optional, skippable)
-           │
-           ▼
-       Analysis Engine (scenario sweep)
-           │
-           ▼
-    Editable Canvas default plan — prepared, run on demand
-           │
-           ▼
-       Post-import Stepper and specialist tools
+Prepare ──► Model ──► Run ──► Interrogate
+ data,       one       the     the sweep's
+ cleaning    chosen    sweep   spread, and
+             chain     around  why
+                       it
 ```
 
-### Data import and default Canvas plan
+### Prepare
 
-1. Import measured time-series and an IEA Task 43 data model, import a BrightHub location, or load a shared dataset.
-   - **No Task 43 JSON?** The fourth import path, **Build data model**, reads the loaded CSV's column headers and drafts a sensor per column — measurement type, height, and the turbulence column paired with each anemometer. The draft is a proposal: correct or exclude any row, declare the logger's UTC offset (or an IANA zone), optionally add boom orientation and a primary-sensor flag, then build. The result is a real Task 43 document written into the session workspace and parsed by the same code path as an uploaded one, so it is downloadable and re-usable rather than an inference living in server memory. Columns it could not read — quality flags, logger diagnostics, statistic channels — are listed with the reason rather than hidden.
-2. (Optional) In the **Analysis sensor selection** table, untick sensors to exclude them. Applying the selection removes them from the working data and records them in `excluded_sensors`; reloading the data file or re-importing from BrightHub restores the full set.
-3. Enter the site metadata and **hub height**. Hub height has no default and is required before a model can run.
-4. In **Long-term reference**, choose the reanalysis provider — BrightHub (ERA5 + MERRA-2) or EarthDataHub (direct ERA5 only) — and the date window. The choice persists to `runconfig` as `reanalysis.acquisitionSource` (default `brighthub`), so which reanalysis a result was built on is recorded with the analysis rather than being a per-session UI setting. It is a frontend-owned key, not a mirror: nothing on the backend derives it, and `tests/test_runconfig_contract.py` asserts it survives normalization. Choosing EarthDataHub reveals a credential field for a PAT (a "Standard API key" or a legacy "Classic" key from [earthdatahub.destine.eu](https://earthdatahub.destine.eu)'s Quota & API keys page — both work identically here) — entered once per browser session and stored server-side in memory only, exactly like the BrightHub client credentials on the same page; there is no server config file to edit.
-5. Click **Save config and setup**. When the provider is BrightHub and credentials are not available, the app opens the BrightHub sign-in view instead of downloading.
-6. The app persists the runconfig, downloads and interpolates the reanalysis, prepares the default Canvas graph, and opens the optional cleaning step. **The Canvas is not executed automatically** — the prepared graph stays editable and runs only when the analyst starts it from the Canvas.
+- **Data**: the data tree (instruments by height, statistics, other channels, reanalysis,
+  saved selections, flags), loading by drop or chooser or by importing a BrightHub location
+  (its records and data model; what BrightHub applies before sending them is chosen and recorded
+  on the cleaning log as upstream processing), and the mast diagram. A data model
+  drafted from the CSV headers is edited by dragging a sensor to its height; an uploaded Task
+  43 model is shown read-only. Columns the draft could not read are listed with the reason.
+  Sensors are taken out of the analysis here too: their columns leave the working data and the
+  mapping, after a preview, and Undo puts them back.
+- **Reanalysis**: BrightHub (ERA5 and MERRA-2) or EarthDataHub (ERA5), one node at a time
+  with its progress.
+- **Timeline, Scatter, Wind rose, Profile**: linked charts. A brush on the timeline, a lasso
+  on the scatter and sectors on the rose are terms of one selection, intersected on the
+  server; every chart shows it. Flags are drawn on the charts as bands.
+- **Inspector**: the selection's terms, record count and channel means; flagging it (the
+  instrument's columns, a reason and a note, previewed, then one `exclude_selection` rule);
+  a rule a chart proposes; the focused flag with who, when and why, and its removal.
+- **Cleaning rules**: every rule as a form from its defaults, previewed as a dry run, then
+  applied.
+- **Sensor overview**: quality control, sensor comparison, MCP readiness, mast effects and
+  atmospheric conditions, each from its operation; a refusal shows the server's reason.
 
-### Running a model on Canvas
+### Model
 
-`Run auto` sends the Canvas graph to the session workflow executor. The backend executes executable nodes in dependency order and streams lifecycle events back to the browser as each node starts, finishes, fails, or is cancelled.
+One chosen chain of operations (decisions/0015.1). **Methods** lists the operations by stage;
+**Pipeline** draws the chosen steps, ordered by what each reads and writes (the server's
+`order_pipeline`), with each step's status: current, changed, stale, not run. Run stale
+steps, one at a time, stopping at a refusal. **Step** holds the selected step's form and its
+result, disclosure fields first. A pipeline is saved by name with the project. A scenario
+from a sweep loads here as its pipeline.
 
-While a run is active, the Canvas shows:
+### Run
 
-- a node state of `pending`, `running`, `done`, or `error` for every executable operation;
-- elapsed time for the active node and completed duration for finished nodes;
-- completed-node count and total elapsed run time;
-- an estimated remaining time once at least one node has finished. The estimate uses the average duration of completed nodes, so it improves as the run advances;
-- a rolling event log with the server message for each operation.
+**Sweep design** is the matrix of the five axes (shear-fit sensors A1, extrapolation reference
+A2, vertical profile B, long-term reference C, LTC method D). A level the campaign cannot run
+is disabled with its reason; a preset (Quick look, Standard EYA, Exhaustive) is intersected
+with what the campaign can run and the levels it drops are named. The live estimate counts
+the planned scenarios and shear tables and lists the duplicates and the refusals, found with
+the code the run uses. A pipeline in Model can be swept around: its choices become the
+matrix's starting levels. **Run** shows each event as it arrives and the outcome: counts,
+gate failures and the sentence saying what is not swept.
 
-Use **Stop** to request cancellation. The graph stays on the Canvas with its final statuses and event history so the analyst can inspect or edit the failing branch before another run.
+### Interrogate
 
-The default graph makes conservative, editable choices:
+A sweep's scenarios under one crossfilter: **Scenarios** (filters per axis level, pins, load
+into Model, every scenario of the sweep exported as CSV), **Distribution** (a metric's histogram, brushed), **Parallel coordinates** (every
+axis and metric, brushed), **Sensitivity** (the server's decomposition over the scenarios the
+filters keep, the uncertainty substitution and what is not swept), **Gates** (for the scenarios the
+filters keep, admissible or not: what each gate measures, its thresholds, the range it observed,
+the scenarios it excluded or flagged, those that could not run, and what the gates left varied) and **Side by side** (two pinned scenarios, where their
+configurations differ, and each configuration as a file).
 
-- uses the two measured wind-speed heights nearest to the requested hub height for power-law shear;
-- loads BrightHub ERA5 and MERRA-2, then interpolates ERA5 to the site;
-- runs `linear_least_squares` and `variance_ratio` LTC branches;
-- produces an inverse-RMSE ensemble, ensemble-based clipping, and uncertainty;
-- leaves cleaning as a manual review node, so importing data never silently removes measurements.
-
-### Post-import Stepper
-
-The Stepper remains available after data import for guided review and manual operation of the analysis stages:
-
-| Stage | What happens |
-|---|---|
-| **1. Data cleaning** | Review the imported measurement inventory, choose which sensors stay in the analysis (excluded sensors are removed from the working data and recorded in `excluded_sensors`), and apply explicit cleaning filters when appropriate. Fully optional — it has its own top-level tab, and nothing downstream requires it. |
-| **2. Reanalysis acquisition** | Review the ERA5 + MERRA-2 nodes and site interpolation already downloaded by **Save config and setup**, and re-run acquisition if needed. The provider (BrightHub, or direct EarthDataHub ERA5) and date window are chosen on the Data import page. |
-| **3. Measured-data exploration** | Recovery/availability, wind rose, Weibull, diurnal/annual profiles, shear profile, turbulence intensity — to refine shear sensors and LTC strategy. |
-| **4. Shear → hub (measured)** | Power-law (α) or log-law (z₀) shear + 12×24 lookup, extrapolate measured sensors to hub height. Only records above `min_speed_mps` (default **3.0 m/s**) contribute — below that, `ln(v₂/v₁)` is anemometer noise rather than profile. α is still bounded to [−1, 1] as a backstop, and every response reports how often that clamp fired. |
-| **5. Reanalysis → hub** | Confirm long-term reference series are available at hub height using the chosen shear method. |
-| **6. Long-Term Correction** | MCP between measured (short) and reanalysis (long) across 5 algorithms (`speedsort` — directionally binned, `linear_least_squares`, `total_least_squares`, `variance_ratio`, `xgboost`); scatter/residual/convergence diagnostics. Requires **at least six months** of valid concurrent records; below that it raises rather than returning a number. |
-| **7. Clipping** | Pick the representative historical window that minimizes combined historic + climate uncertainty. Calendar years below **90%** completeness are excluded and reported, so a partial first or last year cannot inflate inter-annual variability. |
-| **8. Ensemble & uncertainty** | Inverse-RMSE ensemble blend, RSS total uncertainty + P50/75/90/99, and named scenarios for comparison. |
-
-Tabs are ordered **Data import → Data cleaning → Analysis Engine → Canvas → Stepper → Results → Copilot → Sensor Overview → Compare → How To**, so the scenario sweep is reached before committing to a single pipeline. The **Canvas** tab renders the full pipeline as an editable React-Flow DAG (run auto/step, snapshots, fork branches) — it is prepared by *Save config and setup* but never executed automatically; the **Results** tab is a read-only aggregate report of everything the session has produced (run overview, measured data, shear, reanalysis, LTC, ensemble & uncertainty, clipping/scenarios — it never triggers computation), the **Sensor Overview** tab is a measured-data validation dashboard, the **Copilot** tab is a BYOK chat that drives backend tools via natural language (the *Allow the assistant to modify this session* setting controls whether it may write as well as read — see [Chat tool authority](#chat-tool-authority)), and the **Compare** tab diffs saved scenarios.
+The Copilot and the Results report of the interface this replaced return in Phases 4 and 7
+(decisions/0015). Sessions made before projects existed are kept on disk but are not reached
+from the screens.
 
 ## Quick start
 
@@ -118,10 +121,8 @@ npm install
 npm run dev                          # http://127.0.0.1:5173 (proxies /api → :8000)
 ```
 
-The workbench is served beside the current interface at `/workbench/` (decisions/0014.9): its
-start screen lists the projects, and `/workbench/?project=<id>&campaign=<session id>` opens the
-shell on a campaign. Both talk to the same server, so a change made in one shows in the other;
-the current interface at `/` is retired at the Phase 3 gate.
+The workbench is served at `/`: its start screen lists the projects, and
+`/?project=<id>&campaign=<session id>` opens the shell on a campaign.
 
 The server keeps its sessions and projects under `data/`, or under `GOKAATRU_DATA_DIR` when it
 is set (the Playwright backend sets it to `frontend/.e2e-data`).
@@ -137,24 +138,33 @@ npm run test                         # vitest
 
 ```
 server/                 # Python MCP server + FastAPI web API
-├── api/                # FastAPI routes (sessions, analysis, brighthub, workflow, …)
-├── core/               # executor, regression, spatial, formulas, validators, runconfig contract
+├── api/                # FastAPI routes: generated operation routes, sessions, projects, uploads, series, sweep, …
+├── core/               # pipeline order, sweep, regression, spatial, formulas, validators, runconfig contract
 ├── tools/              # MCP tools: data_io, cleaning, shear, extrapolation, era5, ltc, …
 ├── state/              # session + dataset pool managers
 └── schemas/            # Pydantic models (Coordinate, SensorInfo, PlotResult, …)
 
-frontend/               # React + Vite + TypeScript web app
+frontend/               # React + Vite + TypeScript workbench
+├── index.html          # the one entry point, loading src/workbench/main.tsx
 ├── src/
-│   ├── components/     # AppHeader, PhaseTabs, Stepper, stages/, results/, WorkflowView, CopilotView, …
-│   ├── store/          # useWorkspaceStore (Zustand)
-│   ├── lib/            # api, configSync, stages, workflow, copilotAgent, …
-│   └── types/          # analysis.ts (config schema + response interfaces)
-└── tests/              # backend pytest suite
+│   ├── workbench/      # shell, phases and panels (see CODEDOC.md §7)
+│   ├── api/            # client generated from the server's OpenAPI schema
+│   ├── types/sweep.ts  # sweep result-row columns and labels
+│   └── test/           # vitest
+└── e2e/                # Playwright specs against a real backend
+tests/                  # backend pytest suite
 ```
 
 ## Web API (consumed by the frontend)
 
 All session-scoped routes require the `X-GoKaatru-Session` header matching the path `{id}`. Errors: `ValueError` → 400, upstream → 502.
+
+Every analysis step is an operation, run through its generated route (`/sessions/{id}/operations/{name}`,
+below). The hand-written routes that duplicated one were retired in P3-17e: the configuration, the
+data model draft and build, coverage, sensor removal, the diagnostics, cleaning, shear and
+roughness, extrapolation, ERA5 and EarthDataHub, BrightHub, the corrections, ensemble, clipping,
+homogeneity, uncertainty and the site map. A missing BrightHub login is now a 400 naming it, as
+every refusal is, where the hand-written routes answered 401.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -164,39 +174,24 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 | `/projects/{id}/campaigns/{session_id}` | PATCH | Rename a campaign |
 | `/sessions` | POST | Create a new browser session |
 | `/sessions/{id}` | GET | Session summary + `completed_steps` |
-| `/sessions/{id}/config` | GET/PUT | Read or update runconfig |
 | `/sessions/{id}/config/import` | POST | Import a complete runconfig JSON payload |
-| `/sessions/{id}/summary` | GET | Workflow progress and analysis readiness |
 | `/sessions/{id}/uploads/{timeseries\|datamodel}` | POST | Upload a file (multipart) |
+| `/sessions/{id}/sweep/estimate` | POST | Price a specification without running it: leaf and prefix counts, and which leaves the run will skip as duplicates (`duplicates`, each with the leaf it repeats) and which it will refuse (`unavailable`, each with the stage and reason), predicted with the stages' own checks (`check_shear_model`, `check_hub`, `check_ltc`, the policy resolvers). `duplicates_basis` and `refusals_basis` say what it cannot know: a duplicate assumes the first of its computation completes, and a leaf can still fail while it runs |
 | `/sessions/{id}/sweep/{sweep_id}/spread` | POST | Decompose one sweep metric's variance across the five scenario axes |
-| `/sessions/{id}/datamodel/draft` | GET | Draft a Task 43 reading of the loaded timeseries columns (header inference, for review) |
-| `/sessions/{id}/datamodel/build` | POST | Build a minimal Task 43 data model from declared columns, persist it, and load it |
 | `/sessions/{id}/sensors` | GET | Sensor inventory |
-| `/sessions/{id}/sensors/delete` | POST | Remove sensors from the session (drops their columns; persists `excluded_sensors`). The same logic as `remove_sensors`, which is undoable through the generated route; this one, for the current interface, is not |
-| `/sessions/{id}/coverage/{sensor}` | GET | Per-sensor coverage/gap stats |
 | `/sessions/{id}/statistics/{sensor}` | GET | Weibull, monthly/diurnal, percentiles |
-| `/sessions/{id}/era5/{nodes\|extract\|interpolate}` | POST | ERA5 node discovery, extraction, interpolation |
-| `/sessions/{id}/era5/credential` | POST/DELETE | Set or clear this session's EarthDataHub PAT (direct-ERA5 path) |
-| `/sessions/{id}/era5/credential/status` | GET | Whether this session has an EarthDataHub PAT configured |
-| `/sessions/{id}/shear/{calculate\|table}` | POST | Shear timeseries + 12×24 lookup |
-| `/sessions/{id}/roughness/{calculate\|table}` | POST | Log-law roughness equivalents |
-| `/sessions/{id}/extrapolation/hub` | POST | Extrapolate measured + reanalysis to hub height |
-| `/sessions/{id}/homogeneity/{analyze\|apply}` | POST | Pettitt test + cutoff year |
-| `/sessions/{id}/ltc/{algorithm}` | POST | Run one LTC algorithm |
-| `/sessions/{id}/ensemble` | POST | Blend LTC algorithms |
-| `/sessions/{id}/clipping` | POST | Representative-period analysis |
-| `/sessions/{id}/uncertainty` | POST | Total uncertainty + P-factors |
+| `/sessions/{id}/overview-summary` | GET | The retired interface's Sensor Overview summary table. No operation does this and no screen calls it; kept until the owner decides (P3-17e) |
+| `/sessions/{id}/clipping/columns` | GET | The numeric columns of a clipping source, for the retired interface's form; kept as above |
+| `/sessions/{id}/results/{ltc\|ensemble}` | GET | Compact summaries of the stored corrections and ensemble, for the retired Results report (Phase 7 rebuilds it); kept as above |
+| `/sessions/{id}/runconfig/export` | GET | Persist and return the run configuration, for the retired Results report; kept as above |
 | `/sessions/{id}/scenarios` | GET/POST | List or save scenarios |
 | `/sessions/{id}/scenarios/run` | POST | Import config + execute pipeline + save scenario |
 | `/sessions/{id}/scenarios/{index}` | DELETE | Remove a saved scenario |
 | `/sessions/{id}/plots/{name}` | POST | Generate a named Plotly figure |
 | `/sessions/{id}/exports/*` | GET | Download timeseries, LTC, ensemble, or runconfig files |
-| `/sessions/{id}/brighthub/*` | various | BrightHub login/locations/import/reanalysis |
-| `/sessions/{id}/workflow/{execute,step,status,…}` | various | Workflow canvas execution + snapshots + compare |
-| `/sessions/{id}/map/site` | GET | Site-overview GeoJSON (mast + ERA5 nodes) |
 | `/sessions/{id}/chat` | POST | BYOK LLM chat proxy with server-side tool execution (read-only by default; see [Chat tool authority](#chat-tool-authority)) |
 | `/mcp/catalog` | GET | MCP tool/resource catalog for discovery |
-| `/operations` | GET | Every declared operation: effect, stage, canvas, assistant, network, parameters |
+| `/operations` | GET | Every declared operation: effect, stage, canvas, assistant, network, the artifacts it reads and writes (`server/state/artifacts.py`), parameters |
 | `/sessions/{id}/operations/{name}` | POST | Run one operation; JSON body of its parameters (generated, one route per operation). The OpenAPI schema types every request and result (`<Name>Parameters`, `<Name>Result`), and 400 and 502 as `ErrorDetail`; a float in a result may be null, which is how NaN and infinity are sent |
 | `/sessions/{id}/pairs` | GET, POST | A scatter's points as an Arrow stream: `time`, `x`, `y` and, with a `highlight` selection, `highlighted`, described in the schema metadata. Query or body: `x_channel`, `y_channel`, `start`, `end`, `highlight`. The same pairs as `get_scatter_pairs`; not logged as a change. Five years of 10-minute records, 262,800 pairs: 6.3 MB in 14 ms, 59 ms with a 199-vertex lasso highlighted (`python -m tests.measure_series_transport`) |
 | `/sessions/{id}/series` | GET, POST | A window of measured channels as an Arrow stream (`application/vnd.apache.arrow.stream`): per-bucket `<channel>.min`, `.max` and `.count` beside `time`, the window described in the schema metadata (`gokaatru`). Query: `channels`, `start`, `end` (UTC offset required), `buckets`, `selection` (a name or an inline definition); POST takes the same fields as a JSON body, for a lasso too long for a URL, and is not logged as a change. The same window as `get_series_window` |
@@ -223,11 +218,13 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 ### History
 - `list_instruments` — the campaign's instruments by height (highest first), each with its type, boom orientation, the mapping slot it fills, whether the data holds it, and the statistic columns it logs (standard deviation, minimum, maximum: the columns the data model builder's header inference pairs with it, plus the mapping's `sd_col`), and every other channel with how its header reads. The workbench's data tree draws it, and a flag covers a whole instrument by default (decisions/0014.2).
 - `remove_sensors` — take sensors out of the analysis: inventory, height mapping (a speed sensor's standard deviation slot goes with it) and the working and raw data, recorded in the run configuration's `excluded_sensors` so a datamodel re-import keeps them out; a new timeseries brings every sensor back. It marks derived results stale. A dry run shows the columns it would drop; the removed columns are kept aside (`removed_sensors`, saved with the project) so undo puts back every field exactly.
-- `undo_last_change`, `redo_last_change` — undo the last cleaning rule, configuration change, sensor removal or data model build still in the history, or redo what was undone. Undo refuses when a later change has moved what it would restore; any other change clears what can be redone.
+- `undo_last_change`, `redo_last_change` — undo the last cleaning rule, configuration change, sensor removal, data model build or saved selection (defined, replaced or deleted) still in the history, or redo what was undone; a selection comes back with its original author and time. Undo refuses when a later change has moved what it would restore; any other change clears what can be redone.
 - `get_operation_log` — the most recent operation calls (actor, operation, parameters with credentials redacted, data versions), the undo state, and the staleness report (data version, stale artifacts and why), which the workbench's status bar reads in one call.
 
 ### Selections
 - `define_selection`, `delete_selection`, `list_selections`, `resolve_selection` — named record selections: time ranges, direction sectors (wrapping through north), value bands on a channel, polygons over two channels (a lasso on a scatter: even-odd rule, at most 1,000 vertices, more is refused), or explicit record sets, combined by union and intersection. Bounds are half-open (a point on a polygon's left or lower edge is inside, on its right or upper edge outside) and a missing value is never selected. The server resolves a selection against the working data each time it is used, so every view counts the same records.
+- `order_pipeline`, `save_pipeline`, `delete_pipeline`, `list_pipelines` — the campaign's pipeline (decisions/0015): steps of canvas operations put in the order their declared reads and writes require (`server/core/pipeline.py`; one step per result, a second producer or a cycle refused), each with its status against what built the result in the session (`current`, `changed`, `stale`, `not_run`, `upstream`, `invalid`, `ready`) and the steps a "Run stale" would run. Operations that take credentials cannot be steps, since a saved pipeline is written with the project. Named pipelines are saved in the campaign and undone like saved selections.
+- `pipeline_from_scenario`, `sweep_spec_from_pipeline` — a sweep scenario as the steps that compute it (its shear steps, the extrapolation from its reference sensors, its correction against its reference source, its own uncertainty), which run through the operations reproduce its row exactly (`tests/test_scenario_reproduction.py`; `prefix_matches` says when the campaign has changed since the sweep); and a pipeline's choices as sweep levels, the matrix "Sweep around this" starts from (`unmatched` lists what no level expresses).
 - 25 statistics, charts, the series window and the channel summary, all reading the measured records, take a `selection` parameter (`selectable: true` in `GET /operations`): the Weibull, wind-climate, turbulence, windrose, diurnal, monthly, MoMM and scatter statistics, energy metrics, ramps, persistence, sensor comparison, mast effects, QC diagnostics, vertical structure and sector shear tables, the windrose, Weibull, diurnal, scatter, time-series and monthly-mean charts, `get_series_window`, and `summarise_channels` (the valid records, mean, minimum and maximum of named channels, which is how the workbench's inspector compares a selection with every record). It is a saved selection's name, or a definition sent inline as a JSON object (the browser's live brushing): a read on an inline definition is not written to the operation log, because it is view state with nothing to trace, and a saved selection's name cannot start with `{`. The operation then runs with every record outside the selection missing, and its result carries a `selection` block (below). Reads of stored results, the long-term series, the reanalysis or the data inventory take none; `tests/test_selection_operations.py` lists each with the reason.
 
 ### Scenario sweep (Analysis Engine)
@@ -246,15 +243,19 @@ All session-scoped routes require the `X-GoKaatru-Session` header matching the p
 
 ### Extrapolation And Shear
 - `extrapolate_to_hub_height`, `calculate_shear_timeseries`, `calculate_roughness_timeseries`, `build_shear_table`, `build_roughness_table`, `build_sector_shear_tables`, `build_aggr_momm_shear_table`
+- `build_constant_shear_table` — fill the 12x24 table with one exponent: the one given (analyst-supplied) or the mean of the shear series (one site-wide exponent); the sweep's `power_law_constant` level and an analyst exponent build their table with it (`shear_source`).
+- `extrapolate_to_hub_height` takes `reference_columns` (carry up only those sensors, as a sweep's extrapolation-reference policy does) and `extrapolate_reanalysis` (false leaves the reanalysis frames alone, as a sweep does).
 
 ### Long-Term Correction
 - `run_ltc_linear_least_squares`, `run_ltc_total_least_squares`, `run_ltc_speedsort`, `run_ltc_variance_ratio`, `run_ltc_xgboost`
+  Each takes `reference_source` (`era5`, `merra2`): the reanalysis to correct against for that call only; the session's own choice is left as it was. Empty uses the session's choice.
 
 ### Mapping
 - `get_mast_marker`, `get_era5_node_markers`, `get_site_overview_map`
 
 ### Statistics
 - `compute_weibull_params`, `compute_wind_climate`, `compute_windrose_data`, `compute_diurnal_profile`, `compute_monthly_stats`, `compute_turbulence_intensity`, `compute_turbulence_analysis`, `compute_momm`, `compute_scatter_stats`, `calculate_uncertainty`, `compute_energy_sensitivity`
+- `calculate_scenario_uncertainty` — a sweep scenario's uncertainty with every input derived from its own results: the correction's fit and concurrent period, the shear series' dispersion for a fitted power law, the reference heights it was carried from and its shear model's constant. Nothing else the session holds is read (no ensemble, no clipping run's variability, no other table), so a scenario loaded into the canvas answers as its sweep row did; the sweep's uncertainty stage runs the same function (`derived_inputs`).
 
 ### Diagnostics (Sensor Overview)
 - `compute_qc_diagnostics`, `compute_sensor_comparison`, `compute_mast_effects`, `compute_mcp_readiness`, `compute_vertical_structure`
@@ -388,21 +389,25 @@ in its operation's response.
 | `order_dependence` | `apply_cleaning_rule` | Which rules already touched this sensor. Rule order is material — `stuck_sensor` then `icing_filter` removed 10 records where the reverse removed 2, on the same data. |
 | `below_shear_gate`, `records_below_extrapolation_gate` | `extrapolate_to_hub_height` | Records whose reference speed sits below the 3.0 m/s shear gate. They **are** extrapolated and included in the hub series; the count is informational, so a reader can see how much of the hub series rests on the table's exponent outside the speeds it was fitted on. `method_counts.extrapolated` includes them. |
 | `method_models`, `method_is_mixed` | `extrapolate_to_hub_height` | Which physical model produced each hub record. Inside the mast range it is linear interpolation in ln(z); outside it is the shear or roughness table. A series with counts in both rows is a blend of two models. |
-| `mcp_sampling_cap`, `combination` | `calculate_uncertainty` | What the 12-month cap withheld, and what the independence assumption costs at ρ = 0.5. |
-| `k_shear`, `k_shear_basis` | `calculate_uncertainty` (`inputs`) | The shear constant the vertical term used and which branch supplied it: `measured_dispersion` or `measured_dispersion_capped` (fitted, the cap at 0.03 firing when the scatter exceeds it), `assumed_power_law`, `log_law`, `analyst_supplied`, or `not_applied_*` for interpolated or invalid heights (then `k_shear` is null). Interim rule, decision D2 (2026-11-14). |
+| `mcp_sampling_cap`, `combination` | `calculate_uncertainty`, `calculate_scenario_uncertainty` | What the 12-month cap withheld, and what the independence assumption costs at ρ = 0.5. |
+| `k_shear`, `k_shear_basis` | `calculate_uncertainty`, `calculate_scenario_uncertainty` (`inputs`) | The shear constant the vertical term used and which branch supplied it: `measured_dispersion` or `measured_dispersion_capped` (fitted, the cap at 0.03 firing when the scatter exceeds it), `assumed_power_law`, `log_law`, `analyst_supplied`, or `not_applied_*` for interpolated or invalid heights (then `k_shear` is null). Interim rule, decision D2 (2026-11-14). |
 | `method_by_variable`, `skipped_variables` | `interpolate_era5_to_site` | Which interpolation each variable actually used, rather than one label collapsed to "idw" if any variable fell back; and any variable dropped because a node does not carry it, with the nodes responsible. Dew point feeds air density and temperature/pressure feed the XGBoost features, so a silent drop surfaces later as an unrelated missing-column error. |
 | `alpha_reclamped_records`, `stability_treatment` | `extrapolate_to_hub_height` | Records whose shear exponent hit the [-1, 1] clamp before extrapolation — normally zero, but reachable through the fallback fill and the aggregate MoMM path, and a clamp that fires changes the hub speed. And the standing neutral-profile assumption. |
 | `reference_temporal_semantics` | every LTC response | Whether the reference is instantaneous (ERA5) or time-averaged (MERRA-2). The resampling note differs between them: the one-sided variance loss that biases variance-ratio results applies only against an instantaneous reference. |
 | `reference_height_m.record_counts` | `extrapolate_to_hub_height` | The reference height is chosen per record and drops to a lower sensor whenever the top one is missing; `min`/`max`/`most_common` alone cannot distinguish "one record fell back" from "a quarter of the campaign did". `record_counts` gives the full distribution across every height actually used. |
+| `prefix_matches` | `pipeline_from_scenario` (with `prefix_note` when false) | Whether the campaign's fixed-prefix hash still equals the one the sweep ran on. When it does not (cleaning, data, reanalysis or engine changed since), the scenario's steps run on today's session and will not reproduce its row. |
+| `unmatched` | `sweep_spec_from_pipeline` | Each pipeline choice no sweep level expresses (a sensor set no policy resolves to, the aggregated MoMM table, no correction step) with why; its axis takes the sweep's default (`nearest_2`, `power_law_mean`, `variance_ratio`). |
+| `shear_source` | `build_constant_shear_table` | Where the one exponent filling the table came from: `analyst_supplied` (the caller gave it; it has no measured dispersion, so the uncertainty takes `K_SHEAR_ANALYST_SUPPLIED`) or `fitted` (the mean of the shear series, `aggregation: site_constant`). |
 | `fallback_alpha`/`fallback_z0`, `fallback_source`, `table_coverage` | `build_shear_table`, `build_roughness_table`, `build_aggr_momm_shear_table` | The value substituted into any month-hour cell the campaign never observed — the campaign's own mean (`"series_mean"`), or, only when every cell is empty, a hardcoded generic default (`"one_seventh_power_law_default"` / `"open_water_default"`) — and how much of the table is fill. All three table-building tools now report the same fields; the roughness and aggregate-MoMM paths previously reported neither. |
 | `iec_ti_at_15ms`, `iec_ti_bin_mps`, `iec_ti_bin_records` | `compute_turbulence_analysis` | Representative turbulence in the 1 m/s bin containing 15 m/s, which selects the IEC turbulence class (Iref 0.16 / 0.14 / 0.12 for A / B / C). The bin actually used and its record count travel with it, because a low-wind campaign may never reach 15 m/s — in which case the response says so and the class cannot be selected from it. |
 | `gev.available`, `plausible`, `below_largest_observed` | `compute_extreme_winds` | Whether the GEV fit was performed at all, whether each fit's return levels are usable (divergent, or collapsed so that V100 is no higher than V50), and whether V50 sits below the largest observed annual maximum. The last is a cue, not a failure: the largest of twenty maxima is roughly a twenty-year event. |
 | `years_excluded`, `min_year_coverage` | `compute_extreme_winds` | Calendar years covering too little of the calendar to hold an annual maximum, with their day coverage, months and the partial maximum they would have contributed. |
-| `density_normalisation` | `calculate_uncertainty`, `compute_energy_sensitivity` | Whether speeds were normalised to the power curve's reference density before the sensitivity factor was measured, as `U*(rho/rho0)^(1/3)`: the IEC 61400-12-1 treatment for a pitch-regulated turbine (`turbine_regulation: "pitch"`, `method: "iec_61400_12_1_wind_speed_normalisation"`; the method was labelled `iec_61400_12_1_stall` before 2026-11-17, with the same arithmetic). Requires a recorded site density; without one it reports `applied: false` rather than assuming standard conditions. |
+| `density_normalisation` | `calculate_uncertainty`, `calculate_scenario_uncertainty`, `compute_energy_sensitivity` | Whether speeds were normalised to the power curve's reference density before the sensitivity factor was measured, as `U*(rho/rho0)^(1/3)`: the IEC 61400-12-1 treatment for a pitch-regulated turbine (`turbine_regulation: "pitch"`, `method: "iec_61400_12_1_wind_speed_normalisation"`; the method was labelled `iec_61400_12_1_stall` before 2026-11-17, with the same arithmetic). The site's mean density is computed every time from the measured temperature and pressure (`site_density_kgm3`, with `temperature_sensor`, `pressure_sensor`, `humidity_sensor`, `density_records`; `height_basis: "pressure_sensor_height"`), so the factor no longer depends on whether `compute_atmospheric_conditions` ran first (decisions/0015.9; until 2026-11-25 it read a density that diagnostic had saved, and skipped the normalisation when it had not run). Without a temperature or a pressure sensor it reports `applied: false` and why, rather than assuming standard conditions. Measured on Launakalana (1.1623 kg/m3 from `Tmp1_77m`, `Prs1_4m`, `Hum1_10m`): speed factor 0.9826, sensitivity factor 2.7466 to 2.7946, indicative gross AEP 5,514.9 to 5,253.8 MWh (-4.7%), capacity factor 0.2097 to 0.1998; Boxkite and Horns Rev have no pressure and temperature pair and are unchanged. |
 | `upstream_processing` | `brighthub_import_location` | BrightHub cleaning, calibration and offsets applied **before** GoKaatru saw the data. Recorded as a non-undoable entry at the head of the cleaning log: coverage and recovery figures describe the data as received, not the raw campaign. |
-| `engine_version` | sweep `manifest.json`, `get_sweep_summary`, `fixed_prefix_hash` | The engine release that produced the numbers (`ENGINE_VERSION`, currently `"2026.11.2"`), also hashed into the fixed-prefix hash, so every config hash moves with it. Sweeps stored before the stamp read as `null`. The 2026.11 changes (sub-gate records extrapolated, SpeedSort rank-sorted fit, interim vertical-uncertainty rule) moved the numbers, so a `null` or older version is not comparable with a current sweep. Re-run rather than compare. |
+| `engine_version` | sweep `manifest.json`, `get_sweep_summary`, `fixed_prefix_hash` | The engine release that produced the numbers (`ENGINE_VERSION`, currently `"2026.11.3"`: the energy figures are normalised by the measured air density wherever a temperature and a pressure sensor exist), also hashed into the fixed-prefix hash, so every config hash moves with it. Sweeps stored before the stamp read as `null`. The 2026.11 changes (sub-gate records extrapolated, SpeedSort rank-sorted fit, interim vertical-uncertainty rule) moved the numbers, so a `null` or older version is not comparable with a current sweep. Re-run rather than compare. |
 | `duplicates_skipped` | sweep `manifest.json` (`counts.duplicates_skipped`) | Leaves that resolved to the same computation as an earlier leaf and were **not run**. The computation is identified by the resolved sensor columns for the shear-fit and extrapolation-reference policies, plus shear model, reference source, LTC algorithm, hub height and any analyst exponent, so two policy names that pick the same sensors on this mast run once. Each entry names the two policies and `same_as`, the `config_hash` of the row that was run. A skipped duplicate has no row of its own. `planned` = `completed` + `failed` + `duplicates_skipped` on a sweep that was not stopped early. Only completed runs are matched against: if the first of two identical leaves fails, the second runs. Stored sweeps from before 2026-11-14 hashed the policy names and are not comparable on `config_hash`. |
 | `duplicate_levels` | `get_sweep_summary` (`axes.<axis>.duplicate_levels`), `analyze_sweep_spread` / `POST .../spread` (`contributions[].duplicate_levels`) | For the two policy axes, each level whose leaves were skipped as duplicates, the level whose rows it shares (`same_as`) and how many scenarios that covers. Such a level has no rows, so it is absent from `levels_admissible` and the decomposition's `levels`; without this field an axis varied between two policies that picked the same sensors reads as "not varied". `levels_designed` includes it. Only duplicates of rows in view count: a filtered or inadmissible `same_as` row drops its duplicates too. The Interrogate page shows it as "same sensors: <level> = <level>", and the Run monitor's Outcome panel shows `counts.duplicates_skipped`. |
+| `not_swept_recorded_in_manifest` | `get_sweep_summary`, `analyze_sweep_spread` / `POST .../spread` (with `not_swept` and `not_swept_statement`; the manifest carries the same two) | What no sweep varies (decisions/0013.6): wind direction, temperature and air density, stated as "Not swept: wind direction, temperature and air density. Every scenario in this sweep uses the same ones, so the spread covers the wind-speed chain only: sensor choice, shear, reference source and long-term method." (`NOT_SWEPT_STATEMENT`, decisions/0015.8). `false` on a manifest written before 2026-11-25: the statement is then the engine's, which holds for every sweep ever run. |
 | `uncertainty_substitution` | `analyze_sweep_spread` / `POST .../spread` | Per component: the parametric mean, the sweep's empirical term, the value applied and its `basis` (`empirical`, `parametric`, `added`, `not_resolved`), and which axes were used, under-resolved (two levels) or not varied. Per sweep: the distribution of scenario totals with and without the substitution, how many it raised, and how many lacked a parametric component and were left out. Computed over the caller's row selection. The scenario rows' own `total_uncertainty_pct` is unchanged. |
 | `is_interpolation` (`inputs`, `provenance.is_interpolation`) | `derive_uncertainty_inputs` | Whether hub height sits inside the profile the scenario extrapolated from: its own reference heights (axis A2) when given, otherwise every mapped height. A scenario restricted to sensors below hub is extrapolating even when another sensor sits above hub, so it takes the extrapolated vertical term rather than the 1% interpolated one. |
 | `extrapolate_reanalysis`, `reanalysis_status` | `extrapolate_to_hub_height` (sweep stage detail) | Sweep leaves pass `extrapolate_reanalysis=False`: the eight reanalysis node frames are not carried to hub height and the stage reports `reanalysis_status: "not_run"`. The reanalysis response reads `{"status": "skipped", "reason": "not_requested", "wrote_hub_column": false}`. The sweep's LTC reads the native `Spd_100m` / `Spd_50m` columns, so no reported number changes (68 rows identical before and after, 2026-11-14). The MCP tool and HTTP route still default to extrapolating. |
@@ -578,10 +583,10 @@ with `assistant=False` is not exposed at all.
 
 | Tier | Count | Exposed when |
 |---|---|---|
-| Read-only — query, compute, plot, series windows, scatter pairs, flag intervals, channel summaries, the instrument list, the operation log, listing and resolving selections | 57 | always |
-| Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty, the atmospheric diagnostic (it records the density the energy sensitivity uses), the clipping analysis (it records the inter-annual variability the uncertainty model uses), undo and redo, defining and deleting selections, removing sensors | 34 | only with `allow_mutating_tools: true` |
+| Read-only — query, compute, plot, series windows, scatter pairs, flag intervals, channel summaries, the instrument list, the operation log, listing and resolving selections, the atmospheric diagnostic, ordering and listing pipelines, a scenario as a pipeline and a pipeline as sweep levels | 62 | always |
+| Mutating — ingest, cleaning, config writes, ERA5 fetch, extrapolation, shear tables, LTC runs, uncertainty, the clipping analysis (it records the inter-annual variability the uncertainty model uses), undo and redo, defining and deleting selections, saving and deleting pipelines, removing sensors, a constant shear table, a scenario's uncertainty | 37 | only with `allow_mutating_tools: true` |
 
-The remaining 12 of the 98 registered tools are declared `assistant=False` and
+The remaining 12 of the 111 registered tools are declared `assistant=False` and
 therefore unreachable from chat: every BrightHub / EarthDataHub tool — the read-only
 tier's contract is "no session mutation, no filesystem, **no network**", and the
 credential tools would additionally hand an injected prompt a view of the session's
@@ -593,11 +598,10 @@ offered. Tool results are wrapped in `<untrusted-tool-output>` tags and the
 system prompt instructs the model not to follow instructions found inside them —
 that mitigates prompt injection; the allowlist is the actual control.
 
-The Copilot UI sends `allow_mutating_tools: false` by default, and its BYOK
-settings carry an opt-in checkbox ("Allow the assistant to change session data").
-When on, the assistant can change session data without asking for each change;
-per-action approval is not built yet, so it is off until the user opts in. The API
-default is read-only as well.
+The chat route's default is read-only: `allow_mutating_tools` is false unless a request
+sets it, and then the assistant can change session data without asking for each change.
+Per-action approval is not built yet. The interface's Copilot returns in Phase 4
+(decisions/0015).
 
 ### Projects survive a restart
 
@@ -606,9 +610,16 @@ uploads stay untouched with their SHA-256 recorded, every frame is saved as Parq
 by its content hash, and every other field goes into `catalogue.sqlite`. Each operation call
 is logged with its actor, parameters (credentials redacted), code version and data versions,
 and every successful change saves the project, so a restarted server reopens it as it was.
-Each derived result records the call that built it (`derived_provenance`). A result built
-from older data, or by an earlier engine version, is listed by `staleness_report` with the
-reason (`stale_reasons`) and left as it is: nothing is recomputed silently.
+Each derived result records the call that built it (`derived_provenance`) and the version of
+every artifact that call reads (`derived_inputs`, decisions/0015.3). A result built from older
+data, by an earlier engine version, or from a result that has changed since or is stale
+itself, is listed by `staleness_report` with the reason (`stale_reasons`) and left as it is:
+nothing is recomputed silently. So rebuilding the shear table with another method marks the
+hub series, every long-term correction, the ensemble, the clipping and the uncertainty stale,
+and nothing before the table; a rebuild that gives the same table marks nothing. An
+artifact's version moves only when a call changes it (`artifact_versions`), and only changes
+made through an operation are seen: the hand-written routes the current interface uses still
+change the data version but not the other artifacts' versions.
 A project whose recorded raw input was changed or removed outside GoKaatru is refused (HTTP
 409) rather than shown with results the inputs no longer support. Credentials are never
 written to disk.
@@ -636,14 +647,14 @@ under the gitignored `data/uploads/` (set `GOKAATRU_TEST_UPLOADS_DIR` to read th
 elsewhere). Without them those tests skip with a message naming the missing file; they do
 not error.
 
-Frontend (Vitest coverage across types, store, import, stages, Canvas, copilot, and compare):
+Frontend (Vitest for the workbench's pure pieces; Playwright drives every panel against a real backend):
 
 ```bash
 cd frontend && npm run test
 cd frontend && npm run build    # tsc --noEmit && vite build
 cd frontend && npm run check:api   # the generated API client matches frontend/src/api/openapi.json
 cd frontend && npx playwright install chromium   # once
-cd frontend && npm run test:e2e # Playwright smoke test; starts its own backend (:8011) and Vite (:5183)
+cd frontend && npm run test:e2e # Playwright; starts its own backend (:8011) and Vite (:5183)
 ```
 
 Smoke checks:
@@ -655,9 +666,9 @@ python -m uvicorn server.api.main:app --host 127.0.0.1 --port 8000
 
 ## Documentation
 
-The canonical behavior contract is the code itself: the central config schema and response interfaces live in [`frontend/src/types/analysis.ts`](./frontend/src/types/analysis.ts), the web-API surface in [`server/api/routes/`](./server/api/routes), and the stage metadata in [`frontend/src/lib/stages.ts`](./frontend/src/lib/stages.ts). This README tracks the current workflow, endpoints, and tool inventory.
+The canonical behavior contract is the code itself: every operation's parameters and result in the committed OpenAPI schema [`frontend/src/api/openapi.json`](./frontend/src/api/openapi.json) (the interface's client is generated from it), and the web-API surface in [`server/api/routes/`](./server/api/routes). This README tracks the current workflow, endpoints, and tool inventory.
 
 ## Tech stack
 
 **Backend:** Python 3.11+, FastAPI, FastMCP, pandas, xarray, scikit-learn / XGBoost (`[ml]` extra), Plotly + Kaleido, pytest, ruff.
-**Frontend:** React 19, Vite 6, TypeScript (strict), Zustand, @xyflow/react (React Flow), Plotly.js, Zod, Vercel `ai` SDK + `@modelcontextprotocol/sdk` (BYOK copilot), vitest.
+**Frontend:** React 19, Vite 6, TypeScript (strict), Dockview, TanStack Query, Zustand, uPlot, regl-scatterplot, Apache Arrow, @xyflow/react (React Flow), dnd-kit, openapi-fetch, vitest, Playwright with axe.

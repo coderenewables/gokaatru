@@ -16,9 +16,7 @@ from starlette.concurrency import run_in_threadpool
 from server.api.deps import get_session_manager
 from server.api.mcp import create_session_aware_mcp_app
 from server.api.routes.analysis import router as analysis_router
-from server.api.routes.brighthub import router as brighthub_router
 from server.api.routes.chat import router as chat_router
-from server.api.routes.config import router as config_router
 from server.api.routes.datasets import router as datasets_router
 from server.api.routes.exports import router as exports_router
 from server.api.routes.health import router as health_router
@@ -30,7 +28,6 @@ from server.api.routes.series import router as series_router
 from server.api.routes.sessions import router as sessions_router
 from server.api.routes.sweep import router as sweep_router
 from server.api.routes.uploads import router as uploads_router
-from server.api.routes.workflow_execution import router as workflow_execution_router
 from server.operations import record_route_change
 
 _SESSION_PATH = re.compile(r"^/api/sessions/([^/]+)/")
@@ -81,11 +78,8 @@ def create_app() -> FastAPI:
     app.include_router(mcp_router, prefix="/api")
     app.include_router(sessions_router, prefix="/api")
     app.include_router(datasets_router, prefix="/api")
-    app.include_router(workflow_execution_router, prefix="/api")
     app.include_router(uploads_router, prefix="/api")
-    app.include_router(config_router, prefix="/api")
     app.include_router(analysis_router, prefix="/api")
-    app.include_router(brighthub_router, prefix="/api")
     app.include_router(results_router, prefix="/api")
     app.include_router(sweep_router, prefix="/api")
     app.include_router(exports_router, prefix="/api")

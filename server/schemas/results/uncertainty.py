@@ -1,6 +1,8 @@
 """Results of the uncertainty operations (P1-19)."""
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import ConfigDict, Field
 
 from server.schemas.results._base import Number, Result, Staleness
@@ -65,12 +67,18 @@ class McpSamplingCap(Result):
 class DensityNormalisation(Result):
     applied: bool
     reference_density_kgm3: Number
-    #: When not applied: why (no recorded site density).
+    #: When not applied: why (no temperature or pressure sensor, or no record with both).
     reason: str | None = None
     #: When applied: the IEC 61400-12-1 wind-speed normalisation for a pitch-regulated turbine.
     method: str | None = None
     turbine_regulation: str | None = None
     site_density_kgm3: Number = None
+    #: What the site density was measured from (decisions/0015.9), and at which height.
+    temperature_sensor: str | None = None
+    pressure_sensor: str | None = None
+    humidity_sensor: str | None = None
+    density_records: int | None = None
+    height_basis: str | None = None
     speed_factor: Number = None
     note: str | None = None
 
@@ -127,3 +135,9 @@ class ComputeEnergySensitivityResult(EnergySensitivity, Staleness):
     status: str
     #: ``latest_uncertainty`` when the conversion used the session's last uncertainty result.
     speed_uncertainty_source: str | None = None
+
+
+class CalculateScenarioUncertaintyResult(CalculateUncertaintyResult):
+    """A sweep scenario's uncertainty (P3-7b): the same result, with where each input came from."""
+
+    derived_inputs: dict[str, Any]

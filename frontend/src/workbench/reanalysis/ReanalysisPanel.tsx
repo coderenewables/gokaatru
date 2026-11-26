@@ -3,6 +3,7 @@ import { useRef, useState, type FormEvent } from "react";
 
 import { api, unwrap } from "../api";
 import { useCampaign } from "../shell/context";
+import { BrightHubCredentials } from "./BrightHubCredentials";
 import "./reanalysis.css";
 import {
   PROVIDER_NAMES,
@@ -63,16 +64,16 @@ export function ReanalysisPanel() {
 
   const brightHub = useQuery({
     queryKey: ["brighthub-status", sessionId],
-    queryFn: async () => unwrap(await api.GET("/api/sessions/{session_id}/brighthub/status", path)),
+    queryFn: async () => unwrap(await api.POST("/api/sessions/{session_id}/operations/brighthub_status", { ...path, body: {} })),
   });
   const earthDataHub = useQuery({
     queryKey: ["earthdatahub-status", sessionId],
-    queryFn: async () => unwrap(await api.GET("/api/sessions/{session_id}/era5/credential/status", path)),
+    queryFn: async () => unwrap(await api.POST("/api/sessions/{session_id}/operations/earthdatahub_status", { ...path, body: {} })),
   });
   const signedIn =
     provider === "brighthub"
       ? brightHub.data?.authenticated === true
-      : (earthDataHub.data as { configured?: boolean } | undefined)?.configured === true;
+      : earthDataHub.data?.configured === true;
 
   async function run(siteLatitude: number, siteLongitude: number) {
     if (busy.current) return;
@@ -93,15 +94,20 @@ export function ReanalysisPanel() {
       const nodesByDataset: Partial<Record<Dataset, GridNode[]>> = {};
       const body = { latitude: siteLatitude, longitude: siteLongitude };
       if (provider === "brighthub") {
-        const found = unwrap(await api.POST("/api/sessions/{session_id}/brighthub/reanalysis/nodes", { ...path, body }));
+        const found = unwrap(await api.POST("/api/sessions/{session_id}/operations/brighthub_find_reanalysis_nodes", { ...path, body }));
+        // The finder records the nodes, nearest first, with their distance from the site.
         const own = (nodes: typeof found.era5_nodes): GridNode[] =>
           sortByDistance(
-            nodes.map((n) => ({ latitude: n.latitude_ddeg, longitude: n.longitude_ddeg, distance_km: n.distance_km })),
+            nodes.map((n) => ({
+              latitude: Number(n.latitude_ddeg),
+              longitude: Number(n.longitude_ddeg),
+              distance_km: typeof n.distance_km === "number" ? n.distance_km : null,
+            })),
           );
         nodesByDataset.ERA5 = own(found.era5_nodes);
         nodesByDataset["MERRA-2"] = own(found.merra2_nodes);
       } else {
-        const found = unwrap(await api.POST("/api/sessions/{session_id}/era5/nodes", { ...path, body })) as {
+        const found = unwrap(await api.POST("/api/sessions/{session_id}/operations/find_era5_nodes", { ...path, body })) as {
           nodes?: GridNode[];
         };
         nodesByDataset.ERA5 = sortByDistance(found.nodes ?? []);
@@ -116,23 +122,21 @@ export function ReanalysisPanel() {
           let cache: string | null = null;
           if (provider === "brighthub") {
             const response = unwrap(
-              await api.POST("/api/sessions/{session_id}/brighthub/reanalysis/download", {
+              await api.POST("/api/sessions/{session_id}/operations/brighthub_download_reanalysis", {
                 ...path,
                 body: {
                   dataset,
-                  nodes: [{ latitude_ddeg: node.latitude, longitude_ddeg: node.longitude }],
+                  nodes_json: JSON.stringify([{ latitude_ddeg: node.latitude, longitude_ddeg: node.longitude }]),
                   source: "brighthub",
                 },
               }),
             );
             cache = response.items[0]?.cache ?? null;
           } else {
-            unwrap(
-              await api.POST("/api/sessions/{session_id}/era5/extract", {
-                ...path,
-                body: { latitude: node.latitude, longitude: node.longitude, start_date: startDate, end_date: endDate },
-              }),
-            );
+            const at = { latitude: node.latitude, longitude: node.longitude };
+            unwrap(await api.POST("/api/sessions/{session_id}/operations/extract_era5_data", { ...path, body: { ...at, start_date: startDate, end_date: endDate } }));
+            // ERA5 holds u and v; interpolation reads the speed and direction derived from them.
+            unwrap(await api.POST("/api/sessions/{session_id}/operations/compute_era5_wind_speed", { ...path, body: at }));
           }
           done.push({ dataset, node, cache });
           setOutcomes([...done]);
@@ -142,7 +146,7 @@ export function ReanalysisPanel() {
       for (const dataset of datasetsFor(provider)) {
         enter({ phase: "interpolating", dataset });
         unwrap(
-          await api.POST("/api/sessions/{session_id}/era5/interpolate", {
+          await api.POST("/api/sessions/{session_id}/operations/interpolate_era5_to_site", {
             ...path,
             body: { source: interpolationSource(dataset) },
           }),
@@ -271,79 +275,6 @@ export function ReanalysisPanel() {
   );
 }
 
-function BrightHubCredentials(props: {
-  sessionId: string;
-  authenticated: boolean;
-  disabled: boolean;
-  onChanged: () => void;
-}) {
-  const path = { params: { path: { session_id: props.sessionId } } };
-  const [clientId, setClientId] = useState("");
-  const [secret, setSecret] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  async function login(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-    try {
-      unwrap(
-        await api.POST("/api/sessions/{session_id}/brighthub/login", {
-          ...path,
-          body: { client_id: clientId, client_secret: secret },
-        }),
-      );
-      setSecret("");
-      props.onChanged();
-    } catch (failed) {
-      setError(message(failed));
-    }
-  }
-
-  async function logout() {
-    setError(null);
-    try {
-      unwrap(await api.POST("/api/sessions/{session_id}/brighthub/logout", path));
-      props.onChanged();
-    } catch (failed) {
-      setError(message(failed));
-    }
-  }
-
-  return (
-    <section aria-labelledby="gk-re-bh" className="gk-re-group">
-      <h2 id="gk-re-bh">BrightHub account</h2>
-      {props.authenticated ? (
-        <div className="gk-re-row">
-          <span>Signed in for this session.</span>
-          <button type="button" className="gk-button" onClick={() => void logout()} disabled={props.disabled}>
-            Sign out
-          </button>
-        </div>
-      ) : (
-        <form onSubmit={(event) => void login(event)} className="gk-re-form">
-          <label>
-            Client ID
-            <input type="text" value={clientId} onChange={(event) => setClientId(event.target.value)} autoComplete="off" />
-          </label>
-          <label>
-            Client secret
-            <input type="password" value={secret} onChange={(event) => setSecret(event.target.value)} autoComplete="off" />
-          </label>
-          <button type="submit" className="gk-button" disabled={props.disabled || clientId === "" || secret === ""}>
-            Sign in
-          </button>
-        </form>
-      )}
-      {error && (
-        <p role="alert" className="gk-re-failure">
-          {error}
-        </p>
-      )}
-      <p className="gk-muted gk-re-note">Held by the server for this session only.</p>
-    </section>
-  );
-}
-
 function EarthDataHubCredentials(props: {
   sessionId: string;
   configured: boolean;
@@ -358,7 +289,7 @@ function EarthDataHubCredentials(props: {
     event.preventDefault();
     setError(null);
     try {
-      unwrap(await api.POST("/api/sessions/{session_id}/era5/credential", { ...path, body: { pat: token } }));
+      unwrap(await api.POST("/api/sessions/{session_id}/operations/earthdatahub_set_credential", { ...path, body: { pat: token } }));
       setToken("");
       props.onChanged();
     } catch (failed) {
@@ -369,7 +300,7 @@ function EarthDataHubCredentials(props: {
   async function clear() {
     setError(null);
     try {
-      unwrap(await api.DELETE("/api/sessions/{session_id}/era5/credential", path));
+      unwrap(await api.POST("/api/sessions/{session_id}/operations/earthdatahub_clear_credential", { ...path, body: {} }));
       props.onChanged();
     } catch (failed) {
       setError(message(failed));

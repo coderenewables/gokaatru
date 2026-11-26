@@ -78,19 +78,28 @@ def _get_site_overview_map(state: SessionState) -> dict:
     }
 
 
-@operation(effect="read", stage="map", result=result_models.GetMastMarkerResult)
+@operation(
+    effect="read", stage="map", result=result_models.GetMastMarkerResult,
+    reads=("site", "label"),
+)
 def get_mast_marker() -> dict:
     """Return the site measurement mast as a GeoJSON feature for site overview mapping."""
     return _get_mast_marker(session)
 
 
-@operation(effect="read", stage="map", result=result_models.GetEra5NodeMarkersResult)
+@operation(
+    effect="read", stage="map", result=result_models.GetEra5NodeMarkersResult,
+    reads=("reanalysis_nodes", "site"),
+)
 def get_era5_node_markers() -> dict:
     """Return all surrounding ERA5 nodes as a GeoJSON FeatureCollection with distance and bearing metadata."""
     return _get_era5_node_markers(session)
 
 
-@operation(effect="read", stage="map", result=result_models.GetSiteOverviewMapResult)
+@operation(
+    effect="read", stage="map", result=result_models.GetSiteOverviewMapResult,
+    reads=("reanalysis_nodes", "site", "label"),
+)
 def get_site_overview_map() -> dict:
     """Return a combined GeoJSON FeatureCollection of the mast and ERA5 support nodes."""
     return _get_site_overview_map(session)

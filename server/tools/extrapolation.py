@@ -240,6 +240,9 @@ def _extrapolate_to_hub_height(
         column_name = _hub_column_name(hub_height_m)
         state.timeseries_df[column_name] = state.timeseries_df[speed_map[hub_height_m]]
         state.set_hub_height_m(float(hub_height_m))
+        # Measured at hub height, it is still built from the measured records, and goes stale
+        # with them like the extrapolated series below.
+        state.stamp_derived("hub_height_series")
         return {
             "status": "ok",
             "column_name": column_name,
@@ -587,13 +590,32 @@ def _add_shear_to_timeseries(state: SessionState) -> bool:
         "reference_height_m.record_counts",
     ),
     result=result_models.ExtrapolateToHubHeightResult,
+    reads=(
+        "data_model", "measured_data", "reanalysis_nodes", "reference_series", "shear_table", "roughness_table",
+        "shear_settings",
+    ),
+    writes=("hub_height_series", "reanalysis_hub_series", "site"),
 )
-def extrapolate_to_hub_height(hub_height_m: float, shear_model: str = "power_law") -> dict:
-    """Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B."""
-    return _extrapolate_to_hub_height(session, hub_height_m, shear_model)
+def extrapolate_to_hub_height(
+    hub_height_m: float,
+    shear_model: str = "power_law",
+    reference_columns: list[str] | None = None,
+    extrapolate_reanalysis: bool = True,
+) -> dict:
+    """Create a hub-height wind-speed series using power-law or log-law shear traced to IEC 61400-12-1 Annex B.
+
+    ``reference_columns`` limits the measured heights carried up to those sensors (a sweep's
+    extrapolation-reference policy); without it every mapped speed sensor is used.
+    ``extrapolate_reanalysis`` false leaves the reanalysis frames as they are, as a sweep does.
+    """
+    return _extrapolate_to_hub_height(session, hub_height_m, shear_model, reference_columns, extrapolate_reanalysis)
 
 
-@operation(effect="change", stage="extrapolation", result=result_models.ExtrapolateReanalysisToHubResult)
+@operation(
+    effect="change", stage="extrapolation", result=result_models.ExtrapolateReanalysisToHubResult,
+    reads=("reference_series", "shear_table", "reference_choice"),
+    writes=("reanalysis_hub_series",),
+)
 def extrapolate_reanalysis_to_hub(
     hub_height_m: float, reference_height_m: float | None = None
 ) -> dict:

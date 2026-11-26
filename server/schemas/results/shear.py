@@ -154,3 +154,11 @@ class ComputeVerticalStructureResult(Result):
     #: Null without two direction sensors.
     veer: Veer | None
     selection: SelectionUsed | None = None
+
+
+class BuildConstantShearTableResult(Result):
+    status: str
+    alpha: Number
+    #: `analyst_supplied` for a given exponent, `fitted` for the mean of the shear series.
+    shear_source: str
+    aggregation: str

@@ -47,6 +47,11 @@ module; `tests/test_mcp_surface.py` refuses it.
      `_base.py`. Every field the function can return, conditional ones optional (read the
      function for each `result["..."] = ` and `**` spread; a sample shows only the branches it
      took). A float is `Number`. A dry run also needs `preview_result=`.
+   - `reads=(...)`, `writes=(...)`: the artifacts (`server/state/artifacts.py`) it reads and
+     writes, the canvas's ports and what staleness follows. A read writes nothing. Declare every
+     artifact any branch reads or writes, not only those one sample reaches;
+     `tests/test_artifacts.py` fails on an undeclared one, and a declared write no sample makes
+     needs its reason in `WRITES_NOT_OBSERVED`.
    - `selectable=True` for a read that computes from the measured records (the working frame,
      raw data, or the shear and roughness timeseries). The wrapper publishes a `selection`
      parameter and runs the function with every record outside it blank; nothing in the

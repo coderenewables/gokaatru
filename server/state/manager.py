@@ -113,17 +113,10 @@ class SessionManager:
         target.scenarios = copy.deepcopy(source.scenarios)
         target.runconfig = copy.deepcopy(source.runconfig)
 
-        target.workflow_execution = {
-            "run_id": None,
-            "is_running": False,
-            "cancel_requested": False,
-            "node_statuses": {},
-            "events": [],
-        }
-        target.workflow_runs = copy.deepcopy(source.workflow_runs)
         target.operation_log = copy.deepcopy(source.operation_log)
         target.undo_stack = list(source.undo_stack)
         target.selections = copy.deepcopy(source.selections)
+        target.pipelines = copy.deepcopy(source.pipelines)
         target.removed_sensors = copy.deepcopy(source.removed_sensors)
         target.datamodel_origin = copy.deepcopy(source.datamodel_origin)
         target.project = copy.deepcopy(source.project)
@@ -133,10 +126,12 @@ class SessionManager:
         target.data_version = copy.deepcopy(source.data_version)
         target.derived_versions = copy.deepcopy(source.derived_versions)
         target.derived_provenance = copy.deepcopy(source.derived_provenance)
+        target.artifact_clock = source.artifact_clock
+        target.artifact_versions = copy.deepcopy(source.artifact_versions)
+        target.derived_inputs = copy.deepcopy(source.derived_inputs)
         target.ltc_matching_disclosure = copy.deepcopy(source.ltc_matching_disclosure)
         target.shear_clamp_stats = copy.deepcopy(source.shear_clamp_stats)
         target.roughness_clip_stats = copy.deepcopy(source.roughness_clip_stats)
-        target.executed_nodes = copy.deepcopy(source.executed_nodes)
         target.persist_result_files = source.persist_result_files
 
     def create_session(self) -> SessionState:

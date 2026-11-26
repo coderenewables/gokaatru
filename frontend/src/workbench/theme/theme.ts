@@ -22,3 +22,16 @@ export function useTheme(): [Theme, () => void] {
   const toggle = useCallback(() => setTheme((current) => (current === "light" ? "dark" : "light")), []);
   return [theme, toggle];
 }
+
+/** The theme the page shows now, followed as the header switches it: for a library that takes
+ * the theme as a prop (React Flow) rather than from the tokens. */
+export function useAppliedTheme(): Theme {
+  const read = (): Theme => (document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+  const [theme, setTheme] = useState<Theme>(read);
+  useEffect(() => {
+    const observer = new MutationObserver(() => setTheme(read()));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
+  return theme;
+}

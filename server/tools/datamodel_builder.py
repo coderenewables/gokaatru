@@ -206,7 +206,10 @@ def _records_in_local_time(state: SessionState) -> bool:
 
 # The draft proposes a reading of the column headers and writes nothing; the build writes a
 # data model into the workspace and replaces the sensor mapping and timezone in one call.
-@operation(effect="read", stage="ingest", canvas=False, result=result_models.DraftDataModelResult)
+@operation(
+    effect="read", stage="ingest", canvas=False, result=result_models.DraftDataModelResult,
+    reads=("measured_data", "hub_height_series", "data_model"),
+)
 def draft_data_model() -> dict:
     """Draft a Task 43 reading of the loaded timeseries columns for review, with the data
     model in use: its file, whether it was built here (only then can it be edited) and the
@@ -214,7 +217,11 @@ def draft_data_model() -> dict:
     return {**_draft_data_model(session), "in_use": copy.deepcopy(session.datamodel_origin)}
 
 
-@operation(effect="change", stage="ingest", canvas=False, result=result_models.BuildDataModelResult)
+@operation(
+    effect="change", stage="ingest", canvas=False, result=result_models.BuildDataModelResult,
+    reads=("measured_data", "site"),
+    writes=("data_model", "measured_data"),
+)
 def build_data_model(spec: dict) -> dict:
     """Build a minimal IEA Task 43 data model from declared columns and load it.
 

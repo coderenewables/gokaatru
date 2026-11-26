@@ -6,6 +6,7 @@ cleaning rather than freezing a list of rows.
 """
 from __future__ import annotations
 
+import copy
 import json
 from datetime import datetime, timezone
 from typing import Any
@@ -14,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from server.core.selection import SelectionError, resolve, validate
-from server.operations import ACTOR, operation
+from server.operations import ACTOR, note_undo, operation
 from server.schemas.results import selections as result_models
 from server.state.session import SessionState, session
 
@@ -101,11 +102,13 @@ def _define_selection(state: SessionState, name: str, definition: dict[str, Any]
     except SelectionError as exc:
         raise ValueError(str(exc)) from exc
     replaced = name in state.selections
+    before = copy.deepcopy(state.selections.get(name))
     state.selections[name] = {
         "definition": definition,
         "actor": ACTOR.get(),
         "defined_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
+    note_undo({"name": name, "before": before, "after": copy.deepcopy(state.selections[name])})
     state.touch()
     return {"status": "ok", "replaced": replaced, **_summary(name, definition, frame)}
 
@@ -113,6 +116,7 @@ def _define_selection(state: SessionState, name: str, definition: dict[str, Any]
 def _delete_selection(state: SessionState, name: str) -> dict[str, Any]:
     if name not in state.selections:
         raise ValueError(f"No selection named '{name}'")
+    note_undo({"name": name, "before": copy.deepcopy(state.selections[name]), "after": None})
     del state.selections[name]
     state.touch()
     return {"status": "ok", "deleted": name}
@@ -161,6 +165,7 @@ def _summarise_channels(state: SessionState, channels: str) -> dict[str, Any]:
 @operation(
     effect="read", stage="selection", canvas=False, selectable=True,
     result=result_models.SummariseChannelsResult,
+    reads=("measured_data",),
 )
 def summarise_channels(channels: str) -> dict:
     """Valid records, mean, minimum and maximum of measured channels (comma-separated); with a
@@ -168,26 +173,40 @@ def summarise_channels(channels: str) -> dict:
     return _summarise_channels(session, channels)
 
 
-@operation(effect="change", stage="selection", canvas=False, result=result_models.DefineSelectionResult)
+@operation(
+    effect="change", stage="selection", canvas=False, result=result_models.DefineSelectionResult,
+    reads=("measured_data",),
+    writes=("selections",),
+)
 def define_selection(name: str, definition: dict) -> dict:
     """Define or replace a named selection of records: time ranges, direction sectors, value
     bands, polygons over two channels or record sets, combined by union and intersection."""
     return _define_selection(session, name, definition)
 
 
-@operation(effect="change", stage="selection", canvas=False, result=result_models.DeleteSelectionResult)
+@operation(
+    effect="change", stage="selection", canvas=False, result=result_models.DeleteSelectionResult,
+    reads=("selections",),
+    writes=("selections",),
+)
 def delete_selection(name: str) -> dict:
     """Delete a named selection."""
     return _delete_selection(session, name)
 
 
-@operation(effect="read", stage="selection", canvas=False, result=result_models.ListSelectionsResult)
+@operation(
+    effect="read", stage="selection", canvas=False, result=result_models.ListSelectionsResult,
+    reads=("measured_data", "selections"),
+)
 def list_selections() -> dict:
     """List the session's named selections with how many records each holds now."""
     return _list_selections(session)
 
 
-@operation(effect="read", stage="selection", canvas=False, result=result_models.ResolveSelectionResult)
+@operation(
+    effect="read", stage="selection", canvas=False, result=result_models.ResolveSelectionResult,
+    reads=("measured_data", "selections"),
+)
 def resolve_selection(name: str) -> dict:
     """Resolve a named selection against the working data: how many records, and where."""
     return _resolve_selection(session, name)

@@ -711,10 +711,13 @@ def _run_ltc_variance_ratio(state: SessionState, short_col: str, long_col: str) 
         "huber_delta",
     ),
     result=result_models.RunLtcLinearLeastSquaresResult,
+    reads=("hub_height_series", "measured_data", "reference_series", "reference_choice", "settings"),
+    writes=("ltc:linear_least_squares", "ltc_matching"),
 )
-def run_ltc_linear_least_squares(short_col: str, long_col: str) -> dict:
+def run_ltc_linear_least_squares(short_col: str, long_col: str, reference_source: str = "") -> dict:
     """Run robust linear MCP using Huber IRLS and apply the fit to the full long-term record."""
-    return _run_ltc_linear_least_squares(session, short_col, long_col)
+    with session.using_reference_source(reference_source):
+        return _run_ltc_linear_least_squares(session, short_col, long_col)
 
 
 @operation(
@@ -728,10 +731,13 @@ def run_ltc_linear_least_squares(short_col: str, long_col: str) -> dict:
         "error_variance_ratio_assumed",
     ),
     result=result_models.RunLtcTotalLeastSquaresResult,
+    reads=("hub_height_series", "measured_data", "reference_series", "reference_choice", "settings"),
+    writes=("ltc:total_least_squares", "ltc_matching"),
 )
-def run_ltc_total_least_squares(short_col: str, long_col: str) -> dict:
+def run_ltc_total_least_squares(short_col: str, long_col: str, reference_source: str = "") -> dict:
     """Run orthogonal total least squares MCP and apply the fit to the full long-term record."""
-    return _run_ltc_total_least_squares(session, short_col, long_col)
+    with session.using_reference_source(reference_source):
+        return _run_ltc_total_least_squares(session, short_col, long_col)
 
 
 @operation(
@@ -745,12 +751,15 @@ def run_ltc_total_least_squares(short_col: str, long_col: str) -> dict:
         "fit_basis",
     ),
     result=result_models.RunLtcSpeedsortResult,
+    reads=("hub_height_series", "measured_data", "reference_series", "reference_choice", "settings"),
+    writes=("ltc:speedsort", "ltc_matching"),
 )
 def run_ltc_speedsort(
     short_col: str,
     long_col: str,
     short_dir_col: str = "",
     long_dir_col: str = "",
+    reference_source: str = "",
 ) -> dict:
     """Run directional SpeedSort LTC with per-sector transfer functions and dog-leg low-speed segment.
 
@@ -760,7 +769,8 @@ def run_ltc_speedsort(
     the all-sector fit.  Without *long_dir_col* the original non-directional
     behaviour is preserved.
     """
-    return _run_ltc_speedsort(session, short_col, long_col, short_dir_col, long_dir_col)
+    with session.using_reference_source(reference_source):
+        return _run_ltc_speedsort(session, short_col, long_col, short_dir_col, long_dir_col)
 
 
 @operation(
@@ -773,7 +783,10 @@ def run_ltc_speedsort(
         "reference_temporal_semantics",
     ),
     result=result_models.RunLtcVarianceRatioResult,
+    reads=("hub_height_series", "measured_data", "reference_series", "reference_choice", "settings"),
+    writes=("ltc:variance_ratio", "ltc_matching"),
 )
-def run_ltc_variance_ratio(short_col: str, long_col: str) -> dict:
+def run_ltc_variance_ratio(short_col: str, long_col: str, reference_source: str = "") -> dict:
     """Run variance-ratio MCP using mean and standard-deviation scaling of the reference series."""
-    return _run_ltc_variance_ratio(session, short_col, long_col)
+    with session.using_reference_source(reference_source):
+        return _run_ltc_variance_ratio(session, short_col, long_col)

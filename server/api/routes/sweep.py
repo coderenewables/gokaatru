@@ -32,6 +32,7 @@ from server.core.sweep import (
     load_sweep,
     run_sweep,
 )
+from server.core.sweep import estimate_sweep as _estimate_sweep
 from server.state.session import SessionState
 from server.tools.sweep_analysis import _sweep_spread
 
@@ -140,14 +141,10 @@ def estimate_sweep(
     body: SweepRequest,
     state: Annotated[SessionState, Depends(get_session_state)],
 ) -> dict[str, Any]:
-    """Price a specification without running it — the designer's cost counter (§9.1)."""
-    del session_id, state
-    spec = body.to_spec()
-    return {
-        "leaf_count": spec.leaf_count(),
-        "prefix_count": spec.prefix_count(),
-        "spec": spec.as_runconfig(),
-    }
+    """Price a specification without running it — the designer's cost counter (§9.1) — and
+    say which leaves the run will skip as duplicates and which it will refuse, and why."""
+    del session_id
+    return _estimate_sweep(state, body.to_spec())
 
 
 @router.post("/run")

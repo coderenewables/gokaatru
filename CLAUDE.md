@@ -15,27 +15,24 @@ those citations have not been checked against the clause text, and the only word
 is "traced to", never "compliant with" or "follows".
 
 Two parts, one logic core:
-- **`server/`** — Python MCP server (FastMCP) + FastAPI web API. 103 tools across ingest,
+- **`server/`** — Python MCP server (FastMCP) + FastAPI web API. 111 tools across ingest,
   cleaning, statistics, shear/extrapolation, ERA5+MERRA-2 reanalysis, homogeneity, 5 LTC/MCP
   algorithms, ensemble, clipping, uncertainty, mapping, visualization, BrightHub integration,
-  and a scenario **sweep/Analysis Engine**. DTU's WindKit (pinned `==2.2.0`) is used only
-  where it is the reference implementation and has no tools of its own (`decisions/0009`).
-- **`frontend/`** — React 19 + Vite + TypeScript app, navigated by a **3-phase primary rail**
-  (`PhaseRail`: Prepare / Run / Interrogate) plus two independent entries (Canvas, Copilot).
-  **Prepare** merges data import, cleaning, reanalysis, Sensor Overview and the Stepper into
-  one screen with an internal section switcher, ending in a stamped fixed-prefix hash.
-  **Run** merges the Sweep Designer and its live monitor. **Interrogate** merges the Spread
-  Explorer, Sensitivity, Gate Report and Spread Summary under one shared metric switch.
-  **Canvas** is the editable React-Flow DAG runner, populated *only* by explicitly loading
-  one scenario's exact config from a completed sweep ("Load from sweep") or by manually
-  editing/rebuilding a config — no more auto-built default pipeline — plus a "Compare runs"
-  toggle (saved workflow-run comparison, retired as its own tab). A ⌘K command palette
-  (`CommandPalette`) jumps to any phase/stage/preset/metric/gate or falls through to
-  "Ask Copilot". See "Current state" below (2026-09-06 and 2026-09-07 entries) for the full
-  rationale. The new workbench is built beside it at `/workbench/` (Phase 2: projects of
-  campaigns, Dockview panels, data tree and mast diagram, linked timeline, scatter, rose and
-  profile, flags drawn on the charts, undo through the server's history; `decisions/0014`), and
-  replaces it at the Phase 3 gate.
+  selections, pipelines, history and a scenario **sweep/Analysis Engine**. Every tool is
+  declared once as an operation (`server/operations.py`, decisions/0009), which publishes the
+  MCP tool and its generated HTTP route. DTU's WindKit (pinned `==2.2.0`) is used only where
+  it is the reference implementation and has no tools of its own (`decisions/0009`).
+- **`frontend/`** — the **workbench**, React 19 + Vite + TypeScript, served at `/`: projects
+  of campaigns, worked in four phases (decisions/0014, 0015). **Prepare**: data tree, loading
+  and the mast diagram, reanalysis, linked timeline, scatter, rose and profile, flags drawn on
+  the charts, the inspector, cleaning rules as forms and the sensor overview. **Model**: one
+  chosen pipeline of operations, ordered by the server from what each reads and writes, run
+  step by step. **Run**: the matrix sweep designer with a live estimate, and the run monitor.
+  **Interrogate**: a sweep's scenarios under one crossfilter, the server's sensitivity
+  decomposition, gates and two scenarios side by side. Undo and redo go through the server's
+  history; Ctrl+K opens the command palette. The interface it replaced (Prepare/Run/
+  Interrogate rail, Canvas, Stepper, Copilot, Results) was retired at the Phase 3 gate; the
+  Copilot and the Results report return in Phases 4 and 7.
 
 **Single trusted user, local deployment.** No auth layer; the session id is the only
 credential. See README's "Deployment model" section before ever discussing hosting this for
@@ -60,17 +57,24 @@ question rather than guessing from this file alone:
 MCP tools and FastAPI routes call **identical business logic** in `server/tools/` and
 `server/core/`. Never write UI-specific logic in the MCP layer, and never add a capability
 to one interface without the other. New analytics go in `server/tools/` (or `server/core/`
-for pure math) first, then get exposed via both `server/main.py` (MCP) and
-`server/api/routes/` (HTTP).
+for pure math) first, declared with `@operation` (the `add-operation` skill), which publishes
+the MCP tool and `POST /api/sessions/{id}/operations/{name}` from one declaration. A
+hand-written route is only for a request the generated ones cannot express (an upload, an
+Arrow stream, the sweep's event stream, projects); P3-17 retired the ones that duplicated an
+operation, after closing four differences between them.
 
 ## Layout
 
 ```
 server/
 ├── main.py              # FastMCP server, tool registration
-├── api/                 # FastAPI app; routes/ has ~13 route files (~200 endpoints)
+├── operations.py        # the operation registry: one declaration per tool (decisions/0009)
+├── api/                 # FastAPI app; routes/operations.py generates a route per
+│                         #   operation; the hand-written routes left are uploads,
+│                         #   sessions, projects, series/pairs, the sweep, chat and the few
+│                         #   kept for the owner (CODEDOC §4.5)
 ├── core/                # Pure math + orchestration: formulas, regression, spatial,
-│                         #   validators, runconfig contract, executor (workflow DAG),
+│                         #   validators, runconfig contract, pipeline order (pipeline.py),
 │                         #   admissibility (sweep gates), sweep.py, scenario_*.py,
 │                         #   sensor_selection.py, powercurve.py, reanalysis.py
 ├── tools/                # ~20 tool modules (data_io, cleaning, shear, extrapolation,
@@ -81,16 +85,18 @@ server/
 │                         #   @mcp.tool() wrappers and re-exports every builder, so every
 │                         #   existing `server.tools.visualization.*` import path is unchanged)
 ├── state/                # session.py (SessionState), manager.py (SessionManager,
-│                         #   ContextVar-bound), dataset_pool.py
+│                         #   ContextVar-bound), project.py and projects.py (the store and
+│                         #   projects of campaigns), artifacts.py (reads, writes,
+│                         #   staleness), dataset_pool.py
 └── schemas/              # Pydantic v2 contracts
 
 frontend/src/
-├── components/           # AppHeader, PhaseTabs, Stepper, stages/, results/, sweep/,
-│                         #   WorkflowView (Canvas), CopilotView, CompareView, ...
-├── store/                # useWorkspaceStore (Zustand, ~2000 LOC), useSweepStore
-├── lib/                  # api.ts (Axios client), configSync, stages, workflow,
-│                         #   defaultWorkflowPlan, sweepApi, sweepAnalysis, copilotAgent
-└── types/analysis.ts     # canonical config schema + response interfaces
+├── workbench/            # the application: shell/ (phases, Dockview, palette), datatree/,
+│                         #   timeline/, scatter/, rose/, profile/, inspector/, prepare/,
+│                         #   reanalysis/, model/, run/, interrogate/, forms/, history/
+├── api/                  # client generated from the committed OpenAPI schema
+└── types/sweep.ts        # sweep row columns, axis and metric labels, GATE_META
+frontend/e2e/             # Playwright against a real backend (:8011), axe in every spec
 
 tests/                    # 83 backend test files (pytest) — includes oracles.py, an
                            #   independent-implementation oracle harness used to verify
@@ -105,8 +111,9 @@ Full module-by-module detail (every `server/core`/`server/tools` file's responsi
 complete route inventory, frontend file layout): `CODEDOC.md`.
 
 `runconfig` (defined once in `server/core/runconfig.py`) is the single source of truth for
-site metadata; the frontend's convenience fields are derived mirrors, enforced by
-`tests/test_runconfig_contract.py`. Session state (`SessionState`) holds all working data for
+site metadata; the workbench reads it through `get_run_config` and keeps no copy. The retired
+interface wrote derived mirrors into it, which the backend still promotes and strips
+(`tests/test_runconfig_contract.py`). Session state (`SessionState`) holds all working data for
 one analysis; it is a mutating singleton per session, bound via a `ContextVar`
 (`server/state/session.py`).
 
@@ -190,21 +197,32 @@ the synthetic-data tests; `GOKAATRU_TEST_UPLOADS_DIR` points the suite at anothe
 folder, and a missing campaign file skips its test by name (`require_campaign_file` in
 `tests/conftest.py`), never errors.
 
-Current baseline (verified 2026-11-25, branch `phase2-workbench` at the Phase 2 gate):
-1701 backend tests passing / 4 skipped (each skip states its reason), 346 frontend tests
-passing (45 files), 41 Playwright tests passing (the smoke test and the workbench's), frontend
-typecheck and build clean, the generated API client current, 103 MCP tools registered and
-identical to the snapshot, and `ruff check server/ tests/` clean. Without the campaign files
-(CI run 45592898191, Ubuntu and Windows): 1639 passed / 66 skipped; all four CI jobs passed. These numbers move as the project
-grows — `validate-gokaatru` always re-derives the live count rather than trusting any written
-baseline, this one included. Backend count assumes the gitignored `data/uploads/` fixtures are
-present (see the `tests/` layout note above); without them the tests that need them skip.
+Current baseline (verified 2026-11-26, branch `phase3-workbench` at the Phase 3 gate):
+1838 backend tests passing / 4 skipped (each skip states its reason), 258 frontend tests
+passing (20 files), 79 Playwright tests passing (smoke included, axe in every spec), frontend
+typecheck and build clean, the generated API client current, 111 MCP tools registered and
+identical to the snapshot, `ruff check server/ tests/` clean, every published number identical
+on the three campaigns. Without the campaign files (CI run 45757398917, Ubuntu and Windows):
+1776 passed / 66 skipped; all four CI jobs passed. These numbers move as the project grows — `validate-gokaatru` always
+re-derives the live count rather than trusting any written baseline, this one included.
+Backend count assumes the gitignored `data/uploads/` fixtures are present (see the `tests/`
+layout note above); without them the tests that need them skip.
 
 **Ruff was not clean before 2026-08-25** — 185 findings (97 E501, 36 I001, 31 F401, 17 W292,
 3 F841, 1 F811) had accumulated because `ruff>=0.1` is unpinned and the check was not being
 run to zero. They are all fixed now; keep it at zero rather than letting a second wall build.
 
-## Current state (last verified 2026-11-25)
+## Current state (last verified 2026-11-26)
+
+**2026-11-25 to 2026-11-26: workbench Phase 3 on branch `phase3-workbench`, gate passed and pushed (not merged).** Branched from `phase2-workbench` (`ffa609b`). The owner's decisions, taken by interview on 2026-11-25, are `decisions/0015-workbench-model-run-interrogate.md`; the task list is `Claude outputs/WORKBENCH_PLAN.md` §8e. Against my recommendations, the Copilot and the Results report are dropped until Phases 4 and 7, and sessions made in the old interface stay unreachable from the screens (they remain on disk and over MCP and HTTP).
+
+- **P3-G, the gate (2026-11-26):** 1838 backend tests / 4 skipped, 258 frontend (20 files), 79 Playwright, typecheck, build and generated client clean, 111 tools identical to the snapshot, ruff clean, every published number identical on the three campaigns except those P3-4 moved on purpose. The new sweep designer posts, for each preset, exactly the request the old one posted: compared live before the old interface was deleted, then frozen (`frontend/e2e/oldDesignerRuns.json`, `src/test/fixtures/oldSweepDesigner.json`); the server is deterministic, so the same request is the same rows. **Held on the server, not in the browser:** a sweep scenario run as its pipeline reproduces its row (P3-7, every completed row of two Launakalana sweeps exactly); browser tests have no reanalysis, so `scenario.spec.ts` holds only that a scenario loads into Model as its steps in order. Axe and light and dark screenshots in each phase's specs. CI run 45757398917 green on all four jobs (Ubuntu and Windows backend 1776 passed / 66 skipped without the campaign files, frontend 258 in 20 files, Playwright 79). The first CI run (45755979722) failed on a real accessibility defect only CI's Linux fonts exposed: the run monitor's event list wrapped past its height and scrolled with nothing a keyboard could focus; the scrolling lists of the Run panels now take focus, and a test overflows the list on any machine (P3-13a).
+- **Open for the owner:** the hand-written routes kept with no operation and no screen: sensor statistics, the overview summary, clipping columns, runconfig import, the named scenarios, the Results report's summaries and runconfig export, `/plots/{name}` (figures no `plot_*` operation draws), the exports, the shared-dataset library and the MCP catalog (README's Web API table marks them). The old Explore stage's figures (Weibull, diurnal and annual profiles, turbulence) have no viewer until the Phase 7 report; their numbers run from Model. A sweep cannot be stopped: the route passes no `should_stop`, and the old Stop only abandoned the event stream while the sweep ran on, so the new monitor offers none. The energy sensitivity's density is measured at the pressure sensor's height (4 m on Launakalana), not hub height, as the atmospheric diagnostic reports it.
+- **Known, not fixed:** carried from Phase 2, the sensors route still guesses types from names before a data model exists, and the start screen fetches every project's details. A missing BrightHub login is a 400 naming it, where the retired routes answered 401. The rules and flags equivalence tests send the old form's requests through the operation its retired route called, not through the old form itself.
+- **Server (P3-1 to P3-8):** saved selections undoable (P3-1). Every operation declares the artifacts it reads and writes (`server/state/artifacts.py`, 27 artifacts, held to the code on every sample call; P3-2), and a result is stale when anything it was built from changed, transitively, with the input named (P3-3; before it, a rebuilt shear table left the hub series and everything after it reported current). The not-swept sentence on the manifest, summary and spread from one constant (decision 13, worded by 0015.8; P3-5). The energy sensitivity measures the site's air density itself (closes P1-5b; P3-4): Launakalana 1.1623 kg/m³ from `Tmp1_77m` and `Prs1_4m`, indicative gross AEP 5,514.9 → 5,253.8 MWh (−4.7%), sensitivity factor 2.7466 → 2.7946, the 32 sweep rows' AEP and capacity factor −4.3% to −5.3%; nothing else moved; **`ENGINE_VERSION` is now `"2026.11.3"`**, so earlier sweeps are not comparable. Pipelines: the server orders a campaign's steps from their reads and writes (`server/core/pipeline.py`; one producer per result, a cycle refused, ties by stage then position), status per step, named copies, undo (P3-6). The sweep's stages call the functions the operations call, and a scenario answers only from its own results (P3-7b: its shear method, inter-annual variability and energy series had depended on what else the session held); a scenario becomes a pipeline and a pipeline a sweep specification (P3-7). The estimate names the leaves the run will skip as duplicates and refuse, with the stages' own checks (P3-8). 103 → 111 tools.
+- **Interface (P3-9 to P3-16):** forms generated from the operation schemas (P3-9); the phases, each docking its own panels with its own arrangement, named in the address (P3-10a); Model: palette, React Flow pipeline (edges only from the server's order), step panel with the result's disclosure fields first, the operation's description and standards (P3-10); Prepare's cleaning rules as forms with a dry run, and the sensor overview from its operations (P3-12); Run: matrix designer, live estimate, run monitor (P3-13); Interrogate: scenarios, distribution, parallel coordinates under one crossfilter (P3-14), the server's sensitivity over the filtered scenarios, gates, two side by side (P3-15); a scenario loads into Model and a pipeline sweeps in Run (P3-11). P3-12, P3-13 and P3-14 were built by Sonnet agents in separate worktrees and verified on return. The workbench is served at `/`; the old application, its 30 test files and the twelve packages only it imported are deleted (P3-16).
+- **Retired (P3-16, P3-17):** the Canvas executor and its 14 workflow routes, with the session's `executed_nodes`, `workflow_execution` and `workflow_runs` (a saved project's copies are left on disk, not restored; P3-17d); the 48 hand-written routes an operation replaces, in `analysis.py`, `brighthub.py`, `config.py`, `results.py` and `uploads.py` (P3-17e); their tests call the generated routes (`tests/http_operations.py`).
+- **Defects found on the way, each its own commit:** the sensor overview and profile panels sent six failing requests on an empty campaign (P3-16a, found by the new smoke test, which fails on any failed response); the runconfig contract test read the deleted `configSync.ts` (P3-16b). Four capabilities the retirement would have dropped, restored: the Gates panel's description per gate, thresholds, observed range, the scenarios behind each verdict and those that could not run, counted whatever the admissibility filter (it had only counts, of admissible scenarios only; `tests/test_gate_descriptions.py` now holds `GATE_META` to the gates `admissibility.py` emits; P3-15a); a sweep's CSV export and a scenario's runconfig download (the old export lost every metric column when the first row had failed; P3-14a); sensor removal in the data tree (P3-12a); BrightHub location import (P3-12b). Differences between a hand-written route and its operation, closed before the route went: `brighthub_find_reanalysis_nodes` was a read that recorded no nodes, so a node-by-node BrightHub acquisition through the operations could not be interpolated, and a BrightHub location id reached file names in the uploads folder unchecked over MCP and the generated route (P3-17a); D35's period checks and the coordinate ranges lived in the route's request model only, so the operation took a reversed range and returned an empty extraction (P3-17b).
 
 **2026-11-25: workbench Phase 2 on branch `phase2-workbench`, gate passed and pushed (not merged).** Phase 1 was merged as PR #8. The owner's Phase 2 decisions, taken by interview on 2026-11-25, are `decisions/0014-workbench-prepare.md`; the task list is `Claude outputs/WORKBENCH_PLAN.md` §8d. The gate: browser tests for every Prepare row of plan §3.3; flags drawn on a chart equal, record for record, those of the old rules for the same records; every published number identical; every suite and CI green.
 

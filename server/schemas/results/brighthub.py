@@ -72,7 +72,7 @@ class BrighthubImportLocationResult(Result):
 
 
 class BrighthubFindReanalysisNodesResult(Result):
-    #: BrightHub's node records, as it sends them.
+    #: Each node nearest first, with its distance and bearing from the site; the lists are recorded.
     era5_nodes: list[dict[str, Any]]
     merra2_nodes: list[dict[str, Any]]
     era5_count: int

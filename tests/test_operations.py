@@ -6,7 +6,6 @@ import asyncio
 import pytest
 
 from server.api.routes.chat import _MUTATING_TOOLS, _READ_ONLY_TOOLS
-from server.core.executor import _tool_registry
 from server.main import mcp
 from server.operations import REGISTRY, STAGES, Operation, OperationRegistry, operation
 
@@ -111,8 +110,11 @@ def test_stages_are_unique() -> None:
 # No session change, no file written, no network: always offered to the assistant.
 PINNED_READ_TIER = frozenset({
     "get_operation_log", "list_selections", "resolve_selection", "get_series_window", "get_flag_intervals",
+    "order_pipeline", "list_pipelines", "pipeline_from_scenario", "sweep_spec_from_pipeline",
     "get_scatter_pairs", "summarise_channels", "list_instruments",
     "analyze_homogeneity", "analyze_sweep_spread", "build_sector_shear_tables", "compute_air_density",
+    # A read again since the energy sensitivity computes the density itself (P3-4).
+    "compute_atmospheric_conditions",
     "compute_air_density_timeseries", "compute_diurnal_profile",
     "compute_energy_metrics", "compute_energy_sensitivity", "compute_extreme_winds", "compute_mast_effects",
     "compute_mcp_readiness", "compute_momm", "compute_monthly_stats", "compute_qc_diagnostics",
@@ -129,9 +131,10 @@ PINNED_READ_TIER = frozenset({
 # Changes, file writes and network calls: offered only with allow_mutating_tools.
 PINNED_CHANGE_TIER = frozenset({
     "undo_last_change", "redo_last_change", "define_selection", "delete_selection", "remove_sensors",
+    "save_pipeline", "delete_pipeline", "build_constant_shear_table", "calculate_scenario_uncertainty",
     "apply_cleaning_rule", "apply_homogeneity_cutoff", "build_aggr_momm_shear_table", "build_data_model",
     "build_roughness_table", "build_shear_table", "calculate_roughness_timeseries",
-    "calculate_shear_timeseries", "calculate_uncertainty", "compute_atmospheric_conditions", "compute_era5_wind_speed",
+    "calculate_shear_timeseries", "calculate_uncertainty", "compute_era5_wind_speed",
     "extract_era5_data",
     "extrapolate_reanalysis_to_hub", "extrapolate_to_hub_height", "find_era5_nodes",
     "interpolate_era5_to_site", "load_run_config", "parse_datamodel", "parse_timeseries", "run_ensemble",
@@ -152,6 +155,8 @@ PINNED_NOT_ON_CANVAS = frozenset({
     "analyze_sweep_spread", "build_data_model", "draft_data_model", "get_fixed_prefix_hash",
     "get_sweep_summary", "list_sweeps", "get_flag_intervals", "get_scatter_pairs",
     "remove_sensors", "summarise_channels", "list_instruments",
+    "order_pipeline", "save_pipeline", "delete_pipeline", "list_pipelines", "pipeline_from_scenario",
+    "sweep_spec_from_pipeline",
 })
 # Module to stage, in the executor's pipeline order before P1-4 (F-09).
 PINNED_STAGE_BY_MODULE = {
@@ -162,12 +167,12 @@ PINNED_STAGE_BY_MODULE = {
     "statistics": "statistics", "visualization": "visualization", "map": "map", "config": "config",
     "advanced_analysis": "analysis", "atmosphere": "atmosphere", "diagnostics": "diagnostics",
     "scenario_result": "sweep", "sweep_analysis": "sweep", "history": "config", "selections": "selection",
-    "series": "visualization", "flags": "cleaning", "sensors": "ingest",
+    "series": "visualization", "flags": "cleaning", "sensors": "ingest", "pipelines": "pipeline",
 }
 PINNED_STAGES = (
     "ingest", "cleaning", "reanalysis_download", "reanalysis", "homogeneity", "shear", "extrapolation",
     "air_density", "ltc", "ltc_ml", "ensemble", "clipping", "uncertainty", "statistics", "visualization",
-    "map", "config", "analysis", "atmosphere", "diagnostics", "sweep", "selection",
+    "map", "config", "analysis", "atmosphere", "diagnostics", "sweep", "selection", "pipeline",
 )
 
 
@@ -190,15 +195,14 @@ def test_the_chat_route_offers_exactly_the_declared_tiers() -> None:
     assert _MUTATING_TOOLS == PINNED_CHANGE_TIER
 
 
-def test_the_canvas_dispatches_exactly_the_declared_canvas_operations() -> None:
-    dispatch = _tool_registry()
-    assert REGISTRY.names() - set(dispatch) == PINNED_NOT_ON_CANVAS
-    for name, (_module, function) in dispatch.items():
-        assert function is REGISTRY.get(name).fn, name
+def test_the_operations_a_pipeline_cannot_hold_are_the_pinned_ones() -> None:
+    """A pipeline step is a canvas operation (decisions/0015.1); the rest are pinned by name."""
+    assert {declared.name for declared in REGISTRY if not declared.canvas} == PINNED_NOT_ON_CANVAS
 
 
 def test_stages_and_their_order_are_the_pinned_ones() -> None:
-    """The canvas tie-break order (F-09) is the stage order, so it is pinned as well."""
+    """A pipeline's tie-break order (F-09, server/core/pipeline.py) is the stage order, so it is
+    pinned as well."""
     assert STAGES == PINNED_STAGES
     for declared in REGISTRY:
         assert declared.stage == PINNED_STAGE_BY_MODULE[declared.module.rsplit(".", 1)[-1]], declared.name

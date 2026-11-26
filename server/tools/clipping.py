@@ -332,6 +332,11 @@ def _run_clipping_analysis(
 @operation(
     effect="change", stage="clipping", disclosure=("years_used", "years_excluded", "excluded_reason",),
     result=result_models.RunClippingAnalysisResult,
+    reads=(
+        "ensemble", "ltc:linear_least_squares", "ltc:total_least_squares", "ltc:variance_ratio", "ltc:speedsort",
+        "ltc:xgboost", "hub_height_series",
+    ),
+    writes=("clipping",),
 )
 def run_clipping_analysis(
     speed_col: str,

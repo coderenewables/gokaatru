@@ -18,13 +18,14 @@ from server.core.brighthub import (
     fetch_timeseries_csv,
     get_data_model,
     list_measurement_locations,
+    validate_location_id,
 )
 from server.core.reanalysis import DEFAULT_REFERENCE_SOURCE, reference_source_names
 from server.operations import operation
 from server.schemas.common import Coordinate
 from server.schemas.results import brighthub as result_models
 from server.state.session import SessionState, get_active_session, session
-from server.tools.era5 import _era5_key
+from server.tools.era5 import _era5_key, check_coordinate
 
 
 class BrightHubAuthError(ValueError):
@@ -54,6 +55,7 @@ def _require_token(state: SessionState) -> str:
     network=True,
     secret_parameters=("client_id", "client_secret"),
     result=result_models.BrighthubLoginResult,
+    writes=("credentials",),
 )
 def brighthub_login(client_id: str, client_secret: str) -> dict:
     """Authenticate with BrightHub using API key credentials and store token in session."""
@@ -66,7 +68,10 @@ def brighthub_login(client_id: str, client_secret: str) -> dict:
     return {"status": "ok", "authenticated": True}
 
 
-@operation(effect="change", stage="reanalysis_download", assistant=False, result=result_models.BrighthubLogoutResult)
+@operation(
+    effect="change", stage="reanalysis_download", assistant=False, result=result_models.BrighthubLogoutResult,
+    writes=("credentials",),
+)
 def brighthub_logout() -> dict:
     """Clear the stored BrightHub authentication token."""
     session.brighthub_token = None
@@ -74,7 +79,10 @@ def brighthub_logout() -> dict:
     return {"status": "ok", "authenticated": False}
 
 
-@operation(effect="read", stage="reanalysis_download", assistant=False, result=result_models.BrighthubStatusResult)
+@operation(
+    effect="read", stage="reanalysis_download", assistant=False, result=result_models.BrighthubStatusResult,
+    reads=("credentials",),
+)
 def brighthub_status() -> dict:
     """Check whether the session holds a valid BrightHub token."""
     has_token = bool(getattr(session, "brighthub_token", None))
@@ -89,6 +97,7 @@ def brighthub_status() -> dict:
 @operation(
     effect="read", stage="reanalysis_download", assistant=False, network=True,
     result=result_models.BrighthubListLocationsResult,
+    reads=("credentials",),
 )
 def brighthub_list_locations() -> dict:
     """List measurement locations available to the authenticated BrightHub user."""
@@ -112,9 +121,11 @@ def brighthub_list_locations() -> dict:
 @operation(
     effect="read", stage="reanalysis_download", assistant=False, network=True,
     result=result_models.BrighthubGetDataModelResult,
+    reads=("credentials",),
 )
 def brighthub_get_data_model(uuid: str) -> dict:
     """Fetch the IEA Task 43 data model for a BrightHub measurement location."""
+    uuid = validate_location_id(uuid)
     token = _require_token(session)
     try:
         dm = get_data_model(token, uuid)
@@ -134,6 +145,8 @@ def brighthub_get_data_model(uuid: str) -> dict:
         "upstream_processing",
     ),
     result=result_models.BrighthubImportLocationResult,
+    reads=("credentials",),
+    writes=("data_model", "measured_data", "hub_height_series", "label", "site"),
 )
 def brighthub_import_location(
     uuid: str,
@@ -153,6 +166,7 @@ def brighthub_import_location(
     """
     from server.tools.data_io import _parse_datamodel, _parse_timeseries
 
+    uuid = validate_location_id(uuid)
     token = _require_token(session)
     live_session = get_active_session()
     data_dir = Path(live_session.get_data_dir())
@@ -258,28 +272,82 @@ def brighthub_import_location(
 # ---------------------------------------------------------------------------
 
 
-@operation(
-    effect="read", stage="reanalysis_download", assistant=False, network=True,
-    result=result_models.BrighthubFindReanalysisNodesResult,
-)
-def brighthub_find_reanalysis_nodes(latitude: float, longitude: float) -> dict:
-    """Find nearest ERA5 and MERRA-2 reanalysis nodes via BrightHub for a coordinate."""
-    token = _require_token(session)
+def _located(latitude: float, longitude: float, points: list[tuple[float, float]]) -> list[dict]:
+    """Each node with its distance and bearing from the site, in the order given: the list
+    interpolation reads (``_reference_nodes_and_data``)."""
+    from server.core.spatial import bearing_compass, haversine_km
+
+    nodes = [
+        {
+            "latitude": lat,
+            "longitude": lon,
+            "distance_km": haversine_km(latitude, longitude, lat, lon),
+            "bearing": bearing_compass(latitude, longitude, lat, lon),
+        }
+        for lat, lon in points
+    ]
+    return nodes
+
+
+def _set_site(state: SessionState, latitude: float, longitude: float) -> None:
+    current = state.get_coordinate()
+    elevation_m = 0.0 if current is None else current.elevation_m
+    state.set_coordinate(Coordinate(latitude=latitude, longitude=longitude, elevation_m=elevation_m))
+
+
+def _find_brighthub_nodes(state: SessionState, latitude: float, longitude: float) -> dict:
+    """Find the ERA5 and MERRA-2 nodes around the site and record them with the site, as
+    ``find_era5_nodes`` does on the EarthDataHub path: interpolation reads the node lists, so
+    a node downloaded without them cannot be interpolated."""
+    check_coordinate(latitude, longitude)
+    token = _require_token(state)
     try:
-        nodes = fetch_reanalysis_nodes(token, latitude, longitude)
+        found = fetch_reanalysis_nodes(token, latitude, longitude)
     except Exception as exc:
         raise RuntimeError(f"BrightHub API error: {exc}") from exc
+
+    def points(key: str) -> list[tuple[float, float]]:
+        return [(float(node["latitude_ddeg"]), float(node["longitude_ddeg"])) for node in found.get(key, [])]
+
+    def nearest_first(key: str) -> list[dict]:
+        return sorted(_located(latitude, longitude, points(key)), key=lambda node: float(node["distance_km"]))
+
+    state.era5_nodes = nearest_first("era5_nodes")
+    state.merra_nodes = nearest_first("merra2_nodes")
+    _set_site(state, latitude, longitude)
+    state.touch()
+
+    def as_sent(nodes: list[dict]) -> list[dict]:
+        return [
+            {"latitude_ddeg": node["latitude"], "longitude_ddeg": node["longitude"],
+             "distance_km": node["distance_km"], "bearing": node["bearing"]}
+            for node in nodes
+        ]
+
     return {
-        "era5_nodes": nodes.get("era5_nodes", []),
-        "merra2_nodes": nodes.get("merra2_nodes", []),
-        "era5_count": len(nodes.get("era5_nodes", [])),
-        "merra2_count": len(nodes.get("merra2_nodes", [])),
+        "era5_nodes": as_sent(state.era5_nodes),
+        "merra2_nodes": as_sent(state.merra_nodes),
+        "era5_count": len(state.era5_nodes),
+        "merra2_count": len(state.merra_nodes),
     }
 
 
 @operation(
     effect="change", stage="reanalysis_download", assistant=False, network=True,
+    result=result_models.BrighthubFindReanalysisNodesResult,
+    reads=("credentials",),
+    writes=("reanalysis_nodes", "site"),
+)
+def brighthub_find_reanalysis_nodes(latitude: float, longitude: float) -> dict:
+    """Find the nearest ERA5 and MERRA-2 reanalysis nodes via BrightHub and record them with the site, nearest first."""
+    return _find_brighthub_nodes(session, latitude, longitude)
+
+
+@operation(
+    effect="change", stage="reanalysis_download", assistant=False, network=True,
     result=result_models.BrighthubDownloadReanalysisResult,
+    reads=("credentials", "measured_data"),
+    writes=("reanalysis_nodes",),
 )
 def brighthub_download_reanalysis(
     dataset: str,
@@ -496,7 +564,6 @@ def _prepare_brighthub_reanalysis(
     nodes — was unreachable. Both are now interpolated, which is what makes reference
     source a usable scenario axis (design doc §6.2).
     """
-    from server.core.spatial import bearing_compass, haversine_km
     from server.tools.era5 import _interpolate_era5_to_site
 
     if source != "brighthub":
@@ -520,9 +587,7 @@ def _prepare_brighthub_reanalysis(
         # at the point some scenario switched to the source that was never built.
         and all(state.has_reference_series(name) for name in reference_source_names())
     ):
-        current_coordinate = state.get_coordinate()
-        elevation_m = 0.0 if current_coordinate is None else current_coordinate.elevation_m
-        state.set_coordinate(Coordinate(latitude=latitude, longitude=longitude, elevation_m=elevation_m))
+        _set_site(state, latitude, longitude)
         return {
             "status": "ok",
             "source": source,
@@ -559,22 +624,9 @@ def _prepare_brighthub_reanalysis(
             "BrightHub returned fewer than four MERRA-2 nodes; site interpolation requires four nodes"
         )
 
-    def located(items: list[dict]) -> list[dict]:
-        return [
-            {
-                "latitude": item["latitude"],
-                "longitude": item["longitude"],
-                "distance_km": haversine_km(latitude, longitude, item["latitude"], item["longitude"]),
-                "bearing": bearing_compass(latitude, longitude, item["latitude"], item["longitude"]),
-            }
-            for item in items
-        ]
-
-    current_coordinate = state.get_coordinate()
-    elevation_m = 0.0 if current_coordinate is None else current_coordinate.elevation_m
-    state.set_coordinate(Coordinate(latitude=latitude, longitude=longitude, elevation_m=elevation_m))
-    state.era5_nodes = located(era5_items)
-    state.merra_nodes = located(merra_items)
+    _set_site(state, latitude, longitude)
+    state.era5_nodes = _located(latitude, longitude, [(item["latitude"], item["longitude"]) for item in era5_items])
+    state.merra_nodes = _located(latitude, longitude, [(item["latitude"], item["longitude"]) for item in merra_items])
     state.era5_data = era5_data
     state.merra_data = merra_data
     # Interpolate every source, then leave the default active so a caller that prepares
@@ -596,6 +648,8 @@ def _prepare_brighthub_reanalysis(
 @operation(
     effect="change", stage="reanalysis_download", assistant=False, network=True,
     result=result_models.BrighthubPrepareReanalysisResult,
+    reads=("credentials",),
+    writes=("reanalysis_nodes", "reference_series", "reference_choice", "site"),
 )
 def brighthub_prepare_reanalysis(latitude: float, longitude: float, source: str = "brighthub") -> dict:
     """Load BrightHub ERA5 and MERRA-2, then interpolate ERA5 to the project site."""

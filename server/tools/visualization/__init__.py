@@ -93,67 +93,106 @@ from server.tools.visualization._shear import (
 )
 
 
-@operation(effect="read", stage="visualization", selectable=True, result=result_models.PlotWindroseResult)
+@operation(
+    effect="read", stage="visualization", selectable=True, result=result_models.PlotWindroseResult,
+    reads=("measured_data",),
+)
 def plot_windrose(speed_sensor: str, direction_sensor: str) -> dict:
     """Plot a 16-sector wind rose with stacked speed bins using directional frequency percentages."""
     return _plot_windrose(session, speed_sensor, direction_sensor)
 
 
-@operation(effect="read", stage="visualization", selectable=True, result=result_models.PlotWeibullResult)
+@operation(
+    effect="read", stage="visualization", selectable=True, result=result_models.PlotWeibullResult,
+    reads=("measured_data",),
+)
 def plot_weibull(sensor_name: str) -> dict:
     """Plot the measured speed histogram with a fitted Weibull PDF using $f(v;k,A)$ from wind climatology."""
     return _plot_weibull(session, sensor_name)
 
 
-@operation(effect="read", stage="visualization", selectable=True, result=result_models.PlotDiurnalResult)
+@operation(
+    effect="read", stage="visualization", selectable=True, result=result_models.PlotDiurnalResult,
+    reads=("measured_data",),
+)
 def plot_diurnal(sensor_names: str) -> dict:
     """Plot mean diurnal wind-speed profiles by hour of day for one or more measured sensors."""
     return _plot_diurnal(session, sensor_names)
 
 
-@operation(effect="read", stage="visualization", selectable=True, result=result_models.PlotScatterResult)
+@operation(
+    effect="read", stage="visualization", selectable=True, result=result_models.PlotScatterResult,
+    reads=("measured_data",),
+)
 def plot_scatter(sensor_a: str, sensor_b: str) -> dict:
     """Plot a measured scatter comparison with OLS line and regression metrics derived from least squares."""
     return _plot_scatter(session, sensor_a, sensor_b)
 
 
-@operation(effect="read", stage="visualization", selectable=True, result=result_models.PlotTimeseriesResult)
+@operation(
+    effect="read", stage="visualization", selectable=True, result=result_models.PlotTimeseriesResult,
+    reads=("measured_data", "hub_height_series"),
+)
 def plot_timeseries(sensor_names: str) -> dict:
     """Plot one or more measured sensor series, downsampling to daily means for large datasets."""
     return _plot_timeseries(session, sensor_names)
 
 
-@operation(effect="read", stage="visualization", result=result_models.PlotDataCoverageResult)
+@operation(
+    effect="read", stage="visualization", result=result_models.PlotDataCoverageResult,
+    reads=("data_model", "measured_data"),
+)
 def plot_data_coverage() -> dict:
     """Plot sensor availability as a presence-absence heatmap over time for loaded measured data columns."""
     return _plot_data_coverage(session)
 
 
-@operation(effect="read", stage="visualization", result=result_models.PlotShearTableResult)
+@operation(
+    effect="read", stage="visualization", result=result_models.PlotShearTableResult,
+    reads=("shear_table",),
+)
 def plot_shear_table(table_type: str = "shear") -> dict:
     """Plot the monthly-hourly shear or roughness lookup table as a heatmap for hub extrapolation review."""
     return _plot_shear_table(session, table_type)
 
 
-@operation(effect="read", stage="visualization", selectable=True, result=result_models.PlotMonthlyMeansResult)
+@operation(
+    effect="read", stage="visualization", selectable=True, result=result_models.PlotMonthlyMeansResult,
+    reads=("measured_data",),
+)
 def plot_monthly_means(sensor_names: str) -> dict:
     """Plot grouped monthly means for one or more measured sensors using calendar-month aggregation."""
     return _plot_monthly_means(session, sensor_names)
 
 
-@operation(effect="read", stage="visualization", result=result_models.PlotLtcComparisonResult)
+@operation(
+    effect="read", stage="visualization", result=result_models.PlotLtcComparisonResult,
+    reads=(
+        "hub_height_series", "ltc_scenarios", "ltc:linear_least_squares", "ltc:total_least_squares",
+        "ltc:variance_ratio", "ltc:speedsort", "ltc:xgboost",
+    ),
+)
 def plot_ltc_comparison() -> dict:
     """Plot monthly mean and measured-vs-corrected LTC comparisons across all completed correction algorithms."""
     return _plot_ltc_comparison(session)
 
 
-@operation(effect="read", stage="visualization", result=result_models.PlotAnnualMeansResult)
+@operation(
+    effect="read", stage="visualization", result=result_models.PlotAnnualMeansResult,
+    reads=(
+        "ensemble", "ltc:linear_least_squares", "ltc:total_least_squares", "ltc:variance_ratio", "ltc:speedsort",
+        "ltc:xgboost",
+    ),
+)
 def plot_annual_means() -> dict:
     """Plot annual mean corrected wind speed for all LTC algorithms and the ensemble over the long-term record."""
     return _plot_annual_means(session)
 
 
-@operation(effect="read", stage="visualization", result=result_models.PlotUncertaintyBreakdownResult)
+@operation(
+    effect="read", stage="visualization", result=result_models.PlotUncertaintyBreakdownResult,
+    reads=("uncertainty",),
+)
 def plot_uncertainty_breakdown(
     total_pct: float,
     measurement_pct: float,

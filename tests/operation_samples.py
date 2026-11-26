@@ -23,7 +23,7 @@ from pydantic import TypeAdapter
 
 from server.operations import REGISTRY
 from server.state.session import SessionState, bind_session
-from tests.synthetic_pipeline import NODES, NORTH, READ_ARGUMENTS, SITE, run_pipeline
+from tests.synthetic_pipeline import NODES, NORTH, READ_ARGUMENTS, SITE, add_met_sensors, read_arguments, run_pipeline
 from tests.test_operation_routes import _populate
 
 _WIRE = TypeAdapter(Any)
@@ -55,7 +55,7 @@ class Samples:
 def _reads(samples: Samples, state: SessionState, overrides: dict[str, object] | None = None) -> None:
     """Every read, and every selectable one on a selection too. With ``overrides`` the reads
     run on another campaign, where a refusal is expected and skipped."""
-    values = {**READ_ARGUMENTS, **(overrides or {})}
+    values = {**(READ_ARGUMENTS if overrides else read_arguments(state)), **(overrides or {})}
     samples.call(state, "define_selection", name="north", definition=NORTH)
     for declared in REGISTRY:
         if declared.effect != "read" or declared.network:
@@ -112,15 +112,20 @@ def _changes(samples: Samples, state: SessionState, workspace: Path) -> None:
     }
     samples.call(state, "define_selection", name="lasso", definition=lasso)
     samples.call(state, "delete_selection", name="lasso")
-    samples.call(state, "extrapolate_reanalysis_to_hub", hub_height_m=120.0, reference_height_m=100.0)
+    samples.call(state, "save_pipeline", name="chosen", steps=READ_ARGUMENTS["steps"])
+    samples.call(state, "list_pipelines")
+    samples.call(state, "undo_last_change")
+    samples.call(state, "redo_last_change")
+    samples.call(state, "delete_pipeline", name="chosen")
+    # Another height than the pipeline's 120 m, so the call writes a column of its own.
+    samples.call(state, "extrapolate_reanalysis_to_hub", hub_height_m=110.0, reference_height_m=100.0)
     samples.call(state, "apply_homogeneity_cutoff", cutoff_year=2010)
-
-    frame = state.timeseries_df
-    frame["Tmp_2m"] = 10.0 + 5.0 * np.sin(np.arange(len(frame)) / 144.0)
-    frame["Prs_2m"] = 1010.0
-    state.sensor_inventory["Tmp_2m"] = {"height_m": 2.0, "sensor_type": "temperature"}
-    state.sensor_inventory["Prs_2m"] = {"height_m": 2.0, "sensor_type": "pressure"}
-    samples.call(state, "compute_atmospheric_conditions", temperature_sensor="Tmp_2m", pressure_sensor="Prs_2m")
+    samples.call(
+        state, "calculate_scenario_uncertainty",
+        algorithm="variance_ratio", shear_model="power_law_mean", reference_heights=[80.0, 100.0],
+    )
+    samples.call(state, "build_constant_shear_table", alpha=0.2)
+    samples.call(state, "build_constant_shear_table")
 
     lat, lon = NODES[0]
     node = state.era5_data[f"{float(lat)}_{float(lon)}"]
@@ -259,6 +264,7 @@ def _network(samples: Samples, workspace: Path, monkeypatch: pytest.MonkeyPatch)
     samples.call(brighthub, "brighthub_find_reanalysis_nodes", latitude=SITE[0], longitude=SITE[1])
     samples.call(brighthub, "brighthub_download_reanalysis", dataset="ERA5", nodes_json=json.dumps(era5_nodes))
     samples.call(brighthub, "brighthub_prepare_reanalysis", latitude=SITE[0], longitude=SITE[1])
+    samples.call(brighthub, "brighthub_logout")
 
     lats = [SITE[0] - 0.25, SITE[0], SITE[0] + 0.25]
     lons = [SITE[1] - 0.25, SITE[1], SITE[1] + 0.25]
@@ -292,6 +298,7 @@ def collect(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> Samples:
     state, calls = run_pipeline(workspace / "pipeline")
     for name, _, result in calls:
         samples.by_operation[name].append(wire(result))
+    add_met_sensors(state)
     _reads(samples, state)
     # A 120-day mast with met channels and no reanalysis reaches branches a full year does not:
     # partial-year warnings, unobserved months, measured density.

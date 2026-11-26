@@ -33,3 +33,4 @@ gets a new record that supersedes the old one.
 | [0012](0012-frontend-stack.md) | Frontend stack for the new shell | Accepted (owner), 2026-11-19 |
 | [0013](0013-long-term-direction-and-temperature.md) | Long-term direction, temperature and air density in the dataset; methods chosen by measurement; not swept, and said so | Accepted (owner), 2026-11-19 |
 | [0014](0014-workbench-prepare.md) | The workbench's Prepare: flags from selections, linked views, projects of campaigns | Accepted (owner), 2026-11-25 |
+| [0015](0015-workbench-model-run-interrogate.md) | The workbench's Model, Run and Interrogate; staleness follows dependencies; the old interface retired | Accepted (owner), 2026-11-25 |

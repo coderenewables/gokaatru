@@ -194,6 +194,7 @@ def window_payload(window: Window) -> dict:
 @operation(
     effect="read", stage="visualization", disclosure=("decimated", "bucket_ms"), selectable=True,
     result=result_models.GetSeriesWindowResult,
+    reads=("measured_data", "hub_height_series"),
 )
 def get_series_window(
     channels: str,
@@ -211,7 +212,10 @@ def get_series_window(
     return window_payload(_series_window(session, channels, start, end, buckets))
 
 
-@operation(effect="read", stage="visualization", canvas=False, result=result_models.GetScatterPairsResult)
+@operation(
+    effect="read", stage="visualization", canvas=False, result=result_models.GetScatterPairsResult,
+    reads=("measured_data",),
+)
 def get_scatter_pairs(x_channel: str, y_channel: str, start: str = "", end: str = "", highlight: str = "") -> dict:
     """Every record of a half-open window where both channels are valid, as time, x and y.
 

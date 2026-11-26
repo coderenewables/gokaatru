@@ -215,7 +215,10 @@ def _list_instruments(state: SessionState) -> dict[str, Any]:
     return {"heights": heights, "instruments": instruments, "other_channels": other}
 
 
-@operation(effect="read", stage="ingest", canvas=False, result=result_models.ListInstrumentsResult)
+@operation(
+    effect="read", stage="ingest", canvas=False, result=result_models.ListInstrumentsResult,
+    reads=("data_model", "measured_data", "hub_height_series"),
+)
 def list_instruments() -> dict:
     """The campaign's instruments by height (highest first), each with its type, boom, mapped
     role and the statistic columns it logs, and every other channel of the data."""
@@ -240,6 +243,8 @@ def preview_remove_sensors(sensor_names: list[str]) -> dict:
 @operation(
     effect="change", stage="ingest", canvas=False, dry_run=preview_remove_sensors,
     result=result_models.RemoveSensorsResult, preview_result=result_models.RemoveSensorsPreview,
+    reads=("data_model", "measured_data"),
+    writes=("data_model", "measured_data"),
 )
 def remove_sensors(sensor_names: list[str]) -> dict:
     """Remove sensors from the analysis: inventory, height mapping, working and raw data.

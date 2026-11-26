@@ -29,12 +29,21 @@ class RestoredDataModel(RestoredPaths):
     data_model: str
 
 
+class RestoredEntry(Result):
+    """Undoing or redoing a saved selection or pipeline: which one, and whether it is now
+    defined or absent."""
+
+    selection: str | None = None
+    pipeline: str | None = None
+    restored: str
+
+
 class UndoLastChangeResult(Staleness):
     status: str
     undone: LoggedCall
     #: A cleaning rule's undo is a replay from raw data; a configuration change's names the
     #: paths restored; a sensor removal's names the sensors put back.
-    detail: UndoCleaningRuleResult | RestoredDataModel | RestoredPaths | RestoredSensors
+    detail: UndoCleaningRuleResult | RestoredDataModel | RestoredPaths | RestoredSensors | RestoredEntry
     can_undo: bool
     can_redo: bool
 
@@ -43,7 +52,7 @@ class RedoLastChangeResult(Staleness):
     status: str
     redone: LoggedCall
     #: What the change returned when it was made again.
-    detail: ApplyCleaningRuleResult | RemoveSensorsResult | BuildDataModelResult | RunConfig
+    detail: ApplyCleaningRuleResult | RemoveSensorsResult | BuildDataModelResult | RestoredEntry | RunConfig
     can_undo: bool
     can_redo: bool
 

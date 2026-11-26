@@ -3,10 +3,10 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { campaignWithData, newCampaign, pageErrors, workbenchUrl } from "./fixtures";
 
-// The workbench shell at /workbench/ (P2-9, decisions/0006, 0012, 0014.9): a campaign opens
+// The workbench shell at / (P2-9, decisions/0006, 0012, 0014.9): a campaign opens
 // the docked panels, the arrangement persists, both themes render, and axe finds nothing.
 
-const PANELS = ["Data", "Reanalysis", "Timeline", "Scatter", "Wind rose", "Profile", "Inspector"];
+const PANELS = ["Data", "Reanalysis", "Timeline", "Scatter", "Wind rose", "Profile", "Inspector", "Cleaning rules", "Sensor overview"];
 
 function tab(page: Page, title: string): Locator {
   return page.locator(".dv-tab", { hasText: title });
@@ -48,7 +48,7 @@ test.afterEach(() => {
 test("the start screen lists a project's campaigns and opens the shell on one", async ({ page }) => {
   const name = `Start ${Date.now()}`;
   const { projectId, sessionId } = await newCampaign(page, name);
-  await page.goto("/workbench/");
+  await page.goto("/");
   const project = page.getByRole("listitem").filter({ has: page.getByRole("heading", { name }) });
   await expect(project).toBeVisible();
   await expectNoAxeViolations(page);
@@ -60,7 +60,7 @@ test("the start screen lists a project's campaigns and opens the shell on one", 
 
 test("the shell docks every Prepare panel, persists the arrangement and passes axe", async ({ page }, testInfo) => {
   const { projectId, sessionId } = await newCampaign(page, `Shell ${Date.now()}`);
-  await page.goto(`/workbench/?project=${projectId}&campaign=${sessionId}`);
+  await page.goto(`/?project=${projectId}&campaign=${sessionId}`);
   for (const title of PANELS) await expect(tab(page, title)).toBeVisible();
   await expect(page.getByRole("contentinfo", { name: "Status" })).toContainText("No records loaded");
   await expectNoAxeViolations(page);
@@ -100,7 +100,7 @@ test("a campaign with records shows them in the status bar and the inspector", a
 
 test("the dark theme applies, persists and passes axe", async ({ page }, testInfo) => {
   const { projectId, sessionId } = await newCampaign(page, `Theme ${Date.now()}`);
-  await page.goto(`/workbench/?project=${projectId}&campaign=${sessionId}`);
+  await page.goto(`/?project=${projectId}&campaign=${sessionId}`);
   await page.getByRole("button", { name: "Dark theme" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);

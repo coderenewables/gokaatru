@@ -33,6 +33,7 @@ from server.core.datamodel_builder import (
 from server.state.session import session
 from server.tools.data_io import _build_sensor_mapping, _parse_datamodel, _parse_timeseries
 from tests.conftest import UPLOADS_DIR, require_campaign_file
+from tests.http_operations import operation
 
 
 def _campaign_paths(stem: str) -> tuple[Path, Path]:
@@ -419,7 +420,7 @@ class TestHttpRoutes:
 
     def test_draft_route_returns_a_reading_of_the_uploaded_columns(self, client) -> None:
         session_id, headers = self._session_with_timeseries(client)
-        response = client.get(f"/api/sessions/{session_id}/datamodel/draft", headers=headers)
+        response = operation(client, session_id, "draft_data_model")
         assert response.status_code == 200, response.text
         payload = response.json()
         assert payload["basis"] == "header_inference"
@@ -430,13 +431,11 @@ class TestHttpRoutes:
 
     def test_build_route_loads_the_data_model_into_the_session(self, client) -> None:
         session_id, headers = self._session_with_timeseries(client)
-        draft = client.get(f"/api/sessions/{session_id}/datamodel/draft", headers=headers).json()
+        draft = operation(client, session_id, "draft_data_model").json()
         columns = [column["name"] for column in draft["columns"]]
         spec = spec_from_draft(columns, location={"name": "Boxkite", "offset_from_utc_hrs": 0})
 
-        response = client.post(
-            f"/api/sessions/{session_id}/datamodel/build", json=spec, headers=headers
-        )
+        response = operation(client, session_id, "build_data_model", spec=spec)
         assert response.status_code == 200, response.text
         assert response.json()["points_declared"] == 16
 
@@ -446,21 +445,21 @@ class TestHttpRoutes:
 
     def test_build_route_reports_a_refusal_as_a_bad_request_naming_the_column(self, client) -> None:
         session_id, headers = self._session_with_timeseries(client)
-        response = client.post(
-            f"/api/sessions/{session_id}/datamodel/build",
-            json={
+        response = operation(
+            client,
+            session_id,
+            "build_data_model",
+            spec={
                 "location": {"name": "X", "offset_from_utc_hrs": 0},
                 "points": [{"name": "Spd_250m", "measurement_type_id": "wind_speed"}],
             },
-            headers=headers,
         )
         assert response.status_code == 400
         assert "Spd_250m" in response.json()["detail"]
 
     def test_drafting_before_a_timeseries_is_loaded_is_refused(self, client) -> None:
         session_id = client.post("/api/sessions").json()["session_id"]
-        headers = {"X-GoKaatru-Session": session_id}
-        response = client.get(f"/api/sessions/{session_id}/datamodel/draft", headers=headers)
+        response = operation(client, session_id, "draft_data_model")
         assert response.status_code == 400
         assert "timeseries" in response.json()["detail"].lower()
 

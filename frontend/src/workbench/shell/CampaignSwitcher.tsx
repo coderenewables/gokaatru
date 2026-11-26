@@ -12,7 +12,7 @@ export function CampaignSwitcher({ projectId, sessionId, campaigns }: CampaignSw
       aria-label="Campaign"
       value={sessionId}
       onChange={(event) => {
-        window.location.assign(`/workbench/?project=${projectId}&campaign=${event.target.value}`);
+        window.location.assign(`/?project=${projectId}&campaign=${event.target.value}`);
       }}
     >
       {campaigns.map((campaign) => (

@@ -4,8 +4,9 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { campaignWithData, pageErrors, workbenchUrl } from "./fixtures";
 
 // The reanalysis acquisition panel (P2-20): find the nodes around the site, take them one at
-// a time, interpolate each source to the site. The providers are stubbed in the browser, so
-// no test reaches BrightHub or EarthDataHub; the campaign and its site coordinate are real.
+// a time, interpolate each source to the site. The providers' operations are stubbed in the
+// browser, so no test reaches BrightHub or EarthDataHub; the campaign and its site coordinate
+// are real. Their server side is held by pytest against fakes of both services.
 
 const NODES = [
   { latitude: 55.5, longitude: 8.0, distance_km: 33.7, bearing: "NE" },
@@ -23,6 +24,7 @@ interface Recorded {
   downloads: Array<{ dataset: string; nodes: Array<{ latitude_ddeg: number; longitude_ddeg: number }>; source: string }>;
   extracts: Array<{ latitude: number; longitude: number; start_date: string; end_date: string }>;
   interpolates: unknown[];
+  speeds: unknown[];
   maxInFlight: number;
 }
 
@@ -36,7 +38,7 @@ const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
 async function stubProviders(page: Page, options: Options = {}): Promise<Recorded> {
-  const recorded: Recorded = { login: [], nodes: [], downloads: [], extracts: [], interpolates: [], maxInFlight: 0 };
+  const recorded: Recorded = { login: [], nodes: [], downloads: [], extracts: [], interpolates: [], speeds: [], maxInFlight: 0 };
   const delay = options.delayMs ?? 250;
   let signedIn = false;
   let token = false;
@@ -54,83 +56,84 @@ async function stubProviders(page: Page, options: Options = {}): Promise<Recorde
     }
   };
 
-  await page.route("**/api/sessions/*/brighthub/**", async (route) => {
-    const url = new URL(route.request().url());
-    const action = url.pathname.split("/brighthub/")[1];
+  // The providers' operations, through their generated routes; every other operation reaches
+  // the real server.
+  await page.route("**/api/sessions/*/operations/*", async (route) => {
+    const action = new URL(route.request().url()).pathname.split("/operations/")[1];
     const body = route.request().postData() ? JSON.parse(route.request().postData() as string) : null;
-    if (action === "status") return json(route, { authenticated: signedIn, has_token: signedIn });
-    if (action === "login") {
-      recorded.login.push(body);
-      signedIn = true;
-      return json(route, { status: "ok", authenticated: true });
-    }
-    if (action === "logout") {
-      signedIn = false;
-      return json(route, { status: "ok" });
-    }
-    if (action === "reanalysis/nodes") {
-      recorded.nodes.push(body);
-      const nodes = NODES.map((n) => ({ latitude_ddeg: n.latitude, longitude_ddeg: n.longitude, distance_km: n.distance_km, bearing: n.bearing }));
-      return json(route, { era5_nodes: nodes, merra2_nodes: nodes });
-    }
-    if (action === "reanalysis/download") {
-      recorded.downloads.push(body);
-      const count = recorded.downloads.length;
-      const result = await guarded(route, () =>
-        options.failAt === count
-          ? { status: 502, body: { detail: "BrightHub API error: the node could not be read" } }
-          : {
-              status: 200,
-              body: {
-                dataset: body.dataset,
-                source: "brighthub",
-                items: [
-                  {
-                    latitude: body.nodes[0].latitude_ddeg,
-                    longitude: body.nodes[0].longitude_ddeg,
-                    rows: 1000,
-                    cache: CACHE[(count - 1) % 4],
-                    cached_through: "2025-12-31T23:00:00",
-                  },
-                ],
+    switch (action) {
+      case "brighthub_status":
+        return json(route, { authenticated: signedIn, has_token: signedIn });
+      case "brighthub_login":
+        recorded.login.push(body);
+        signedIn = true;
+        return json(route, { status: "ok", authenticated: true });
+      case "brighthub_logout":
+        signedIn = false;
+        return json(route, { status: "ok", authenticated: false });
+      case "brighthub_find_reanalysis_nodes": {
+        recorded.nodes.push(body);
+        const nodes = NODES.map((n) => ({ latitude_ddeg: n.latitude, longitude_ddeg: n.longitude, distance_km: n.distance_km, bearing: n.bearing }));
+        return json(route, { era5_nodes: nodes, merra2_nodes: nodes, era5_count: 4, merra2_count: 4 });
+      }
+      case "brighthub_download_reanalysis": {
+        const request = { dataset: body.dataset, nodes: JSON.parse(body.nodes_json), source: body.source };
+        recorded.downloads.push(request);
+        const count = recorded.downloads.length;
+        const result = await guarded(route, () =>
+          options.failAt === count
+            ? { status: 502, body: { detail: "BrightHub API error: the node could not be read" } }
+            : {
+                status: 200,
+                body: {
+                  dataset: request.dataset,
+                  source: "brighthub",
+                  count: 1,
+                  items: [
+                    {
+                      latitude: request.nodes[0].latitude_ddeg,
+                      longitude: request.nodes[0].longitude_ddeg,
+                      rows: 1000,
+                      cache: CACHE[(count - 1) % 4],
+                      cached_through: "2025-12-31T23:00:00",
+                    },
+                  ],
+                },
               },
-            },
-      );
-      return json(route, (result as { body: unknown }).body, (result as { status: number }).status);
+        );
+        return json(route, (result as { body: unknown }).body, (result as { status: number }).status);
+      }
+      case "earthdatahub_status":
+        return json(route, { configured: token });
+      case "earthdatahub_set_credential":
+        token = true;
+        return json(route, { status: "ok", configured: true });
+      case "earthdatahub_clear_credential":
+        token = false;
+        return json(route, { status: "ok", configured: false });
+      case "find_era5_nodes":
+        recorded.nodes.push(body);
+        return json(route, { nodes: NODES, grid_resolution_deg: 0.25 });
+      case "extract_era5_data": {
+        recorded.extracts.push(body);
+        const count = recorded.extracts.length;
+        const result = await guarded(route, () =>
+          options.failAt === count
+            ? { status: 502, body: { detail: "EarthDataHub refused the read" } }
+            : { status: 200, body: { status: "ok", rows: 100 } },
+        );
+        return json(route, (result as { body: unknown }).body, (result as { status: number }).status);
+      }
+      case "compute_era5_wind_speed":
+        recorded.speeds.push(body);
+        return json(route, { status: "ok" });
+      case "interpolate_era5_to_site":
+        recorded.interpolates.push(body);
+        interpolated = true;
+        return json(route, { status: "ok", nodes_used: 4 });
+      default:
+        return route.fallback();
     }
-    return json(route, { detail: `unstubbed ${action}` }, 404);
-  });
-
-  await page.route("**/api/sessions/*/era5/**", async (route) => {
-    const url = new URL(route.request().url());
-    const action = url.pathname.split("/era5/")[1];
-    const method = route.request().method();
-    const body = route.request().postData() ? JSON.parse(route.request().postData() as string) : null;
-    if (action === "credential/status") return json(route, { configured: token });
-    if (action === "credential") {
-      token = method === "POST";
-      return json(route, { status: "ok", configured: token });
-    }
-    if (action === "nodes") {
-      recorded.nodes.push(body);
-      return json(route, { nodes: NODES, grid_resolution_deg: 0.25 });
-    }
-    if (action === "extract") {
-      recorded.extracts.push(body);
-      const count = recorded.extracts.length;
-      const result = await guarded(route, () =>
-        options.failAt === count
-          ? { status: 502, body: { detail: "EarthDataHub refused the read" } }
-          : { status: 200, body: { status: "ok", rows: 100 } },
-      );
-      return json(route, (result as { body: unknown }).body, (result as { status: number }).status);
-    }
-    if (action === "interpolate") {
-      recorded.interpolates.push(body);
-      interpolated = true;
-      return json(route, { status: "ok", nodes_used: 4 });
-    }
-    return json(route, { detail: `unstubbed ${action}` }, 404);
   });
 
   // The real summary, with the reanalysis flags the stubbed acquisition would have set.
@@ -272,6 +275,8 @@ test("EarthDataHub: the four extractions run one after another, never two in fli
   expect(recorded.extracts.map((e) => [e.latitude, e.longitude])).toEqual(NEAREST_FIRST.map((n) => [n.latitude, n.longitude]));
   expect(recorded.extracts.every((e) => e.start_date === "2020-01-01" && e.end_date === "2020-12-31")).toBe(true);
   expect(recorded.interpolates).toEqual([{ source: "era5" }]);
+  // Each extracted node's speed and direction are derived from its u and v before interpolating.
+  expect(recorded.speeds).toEqual(NEAREST_FIRST.map((n) => ({ latitude: n.latitude, longitude: n.longitude })));
   expect(await storageHolds(page, "edh-token-abc-987")).toBe(false);
 
   await page.getByRole("button", { name: "Clear token" }).click();

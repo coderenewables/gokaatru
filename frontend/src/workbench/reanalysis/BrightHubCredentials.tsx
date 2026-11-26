@@ -23,7 +23,7 @@ export function BrightHubCredentials(props: {
     setError(null);
     try {
       unwrap(
-        await api.POST("/api/sessions/{session_id}/brighthub/login", {
+        await api.POST("/api/sessions/{session_id}/operations/brighthub_login", {
           ...path,
           body: { client_id: clientId, client_secret: secret },
         }),
@@ -38,7 +38,7 @@ export function BrightHubCredentials(props: {
   async function logout() {
     setError(null);
     try {
-      unwrap(await api.POST("/api/sessions/{session_id}/brighthub/logout", path));
+      unwrap(await api.POST("/api/sessions/{session_id}/operations/brighthub_logout", { ...path, body: {} }));
       props.onChanged();
     } catch (failed) {
       setError(message(failed));

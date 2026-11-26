@@ -32,7 +32,7 @@ export function BrightHubImport() {
 
   const status = useQuery({
     queryKey: ["brighthub-status", sessionId],
-    queryFn: async () => unwrap(await api.GET("/api/sessions/{session_id}/brighthub/status", path)),
+    queryFn: async () => unwrap(await api.POST("/api/sessions/{session_id}/operations/brighthub_status", { ...path, body: {} })),
   });
   const signedIn = status.data?.authenticated === true;
   const locations = useQuery({

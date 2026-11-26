@@ -128,8 +128,8 @@ test("an empty campaign imports a BrightHub location, with what BrightHub applie
   let signedIn = false;
   const imports: Array<Record<string, unknown>> = [];
   const json = (body: unknown) => ({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
-  await page.route("**/api/sessions/*/brighthub/status", (route) => route.fulfill(json({ authenticated: signedIn, has_token: signedIn })));
-  await page.route("**/api/sessions/*/brighthub/login", (route) => {
+  await page.route("**/operations/brighthub_status", (route) => route.fulfill(json({ authenticated: signedIn, has_token: signedIn })));
+  await page.route("**/operations/brighthub_login", (route) => {
     signedIn = true;
     return route.fulfill(json({ status: "ok", authenticated: true }));
   });

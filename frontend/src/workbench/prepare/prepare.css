@@ -53,24 +53,6 @@
   border-bottom: 1px solid var(--gk-border);
 }
 
-.gk-pairs {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 6px 12px;
-  margin: 0;
-  font-size: 13px;
-}
-
-.gk-pairs dt {
-  color: var(--gk-muted);
-  font-size: 12px;
-}
-
-.gk-pairs dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-
 .gk-refusal {
   margin: 0;
   color: var(--gk-danger);

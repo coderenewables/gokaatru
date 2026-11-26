@@ -424,8 +424,11 @@ frontend/src/
 │   │                     #   Scenarios, Distribution and Parallel panels; useSweeps.ts reads
 │   │                     #   GET /sweep and /sweep/{id}. SensitivityPanel (the server's
 │   │                     #   decomposition over the filtered hashes, spread, uncertainty
-│   │                     #   substitution, the not-swept sentence), GatesPanel (verdicts in
-│   │                     #   view, axes over the sweep from get_sweep_summary), PinnedPanel
+│   │                     #   substitution, the not-swept sentence), GatesPanel (over the
+│   │                     #   filtered scenarios, admissible or not: verdicts, each gate's
+│   │                     #   description from GATE_META, thresholds from the manifest,
+│   │                     #   observed range and the scenarios behind each verdict, those that
+│   │                     #   could not run; axes over the sweep from get_sweep_summary), PinnedPanel
 │   │                     #   (two scenarios and where their runconfigs differ; load into
 │   │                     #   Model) (P3-15)
 │   ├── history/          # undo, redo and the status bar's history (get_operation_log,

@@ -214,3 +214,32 @@
   gap: 6px;
   margin-right: 12px;
 }
+
+.gk-int-gates h2 {
+  font-size: 14px;
+  margin: 4px 0;
+}
+
+.gk-int-gates > .gk-pairs,
+.gk-int-gates > .gk-compare,
+.gk-int-gates > details {
+  margin-bottom: 10px;
+}
+
+.gk-gate {
+  margin-top: 10px;
+  padding: 6px 0 6px 10px;
+  border-left: 3px solid var(--gk-border);
+}
+
+.gk-gate[data-excluding] {
+  border-left-color: var(--gk-flag);
+}
+
+.gk-gate p {
+  margin: 4px 0;
+}
+
+.gk-gate details {
+  margin-top: 6px;
+}

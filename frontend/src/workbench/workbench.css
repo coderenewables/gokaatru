@@ -417,3 +417,26 @@
 .gk-command-active {
   background: var(--gk-accent-soft);
 }
+
+/* Shared by the panels of every phase. */
+.gk-pairs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.gk-pairs dt {
+  color: var(--gk-muted);
+  font-size: 12px;
+}
+
+.gk-pairs dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.gk-warning {
+  color: var(--gk-flag);
+}

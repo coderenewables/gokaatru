@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useState } from "react";
 
+import type { SweepManifest } from "../../types/sweep";
 import { api, unwrap } from "../api";
 import { useCampaign } from "../shell/context";
 import { type SweepRow, useInterrogate } from "./store";
@@ -27,7 +28,8 @@ export function useSweepList() {
   });
 }
 
-/** The open sweep's rows, kept in the store for the panels that read the filtered rows. */
+/** The open sweep: its manifest, and its rows, kept in the store for the panels that read the
+ * filtered rows. */
 export function useOpenSweep() {
   const { sessionId } = useCampaign();
   const sweepId = useInterrogate((state) => state.sweepId);
@@ -41,10 +43,10 @@ export function useOpenSweep() {
           params: { path: { session_id: sessionId, sweep_id: sweepId ?? "" } },
         }),
       );
-      return (body as unknown as { results: SweepRow[] }).results;
+      return body as unknown as { manifest: Partial<SweepManifest>; results: SweepRow[] };
     },
   });
-  const rows = query.data;
+  const rows = query.data?.results;
   useEffect(() => {
     if (rows) setRows(rows);
   }, [rows, setRows]);

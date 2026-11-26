@@ -23,10 +23,21 @@ test.afterEach(() => {
   expect(thrown).toEqual([]);
 });
 
-async function open(page: Page) {
+const THRESHOLDS = { concurrent_months_warn: 12, concurrent_months_fail: 9 };
+
+async function open(page: Page, extra: Record<string, unknown>[] = []) {
   const stub = await stubSweeps(page);
-  const rows = sweepRows().map((row) => ({ ...row, gate_concurrent_period: row.admissible ? "pass" : "fail", gate_concurrent_period_value: 12 }));
-  await page.route(/\/api\/sessions\/[^/]+\/sweep\/sweep-[^/]+$/, (route) => json(route, { manifest: { sweep_id: stub.newer }, results: rows }));
+  const rows = [
+    ...sweepRows().map((row) => ({
+      ...row,
+      gate_concurrent_period: row.admissible ? "pass" : "fail",
+      gate_concurrent_period_value: row.admissible ? 12.5 : 7.25,
+    })),
+    ...extra,
+  ] as ReturnType<typeof sweepRows>;
+  await page.route(/\/api\/sessions\/[^/]+\/sweep\/sweep-[^/]+$/, (route) =>
+    json(route, { manifest: { sweep_id: stub.newer, thresholds: THRESHOLDS }, results: rows }),
+  );
   const spreadRequests: string[][] = [];
   await page.route(/\/sweep\/[^/]+\/spread$/, (route) => {
     const body = route.request().postDataJSON() as { config_hashes: string[] };
@@ -92,15 +103,42 @@ test("the sensitivity is the server's, over the scenarios the filters keep, and 
   await page.screenshot({ path: testInfo.outputPath("interrogate-sensitivity-dark.png") });
 });
 
-test("the gates panel counts the verdicts in view and shows what the gates left varied", async ({ page }) => {
-  const { rows } = await open(page);
+test("the gates panel says what each gate checks, what it found and what it excluded, whatever the admissibility filter", async ({ page }, testInfo) => {
+  const refused = {
+    ...sweepRows()[0],
+    config_hash: "deadbeef00000000",
+    status: "failed",
+    admissible: false,
+    error: "No concurrent months.",
+  };
+  const { rows } = await open(page, [refused]);
   await tab(page, "Gates").click();
+  const completed = rows.filter((row) => row.status === "ok");
+  const excluded = completed.filter((row) => !row.admissible);
+  expect(excluded.length).toBeGreaterThan(0);
+
+  // The excluded scenarios are counted although the scenario filters hide them by default.
+  const counts = page.getByLabel("Admissibility counts");
+  await expect(counts).toContainText(`Excluded by a gate${excluded.length}`);
+  await expect(counts).toContainText("Could not run1");
   const tally = page.getByRole("table", { name: /Gate verdicts/ });
-  const passing = rows.filter((row) => row.admissible).length;
-  await expect(tally.getByRole("row", { name: /concurrent period/ }).getByRole("cell").first()).toHaveText(String(passing));
+  const verdicts = tally.getByRole("row", { name: /Concurrent period/ }).getByRole("cell");
+  await expect(verdicts.nth(0)).toHaveText(String(excluded.length));
+  await expect(verdicts.nth(3)).toHaveText(String(completed.length - excluded.length));
+
+  const gate = page.getByRole("region", { name: "Concurrent period" });
+  await expect(gate).toContainText("Months of measured/reference overlap");
+  const facts = gate.getByLabel("Concurrent period thresholds and observed range");
+  await expect(facts).toContainText("concurrent months fail9");
+  await expect(facts).toContainText("observed range7.250 to 12.500");
+  await gate.getByText(`Excluded ${excluded.length} scenarios`).click();
+  for (const row of excluded) await expect(gate.getByRole("rowheader", { name: row.config_hash.slice(0, 8) })).toBeVisible();
+
+  await expect(page.getByRole("region", { name: /Could not run/ })).toContainText("No concurrent months.");
   await expect(page.getByRole("table", { name: /scenarios admissible/ })).toContainText("power_law_mean");
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations.map((violation) => violation.id)).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("interrogate-gates.png") });
 });
 
 test("two pinned scenarios sit side by side with their differences, and one loads into Model", async ({ page }, testInfo) => {

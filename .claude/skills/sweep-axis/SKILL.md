@@ -38,10 +38,11 @@ needs:
   so an absent check is never mistaken for a satisfied one.
 - The threshold values as fields on `GateThresholds`, written into the scenario runconfig —
   never a bare code default — so a sweep's admissibility rules stay auditable after the fact.
-- A card in `GateReportView.tsx` (frontend derives its gate list from `gate_*` columns
-  automatically, but the prose description is registered per-gate and a test asserts every
-  backend-emitted gate has one — don't skip this or the frontend will render an unexplained
-  gate).
+- A `GATE_META` entry in `frontend/src/types/sweep.ts`: what it measures, what it applies to
+  and its threshold keys. The Gates panel finds gates from the `gate_*` columns on its own,
+  but without an entry it shows the gate unexplained; `tests/test_gate_descriptions.py` fails
+  until every gate `admissibility.py` emits has one and every `GateThresholds` field belongs
+  to a gate.
 
 **Read §13.6 before adding a gate based on a goodness-of-fit statistic** (R², RMSE, etc.) as
 an admissibility filter across a methodology axis. The removed LTC R² gate is the cautionary

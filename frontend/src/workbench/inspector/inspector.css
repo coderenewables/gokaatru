@@ -69,10 +69,6 @@
   padding-left: 18px;
 }
 
-.gk-warning {
-  color: var(--gk-flag);
-}
-
 .gk-facts {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

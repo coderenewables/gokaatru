@@ -61,14 +61,18 @@ function inAny(value: number | null, ranges: Range[]): boolean {
   return value !== null && ranges.some((range) => value >= range.min && value <= range.max);
 }
 
-/** The rows every term lets through. ``except`` leaves one view's own term out, which is what
- * that view draws its context from (the rows its own brush would otherwise hide). */
-export function filterRows(rows: readonly SweepRow[], terms: Terms, except?: "distribution"): SweepRow[] {
+/** What a view leaves out of the intersection: its own brush, which it draws its context from
+ * (the rows that brush would otherwise hide), or the admissibility filter, for the gates panel,
+ * whose subject is the scenarios the gates excluded. */
+export type Except = "distribution" | "admissibility";
+
+/** The rows every term lets through, but the one ``except`` names. */
+export function filterRows(rows: readonly SweepRow[], terms: Terms, except?: Except): SweepRow[] {
   const numeric = Object.entries(terms.ranges).filter(([, ranges]) => ranges.length > 0);
   const categorical = Object.entries(terms.picked);
   const levels = Object.entries(terms.levels);
   return rows.filter((row) => {
-    if (!terms.showInadmissible && !row.admissible) return false;
+    if (except !== "admissibility" && !terms.showInadmissible && !row.admissible) return false;
     for (const [axis, kept] of levels) if (!kept.includes(levelOf(row, axis))) return false;
     for (const [axis, kept] of categorical) if (!kept.includes(levelOf(row, axis))) return false;
     for (const [column, ranges] of numeric) if (!inAny(metricValue(row, column), ranges)) return false;
@@ -214,7 +218,7 @@ export const useInterrogate = create<InterrogateStore>((set, get) => ({
 }));
 
 /** The scenarios every panel shows: the rows the intersection of every term lets through. */
-export function useFilteredRows(except?: "distribution"): SweepRow[] {
+export function useFilteredRows(except?: Except): SweepRow[] {
   const rows = useInterrogate((state) => state.rows);
   const terms = useTerms();
   return useMemo(() => filterRows(rows, terms, except), [rows, terms, except]);

@@ -270,6 +270,34 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
+test("a long run's event list scrolls, and a keyboard can scroll it", async ({ page }) => {
+  // CI's fonts wrapped the eight events of the runs above past the list's height, and axe found
+  // a scrolling region no keyboard could reach; here the list overflows on any machine.
+  const errors = pageErrors(page);
+  const shear = Array.from({ length: 30 }, (_, index) => ["nearest_2", `power_law_${index}`, null]);
+  const events = [
+    STREAM[0],
+    ...shear.flatMap((prefix) => [
+      { event: "prefix_started", completed: 0, total: 4, config_hash: null, detail: { shear_prefix: prefix } },
+      { event: "prefix_completed", completed: 0, total: 4, config_hash: null, detail: { shear_prefix: prefix } },
+    ]),
+    ...STREAM.slice(1),
+  ];
+  await fakeSweep(page, { streamBody: events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") });
+  await openRun(page, "Long run");
+  await page.getByRole("button", { name: "Run sweep" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Finished" })).toBeVisible();
+
+  const list = page.getByRole("list", { name: "Events" });
+  const sizes = await list.evaluate((element) => ({ scroll: element.scrollHeight, client: element.clientHeight }));
+  expect(sizes.scroll).toBeGreaterThan(sizes.client);
+  await expectNoAxeViolations(page);
+  await list.focus();
+  await page.keyboard.press("PageDown");
+  await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
 test("a sweep that ends in an error says so, and the design can be run again", async ({ page }) => {
   const errors = pageErrors(page);
   const streamBody = [STREAM[0], { event: "sweep_error", error: "ValueError('no reanalysis')" }]

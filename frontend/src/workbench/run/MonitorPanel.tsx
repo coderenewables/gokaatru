@@ -111,7 +111,7 @@ export function MonitorPanel() {
           {manifest.duplicates_skipped && manifest.duplicates_skipped.length > 0 ? (
             <details>
               <summary>{manifest.duplicates_skipped.length} skipped as duplicates</summary>
-              <ul className="gk-leaves">
+              <ul className="gk-leaves" tabIndex={0} aria-label="Leaves skipped as duplicates">
                 {manifest.duplicates_skipped.map((entry, index) => (
                   <li key={index}>
                     {entry.shear_fit_policy} / {entry.reference_policy} <span className="gk-leaf-note">repeats {entry.same_as.slice(0, 8)}</span>
@@ -124,7 +124,8 @@ export function MonitorPanel() {
         </section>
       ) : null}
 
-      <ol className="gk-events" aria-label="Events">
+      {/* Scrolls once the run is long: focusable, so a keyboard can scroll it. */}
+      <ol className="gk-events" aria-label="Events" tabIndex={0}>
         {[...run.log].reverse().map((line) => (
           <li key={line.id} className={`gk-event gk-event-${line.kind}`}>
             {line.text}

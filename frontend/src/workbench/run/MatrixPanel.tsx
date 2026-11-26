@@ -104,7 +104,8 @@ function EstimateSummary({ estimate }: { estimate: Estimate }) {
         <details>
           <summary>{counts.duplicates.toLocaleString()} skipped as duplicates</summary>
           <p className="gk-basis">{estimate.duplicates_basis}</p>
-          <ul className="gk-leaves">
+          {/* Scrolls when long: focusable, so a keyboard can scroll it (axe scrollable-region-focusable). */}
+          <ul className="gk-leaves" tabIndex={0} aria-label="Leaves skipped as duplicates">
             {estimate.duplicates.map((entry) => (
               <li key={leaf(entry)}>
                 {leaf(entry)} <span className="gk-leaf-note">repeats {leaf(entry.same_as)}</span>
@@ -117,7 +118,7 @@ function EstimateSummary({ estimate }: { estimate: Estimate }) {
         <details>
           <summary>{counts.unavailable.toLocaleString()} refused</summary>
           <p className="gk-basis">{estimate.refusals_basis}</p>
-          <ul className="gk-leaves">
+          <ul className="gk-leaves" tabIndex={0} aria-label="Leaves refused">
             {estimate.unavailable.map((entry) => (
               <li key={leaf(entry)}>
                 {leaf(entry)}{" "}
